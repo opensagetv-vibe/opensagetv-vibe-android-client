@@ -251,10 +251,16 @@ def main() -> int:
         fail("Android Gradle Plugin 8.13.2 not configured")
     if "gradle-8.13-bin.zip" not in wrapper:
         fail("Gradle wrapper is not 8.13")
-    if "FROM eclipse-temurin:17-jdk-jammy" not in dockerfile:
-        fail("Docker Dev build image is not JDK 17")
-    if "FROM eclipse-temurin:8-jdk-jammy AS legacy-jdk8" not in dockerfile or "/opt/java/jdk8" not in dockerfile:
-        fail("Docker image does not preserve JDK 8 for untouched baseline builds")
+    if not re.search(r"FROM eclipse-temurin:17-jdk-jammy@sha256:[0-9a-f]{64}", dockerfile):
+        fail("Docker Dev build image is not digest-pinned JDK 17")
+    if (
+        not re.search(
+            r"FROM eclipse-temurin:8-jdk-jammy@sha256:[0-9a-f]{64} AS legacy-jdk8",
+            dockerfile,
+        )
+        or "/opt/java/jdk8" not in dockerfile
+    ):
+        fail("Docker image does not preserve digest-pinned JDK 8 for baseline builds")
     for sdk_marker in ('"platforms;android-29"', '"build-tools;29.0.2"', '"platforms;android-36"', '"build-tools;36.0.0"'):
         if sdk_marker not in dockerfile:
             fail(f"Docker dual Android SDK toolchain missing: {sdk_marker}")

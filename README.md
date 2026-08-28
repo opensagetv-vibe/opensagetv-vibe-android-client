@@ -1,3 +1,44 @@
+# OpenSageTV Vibe Android Client
+
+This is the Android MiniClient component of OpenSageTV Vibe. The current active
+behavioral baseline is v0.5.75. It is being migrated in this independent Git
+repository without modifying the known-good `SageTV-MiniClient-Dev` rollback
+copy.
+
+The repository is self-contained: active and frozen source, Gradle wrappers,
+native/Java dependencies, MCP tooling, tests, and Docker build tooling are all
+present here. See [MIGRATION_TO_OPENSAGETV_VIBE.md](MIGRATION_TO_OPENSAGETV_VIBE.md)
+for provenance and phase status, [docs/BASELINE_VALIDATION.md](docs/BASELINE_VALIDATION.md)
+for verified copy/build evidence, and
+[docs/REPOSITORY_LAYOUT.md](docs/REPOSITORY_LAYOUT.md) for ownership boundaries.
+The project is licensed under the [Apache License 2.0](LICENSE).
+
+## Quick start
+
+Docker with Compose is the only host build dependency.
+
+```bash
+./dev.sh image
+./dev.sh test
+./dev.sh validate
+./dev.sh build
+```
+
+These commands reuse `opensagetv-vibe-android-dev`; source edits do not create a
+new container or require an image rebuild. APKs are written under `artifacts/`.
+Use `./dev.sh shell`, `./dev.sh stop-dev`, or `./dev.sh remove-dev` for explicit
+container lifecycle control.
+
+Device-backed install, launch, and playback commands are separate commissioning
+operations. They may target only `org.opensagetv.miniclient.dev.debug`;
+production package identities remain protected.
+
+## Preserved v0.5.75 engineering record
+
+The chronological material below is retained intact as migration evidence. It
+will be indexed only after this working copy passes independent device
+equivalence.
+
 ### Tuning-matrix ADB preflight
 
 `mcp-player-tuning-matrix` connects ADB once before the first combination and verifies the MCP ADB session before any `dev_prepare_clean_start` call. If the Fire TV/Android device is unavailable, the suite now fails immediately instead of generating an infrastructure error for every tuning combination.

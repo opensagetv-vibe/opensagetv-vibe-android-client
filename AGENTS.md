@@ -1,4 +1,17 @@
-# AGENTS.md — SageTV MiniClient Dev Rules
+# AGENTS.md — OpenSageTV Vibe Android Client Rules
+
+## Migration workspace boundary
+
+All work governed by this file occurs inside the
+`opensagetv-vibe-android-client` repository. Do not modify, delete, move, or
+rename the sibling `SageTV-MiniClient-Dev` directory; it is the known-good
+v0.5.75 rollback source. The repository must build, test, run MCP, and package
+without reading files from that sibling. Comparison is allowed only as an
+explicit audit step.
+
+The initial exact baseline is Git commit `e770f9f`. Preserve it and make logical
+migration commits after it. Keep README, CHANGELOG, HANDOFF, and
+`MIGRATION_TO_OPENSAGETV_VIBE.md` current as architectural work proceeds.
 
 ## Codex playback diagnostics
 

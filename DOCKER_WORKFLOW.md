@@ -1,8 +1,13 @@
-# Docker Workflow — v0.4.0
+# OpenSageTV Vibe Android Docker workflow
 
 All Android/JDK/ADB/Python/MCP build and deployment work remains inside Docker.
 
-## Rebuild image after v0.4.0 update
+Normal commands reuse one container named `opensagetv-vibe-android-dev` and one
+cache volume named `opensagetv-vibe-android-gradle-cache`. Run `./dev.sh image`
+only when `docker/Dockerfile` or image dependencies change; bind-mounted source
+changes need only `test`, `validate`, or `build`.
+
+## Build or update the image
 
 The player modernization changes the Android build toolchain, so run once after extracting the update:
 

@@ -34,7 +34,7 @@ require_project_mount() {
   done
   if [[ "$missing" -ne 0 ]]; then
     cat >&2 <<EOF
-ERROR: /workspace is not the SageTV MiniClient Dev project root.
+ERROR: /workspace is not the OpenSageTV Vibe Android Client repository root.
 The Docker bind source is pointing at the wrong host directory.
 
 Current container workspace: $WORKSPACE
@@ -42,7 +42,7 @@ Expected project markers: dev.sh, scripts/, mcp/, docker-compose.yml
 
 Normally no path configuration is required; the directory containing dev.sh is mounted automatically.
 To override it explicitly from WSL:
-  SAGETV_WINDOWS_ROOT=/mnt/c/path/to/SageTV-MiniClient-Dev ./dev.sh <command>
+  OPENSAGETV_VIBE_ANDROID_ROOT=/mnt/c/path/to/opensagetv-vibe-android-client ./dev.sh <command>
 EOF
     exit 2
   fi
@@ -63,10 +63,10 @@ fi
 
 usage() {
   cat <<'USAGE'
-SageTV MiniClient Docker development environment
+OpenSageTV Vibe Android Client development environment
 
 All Android/ADB/Python/MCP/Gradle work runs in this image.
-Workspace bind: current project directory by default (SAGETV_WINDOWS_ROOT can override)
+Workspace bind: current repository by default (OPENSAGETV_VIBE_ANDROID_ROOT can override)
 
 Commands:
   import-source ZIP [--replace]
@@ -97,6 +97,7 @@ require_dev_source() {
 
 build_dev_apk() {
   require_dev_source
+  "$PROJECT/scripts/ensure_debug_keystore.sh"
   python3 "$PROJECT/scripts/validate_project.py"
   mkdir -p "$ARTIFACTS/firetv"
   chmod +x "$DEV_SRC/gradlew"
@@ -104,7 +105,7 @@ build_dev_apk() {
   ./gradlew --no-daemon clean :android-tv:assembleDebug
   APK="$(find android-tv/build/outputs/apk -type f -name '*debug*.apk' | head -n 1)"
   [[ -n "$APK" ]] || { echo "Gradle completed but no Dev debug APK was found" >&2; exit 3; }
-  OUT="$ARTIFACTS/firetv/SageTV-MiniClient-Dev-debug.apk"
+  OUT="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-debug.apk"
   cp -f "$APK" "$OUT"
   sha256sum "$OUT" | tee "$OUT.sha256"
   echo "Built isolated Dev APK: $OUT"
@@ -115,6 +116,7 @@ build_existing_apk() {
     echo "Untouched baseline source is absent; bootstrapping pinned upstream baseline..."
     python3 "$PROJECT/scripts/bootstrap.py" --dest "$EXISTING_SRC" --skip-refactor
   fi
+  "$PROJECT/scripts/ensure_debug_keystore.sh"
   mkdir -p "$ARTIFACTS/existing"
   chmod +x "$EXISTING_SRC/gradlew"
   cd "$EXISTING_SRC"
@@ -123,7 +125,7 @@ build_existing_apk() {
   JAVA_HOME=/opt/java/jdk8 PATH=/opt/java/jdk8/bin:$PATH ./gradlew --no-daemon :android-tv:assembleDebug
   APK="$(find android-tv/build/outputs/apk -type f -name '*debug*.apk' | head -n 1)"
   [[ -n "$APK" ]] || { echo "Gradle completed but no baseline debug APK was found" >&2; exit 3; }
-  OUT="$ARTIFACTS/existing/SageTV-MiniClient-Existing-debug.apk"
+  OUT="$ARTIFACTS/existing/OpenSageTV-Vibe-Android-Client-v0.5.75-baseline-debug.apk"
   cp -f "$APK" "$OUT"
   sha256sum "$OUT" | tee "$OUT.sha256"
   [[ -f "$EXISTING_SRC/UPSTREAM_BASELINE.txt" ]] && cp -f "$EXISTING_SRC/UPSTREAM_BASELINE.txt" "$ARTIFACTS/existing/UPSTREAM_BASELINE.txt"

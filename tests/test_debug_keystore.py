@@ -8,8 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 class DebugKeystoreTests(unittest.TestCase):
     def test_build_commands_ensure_debug_keystore(self):
         dev = (ROOT / "dev.sh").read_text()
+        entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text()
         self.assertIn("ensure_debug_keystore", dev)
         self.assertIn("/workspace/scripts/ensure_debug_keystore.sh", dev)
+        self.assertIn('"$PROJECT/scripts/ensure_debug_keystore.sh"', entrypoint)
+        self.assertLess(
+            entrypoint.index('"$PROJECT/scripts/ensure_debug_keystore.sh"'),
+            entrypoint.index("./gradlew --no-daemon clean :android-tv:assembleDebug"),
+        )
 
     def test_generator_matches_sagetv_gradle_alias(self):
         script = (ROOT / "scripts/ensure_debug_keystore.sh").read_text()

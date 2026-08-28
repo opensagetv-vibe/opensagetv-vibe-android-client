@@ -382,7 +382,7 @@ def dev_package_info() -> str:
 @mcp.tool()
 def install_dev_apk(apk_path: str = "") -> dict:
     """Install/replace the Dev APK only after verifying its package ID. With no path, install the default built artifact."""
-    apk = Path(apk_path).expanduser().resolve() if apk_path else cfg.artifact_dir / "SageTV-MiniClient-Dev-debug.apk"
+    apk = Path(apk_path).expanduser().resolve() if apk_path else cfg.artifact_dir / "OpenSageTV-Vibe-Android-Client-debug.apk"
     return {"package": cfg.dev_package, "apk": str(apk), "result": adb.install_dev_apk(apk)}
 
 @mcp.tool()

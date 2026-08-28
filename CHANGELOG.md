@@ -1,3 +1,32 @@
+# Changelog
+
+## Unreleased — OpenSageTV Vibe migration
+
+- Copied the complete known-good v0.5.75 project into the independent
+  `opensagetv-vibe-android-client` repository and preserved the exact 1,201-file
+  snapshot as the first Git commit.
+- Proved path and SHA-256 equivalence, reran all 180 Python tests, passed the
+  project validator, and completed a clean Docker APK build before restructuring.
+- Added migration provenance, baseline evidence, and repository-layout
+  documentation without creating a dependency on the old workspace.
+- Renamed repository build identities to the `opensagetv-vibe-*` namespace.
+- Identified the Android image accurately as Jammy/JDK 17; Ubuntu 26 remains
+  the separate server/unified-build baseline and is not falsely claimed here.
+- Pinned both Temurin base images by digest and pinned the directly installed
+  Python/MCP tool versions used by the validated image.
+- Changed normal Docker commands to reuse one named development container and
+  one named Gradle cache instead of a disposable container per command.
+- Moved debug-key preparation into the in-container build path so every build
+  caller gets the same safe, non-production signing setup.
+- Renamed generated APK artifacts to the OpenSageTV Vibe component identity;
+  Android package IDs and playback behavior remain unchanged in this phase.
+- Expanded ignore and line-ending rules while explicitly retaining required
+  checked-in native and packaged dependencies.
+- Added the root Apache 2.0 license already used by the active Android source.
+- Verified Phase 1 with 150 scaffold/static tests, 35 MCP tests, the full
+  validator, and a clean 60-task build. The renamed APK is byte-identical to
+  the pre-refactor baseline artifact.
+
 ## v0.5.75
 - Automated MCP/player test wrappers now default to client ID `44:45:56:30:30:31` (`DEV001`) when `--client-id` is omitted; explicit `--client-id` wins.
 - The test wrapper uses client-ID ensure semantics, avoiding an app restart when the requested test ID is already configured/active.

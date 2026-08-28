@@ -25,10 +25,10 @@ set "VERSION=unknown"
 if exist "%ROOT%\VERSION" set /p "VERSION="<"%ROOT%\VERSION"
 if not defined VERSION set "VERSION=unknown"
 
-set "ZIP_NAME=SageTV-MiniClient-Dev-AI-Handoff-v%VERSION%.zip"
+set "ZIP_NAME=opensagetv-vibe-android-client-AI-Handoff-v%VERSION%.zip"
 set "ZIP_PATH=%ROOT%\%ZIP_NAME%"
 set "STAGE=%TEMP%\SageTV-MiniClient-AI-Handoff-%RANDOM%-%RANDOM%"
-set "STAGE_ROOT=%STAGE%\SageTV-MiniClient-Dev"
+set "STAGE_ROOT=%STAGE%\opensagetv-vibe-android-client"
 
 if exist "%STAGE%" rmdir /s /q "%STAGE%"
 mkdir "%STAGE_ROOT%" >nul 2>&1

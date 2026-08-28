@@ -1,17 +1,17 @@
 # Windows Workspace Setup
 
-Extract the full package into any Windows folder. For example:
+Clone or extract the repository into any Windows folder. For example:
 
-`C:\SageTV-MiniClient-Dev`
+`C:\source\opensagetv-vibe-android-client`
 
 or
 
-`C:\TMP_SAGETV_DOCKER\SageTV-MiniClient-Dev`
+`C:\TMP_SAGETV_DOCKER\projects\opensagetv-vibe-android-client`
 
 Expected layout:
 
 ```text
-C:\SageTV-MiniClient-Dev\
+C:\source\opensagetv-vibe-android-client\
 ├─ docker\
 ├─ mcp\
 ├─ scripts\
@@ -35,7 +35,7 @@ The Gradle cache remains a Docker named volume for performance.
 ## WSL workflow
 
 ```bash
-cd /mnt/c/TMP_SAGETV_DOCKER/SageTV-MiniClient-Dev   # use your actual extracted path
+cd /mnt/c/TMP_SAGETV_DOCKER/projects/opensagetv-vibe-android-client
 ./dev.sh image
 ./dev.sh test
 ./dev.sh validate
@@ -45,7 +45,9 @@ No `.env` file is required. The directory containing `dev.sh` is mounted to `/wo
 
 ## Windows Docker CLI workflow
 
-Run from the extracted project root. Docker mounts that directory to `/workspace` automatically. Use `.env.example` only if you intentionally need an explicit `SAGETV_WINDOWS_ROOT` override.
+Run from the repository root. Docker mounts that directory to `/workspace`
+automatically. Use `.env.example` only if you intentionally need an explicit
+`OPENSAGETV_VIBE_ANDROID_ROOT` override.
 
 ## Build untouched/current app
 
@@ -63,4 +65,4 @@ It builds only `source/existing` and does not install it.
 
 Output:
 
-`<project-root>\artifacts\firetv\SageTV-MiniClient-Dev-debug.apk`
+`<project-root>\artifacts\firetv\OpenSageTV-Vibe-Android-Client-debug.apk`

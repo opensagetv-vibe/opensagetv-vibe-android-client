@@ -1,5 +1,5 @@
 # Copy this file to the Windows workspace as:
-# C:/SageTV-MiniClient-Dev/config/firetv.toml
+# Copy to opensagetv-vibe-android-client/config/firetv.toml and edit locally.
 # Then edit the Fire TV address.
 device = "192.168.1.50:5555"
 dev_package = "org.opensagetv.miniclient.dev.debug"

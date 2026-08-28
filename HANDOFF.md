@@ -1,3 +1,31 @@
+# OpenSageTV Vibe Android Client — Handoff
+
+## Migration state (2026-08-28)
+
+The exact known-good v0.5.75 copy is preserved at Git commit `e770f9f`. Phase 1
+work occurs only in this new repository; the original `SageTV-MiniClient-Dev`
+directory remains an unmodified rollback source and is not required by any
+build or test.
+
+Pre-refactor validation passed 145 scaffold tests, 35 MCP tests, shell syntax,
+the full project validator, and a clean Docker APK build. Current migration
+evidence and architecture are in `MIGRATION_TO_OPENSAGETV_VIBE.md` and `docs/`.
+No Android device was modified during the structural migration.
+
+Phase 1 subsequently passed 150 scaffold/static tests, 35 MCP tests, the full
+validator, and a clean 60-task Gradle build in the renamed reusable container.
+The resulting Vibe-named APK has the same SHA-256 as the pre-refactor build,
+proving the structural changes did not alter Android output. Exact evidence is
+in `docs/PHASE1_VALIDATION.md`.
+
+The Android application ID intentionally remains
+`org.opensagetv.miniclient.dev.debug`. Keep legacy Exo as the default and do not
+promote MIM/Media3 behavior until real device commissioning passes. Normal
+build/test/MCP commands now reuse `opensagetv-vibe-android-dev`; do not re-add
+phase-specific or disposable build containers.
+
+## Preserved v0.5.75 handoff
+
 ### v0.5.75 client ID / test setup rule
 
 The Dev app has returned to the original generated-and-persisted client-ID behavior. Do not hard-code `DEV001` in Android/core code. Existing installs keep whatever `client_id` is already persisted; fresh installs generate an ID on first use. Original connection-specific `ServerInfo.macAddress` override behavior is restored. Debug contract is now `debugStatusVersion=14`.

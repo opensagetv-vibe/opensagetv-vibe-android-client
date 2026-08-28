@@ -7,8 +7,14 @@ ROOT = Path(__file__).resolve().parents[1]
 class DualAndroidToolchainTests(unittest.TestCase):
     def test_docker_carries_dev_and_legacy_jdks(self):
         text = (ROOT / "docker/Dockerfile").read_text()
-        self.assertIn("FROM eclipse-temurin:8-jdk-jammy AS legacy-jdk8", text)
-        self.assertIn("FROM eclipse-temurin:17-jdk-jammy", text)
+        self.assertRegex(
+            text,
+            r"FROM eclipse-temurin:8-jdk-jammy@sha256:[0-9a-f]{64} AS legacy-jdk8",
+        )
+        self.assertRegex(
+            text,
+            r"FROM eclipse-temurin:17-jdk-jammy@sha256:[0-9a-f]{64}",
+        )
         self.assertIn("COPY --from=legacy-jdk8 /opt/java/openjdk /opt/java/jdk8", text)
 
     def test_docker_carries_old_and_new_android_sdks(self):

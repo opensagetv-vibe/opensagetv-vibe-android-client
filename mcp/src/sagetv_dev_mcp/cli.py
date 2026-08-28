@@ -45,7 +45,7 @@ def main() -> int:
     connect(adb)
 
     if args.command == "install":
-        apk = (Path(args.apk).expanduser().resolve() if args.apk else cfg.artifact_dir / "SageTV-MiniClient-Dev-debug.apk")
+        apk = (Path(args.apk).expanduser().resolve() if args.apk else cfg.artifact_dir / "OpenSageTV-Vibe-Android-Client-debug.apk")
         detected = adb.detect_apk_package(apk)
         print(f"Verified APK package: {detected}")
         print(adb.install_dev_apk(apk))

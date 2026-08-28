@@ -1,5 +1,5 @@
 param(
-    [string]$Root = "C:\SageTV-MiniClient-Dev"
+    [string]$Root = "C:\source\opensagetv-vibe-android-client"
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,9 +23,9 @@ foreach ($folder in $folders) {
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
 }
 
-Write-Host "Windows SageTV development workspace ready: $Root"
+Write-Host "OpenSageTV Vibe Android workspace ready: $Root"
 Write-Host "Bundled source should already exist in: $(Join-Path $Root 'source')"
 Write-Host "Use $(Join-Path $Root 'incoming') only for a future replacement source ZIP."
 Write-Host "ADB RSA keys will persist in: $(Join-Path $Root 'adb')"
 Write-Host "The Docker entrypoint creates firetv.toml from the project example if it is missing."
-Write-Host "The project directory is mounted automatically. SAGETV_WINDOWS_ROOT is only needed as an explicit override."
+Write-Host "The project directory is mounted automatically. OPENSAGETV_VIBE_ANDROID_ROOT is only needed as an explicit override."

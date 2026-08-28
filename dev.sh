@@ -2,20 +2,33 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Always give Docker Compose an absolute bind source. This avoids WSL/Docker Desktop
-# ambiguity around relative bind paths and does not require a .env file.
-# An explicitly exported SAGETV_WINDOWS_ROOT still wins when an override is needed.
-export SAGETV_WINDOWS_ROOT="${SAGETV_WINDOWS_ROOT:-$ROOT}"
+# Always give Docker Compose an absolute bind source. The legacy
+# SAGETV_WINDOWS_ROOT variable remains a compatibility fallback only.
+export OPENSAGETV_VIBE_ANDROID_ROOT="${OPENSAGETV_VIBE_ANDROID_ROOT:-${SAGETV_WINDOWS_ROOT:-$ROOT}}"
+export SAGETV_WINDOWS_ROOT="${SAGETV_WINDOWS_ROOT:-$OPENSAGETV_VIBE_ANDROID_ROOT}"
 
-COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT")
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT" --project-name opensagetv-vibe-android-client)
+
+ensure_dev_container() {
+  "${COMPOSE[@]}" up -d dev >/dev/null
+}
+
+dev_exec() {
+  ensure_dev_container
+  "${COMPOSE[@]}" exec -T dev "$@"
+}
+
+dev_command() {
+  dev_exec /usr/local/bin/opensagetv-vibe-android-dev "$@"
+}
 
 ensure_debug_keystore() {
-  "${COMPOSE[@]}" run --rm dev /workspace/scripts/ensure_debug_keystore.sh
+  dev_exec /workspace/scripts/ensure_debug_keystore.sh
 }
 
 repair_dev_gradle() {
   # Run from the bind-mounted workspace so this works with the existing Docker image.
-  "${COMPOSE[@]}" run --rm dev python3 /workspace/scripts/repair_dev_gradle.py
+  dev_exec python3 /workspace/scripts/repair_dev_gradle.py
 }
 
 DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"
@@ -57,18 +70,28 @@ run_automated_mcp_test() {
 
   echo "TEST CLIENT ID ($id_source): $client_id"
   echo "NOTE: first-time MiniClient setup must already be complete before automated testing."
-  "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_client_id.py --ensure "$client_id" --quiet
-  exec "${COMPOSE[@]}" run --rm -T dev python3 "/workspace/scripts/$script" "${filtered[@]}"
+  dev_exec python3 /workspace/scripts/mcp_client_id.py --ensure "$client_id" --quiet
+  dev_exec python3 "/workspace/scripts/$script" "${filtered[@]}"
 }
 
 case "${1:-help}" in
   image)
     "${COMPOSE[@]}" build dev
+    "${COMPOSE[@]}" up -d --force-recreate dev
+    ;;
+  start)
+    ensure_dev_container
+    ;;
+  stop-dev)
+    "${COMPOSE[@]}" stop dev
+    ;;
+  remove-dev)
+    "${COMPOSE[@]}" rm -sf dev
     ;;
   mcp)
     shift
     # MCP stdio cannot use a pseudo-TTY and must keep stdout clean for protocol frames.
-    exec "${COMPOSE[@]}" run --rm -T dev mcp "$@"
+    dev_command mcp "$@"
     ;;
   mcp-test)
     shift
@@ -80,7 +103,7 @@ case "${1:-help}" in
   mcp-telemetry)
     shift
     # Read structured player telemetry through the real MCP stdio protocol.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_player_telemetry.py "$@"
+    dev_exec python3 /workspace/scripts/mcp_player_telemetry.py "$@"
     ;;
   mcp-seek-test)
     shift
@@ -90,7 +113,7 @@ case "${1:-help}" in
   mcp-seek-time)
     shift
     # Debug-only direct player seek to a required caller-supplied absolute media time.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_seek_time.py "$@"
+    dev_exec python3 /workspace/scripts/mcp_seek_time.py "$@"
     ;;
   mcp-search-test)
     shift
@@ -100,7 +123,7 @@ case "${1:-help}" in
   mcp-send-sequence)
     shift
     # Read an explicit multiline command/sendkey/sendtext/directtext/hideime/delay/wait script and execute it as one MCP tool call.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_send_sequence.py "$@"
+    dev_exec python3 /workspace/scripts/mcp_send_sequence.py "$@"
     ;;
   mcp-comskip-test)
     shift
@@ -130,12 +153,12 @@ case "${1:-help}" in
   mcp-player-tune)
     shift
     # Set/show Dev-only in-memory player tuning; requires v0.5.70 debugStatusVersion>=13.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_player_tune.py "$@"
+    dev_exec python3 /workspace/scripts/mcp_player_tune.py "$@"
     ;;
   client-id)
     shift
     # Show/set the persisted SageTV MiniClient ID through the debug-only MCP control surface.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/mcp_client_id.py "$@"
+    dev_exec python3 /workspace/scripts/mcp_client_id.py "$@"
     ;;
   mcp-player-tuning-matrix)
     shift
@@ -150,43 +173,46 @@ case "${1:-help}" in
   player-diag)
     shift
     # External-only player diagnostics. Does not add hooks to the Android player.
-    exec "${COMPOSE[@]}" run --rm -T dev python3 /workspace/scripts/player_diagnostics.py "$@"
+    dev_exec python3 /workspace/scripts/player_diagnostics.py "$@"
     ;;
   test)
     shift
     repair_dev_gradle
-    exec "${COMPOSE[@]}" run --rm dev test "$@"
+    dev_command test "$@"
     ;;
   validate)
     shift
     repair_dev_gradle
-    exec "${COMPOSE[@]}" run --rm dev validate "$@"
+    dev_command validate "$@"
     ;;
   build)
     shift
     repair_dev_gradle
-    ensure_debug_keystore
-    exec "${COMPOSE[@]}" run --rm dev build "$@"
+    dev_command build "$@"
     ;;
   build-existing)
     shift
-    ensure_debug_keystore
-    exec "${COMPOSE[@]}" run --rm dev build-existing "$@"
+    dev_command build-existing "$@"
     ;;
   ensure-debug-keystore)
     shift
-    exec "${COMPOSE[@]}" run --rm dev /workspace/scripts/ensure_debug_keystore.sh "$@"
+    dev_exec /workspace/scripts/ensure_debug_keystore.sh "$@"
     ;;
   shell)
     shift
-    exec "${COMPOSE[@]}" run --rm dev shell "$@"
+    ensure_dev_container
+    exec "${COMPOSE[@]}" exec dev bash "$@"
     ;;
   help|-h|--help)
     cat <<'USAGE'
 Usage: ./dev.sh COMMAND [args...]
 
 Host requirement: Docker Desktop/Engine with Compose. Android/JDK/Python/ADB/MCP live in Docker.
-Workspace bind: this project directory by default (SAGETV_WINDOWS_ROOT can override)
+Workspace bind: this repository by default (OPENSAGETV_VIBE_ANDROID_ROOT can override)
+
+  start                         Create/start the one reusable development container
+  stop-dev                      Stop the reusable development container
+  remove-dev                    Deliberately remove only that development container
 
   image                         Build/update development image
   import-source ZIP [--replace] Import exact source ZIP into baseline + baseline + Dev trees
@@ -229,6 +255,6 @@ USAGE
     ;;
   *)
     cmd="$1"; shift
-    exec "${COMPOSE[@]}" run --rm dev "$cmd" "$@"
+    dev_command "$cmd" "$@"
     ;;
 esac
