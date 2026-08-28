@@ -46,10 +46,11 @@ in Docker before Phase 1 began.
    comparison tree, define `source/dev` as the only active Android source, and
    move chronological investigation material into indexed historical areas
    without losing evidence.
-4. **Unified build integration.** Add this repository as a component of
-   `opensagetv-vibe-build-env`, with exact commit/artifact provenance. The
-   Android toolchain may be a private image stage, but normal work must expose
-   one documented Vibe development workflow rather than phase containers.
+4. **Unified build integration — complete locally.** This repository is a
+   mounted component of `opensagetv-vibe-build-env`; normal build, test,
+   validation, MCP, release-artifact, and provenance work uses the one
+   `opensagetv-vibe-dev` container. The standalone Compose definition remains
+   only as an isolated-checkout rollback until publication/commissioning.
 5. **Independent Android regression gates.** Run unit, validator, clean Gradle,
    APK identity, MCP protocol, install/launch, and physical player matrices.
    Device-backed installation and playback are explicit commissioning gates;

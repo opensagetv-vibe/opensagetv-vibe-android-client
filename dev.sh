@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_ENV_ROOT="${OPENSAGETV_VIBE_BUILD_ENV_ROOT:-$ROOT/../opensagetv-vibe-build-env}"
+UNIFIED_CONTAINER="${OPENSAGETV_VIBE_DEV_CONTAINER:-opensagetv-vibe-dev}"
+USE_UNIFIED=false
+CONTAINER_WORKSPACE=/workspace
+
+if [[ "${OPENSAGETV_VIBE_ANDROID_STANDALONE:-false}" != true && -x "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" ]]; then
+  USE_UNIFIED=true
+  CONTAINER_WORKSPACE=/workspace/android-client
+fi
 
 # Always give Docker Compose an absolute bind source. The legacy
 # SAGETV_WINDOWS_ROOT variable remains a compatibility fallback only.
@@ -10,25 +19,51 @@ export SAGETV_WINDOWS_ROOT="${SAGETV_WINDOWS_ROOT:-$OPENSAGETV_VIBE_ANDROID_ROOT
 COMPOSE=(docker compose -f "$ROOT/docker-compose.yml" --project-directory "$ROOT" --project-name opensagetv-vibe-android-client)
 
 ensure_dev_container() {
-  "${COMPOSE[@]}" up -d dev >/dev/null
+  if [[ "$USE_UNIFIED" == true ]]; then
+    "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" start >/dev/null
+  else
+    "${COMPOSE[@]}" up -d dev >/dev/null
+  fi
 }
 
 dev_exec() {
   ensure_dev_container
-  "${COMPOSE[@]}" exec -T dev "$@"
+  if [[ "$USE_UNIFIED" == true ]]; then
+    docker exec -i "$UNIFIED_CONTAINER" env \
+      JAVA_HOME=/opt/java/jdk17 \
+      JDK_HOME=/opt/java/jdk17 \
+      GRADLE_USER_HOME=/work/.gradle/android \
+      ANDROID_USER_HOME="$CONTAINER_WORKSPACE/adb" \
+      SAGETV_WORKSPACE="$CONTAINER_WORKSPACE" \
+      SAGETV_DEV_SOURCE="$CONTAINER_WORKSPACE/source/dev" \
+      SAGETV_EXISTING_SOURCE="$CONTAINER_WORKSPACE/source/existing" \
+      SAGETV_MCP_CONFIG="$CONTAINER_WORKSPACE/config/firetv.toml" \
+      SAGETV_ARTIFACT_DIR="$CONTAINER_WORKSPACE/artifacts/firetv" \
+      PYTHONPATH="$CONTAINER_WORKSPACE/mcp/src" \
+      PYTHONDONTWRITEBYTECODE=1 \
+      PYTHONUNBUFFERED=1 \
+      PATH="/opt/java/jdk17/bin:/opt/opensagetv-vibe/android-python/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/36.0.0:/opt/android-sdk/cmdline-tools/latest/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+      "$@"
+  else
+    "${COMPOSE[@]}" exec -T dev "$@"
+  fi
 }
 
 dev_command() {
-  dev_exec /usr/local/bin/opensagetv-vibe-android-dev "$@"
+  if [[ "$USE_UNIFIED" == true ]]; then
+    dev_exec bash "$CONTAINER_WORKSPACE/docker/entrypoint.sh" "$@"
+  else
+    dev_exec /usr/local/bin/opensagetv-vibe-android-dev "$@"
+  fi
 }
 
 ensure_debug_keystore() {
-  dev_exec /workspace/scripts/ensure_debug_keystore.sh
+  dev_exec "$CONTAINER_WORKSPACE/scripts/ensure_debug_keystore.sh"
 }
 
 repair_dev_gradle() {
   # Run from the bind-mounted workspace so this works with the existing Docker image.
-  dev_exec python3 /workspace/scripts/repair_dev_gradle.py
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/repair_dev_gradle.py" --workspace "$CONTAINER_WORKSPACE"
 }
 
 DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"
@@ -70,23 +105,28 @@ run_automated_mcp_test() {
 
   echo "TEST CLIENT ID ($id_source): $client_id"
   echo "NOTE: first-time MiniClient setup must already be complete before automated testing."
-  dev_exec python3 /workspace/scripts/mcp_client_id.py --ensure "$client_id" --quiet
-  dev_exec python3 "/workspace/scripts/$script" "${filtered[@]}"
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_client_id.py" --ensure "$client_id" --quiet
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/$script" "${filtered[@]}"
 }
 
 case "${1:-help}" in
   image)
-    "${COMPOSE[@]}" build dev
-    "${COMPOSE[@]}" up -d --force-recreate dev
+    if [[ "$USE_UNIFIED" == true ]]; then
+      "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" image
+      "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" start
+    else
+      "${COMPOSE[@]}" build dev
+      "${COMPOSE[@]}" up -d --force-recreate dev
+    fi
     ;;
   start)
     ensure_dev_container
     ;;
   stop-dev)
-    "${COMPOSE[@]}" stop dev
+    if [[ "$USE_UNIFIED" == true ]]; then "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" stop; else "${COMPOSE[@]}" stop dev; fi
     ;;
   remove-dev)
-    "${COMPOSE[@]}" rm -sf dev
+    if [[ "$USE_UNIFIED" == true ]]; then "$BUILD_ENV_ROOT/opensagetv-vibe-dev.sh" remove-dev; else "${COMPOSE[@]}" rm -sf dev; fi
     ;;
   mcp)
     shift
@@ -103,7 +143,7 @@ case "${1:-help}" in
   mcp-telemetry)
     shift
     # Read structured player telemetry through the real MCP stdio protocol.
-    dev_exec python3 /workspace/scripts/mcp_player_telemetry.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_player_telemetry.py" "$@"
     ;;
   mcp-seek-test)
     shift
@@ -113,7 +153,7 @@ case "${1:-help}" in
   mcp-seek-time)
     shift
     # Debug-only direct player seek to a required caller-supplied absolute media time.
-    dev_exec python3 /workspace/scripts/mcp_seek_time.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_seek_time.py" "$@"
     ;;
   mcp-search-test)
     shift
@@ -123,7 +163,7 @@ case "${1:-help}" in
   mcp-send-sequence)
     shift
     # Read an explicit multiline command/sendkey/sendtext/directtext/hideime/delay/wait script and execute it as one MCP tool call.
-    dev_exec python3 /workspace/scripts/mcp_send_sequence.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_send_sequence.py" "$@"
     ;;
   mcp-comskip-test)
     shift
@@ -153,12 +193,12 @@ case "${1:-help}" in
   mcp-player-tune)
     shift
     # Set/show Dev-only in-memory player tuning; requires v0.5.70 debugStatusVersion>=13.
-    dev_exec python3 /workspace/scripts/mcp_player_tune.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_player_tune.py" "$@"
     ;;
   client-id)
     shift
     # Show/set the persisted SageTV MiniClient ID through the debug-only MCP control surface.
-    dev_exec python3 /workspace/scripts/mcp_client_id.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_client_id.py" "$@"
     ;;
   mcp-player-tuning-matrix)
     shift
@@ -173,7 +213,7 @@ case "${1:-help}" in
   player-diag)
     shift
     # External-only player diagnostics. Does not add hooks to the Android player.
-    dev_exec python3 /workspace/scripts/player_diagnostics.py "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/player_diagnostics.py" "$@"
     ;;
   test)
     shift
@@ -196,12 +236,16 @@ case "${1:-help}" in
     ;;
   ensure-debug-keystore)
     shift
-    dev_exec /workspace/scripts/ensure_debug_keystore.sh "$@"
+    dev_exec "$CONTAINER_WORKSPACE/scripts/ensure_debug_keystore.sh" "$@"
     ;;
   shell)
     shift
     ensure_dev_container
-    exec "${COMPOSE[@]}" exec dev bash "$@"
+    if [[ "$USE_UNIFIED" == true ]]; then
+      exec docker exec -it "$UNIFIED_CONTAINER" bash "$@"
+    else
+      exec "${COMPOSE[@]}" exec dev bash "$@"
+    fi
     ;;
   help|-h|--help)
     cat <<'USAGE'

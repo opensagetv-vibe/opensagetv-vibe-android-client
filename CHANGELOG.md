@@ -2,6 +2,16 @@
 
 ## Unreleased — OpenSageTV Vibe migration
 
+- Integrated normal Android build/test/validation/MCP work with the sibling
+  Ubuntu 26 unified build environment and its one `opensagetv-vibe-dev`
+  container. The standalone Jammy Compose image remains only as an explicit
+  isolated-checkout recovery fallback.
+- Kept Java 11 as the unified image default while selecting JDK 17 only for the
+  active Android build and JDK 8 only for the frozen v0.5.75 comparison build.
+- Reproduced the Phase 1 APK byte-for-byte in the unified image after all 151
+  scaffold/static tests, 35 MCP tests, project-manifest validation, and the
+  full source validator passed.
+
 - Copied the complete known-good v0.5.75 project into the independent
   `opensagetv-vibe-android-client` repository and preserved the exact 1,201-file
   snapshot as the first Git commit.

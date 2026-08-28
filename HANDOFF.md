@@ -18,11 +18,19 @@ The resulting Vibe-named APK has the same SHA-256 as the pre-refactor build,
 proving the structural changes did not alter Android output. Exact evidence is
 in `docs/PHASE1_VALIDATION.md`.
 
+Unified build-environment validation is recorded in
+`docs/UNIFIED_BUILD_VALIDATION.md`. The Ubuntu 26 image kept Java 11 as its
+default, selected JDK 17 only for Android, passed 151 scaffold/static and 35
+MCP tests plus full validation, and reproduced the exact Phase 1 APK hash.
+
 The Android application ID intentionally remains
 `org.opensagetv.miniclient.dev.debug`. Keep legacy Exo as the default and do not
 promote MIM/Media3 behavior until real device commissioning passes. Normal
-build/test/MCP commands now reuse `opensagetv-vibe-android-dev`; do not re-add
-phase-specific or disposable build containers.
+build/test/MCP commands now reuse the unified `opensagetv-vibe-dev` container
+when the sibling build-environment repository is present; do not re-add
+phase-specific or disposable build containers. The standalone
+`opensagetv-vibe-android-dev` Compose path is retained only as an explicit
+isolated-checkout rollback.
 
 ## Preserved v0.5.75 handoff
 

@@ -26,6 +26,16 @@ class VibeMigrationTests(unittest.TestCase):
         self.assertIn('applicationIdSuffix = ".debug"', gradle)
         self.assertNotIn("jvl.sage.miniclient", gradle)
 
+    def test_normal_workspace_prefers_unified_build_environment(self):
+        dev = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        self.assertIn("$ROOT/../opensagetv-vibe-build-env", dev)
+        self.assertIn("UNIFIED_CONTAINER=", dev)
+        self.assertIn("opensagetv-vibe-dev", dev)
+        self.assertIn("CONTAINER_WORKSPACE=/workspace/android-client", dev)
+        self.assertIn("OPENSAGETV_VIBE_ANDROID_STANDALONE", dev)
+        self.assertIn("JAVA_HOME=/opt/java/jdk17", dev)
+        self.assertIn("GRADLE_USER_HOME=/work/.gradle/android", dev)
+
 
 if __name__ == "__main__":
     unittest.main()

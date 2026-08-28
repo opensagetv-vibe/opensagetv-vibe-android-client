@@ -17,6 +17,17 @@ The project is licensed under the [Apache License 2.0](LICENSE).
 
 Docker with Compose is the only host build dependency.
 
+In the normal sibling-repository workspace, the preferred commands use the one
+Ubuntu 26 unified image and `opensagetv-vibe-dev` container:
+
+```bash
+../opensagetv-vibe-build-env/opensagetv-vibe-dev.sh android-info
+../opensagetv-vibe-build-env/opensagetv-vibe-dev.sh android-all
+```
+
+`dev.sh` detects that sibling build environment automatically, so the familiar
+component interface uses the same container:
+
 ```bash
 ./dev.sh image
 ./dev.sh test
@@ -24,10 +35,15 @@ Docker with Compose is the only host build dependency.
 ./dev.sh build
 ```
 
-These commands reuse `opensagetv-vibe-android-dev`; source edits do not create a
-new container or require an image rebuild. APKs are written under `artifacts/`.
+These commands reuse `opensagetv-vibe-dev`; source edits do not create a new
+container or require an image rebuild. APKs are written under `artifacts/`.
 Use `./dev.sh shell`, `./dev.sh stop-dev`, or `./dev.sh remove-dev` for explicit
 container lifecycle control.
+
+An isolated checkout without the sibling build-environment repository retains
+the Jammy/JDK 17 Compose definition as a recovery fallback. Set
+`OPENSAGETV_VIBE_ANDROID_STANDALONE=true` to request that fallback explicitly;
+it is not the normal multi-repository workflow.
 
 Device-backed install, launch, and playback commands are separate commissioning
 operations. They may target only `org.opensagetv.miniclient.dev.debug`;

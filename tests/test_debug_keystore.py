@@ -10,7 +10,7 @@ class DebugKeystoreTests(unittest.TestCase):
         dev = (ROOT / "dev.sh").read_text()
         entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text()
         self.assertIn("ensure_debug_keystore", dev)
-        self.assertIn("/workspace/scripts/ensure_debug_keystore.sh", dev)
+        self.assertIn('$CONTAINER_WORKSPACE/scripts/ensure_debug_keystore.sh', dev)
         self.assertIn('"$PROJECT/scripts/ensure_debug_keystore.sh"', entrypoint)
         self.assertLess(
             entrypoint.index('"$PROJECT/scripts/ensure_debug_keystore.sh"'),

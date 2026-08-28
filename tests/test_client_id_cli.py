@@ -38,7 +38,7 @@ class ClientIdCliTests(unittest.TestCase):
         self.assertIn('DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"', dev)
         self.assertIn('run_automated_mcp_test()', dev)
         self.assertIn('--client-id)', dev)
-        self.assertIn('mcp_client_id.py --ensure "$client_id" --quiet', dev)
+        self.assertRegex(dev, r'mcp_client_id\.py"? --ensure "\$client_id" --quiet')
         for script in (
             "mcp_smoke_test.py", "mcp_seek_suite.py", "mcp_search_test.py",
             "mcp_comskip_test.py", "mcp_playback_test.py", "mcp_media3_matrix.py",

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("SAGETV_WORKSPACE", "/workspace"))
@@ -107,14 +108,15 @@ def main() -> int:
     dev_sh = (WORKSPACE / "dev.sh").read_text(errors="ignore")
     if 'DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"' not in dev_sh:
         fail("automated MCP/player tests no longer default to DEV001 / 44:45:56:30:30:31")
-    if 'run_automated_mcp_test()' not in dev_sh or 'mcp_client_id.py --ensure "$client_id" --quiet' not in dev_sh:
+    if 'run_automated_mcp_test()' not in dev_sh or not re.search(
+        r'mcp_client_id\.py"? --ensure "\$client_id" --quiet', dev_sh
+    ):
         fail("automated MCP/player test client-ID ensure wrapper is missing")
 
     pref_store = (SRC / "android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java").read_text(errors="ignore")
     prefs_xml = (SRC / "android-shared/src/main/res/xml/prefs.xml").read_text(errors="ignore")
     if 'STREAMING_MODE_DEFAULT = "dynamic";' not in pref_store:
         fail("Dev streaming mode default is not dynamic in AndroidPrefStore")
-    import re
     streaming_match = re.search(r'<ListPreference\b[^>]*android:key="streaming_mode"[^>]*/>', prefs_xml, flags=re.S)
     streaming_block = streaming_match.group(0) if streaming_match else ""
     if 'android:defaultValue="dynamic"' not in streaming_block:
