@@ -1,0 +1,9 @@
+SageTV MiniClient Dev v0.5.12
+
+MCP seek-test calibration correction.
+
+- Calibrates SageTV FF/REW increments before testing.
+- Builds semantic +30/-10 tests from measured server skip values.
+- Corrects rapid +30,+30,-10,+60,-30 net expectation to +80 seconds.
+- Adds skip interval overrides and separate paced/rapid delays.
+- Playback/player implementation code is unchanged from v0.5.11.

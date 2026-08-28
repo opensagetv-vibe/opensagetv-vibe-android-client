@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sagetv-dev-firetv-mcp"
+version = "0.2.0"
+description = "MCP tools for safe SageTV MiniClient build/deploy/debug testing on a Fire TV device"
+requires-python = ">=3.10"
+dependencies = [
+  "mcp[cli]>=2,<3",
+  "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+sagetv-dev-firetv-mcp = "sagetv_dev_mcp.server:main"
+sagetv-dev-firetv = "sagetv_dev_mcp.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sagetv_dev_mcp"]

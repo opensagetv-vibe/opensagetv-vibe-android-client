@@ -1,0 +1,12 @@
+SageTV MiniClient Dev v0.5.67
+
+Pull seek recovery / sync-point experiment
+
+- Restores Media3 Pull TS timestamp search to the proven 8x baseline after the 4x experiment failed to improve recovery.
+- Adds direction-aware Pull seek parameters to Media3 and legacy Exo2: large forward seeks use NEXT_SYNC, large backward seeks use PREVIOUS_SYNC, and sub-2-second seeks retain CLOSEST_SYNC.
+- Adds a one-shot 10-second Pull seek recovery watchdog. If the same seek generation is still BUFFERING, the player reprepares the current MediaSource at the requested target once.
+- Fixes Media3/Exo2 Pull DataSource contract handling so a non-zero read cannot return 0 when the backing source is closed or unexpectedly returns zero bytes.
+- Adds Media3-equivalent Pull READ/open telemetry to Exo2PullDataSource.
+- Bumps debugStatusVersion to 11 so the matrix refuses to evaluate these changes against an older APK.
+
+A/V output recovery remains the verdict. Seek landing remains telemetry.

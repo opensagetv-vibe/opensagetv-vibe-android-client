@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <ListPreference
+        android:defaultValue="hardware"
+        android:dialogTitle="@string/dialog_title_decoding_method"
+        android:entries="@array/entries_list_decoding_method"
+        android:entryValues="@array/entryvalues_list_decoding_method"
+        android:key="decoding_method"
+        android:summary="@string/summary_list_decoding_method"
+        android:title="@string/title_list_decoding_method"/>
+
+
+    <ListPreference
+        android:defaultValue="sync"
+        android:dialogTitle="MediaCodec Queueing Mode"
+        android:entries="@array/entries_codec_queueing_mode"
+        android:entryValues="@array/entryvalues_codec_queueing_mode"
+        android:key="exo2_codec_mode"
+        android:summary="%s"
+        android:title="MediaCodec Queueing Mode"/>
+
+    <Preference
+        android:key="show_exo_decoders"
+        android:summary="@string/show_exo_decoders_pref_summary"
+        android:title="@string/show_exo_decoders"/>
+
+    <ListPreference android:defaultValue="1"
+        android:title="@string/exoplayer_ffmpeg_extension_title"
+        android:dialogTitle="@string/exoplayer_ffmpeg_extension_title"
+        android:summary="@string/exoplayer_ffmpeg_extension_summary"
+        android:key="exoplayer_ffmpeg_extension"
+        android:entries="@array/entries_exoplayer_ffmpeg_extension_preference"
+        android:entryValues="@array/entryvalues_exoplayer_ffmpeg_extension_preference"/>
+
+    <Preference
+        android:key="exoversion"
+        android:summary=""
+        android:title="ExoPlayer Version"/>
+
+</PreferenceScreen>

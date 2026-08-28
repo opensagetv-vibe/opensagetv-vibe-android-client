@@ -1,0 +1,14 @@
+v0.5.45 fixes false PASS detection for direct debug seeks.
+
+The previous verifier could see the intentional temporary 0 returned by BaseMediaPlayerImpl while Media3 was seeking/not ready and declare target 0 reached even when playback later returned to the old position.
+
+New PASS requirements:
+- active player
+- debug probe ready
+- seekPending=false
+- flushed=false
+- Exo/Media3 playbackState=READY
+- requested target within tolerance
+- position remains consistent with the target while playback advances for 1200 ms by default
+
+No Android source changed. Rebuild/install is NOT required.

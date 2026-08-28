@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Dev/debug APK only. Exposes a narrow ADB/MCP control surface for regression testing. -->
+        <receiver
+            android:name="sagex.miniclient.android.tv.debug.DevTestReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.opensagetv.miniclient.dev.DEBUG_CONTROL" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

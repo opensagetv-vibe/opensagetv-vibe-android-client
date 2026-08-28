@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+    <PreferenceCategory android:title="@string/media_player_preferences">
+
+        <ListPreference
+            android:defaultValue="exoplayer"
+            android:dialogTitle="@string/dialog_title_default_player"
+            android:entries="@array/entries_list_default_player"
+            android:entryValues="@array/entryvalues_list_default_player"
+            android:key="default_player"
+            android:summary="@string/summary_list_default_player"
+            android:title="@string/title_list_default_player"/>
+
+        <ListPreference
+            android:defaultValue="hardware"
+            android:dialogTitle="@string/dialog_title_decoding_method"
+            android:entries="@array/entries_list_decoding_method"
+            android:entryValues="@array/entryvalues_list_decoding_method"
+            android:key="decoding_method"
+            android:summary="@string/summary_list_decoding_method"
+            android:title="@string/title_list_decoding_method"/>
+
+        <ListPreference
+            android:defaultValue="dynamic"
+            android:dialogTitle="@string/dialog_title_list_streaming_mode_preference"
+            android:entries="@array/entries_list_streaming_mode_preference"
+            android:entryValues="@array/entryvalues_list_streaming_mode_preference"
+            android:key="streaming_mode"
+            android:summary="@string/summary_list_streaming_mode_preference"
+            android:title="@string/title_list_streaming_mode_preference"/>
+
+        <Preference android:title="Fixed Transcoding Settings"
+            android:summary="Change the setting SageTV server will use to transcode content when using fixed streaming"
+            android:key="fixed_transcoding"/>
+
+        <Preference android:title="Fixed Remuxing Settings"
+            android:summary="Change the setting SageTV server will use to remux content when using fixed streaming (> v9.2.5 SageTV)"
+            android:key="fixed_remuxing"/>
+
+        <Preference android:title="Codec and Container Settings"
+            android:summary="Change how the application reports to SageTV which containers and codecs it supports. This can be helpful if a specific device does not handle a specific codec or container well"
+            android:key="container_codec_settings"/>
+
+        <Preference android:title="ExoPlayer Legacy Settings and Information"
+            android:summary="Settings for the frozen ExoPlayer compatibility backend"
+            android:key="exoplayer_settings"/>
+
+        <Preference android:title="Media3 ExoPlayer Settings and Information"
+            android:summary="Information for the current Google Media3 playback backend"
+            android:key="media3_settings"/>
+
+        <Preference android:title="IJKPlayer Settings and Information"
+            android:summary="Configure the GSY-maintained IJK runtime and hardware codec selection"
+            android:key="ijkplayer_settings"/>
+
+        <Preference android:title="GSYVideoPlayer Settings"
+            android:summary="Advanced settings for the GSYVideoPlayer IJK-kernel backend"
+            android:key="gsyplayer_settings"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Mappings" android:key="Mapping Settings">
+
+        <Preference android:title="Media Key Mappings"
+            android:summary="Change the default mappings for remote controls and game pads"
+            android:key="media_key_mappings"/>
+
+        <Preference android:title="Touch Mappings"
+            android:summary="Change the default mappings touch screen actions"
+            android:key="touch_mappings"/>
+
+    </PreferenceCategory>
+
+
+
+    <PreferenceCategory android:title="@string/application_settings">
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="auto_connect_to_last_server"
+            android:summary="@string/summary_auto_connect_to_last_server_preference"
+            android:title="@string/title_auto_connect_to_last_server_preference"/>
+
+        <ListPreference
+            android:dependency="auto_connect_to_last_server"
+            android:defaultValue="10"
+            android:dialogTitle="@string/dialog_title_auto_connect_delay_preference"
+            android:entries="@array/entries_list_auto_connect_delay_preference"
+            android:entryValues="@array/entryvalues_list_auto_connect_delay_preference"
+            android:key="auto_connect_delay"
+            android:summary="@string/summary_auto_connect_delay_preference"
+            android:title="@string/title_auto_connect_delay_preference"/>
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="use_opengl_ui"
+            android:summary="@string/use_opengl_ui_summary"
+            android:title="@string/use_opengl_ui_title" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="use_native_resolution"
+            android:summary="@string/use_native_resolution_summary"
+            android:title="@string/use_native_resolution_title"/>
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="exit_on_standby"
+            android:summary="@string/exit_on_standby_summary"
+            android:title="@string/exit_on_standby_title" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="app_destroy_on_pause"
+            android:summary="@string/terminate_onpause_summary"
+            android:title="@string/terminate_onpause_title" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="disable_sleep"
+            android:summary="@string/disable_sleep_summary"
+            android:title="@string/disable_sleep_title" />
+
+        <!--
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="exit_to_home_screen"
+            android:summary="@string/exit_to_home_screen_summary"
+            android:title="@string/exit_to_home_screen_title"/>
+        -->
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="use_tv_ui_on_tablet"
+            android:summary="@string/use_tv_ui_on_tablet_summary"
+            android:title="@string/use_tv_ui_on_tablet_title"/>
+
+        <ListPreference
+            android:defaultValue="64"
+            android:dialogTitle="@string/dialog_title_list_mem_cache_preference"
+            android:entries="@array/entries_list_mem_cache_preference"
+            android:entryValues="@array/entryvalues_list_mem_cache_preference"
+            android:key="image_cache_size_mb"
+            android:summary="@string/summary_list_mem_cache_preference"
+            android:title="@string/title_list_mem_cache_preference"/>
+
+        <ListPreference
+            android:defaultValue="512"
+            android:dialogTitle="@string/dialog_title_list_disk_cache_preference"
+            android:entries="@array/entries_list_disk_cache_preference"
+            android:entryValues="@array/entryvalues_list_disk_cache_preference"
+            android:key="disk_image_cache_size_mb"
+            android:summary="@string/summary_list_disk_cache_preference"
+            android:title="@string/title_list_disk_cache_preference"/>
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/debug_preferences">
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="debug_log_unmapped_keypresses"
+            android:summary="@string/summary_debug_log_unmapped_keypresses_preference"
+            android:title="@string/title_debug_log_unmapped_keypresses_preference"/>
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="debug_ar"
+            android:summary="@string/summary_debug_ar_preference"
+            android:title="@string/title_debug_ar_preference"/>
+
+        <!--
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="use_httpls"
+            android:summary="@string/summary_use_httpls_preference"
+            android:title="@string/title_use_httpls_preference" />-->
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/logging_preferences">
+        <CheckBoxPreference
+            android:enabled="false"
+            android:defaultValue="false"
+            android:key="use_log_to_sdcard"
+            android:summary="@string/summary_use_log_to_sdcard_acceleration_preference"
+            android:title="@string/title_use_log_to_sdcard_preference"/>
+
+        <Preference
+            android:enabled="false"
+            android:key="share_log"
+            android:summary="Share log using another application on Android"
+            android:title="Share Log"/>
+
+        <ListPreference
+            android:defaultValue="debug"
+            android:dialogTitle="@string/dialog_title_list_loglevels_preference"
+            android:entries="@array/entries_list_loglevels_preference"
+            android:entryValues="@array/entryvalues_list_loglevels_preference"
+            android:key="log_level"
+            android:summary="@string/summary_list_loglevels_preference"
+            android:title="@string/title_list_loglevels_preference"/>
+</PreferenceCategory>
+
+    <PreferenceCategory android:title="About">
+
+        <Preference
+            android:key="version"
+            android:summary=""
+            android:title="Version"/>
+        <Preference
+            android:key="versionCode"
+            android:summary=""
+            android:title="Version Code (Build Number)"/>
+
+        <Preference
+
+            android:key="clientid"
+            android:summary=""
+            android:title="Cliend ID"/>
+
+        <Preference
+
+            android:key="ipaddress"
+            android:summary=""
+            android:title="Device IP Address"/>
+
+        <Preference
+            android:key="screensize"
+            android:summary=""
+            android:title="Native UI Resolution"/>
+
+        <Preference
+            android:key="appmemory"
+            android:summary=""
+            android:title="Application Available Memory"/>
+
+
+
+    </PreferenceCategory>
+
+    <!--<PreferenceCategory android:title="Danger">-->
+
+    <!--<Preference-->
+    <!--android:key="reset_to_defaults"-->
+    <!--android:summary="Reset all preferences to Default Values"-->
+    <!--android:title="Reset To Default Preferences"/>-->
+
+    <!--</PreferenceCategory>-->
+
+</PreferenceScreen>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <ListPreference
+        android:defaultValue="hardware"
+        android:dialogTitle="@string/dialog_title_decoding_method"
+        android:entries="@array/entries_list_decoding_method"
+        android:entryValues="@array/entryvalues_list_decoding_method"
+        android:key="decoding_method"
+        android:summary="@string/summary_list_decoding_method"
+        android:title="@string/title_list_decoding_method"/>
+
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="announce_software_decoder"
+        android:summary="@string/summary_announce_software_decoder_preference"
+        android:title="@string/title_announce_software_decoder_preference"/>
+
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="prefer_android_software_decoders"
+        android:summary="@string/summary_prefer_android_software_decoders_preference"
+        android:title="@string/title_prefer_android_software_decoders_preference"/>
+
+    <Preference
+        android:key="decoders"
+        android:summary="@string/enable_disable_decoders_pref_summary"
+        android:title="@string/hardware_decoders"/>
+
+</PreferenceScreen>

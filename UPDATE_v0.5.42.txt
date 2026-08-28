@@ -1,0 +1,8 @@
+SageTV MiniClient Dev v0.5.42
+
+Fixes the v0.5.41 packaging/test mismatch and removes obsolete Android debug text injection paths.
+
+Required after overwrite:
+  ./test_valitdate_build_install_lanuch.sh
+
+Then rerun the desired MCP playback/Comskip test.

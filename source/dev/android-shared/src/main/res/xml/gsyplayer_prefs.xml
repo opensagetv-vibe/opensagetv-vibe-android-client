@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <ListPreference
+        android:defaultValue="auto"
+        android:dialogTitle="@string/gsy_engine_dialog_title"
+        android:entries="@array/entries_gsy_player_engine"
+        android:entryValues="@array/entryvalues_gsy_player_engine"
+        android:key="gsy_player_engine"
+        android:title="@string/gsy_engine_title"/>
+
+    <ListPreference
+        android:defaultValue="hardware"
+        android:dialogTitle="@string/dialog_title_decoding_method"
+        android:entries="@array/entries_list_decoding_method"
+        android:entryValues="@array/entryvalues_list_decoding_method"
+        android:key="decoding_method"
+        android:summary="@string/summary_list_decoding_method"
+        android:title="@string/title_list_decoding_method"/>
+
+    <Preference
+        android:key="gsy_version"
+        android:title="@string/gsy_version_title"/>
+
+    <Preference
+        android:key="gsy_architecture"
+        android:title="@string/gsy_architecture_title"
+        android:summary="@string/gsy_architecture_summary"/>
+
+</PreferenceScreen>

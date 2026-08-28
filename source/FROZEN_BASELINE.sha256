@@ -1,0 +1,3 @@
+# Frozen known-good files required by compact AI handoff validation.
+# Generated from the untouched source/existing v0.5.26 baseline.
+c124530c7afb4da1e1a0ecdd1da1d0f6fa007e469e6308fb84812e881121510d  android-shared/src/main/java/sagex/miniclient/android/video/BaseMediaPlayerImpl.java

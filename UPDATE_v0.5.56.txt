@@ -1,0 +1,16 @@
+SageTV MiniClient Dev v0.5.56
+
+Debug/MCP Android IME suppression for native SageTV text entry.
+
+Changes:
+- Adds debug-only ime_suppress control in DevTestReceiver.
+- Adds UIActivityLifeCycleHandler debug suppression flag that prevents showHideKeyboard(true)
+  from displaying Android's soft keyboard while MCP native text automation is active.
+- Suppression is enabled before SageTV Search is opened and restored after the Search/start sequence.
+- Android IME is hidden directly only if debug state positively reports it is visible.
+- No Android BACK key is sent merely to dismiss a keyboard.
+- Manual/non-MCP text entry behavior is unchanged.
+- Debug statusVersion advanced to 5 and reports imeSuppressedForDebug.
+- dev_search_text now uses MiniClient-native SageTV text events and the same temporary IME suppression.
+
+This update changes Android source and requires rebuilding/reinstalling the debug APK.

@@ -1,0 +1,19 @@
+SageTV MiniClient Dev v0.5.30
+
+Purpose
+- Remove all production defaults/hard-coding for the native Search test recording.
+
+Required usage
+- Every Search-based host test must receive --text explicitly.
+- Example:
+  ./dev.sh mcp-media3-comskip-matrix --server 192.168.10.175 --text "<recording search text>"
+
+Failure behavior
+- If --text is omitted, argparse exits with an error before MCP/ADB/session actions begin.
+- Empty or multiline text is also rejected by the existing sequence builder.
+- MCP dev_search_text requires its text argument and has no default fallback.
+
+Scope
+- Host/MCP/test/docs only.
+- No Android player code changed.
+- No APK rebuild required solely for this update.

@@ -1,0 +1,10 @@
+SageTV MiniClient Dev v0.5.74
+
+- Adds MediaCodec Queueing Mode to Media3 and legacy ExoPlayer settings.
+- Choices: Sync (Recommended), Auto, Async.
+- Default: Sync.
+- Saved preference applies to new players.
+- Explicit MCP codecMode tuning temporarily overrides the saved setting; reset returns to the saved preference on the next player.
+- Tuning-matrix default is now sync; new auto_codec profile is available.
+- Requires debug APK rebuild/install.
+- debugStatusVersion remains 13.

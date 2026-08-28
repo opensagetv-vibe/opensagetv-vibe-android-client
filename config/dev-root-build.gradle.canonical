@@ -1,0 +1,73 @@
+buildscript {
+    repositories {
+        google()
+        //mavenLocal()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        flatDir {
+            dirs 'libs'
+        }
+        jcenter()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.2'
+
+    }
+}
+
+
+allprojects {
+
+    version = '1.0'
+
+    ext {
+
+        appVersionCode = 2101102
+        appVersionName = "1.14.0"
+
+
+        gdxVersion = "1.9.14"
+        // NOTE: This is for ext we need to build ffmpeg
+        exoVersionCustomExt = '2.18.0'
+        // NOTE: using regular exoplayer for core stuff
+        exoVersion = '2.18.1' // frozen working legacy baseline; Media3 is the modernization path
+        media3Version = '1.11.0'
+        gsyVersion = '13.1.0'
+        ijkVersionDev = '0.8.8-SNAPSHOT' // original SageTV IJK runtime; intentionally separate from GSY
+        androidBuildToolsVersion = "36.0.0"
+        androidMinSdkVersion = 23
+        androidCompileSdkVersion = 36
+        androidTargetSdkVersion = 30
+        // tell every project where to find the local project maven files
+        mavenInProject = file('../mavenlocal').absoluteFile.toURI()
+        defJavaVesionNum = 1.8
+        defJavaVesionConst = JavaVersion.VERSION_1_8
+    }
+
+    repositories {
+        maven { url mavenInProject }
+        google()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven { url "https://oss.sonatype.org/content/repositories/releases/" }
+        flatDir {
+            dirs '../libs'
+        }
+        jcenter()
+    }
+
+    // Legacy ExoPlayer is kept as an A/B baseline next to Media3.  AGP/Gradle 8
+    // must never resolve a mixed com.google.android.exoplayer module set because
+    // those modules are not binary compatible across releases (for example
+    // TrackOutput/SampleQueue can otherwise fail with AbstractMethodError).
+    configurations.configureEach { configuration ->
+        configuration.resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.google.android.exoplayer') {
+                details.useVersion exoVersion
+                details.because("keep every legacy ExoPlayer module aligned to ${exoVersion}")
+            }
+        }
+    }
+}
+

@@ -1,0 +1,22 @@
+SageTV MiniClient Dev v0.3.6 -> v0.3.7
+
+Purpose: clean-install telemetry retest.
+
+Changes:
+- Re-enables the original v0.3.0 read-only player telemetry hooks.
+- Telemetry is logcat-only; no app-private telemetry file writes.
+- Telemetry uses WARN priority for better Fire OS visibility.
+- Keeps v0.3.6 fixed client ID DEV001 (44:45:56:30:30:31).
+- Keeps fresh-install default Streaming Mode = Dynamic.
+- Keeps clean Gradle builds.
+- Keeps uninstall-before-install for the Dev APK.
+
+After extracting over the project root:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch
+
+First verify video playback. Then, in a second terminal:
+  ./dev.sh mcp-telemetry

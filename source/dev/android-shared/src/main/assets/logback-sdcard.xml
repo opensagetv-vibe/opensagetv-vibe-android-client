@@ -1,0 +1,27 @@
+<configuration>
+    <appender name="sdcard" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <lazy>false</lazy>
+        <!-- NOTE LOG_DIR is set in AppUtil.java -->
+        <file>${LOG_DIR}/sagetv-miniclient.txt</file>
+
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <!-- daily rollover period -->
+            <fileNamePattern>${LOG_DIR}/sagetv-miniclient.%i.txt</fileNamePattern>
+
+            <!-- keep 2 files -->
+            <minIndex>1</minIndex>
+            <maxIndex>2</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>5MB</maxFileSize>
+        </triggeringPolicy>
+    </appender>
+
+    <root level="DEBUG">
+        <appender-ref ref="sdcard"/>
+    </root>
+</configuration>

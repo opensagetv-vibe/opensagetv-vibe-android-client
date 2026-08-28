@@ -1,0 +1,10 @@
+v0.5.46 is a host/MCP/test-harness update. No Android APK rebuild is required.
+
+Key changes:
+- Comskip watchdog CLI defaults to 180000 ms (3 minutes).
+- WATCHDOG_EXPIRED is observational/non-fatal and cause remains undetermined.
+- New ./dev.sh mcp-player-matrix complete 63-case harness:
+  4 top-level players, 3 streaming modes, 3 decoder policies, and all 4 GSY engines.
+- Default checks per configuration: startup/A-V, absolute seek, forward/back seek, pause/resume, Comskip right/left.
+- Matrix continues after media recovery issues; only infrastructure/tool errors produce a nonzero final harness result.
+- --list-cases and --case-id allow Codex to enumerate or target exact configurations.

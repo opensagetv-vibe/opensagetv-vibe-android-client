@@ -1,0 +1,13 @@
+SageTV MiniClient Dev v0.5.39
+
+Direct debug automation conversion:
+- direct MiniClient text input
+- direct IME hide
+- direct player play/pause/stop
+- direct absolute and relative seek
+- direct forward/back skip by caller-passed milliseconds
+- dedicated debug Comskip (no Android key or arrow mapping; SageTV/STV still owns marker target)
+- Media3 seek matrix converted to direct player seeks
+- sendkey/sendtext retained as legacy diagnostics
+
+Rebuild/install the debug APK before device testing.

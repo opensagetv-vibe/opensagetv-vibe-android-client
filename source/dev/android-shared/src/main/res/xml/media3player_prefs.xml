@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <ListPreference
+        android:defaultValue="hardware"
+        android:dialogTitle="@string/dialog_title_decoding_method"
+        android:entries="@array/entries_list_decoding_method"
+        android:entryValues="@array/entryvalues_list_decoding_method"
+        android:key="decoding_method"
+        android:summary="@string/summary_list_decoding_method"
+        android:title="@string/title_list_decoding_method"/>
+
+    <ListPreference
+        android:defaultValue="sync"
+        android:dialogTitle="MediaCodec Queueing Mode"
+        android:entries="@array/entries_codec_queueing_mode"
+        android:entryValues="@array/entryvalues_codec_queueing_mode"
+        android:key="media3_codec_mode"
+        android:summary="%s"
+        android:title="MediaCodec Queueing Mode"/>
+
+    <Preference
+        android:key="show_media3_decoders"
+        android:summary="Show the Android MediaCodecs visible to the Media3 backend"
+        android:title="Show Media3 MediaCodecs"/>
+    <Preference
+        android:key="media3version"
+        android:summary=""
+        android:title="Media3 Version"/>
+    <Preference
+        android:key="media3_decoder_policy"
+        android:summary="Platform MediaCodec with decoder fallback; no legacy ExoPlayer FFmpeg extension"
+        android:title="Decoder Policy"/>
+</PreferenceScreen>

@@ -1,0 +1,7 @@
+SageTV MiniClient Dev v0.5.19
+
+MCP-only native Search helper.
+- Adds MCP tool: dev_search
+- Adds host command: ./dev.sh mcp-search-test
+- The helper connects ADB and sends Search in one MCP/container session.
+- No APK rebuild required from v0.5.18.

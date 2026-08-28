@@ -1,0 +1,16 @@
+SageTV MiniClient Dev v0.3.3 -> v0.3.4
+
+Purpose: restore the exact v0.3.0 Android telemetry runtime that was confirmed to play video.
+
+Apply by extracting this ZIP over the project root and overwriting files.
+
+Then run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch
+
+FIRST TEST: verify video playback starts normally.
+Do not judge this patch by MCP telemetry availability; app-private file telemetry has been intentionally disabled.
+No Docker image rebuild is required.

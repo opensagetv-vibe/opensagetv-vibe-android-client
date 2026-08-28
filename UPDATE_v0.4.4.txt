@@ -1,0 +1,21 @@
+SageTV MiniClient Dev v0.4.3 -> v0.4.4
+
+Purpose: repair Fire TV video output lifecycle after real hardware testing showed:
+- Legacy Exo exits when starting video
+- Media3 audio-only
+- IJK audio-only
+
+Changes:
+- Legacy Exo uses setVideoSurfaceView() before prepare().
+- Media3 binds SurfaceView before prepare().
+- IJK restores video_surface visibility after releasePlayer() before setDisplay().
+- GDX OSD uses translucent media-overlay SurfaceView ordering.
+- No internal telemetry hooks.
+
+Apply over the existing project root, overwriting files.
+Then run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch

@@ -1,0 +1,10 @@
+source
+artifacts
+incoming
+adb
+logs
+screenshots
+recordings
+.gradle
+**/build
+*.zip

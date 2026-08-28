@@ -1,0 +1,54 @@
+schema = 1
+
+# Fill the recording labels/paths only after choosing safe test media in SageTV.
+# These cases are intentionally backend-neutral until telemetry identifies the player.
+
+[[case]]
+id = "P100_COLD_START"
+description = "Force-stop dev app, launch, open known-good recording, measure visible first video frame."
+manual_before_telemetry = true
+
+[[case]]
+id = "P110_SKIP_FORWARD_10"
+description = "Stable playback then one +10-second skip; require video and audio recovery."
+manual_before_telemetry = true
+
+[[case]]
+id = "P111_SKIP_FORWARD_30"
+description = "Stable playback then one +30-second skip; require video and audio recovery."
+manual_before_telemetry = true
+
+[[case]]
+id = "P112_SKIP_FORWARD_60"
+description = "Stable playback then one +60-second skip; require video and audio recovery."
+manual_before_telemetry = true
+
+[[case]]
+id = "P120_SKIP_BACK_10"
+description = "Stable playback then one -10-second skip; require video and audio recovery."
+manual_before_telemetry = true
+
+[[case]]
+id = "P121_SKIP_BACK_30"
+description = "Stable playback then one -30-second skip; require video and audio recovery."
+manual_before_telemetry = true
+
+[[case]]
+id = "P130_RAPID_MIXED_SEEK"
+description = "+30,+30,-10,+60,-30 repeated four times with settling delay."
+manual_before_telemetry = true
+
+[[case]]
+id = "P140_PAUSE_SEEK_RESUME"
+description = "Pause, seek, resume; verify audio/video return."
+manual_before_telemetry = true
+
+[[case]]
+id = "P150_STOP_REOPEN"
+description = "Stop and reopen same recording."
+manual_before_telemetry = true
+
+[[case]]
+id = "P160_CHANGE_RECORDING"
+description = "Switch between two known-good recordings without exiting app."
+manual_before_telemetry = true

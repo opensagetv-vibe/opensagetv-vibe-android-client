@@ -1,0 +1,26 @@
+SageTV MiniClient Dev v0.5.36
+
+Search/IME synchronization and Android keyboard visibility diagnostics.
+
+Changes:
+- Android debug snapshot now reports the keyboard request separately from actual IME visibility:
+    imeRequested=true|false
+    imeVisibleKnown=true|false
+    imeVisible=true|false
+  `imeVisible=false` with `imeVisibleKnown=true` explicitly means Android verifies that the keyboard is NOT displayed.
+- Debug status version increased to 2.
+- `mcp-send-sequence` adds:
+    waittextinput <timeout-ms>
+    waitimevisible <timeout-ms>
+    waitimehidden <timeout-ms>
+- Standard native recording startup now performs:
+    command search
+    waittextinput 8000
+    waitimevisible 8000
+    sendtext <required --text>
+    sendkey BACK
+    waitimehidden 5000
+  before continuing the validated playback-start keys.
+- This prevents text injection before the Search field and Fire TV keyboard are actually ready, and verifies that the keyboard is dismissed before playback navigation continues.
+
+Android source changed. Rebuild/install the debug APK before testing.

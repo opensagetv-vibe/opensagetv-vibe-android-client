@@ -1,0 +1,8 @@
+config/firetv.toml
+artifacts/*
+!artifacts/.gitkeep
+miniclient-src/*
+mcp/.venv/
+**/__pycache__/
+*.pyc
+.gradle/

@@ -1,0 +1,485 @@
+diff -ruN existing/.dev-refactor.json dev/.dev-refactor.json
+--- existing/.dev-refactor.json	1970-01-01 00:00:00.000000000 +0000
++++ dev/.dev-refactor.json	2026-08-26 00:10:14.364675690 +0000
+@@ -0,0 +1,29 @@
++{
++  "schema": 2,
++  "timestamp_utc": "2026-08-26T00:10:14.362945+00:00",
++  "upstream_head": null,
++  "dev_application_id_base": "org.opensagetv.miniclient.dev",
++  "expected_debug_application_id": "org.opensagetv.miniclient.dev.debug",
++  "visible_name_release": "SageTV MiniClient Dev",
++  "visible_name_debug": "SageTV MiniClient Dev Debug",
++  "changed_files": [
++    "build.gradle",
++    "android-tv/build.gradle",
++    "android-shared/build.gradle",
++    "android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java",
++    "android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java",
++    "android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java",
++    "android-shared/src/main/java/sagex/miniclient/android/util/Logger.java",
++    "android-shared/src/main/AndroidManifest.xml",
++    "android-shared/src/main/res/xml/prefs.xml",
++    "android-shared/src/main/res/values/strings.xml",
++    "pipeline/Jenkinsfile",
++    ".gitignore",
++    "FIREBASE_REMOVAL.md",
++    "scripts/verify_no_firebase.sh",
++    "CHANGELOG.md"
++  ],
++  "remaining_active_firebase_references": [],
++  "firebase_removed_from_active_code": true,
++  "behavioral_player_code_modified": false
++}
+diff -ruN existing/.gitignore dev/.gitignore
+--- existing/.gitignore	2026-08-26 00:10:13.670142217 +0000
++++ dev/.gitignore	2026-08-26 00:10:14.343967014 +0000
+@@ -32,7 +32,6 @@
+ *.iml
+ *.apk
+ out/
+-com_crashlytics_export_strings.xml
+ 
+ ## Eclipse
+ .classpath
+@@ -70,4 +69,3 @@
+ ## Sensitive
+ keystore.properties
+ jvlsagetvkeystore
+-google-services.json
+\ No newline at end of file
+diff -ruN existing/CHANGELOG.md dev/CHANGELOG.md
+--- existing/CHANGELOG.md	2026-08-26 00:10:13.670301927 +0000
++++ dev/CHANGELOG.md	2026-08-26 00:10:14.344255469 +0000
+@@ -1,3 +1,7 @@
++**Dev / Unreleased**
++- Removed Google Firebase Analytics and Crashlytics dependencies, plugins, runtime reporting, settings, manifest metadata, and Jenkins Google Services credential handling.
++- Android logging now remains local through the existing SLF4J logger; exception stack traces are retained in local logs.
++
+ **1.14.0 (9/27/2022)**
+ - Update ExoPlayer to 2.18.1
+ 
+diff -ruN existing/FIREBASE_REMOVAL.md dev/FIREBASE_REMOVAL.md
+--- existing/FIREBASE_REMOVAL.md	1970-01-01 00:00:00.000000000 +0000
++++ dev/FIREBASE_REMOVAL.md	2026-08-26 00:10:14.344062979 +0000
+@@ -0,0 +1,22 @@
++# Firebase Removal
++
++Firebase Analytics and Firebase Crashlytics have been removed from the MiniClient Dev source tree.
++
++## Removed
++
++- Google Services Gradle plugin and classpath.
++- Firebase Crashlytics Gradle plugin and classpath.
++- Firebase BoM, Analytics, and Crashlytics application dependencies.
++- Shared-module Crashlytics dependency.
++- Crashlytics initialization from `MiniclientApplication`.
++- Crashlytics calls from the Android `Logger` implementation.
++- Crashlytics enable/user settings and preference-store helpers.
++- Crashlytics manifest collection metadata.
++- Jenkins dependency on the Firebase `google-services.json` credential.
++- Firebase-specific `.gitignore` entries.
++
++## Logging behavior
++
++The existing `ILogger` interface is unchanged to avoid unnecessary changes in shared/core code. Android `Logger` now sends messages and exceptions only to its SLF4J backend. `setCustomKey()` and `setUserID()` remain no-op compatibility methods because their only purpose was cloud crash-report metadata.
++
++Historical Firebase entries in `CHANGELOG.md` are intentionally retained because they describe older released versions.
+diff -ruN existing/android-shared/build.gradle dev/android-shared/build.gradle
+--- existing/android-shared/build.gradle	2026-08-26 00:10:13.670676562 +0000
++++ dev/android-shared/build.gradle	2026-08-26 00:10:14.339880756 +0000
+@@ -75,7 +75,6 @@
+     }
+ 
+     api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+-    implementation 'com.google.firebase:firebase-crashlytics:18.2.10'
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi"
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+diff -ruN existing/android-shared/src/main/AndroidManifest.xml dev/android-shared/src/main/AndroidManifest.xml
+--- existing/android-shared/src/main/AndroidManifest.xml	2026-08-26 00:10:13.682861072 +0000
++++ dev/android-shared/src/main/AndroidManifest.xml	2026-08-26 00:10:14.341016578 +0000
+@@ -2,12 +2,7 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools"
+     package="sagex.miniclient.android">
+-
+-    <meta-data
+-        android:name="firebase_crashlytics_collection_enabled"
+-        android:value="false" />
+-
+-    <uses-feature
++<uses-feature
+         android:glEsVersion="0x00020000"
+         android:required="true" />
+ 
+diff -ruN existing/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java dev/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java
+--- existing/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java	2026-08-26 00:10:13.685861463 +0000
++++ dev/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java	2026-08-26 00:10:14.340037162 +0000
+@@ -13,7 +13,6 @@
+ //import org.slf4j.LoggerFactory;
+ 
+ 
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+ 
+ import java.io.BufferedReader;
+ import java.io.File;
+@@ -59,8 +58,6 @@
+         MiniclientApplication.INSTANCE = this;
+         AndroidMiniClientOptions options = new AndroidMiniClientOptions(this);
+ 
+-        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(options.getPrefs().getFirebaseCrashlyticsEnabled());
+-        FirebaseCrashlytics.getInstance().setUserId(options.getPrefs().getFirebaseCrashlyticsUser());
+ 
+         PackageManager manager = this.getPackageManager();
+ 
+diff -ruN existing/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java dev/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java
+--- existing/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java	2026-08-26 00:10:13.687573473 +0000
++++ dev/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java	2026-08-26 00:10:14.340395152 +0000
+@@ -57,14 +57,6 @@
+     public static final String CONTAINER_SUPPORT_DEFAULT = "automatic";
+     public static final String VIDEO_CODEC_SUPPORT_DEFAULT = "automatic";
+     public static final String AUDIO_CODEC_SUPPORT_DEFAULT = "automatic";
+-
+-    public static final String FIREBASE_CRASHLYTICS_ENABLED = "firebase/crashlytics/enabled";
+-    public static final boolean FIREBASE_CRASHLYTICS_ENABLED_DEFAULT = true;
+-
+-    public static final String FIREBASE_CRASHLYTICS_USER = "firebase/crashlytics/user";
+-    public static final String FIREBASE_CRASHLYTICS_USER_DEFAULT = "Anonymous";
+-
+-
+     //</editor-fold>
+ 
+     private final SharedPreferences prefs;
+@@ -321,17 +313,6 @@
+     {
+         return this.getString("codec/audio/" + codec + "/support", AndroidPrefStore.AUDIO_CODEC_SUPPORT_DEFAULT);
+     }
+-
+-    public boolean getFirebaseCrashlyticsEnabled()
+-    {
+-        return this.getBoolean(AndroidPrefStore.FIREBASE_CRASHLYTICS_ENABLED, AndroidPrefStore.FIREBASE_CRASHLYTICS_ENABLED_DEFAULT);
+-    }
+-
+-    public String getFirebaseCrashlyticsUser()
+-    {
+-        return this.getString(AndroidPrefStore.FIREBASE_CRASHLYTICS_USER, AndroidPrefStore.FIREBASE_CRASHLYTICS_USER_DEFAULT);
+-    }
+-
+     /*
+     private boolean codecListCompare(String list, String compCodec)
+     {
+diff -ruN existing/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java dev/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java
+--- existing/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java	2026-08-26 00:10:13.688697176 +0000
++++ dev/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java	2026-08-26 00:10:14.340660551 +0000
+@@ -15,7 +15,6 @@
+ import android.widget.Toast;
+ 
+ 
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+ 
+ import java.io.File;
+ import java.io.FilenameFilter;
+diff -ruN existing/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java dev/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java
+--- existing/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java	2026-08-26 00:10:13.688878600 +0000
++++ dev/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java	2026-08-26 00:10:14.340743416 +0000
+@@ -1,137 +1,121 @@
+ package sagex.miniclient.android.util;
+ 
+-import sagex.miniclient.logging.ILogger;
+ import org.slf4j.LoggerFactory;
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+ 
++import sagex.miniclient.logging.ILogger;
++
++/**
++ * Android logger implementation backed by SLF4J only.
++ *
++ * <p>All logging remains local through the existing SLF4J backend. The
++ * metadata methods remain as no-ops to preserve the shared {@link ILogger}
++ * interface.</p>
++ */
+ public class Logger implements ILogger
+ {
+-    private Class cls;
+     private org.slf4j.Logger log;
+-    //private FirebaseCrashlytics crashlogger;
+ 
+     public static Logger getLogger(Class cls)
+     {
+-        Logger log = new Logger();
+-        log.log = LoggerFactory.getLogger(cls);
+-
+-        //log.crashlogger = FirebaseCrashlytics.getInstance();
+-
+-        return log;
++        Logger logger = new Logger();
++        logger.log = LoggerFactory.getLogger(cls);
++        return logger;
+     }
+ 
+     public static Logger getLogger(String name)
+     {
+-        Logger log = new Logger();
+-        log.log = LoggerFactory.getLogger(name);
+-        //log.crashlogger = FirebaseCrashlytics.getInstance();
+-
+-        return log;
++        Logger logger = new Logger();
++        logger.log = LoggerFactory.getLogger(name);
++        return logger;
+     }
+ 
+     @Override
+-    public ILogger getLoggerInstance(String name)
++    public boolean isTraceEnabled()
+     {
+-        return Logger.getLogger(name);
++        return log.isTraceEnabled();
+     }
+ 
+     @Override
+-    public ILogger getLoggerInstance(Class cls)
++    public boolean isDebugEnabled()
+     {
+-        return Logger.getLogger(cls);
++        return log.isDebugEnabled();
+     }
+ 
+     @Override
+     public void recordException(Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().recordException(t);
+-
++        log.error("Unhandled exception", t);
+     }
+ 
+     @Override
+     public void logError(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.error(message);
+     }
+ 
+     @Override
+     public void logError(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+-        log.error(message);
++        log.error(message, t);
+     }
+ 
+     @Override
+     public void logWarning(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.warn(message);
+     }
+ 
+     @Override
+     public void logWarning(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.warn(message, t);
+     }
+ 
+     @Override
+     public void logDebug(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.debug(message);
+     }
+ 
+     @Override
+     public void logDebug(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.debug(message, t);
+     }
+ 
+     @Override
+     public void logInfo(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.info(message);
+     }
+ 
+     @Override
+     public void logInfo(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.info(message, t);
+     }
+ 
+     @Override
+     public void logTrace(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.trace(message);
+     }
+ 
+     @Override
+     public void logTrace(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.trace(message, t);
+     }
+ 
+     @Override
+     public void setCustomKey(String key, String value)
+     {
+-        FirebaseCrashlytics.getInstance().setCustomKey(key, value);
++        // Cloud crash-report metadata is no longer used.
+     }
+ 
+     @Override
+     public void setUserID(String userID)
+     {
+-        FirebaseCrashlytics.getInstance().setUserId(userID);
++        // Cloud crash-report user metadata is no longer used.
+     }
+ }
+diff -ruN existing/android-shared/src/main/res/values/strings.xml dev/android-shared/src/main/res/values/strings.xml
+--- existing/android-shared/src/main/res/values/strings.xml	2026-08-26 00:10:13.693436358 +0000
++++ dev/android-shared/src/main/res/values/strings.xml	2026-08-26 00:10:14.343159077 +0000
+@@ -153,9 +153,4 @@
+     <string name="dialog_title_list_remuxing_format_preference" >Remuxing Container Format</string>
+     <string name="summary_list_remuxing_formats_preference">%s - The container format SageTV will use to remux the content too</string>
+     <string name="title_list_remuxing_formats_preference">Remuxing Container Format</string>
+-    <string name="summary_enable_crashlytics_preference">This enables crash and exception logging to Google Firebase Crashlytics to help developers diagnose issues.  Requires application restart to take effect</string>
+-    <string name="title_enable_crashlytics_preference">Google Firebase Crashlytics Logging</string>
+-    <string name="dialog_title_firebase_user_preference">Firebase User</string>
+-    <string name="title_firebase_user_preference">Firebase Crashlytics User</string>
+-    <string name="summary_firebase_user_preference">This will allow the developer to find a crash report in firebase if the user reported it</string>
+ </resources>
+diff -ruN existing/android-shared/src/main/res/xml/prefs.xml dev/android-shared/src/main/res/xml/prefs.xml
+--- existing/android-shared/src/main/res/xml/prefs.xml	2026-08-26 00:10:13.693740677 +0000
++++ dev/android-shared/src/main/res/xml/prefs.xml	2026-08-26 00:10:14.341437292 +0000
+@@ -183,23 +183,7 @@
+             android:key="log_level"
+             android:summary="@string/summary_list_loglevels_preference"
+             android:title="@string/title_list_loglevels_preference"/>
+-
+-        <EditTextPreference
+-            android:defaultValue="anonymous"
+-            android:key="firebase/crashlytics/user"
+-            android:dialogTitle="@string/dialog_title_firebase_user_preference"
+-            android:title="@string/title_firebase_user_preference"
+-            android:summary="@string/summary_firebase_user_preference" />
+-
+-
+-        <CheckBoxPreference
+-            android:enabled="true"
+-            android:defaultValue="true"
+-            android:key="firebase/crashlytics/enabled"
+-            android:summary="@string/summary_enable_crashlytics_preference"
+-            android:title="@string/title_enable_crashlytics_preference"/>
+-
+-    </PreferenceCategory>
++</PreferenceCategory>
+ 
+     <PreferenceCategory android:title="About">
+ 
+diff -ruN existing/android-tv/build.gradle dev/android-tv/build.gradle
+--- existing/android-tv/build.gradle	2026-08-26 00:10:13.693925015 +0000
++++ dev/android-tv/build.gradle	2026-08-26 00:10:14.339683599 +0000
+@@ -1,8 +1,5 @@
+ apply plugin: 'com.android.application'
+-apply plugin: 'com.google.gms.google-services' // Google services Gradle plugin
+ 
+-// Apply the Crashlytics Gradle plugin
+-apply plugin: 'com.google.firebase.crashlytics'
+ 
+ def computeVersionCode()
+ {
+@@ -35,7 +32,7 @@
+ 
+     defaultConfig {
+ 
+-        applicationId "jvl.sage.miniclient.android.tv.debug"
++        applicationId "org.opensagetv.miniclient.dev"
+         minSdkVersion androidMinSdkVersion
+         targetSdkVersion androidTargetSdkVersion
+         // versionCode API (2 digits), SCREEN (2 digits), VERSION (3 digits)
+@@ -113,7 +110,7 @@
+             minifyEnabled false
+             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+             signingConfig signingConfigs.release
+-            resValue "string", "app_name", "@string/app_name_release"
++            resValue "string", "app_name", 'SageTV MiniClient Dev'
+         }
+         debug
+         {
+@@ -124,8 +121,8 @@
+ 
+             //Identify the application as debug, and allow it to be installed along side production
+             applicationIdSuffix = ".debug"
+-            versionNameSuffix = "-DEBUG"
+-            resValue "string", "app_name", "@string/app_name_debug"
++            versionNameSuffix = "-DEV-DEBUG"
++            resValue "string", "app_name", 'SageTV MiniClient Dev Debug'
+         }
+     }
+ }
+@@ -141,13 +138,7 @@
+     implementation "androidx.leanback:leanback:1.0.0"
+     api "com.github.bumptech.glide:glide:3.8.0"
+ 
+-    // Import the BoM for the Firebase platform
+-    implementation platform('com.google.firebase:firebase-bom:30.0.0')
+ 
+-    // Declare the dependencies for the Crashlytics and Analytics libraries
+-    // When using the BoM, you don't specify versions in Firebase library dependencies
+-    implementation 'com.google.firebase:firebase-crashlytics'
+-    implementation 'com.google.firebase:firebase-analytics'
+ 
+ 
+ }
+diff -ruN existing/build.gradle dev/build.gradle
+--- existing/build.gradle	2026-08-26 00:10:13.706828829 +0000
++++ dev/build.gradle	2026-08-26 00:10:14.339112539 +0000
+@@ -13,10 +13,7 @@
+     dependencies {
+         classpath 'com.android.tools.build:gradle:4.0.2'
+         classpath 'org.robovm:robovm-gradle-plugin:1.6.0'
+-        classpath 'com.google.gms:google-services:4.3.10'
+ 
+-        // Add the Crashlytics Gradle plugin
+-        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.8.1'
+     }
+ }
+ 
+diff -ruN existing/pipeline/Jenkinsfile dev/pipeline/Jenkinsfile
+--- existing/pipeline/Jenkinsfile	2026-08-26 00:10:13.764223656 +0000
++++ dev/pipeline/Jenkinsfile	2026-08-26 00:10:14.343833363 +0000
+@@ -234,9 +234,7 @@
+             {
+                 script
+                 {
+-                    withCredentials([file(credentialsId: 'SageTVAndroidClient-GoogleServicesJSON-Firebase', variable: 'google_services_json')])
+-                    {
+-                        sh "cp ${google_services_json} ./android-tv"
++./android-tv"
+                     }
+ 
+                     sh "./gradlew clean"
+diff -ruN existing/scripts/verify_no_firebase.sh dev/scripts/verify_no_firebase.sh
+--- existing/scripts/verify_no_firebase.sh	1970-01-01 00:00:00.000000000 +0000
++++ dev/scripts/verify_no_firebase.sh	2026-08-26 00:10:14.344153345 +0000
+@@ -0,0 +1,11 @@
++#!/usr/bin/env bash
++set -euo pipefail
++ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++cd "$ROOT"
++
++if grep -RniE 'firebase|crashlytics|google-services[.]json'   --include='*.java' --include='*.kt' --include='*.gradle' --include='*.xml'   --include='*.properties' --include='Jenkinsfile' --include='.gitignore'   --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build --exclude-dir=playstore .; then
++  echo "FAIL: active Firebase/Crashlytics references remain" >&2
++  exit 1
++fi
++
++echo "PASS: no active Firebase/Crashlytics/Google Services references found"

@@ -1,0 +1,9 @@
+# Copy this file to the Windows workspace as:
+# C:/SageTV-MiniClient-Dev/config/firetv.toml
+# Then edit the Fire TV address.
+device = "192.168.1.50:5555"
+dev_package = "org.opensagetv.miniclient.dev.debug"
+adb = "adb"
+artifact_dir = "/workspace/artifacts/firetv"
+# Optional. aapt is already available in the development image.
+aapt = "/opt/android-sdk/build-tools/29.0.2/aapt"

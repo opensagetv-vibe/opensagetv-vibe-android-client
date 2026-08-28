@@ -1,0 +1,5 @@
+# Codex Start Prompt
+
+Use this after extracting the full v0.2.0 workspace and the Docker scaffold tests pass. The exact source is already bundled.
+
+> Read `AGENTS.md`, `HANDOFF.md`, `CODE_REVIEW.md`, `TASKS.md`, `QUESTIONS.md`, `DOCKER_WORKFLOW.md`, and `SOURCE_IMPORT.md` before editing code. Use only the Docker workflow. Do not modify, stop, uninstall, clear data, or replace any package beginning with `jvl.sage.miniclient`. The only deployable test package is `org.opensagetv.miniclient.dev.debug` and APK installs must go through the package-verifying Docker/MCP path. First validate and build both the bundled untouched baseline and isolated Dev app. Confirm `source/SOURCE_IMPORT.json` and the Firebase-removal validation before any player behavior edits. Do not change ExoPlayer/IJKPlayer behavior yet. Establish a Fire TV playback baseline first, then add telemetry before making startup or seek fixes. Keep ExoPlayer/Media3, IJKPlayer, Android build modernization, and seek-algorithm changes as separate phases with regression evidence.

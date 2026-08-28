@@ -1,0 +1,14 @@
+SageTV MiniClient Dev v0.5.1 update
+
+Fixes IJK/GSY MPEG-2 playback on Amazon AFTMM / mantis Fire TV.
+
+- Prevents the confirmed MTK MPEG-2 MediaCodec dequeueInputBuffer failure loop.
+- IJK/GSY automatically use bundled FFmpeg software decode for MPEG-2 on AFTMM/mantis.
+- H.264/AVC, HEVC, MPEG-4 and other devices keep normal hardware decoding.
+- Adds a second codec-selector guard plus regression tests/validation.
+
+Apply over the v0.5.0 project root, then run:
+  ./test_valitdate_build_install_lanuch.sh
+
+First runtime check:
+  Select IJKPlayer, keep Decoding Method = Hardware, and replay the same MPEG-2 recording.

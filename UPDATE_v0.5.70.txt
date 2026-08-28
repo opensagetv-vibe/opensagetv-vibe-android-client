@@ -1,0 +1,3 @@
+SageTV MiniClient Dev v0.5.70
+
+Adds Dev-only runtime player tuning and an MCP tuning matrix. Rebuild/install once for debugStatusVersion=13; subsequent parameter sweeps do not require recompiling. See README.md and TASK_CODEX.md.

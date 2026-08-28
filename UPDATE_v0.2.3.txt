@@ -1,0 +1,28 @@
+SageTV MiniClient Dev v0.2.3 update
+==================================
+
+Fixes WSL/Docker Desktop workspace bind mounting.
+
+dev.sh now exports its own absolute directory as SAGETV_WINDOWS_ROOT before
+calling Docker Compose. This prevents /workspace from accidentally pointing at
+C:\SageTV-MiniClient-Dev or another stale/default location.
+
+INSTALL
+-------
+Extract the contents of this ZIP directly into your existing
+SageTV-MiniClient-Dev project directory and overwrite files.
+
+Then run:
+  unset SAGETV_WINDOWS_ROOT
+  ./dev.sh test
+  ./dev.sh validate
+
+No Docker image rebuild is required.
+
+Optional diagnostic:
+  ./dev.sh shell
+  pwd
+  ls -l /workspace/scripts/run_unit_tests.sh
+
+Expected container pwd: /workspace
+Expected run_unit_tests.sh to exist.

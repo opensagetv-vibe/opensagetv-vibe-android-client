@@ -1,0 +1,24 @@
+SageTV MiniClient Dev v0.3.5 -> v0.3.6
+
+Extract this ZIP directly over the existing SageTV-MiniClient-Dev project root and overwrite files.
+
+Changes:
+- Hard rollback of all Android player telemetry runtime hooks to the pre-telemetry v0.2.10 player source.
+- Clean Dev builds (`gradle clean`) to prevent stale telemetry classes.
+- Fixed SageTV Dev client ID: DEV001 = 44:45:56:30:30:31.
+- Fixed client ID is enforced at resolver and MiniClientConnection wire layer.
+- Fresh Dev installs default Streaming Mode to dynamic, not fixed.
+- Dev APK install always uninstalls org.opensagetv.miniclient.dev.debug before fresh install.
+- Existing/production MiniClient package remains protected.
+- MCP player telemetry is intentionally disabled during baseline recovery.
+
+After applying:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch
+
+No Docker image rebuild is required.
+
+Important: uninstall-first clears Android-local Dev app preferences. The fixed compiled DEV001 identity is intended to preserve the SageTV server-side MiniClient profile. Fresh local streaming mode will be Dynamic.

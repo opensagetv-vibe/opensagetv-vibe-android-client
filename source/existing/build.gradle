@@ -1,0 +1,62 @@
+buildscript {
+    repositories {
+        google()
+        //mavenLocal()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        flatDir {
+            dirs 'libs'
+        }
+        jcenter()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.0.2'
+        classpath 'org.robovm:robovm-gradle-plugin:1.6.0'
+        classpath 'com.google.gms:google-services:4.3.10'
+
+        // Add the Crashlytics Gradle plugin
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.8.1'
+    }
+}
+
+
+allprojects {
+
+    version = '1.0'
+
+    ext {
+
+        appVersionCode = 2101102
+        appVersionName = "1.14.0"
+
+
+        gdxVersion = "1.9.14"
+        // NOTE: This is for ext we need to build ffmpeg
+        exoVersionCustomExt = '2.18.0'
+        // NOTE: using regular exoplayer for core stuff
+        exoVersion = '2.18.1'
+        ijkVersionDev = '0.8.8-SNAPSHOT'
+        androidBuildToolsVersion = "29.0.2"
+        androidMinSdkVersion = 21
+        androidCompileSdkVersion = 29
+        androidTargetSdkVersion = 30
+        // tell every project where to find the local project maven files
+        mavenInProject = file('../mavenlocal').absoluteFile.toURI()
+        defJavaVesionNum = 1.8
+        defJavaVesionConst = JavaVersion.VERSION_1_8
+    }
+
+    repositories {
+        maven { url mavenInProject }
+        google()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven { url "https://oss.sonatype.org/content/repositories/releases/" }
+        flatDir {
+            dirs '../libs'
+        }
+        jcenter()
+    }
+}
+

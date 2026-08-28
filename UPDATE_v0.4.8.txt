@@ -1,0 +1,19 @@
+SageTV MiniClient Dev v0.4.7 -> v0.4.8
+
+Purpose:
+- Leave working Legacy ExoPlayer and Media3 backends unchanged.
+- Fix IJK 0.8.8 black-screen/stop behavior seen with MPEG-2/H.262 Fire TV playback by defaulting IJK MPEG-2 to the bundled FFmpeg software decoder.
+- Keep IJK MediaCodec hardware decoding enabled for AVC/H.264 and HEVC/H.265.
+- Add an opt-in IJK: MPEG-2 Hardware Decoder preference for A/B testing.
+- Mark IJK player errors handled after playerFailed() to avoid a duplicate completion/stop cascade.
+
+Apply over the existing v0.4.7 project root, overwriting files.
+
+Then run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch
+
+Select IJKPlayer Legacy and test the same MPEG-2 recording. Leave "IJK: MPEG-2 Hardware Decoder" OFF for the first test.

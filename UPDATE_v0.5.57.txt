@@ -1,0 +1,17 @@
+v0.5.57 - Local player-position seek verification
+
+Fixes the player-matrix absolute seek appearing stuck for the full watchdog while video is already playing.
+
+Root cause:
+- Direct MiniPlayerPlugin.seek(targetMs) uses backend-local player time.
+- MCP verified the result against SageTV's anchored display timeline (serverAnchorMs + local position).
+- Dynamic streaming can have a non-zero server anchor, so seek target 0 could never satisfy the old verifier.
+
+Changes:
+- dev_seek_time verifies health_playerPositionMs / local-position fallback.
+- Relative debug seeks calculate targets from local player position.
+- SageTV timeline remains diagnostic only.
+
+Requires Android debug APK rebuild/install because DevTestReceiver.java changed.
+
+Debug APK capability marker: `debugStatusVersion=6`. MCP direct seek tools reject older debug APKs so the full matrix cannot silently use the old anchored-coordinate relative seek implementation.

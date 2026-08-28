@@ -1,0 +1,8 @@
+SageTV MiniClient Dev v0.5.20
+
+MCP native Search text-entry test:
+- dev_type_text(text, submit=False) injects Android keyboard text.
+- dev_search_text(...) opens native SageTV Search, waits for hasTextInput=true, types text, presses keyboard Next/Enter, and can send post-search Android keys.
+- Default ./dev.sh mcp-search-test sequence:
+  Search -> type "meet the press" -> Next/Enter -> Down -> Right -> Right -> Right -> Play -> Play
+- No Android/player source changes; no APK rebuild is required from v0.5.19.

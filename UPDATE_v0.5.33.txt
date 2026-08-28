@@ -1,0 +1,15 @@
+SageTV MiniClient Dev v0.5.33
+
+Purpose: diagnose Media3 Pull large-seek latency without another tuning guess.
+
+Changes:
+- Revert Media3 Pull buffer from experimental 1 MiB back to proven 256 KiB.
+- Count Pull data-source opens and SageTV READ request/byte/wait metrics.
+- Surface metrics in debug playback health and Comskip matrix output/report.
+
+APK rebuild/install is required because Android/core source changed.
+
+Test:
+./dev.sh mcp-media3-comskip-matrix --server 192.168.10.175 --text "<recording search>" --modes pull
+
+Look for the new `pull I/O:` line after each RIGHT/LEFT command.

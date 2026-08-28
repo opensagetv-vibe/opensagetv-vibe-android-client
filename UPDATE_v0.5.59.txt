@@ -1,0 +1,9 @@
+SageTV MiniClient Dev v0.5.59
+
+Host/MCP-only update. No APK rebuild required if debugStatusVersion=6 is already installed.
+
+Changes:
+- absolute_seek verdict ignores where playback lands
+- recovery passes when real video/audio output counters resume advancing
+- target/position/seek wrapper state is diagnostic only
+- CLI prints every matrix step plus video/audio advancement health after each result

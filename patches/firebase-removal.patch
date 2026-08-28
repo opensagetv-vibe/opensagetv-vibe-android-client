@@ -1,0 +1,390 @@
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/.gitignore /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/.gitignore
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/.gitignore	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/.gitignore	2026-08-25 23:58:26.517975715 +0000
+@@ -32,7 +32,6 @@
+ *.iml
+ *.apk
+ out/
+-com_crashlytics_export_strings.xml
+ 
+ ## Eclipse
+ .classpath
+@@ -70,4 +69,3 @@
+ ## Sensitive
+ keystore.properties
+ jvlsagetvkeystore
+-google-services.json
+\ No newline at end of file
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/CHANGELOG.md /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/CHANGELOG.md
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/CHANGELOG.md	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/CHANGELOG.md	2026-08-25 23:58:26.518110358 +0000
+@@ -1,3 +1,7 @@
++**Unreleased**
++- Removed Google Firebase Analytics and Crashlytics dependencies, plugins, runtime reporting, settings, manifest metadata, and Jenkins Google Services credential handling.
++- Android logging now remains local through the existing SLF4J logger; exception stack traces are retained in local logs.
++
+ **1.14.0 (9/27/2022)**
+ - Update ExoPlayer to 2.18.1
+ 
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/FIREBASE_REMOVAL.md /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/FIREBASE_REMOVAL.md
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/FIREBASE_REMOVAL.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/FIREBASE_REMOVAL.md	2026-08-25 23:58:26.518216588 +0000
+@@ -0,0 +1,22 @@
++# Firebase Removal
++
++Firebase Analytics and Firebase Crashlytics have been removed from the MiniClient source tree.
++
++## Removed
++
++- Google Services Gradle plugin and classpath.
++- Firebase Crashlytics Gradle plugin and classpath.
++- Firebase BoM, Analytics, and Crashlytics application dependencies.
++- Shared-module Crashlytics dependency.
++- Crashlytics initialization from `MiniclientApplication`.
++- Crashlytics calls from the Android `Logger` implementation.
++- Crashlytics enable/user settings and preference-store helpers.
++- Crashlytics manifest collection metadata.
++- Jenkins dependency on the Firebase `google-services.json` credential.
++- Firebase-specific `.gitignore` entries.
++
++## Logging behavior
++
++The existing `ILogger` interface is unchanged to avoid unnecessary changes in shared/core code. Android `Logger` now sends messages and exceptions only to its SLF4J backend. `setCustomKey()` and `setUserID()` remain no-op compatibility methods because their only purpose was cloud crash-report metadata.
++
++Historical Firebase entries in `CHANGELOG.md` are intentionally retained because they describe older released versions.
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/build.gradle /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/build.gradle
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/build.gradle	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/build.gradle	2026-08-25 23:58:26.514866972 +0000
+@@ -75,7 +75,6 @@
+     }
+ 
+     api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+-    implementation 'com.google.firebase:firebase-crashlytics:18.2.10'
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi"
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/AndroidManifest.xml /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/AndroidManifest.xml
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/AndroidManifest.xml	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/AndroidManifest.xml	2026-08-25 23:58:26.517496884 +0000
+@@ -3,10 +3,6 @@
+     xmlns:tools="http://schemas.android.com/tools"
+     package="sagex.miniclient.android">
+ 
+-    <meta-data
+-        android:name="firebase_crashlytics_collection_enabled"
+-        android:value="false" />
+-
+     <uses-feature
+         android:glEsVersion="0x00020000"
+         android:required="true" />
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java	2026-08-25 23:58:26.515011400 +0000
+@@ -13,8 +13,6 @@
+ //import org.slf4j.LoggerFactory;
+ 
+ 
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+-
+ import java.io.BufferedReader;
+ import java.io.File;
+ import java.io.FileReader;
+@@ -59,9 +57,6 @@
+         MiniclientApplication.INSTANCE = this;
+         AndroidMiniClientOptions options = new AndroidMiniClientOptions(this);
+ 
+-        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(options.getPrefs().getFirebaseCrashlyticsEnabled());
+-        FirebaseCrashlytics.getInstance().setUserId(options.getPrefs().getFirebaseCrashlyticsUser());
+-
+         PackageManager manager = this.getPackageManager();
+ 
+         try
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java	2026-08-25 23:58:26.516054942 +0000
+@@ -58,12 +58,6 @@
+     public static final String VIDEO_CODEC_SUPPORT_DEFAULT = "automatic";
+     public static final String AUDIO_CODEC_SUPPORT_DEFAULT = "automatic";
+ 
+-    public static final String FIREBASE_CRASHLYTICS_ENABLED = "firebase/crashlytics/enabled";
+-    public static final boolean FIREBASE_CRASHLYTICS_ENABLED_DEFAULT = true;
+-
+-    public static final String FIREBASE_CRASHLYTICS_USER = "firebase/crashlytics/user";
+-    public static final String FIREBASE_CRASHLYTICS_USER_DEFAULT = "Anonymous";
+-
+ 
+     //</editor-fold>
+ 
+@@ -322,16 +316,6 @@
+         return this.getString("codec/audio/" + codec + "/support", AndroidPrefStore.AUDIO_CODEC_SUPPORT_DEFAULT);
+     }
+ 
+-    public boolean getFirebaseCrashlyticsEnabled()
+-    {
+-        return this.getBoolean(AndroidPrefStore.FIREBASE_CRASHLYTICS_ENABLED, AndroidPrefStore.FIREBASE_CRASHLYTICS_ENABLED_DEFAULT);
+-    }
+-
+-    public String getFirebaseCrashlyticsUser()
+-    {
+-        return this.getString(AndroidPrefStore.FIREBASE_CRASHLYTICS_USER, AndroidPrefStore.FIREBASE_CRASHLYTICS_USER_DEFAULT);
+-    }
+-
+     /*
+     private boolean codecListCompare(String list, String compCodec)
+     {
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java	2026-08-25 23:58:26.515386074 +0000
+@@ -15,8 +15,6 @@
+ import android.widget.Toast;
+ 
+ 
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+-
+ import java.io.File;
+ import java.io.FilenameFilter;
+ 
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java	2026-08-25 23:58:46.425062807 +0000
+@@ -1,32 +1,32 @@
+ package sagex.miniclient.android.util;
+ 
+-import sagex.miniclient.logging.ILogger;
+ import org.slf4j.LoggerFactory;
+-import com.google.firebase.crashlytics.FirebaseCrashlytics;
+ 
++import sagex.miniclient.logging.ILogger;
++
++/**
++ * Android logger implementation backed by SLF4J only.
++ *
++ * <p>All logging remains local through the existing SLF4J backend. The
++ * metadata methods remain as no-ops to preserve the shared {@link ILogger}
++ * interface.</p>
++ */
+ public class Logger implements ILogger
+ {
+-    private Class cls;
+     private org.slf4j.Logger log;
+-    //private FirebaseCrashlytics crashlogger;
+ 
+     public static Logger getLogger(Class cls)
+     {
+-        Logger log = new Logger();
+-        log.log = LoggerFactory.getLogger(cls);
+-
+-        //log.crashlogger = FirebaseCrashlytics.getInstance();
+-
+-        return log;
++        Logger logger = new Logger();
++        logger.log = LoggerFactory.getLogger(cls);
++        return logger;
+     }
+ 
+     public static Logger getLogger(String name)
+     {
+-        Logger log = new Logger();
+-        log.log = LoggerFactory.getLogger(name);
+-        //log.crashlogger = FirebaseCrashlytics.getInstance();
+-
+-        return log;
++        Logger logger = new Logger();
++        logger.log = LoggerFactory.getLogger(name);
++        return logger;
+     }
+ 
+     @Override
+@@ -44,94 +44,78 @@
+     @Override
+     public void recordException(Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().recordException(t);
+-
++        log.error("Unhandled exception", t);
+     }
+ 
+     @Override
+     public void logError(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.error(message);
+     }
+ 
+     @Override
+     public void logError(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+-        log.error(message);
++        log.error(message, t);
+     }
+ 
+     @Override
+     public void logWarning(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.warn(message);
+     }
+ 
+     @Override
+     public void logWarning(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.warn(message, t);
+     }
+ 
+     @Override
+     public void logDebug(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.debug(message);
+     }
+ 
+     @Override
+     public void logDebug(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.debug(message, t);
+     }
+ 
+     @Override
+     public void logInfo(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.info(message);
+     }
+ 
+     @Override
+     public void logInfo(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.info(message, t);
+     }
+ 
+     @Override
+     public void logTrace(String message)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+         log.trace(message);
+     }
+ 
+     @Override
+     public void logTrace(String message, Throwable t)
+     {
+-        FirebaseCrashlytics.getInstance().log(message);
+-        FirebaseCrashlytics.getInstance().recordException(t);
+         log.trace(message, t);
+     }
+ 
+     @Override
+     public void setCustomKey(String key, String value)
+     {
+-        FirebaseCrashlytics.getInstance().setCustomKey(key, value);
++        // Cloud crash-report metadata is no longer used.
+     }
+ 
+     @Override
+     public void setUserID(String userID)
+     {
+-        FirebaseCrashlytics.getInstance().setUserId(userID);
++        // Cloud crash-report user metadata is no longer used.
+     }
+ }
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/res/values/strings.xml /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/res/values/strings.xml
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/res/values/strings.xml	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/res/values/strings.xml	2026-08-25 23:58:26.517242310 +0000
+@@ -153,9 +153,4 @@
+     <string name="dialog_title_list_remuxing_format_preference" >Remuxing Container Format</string>
+     <string name="summary_list_remuxing_formats_preference">%s - The container format SageTV will use to remux the content too</string>
+     <string name="title_list_remuxing_formats_preference">Remuxing Container Format</string>
+-    <string name="summary_enable_crashlytics_preference">This enables crash and exception logging to Google Firebase Crashlytics to help developers diagnose issues.  Requires application restart to take effect</string>
+-    <string name="title_enable_crashlytics_preference">Google Firebase Crashlytics Logging</string>
+-    <string name="dialog_title_firebase_user_preference">Firebase User</string>
+-    <string name="title_firebase_user_preference">Firebase Crashlytics User</string>
+-    <string name="summary_firebase_user_preference">This will allow the developer to find a crash report in firebase if the user reported it</string>
+ </resources>
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/res/xml/prefs.xml /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/res/xml/prefs.xml
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-shared/src/main/res/xml/prefs.xml	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-shared/src/main/res/xml/prefs.xml	2026-08-25 23:58:26.516762187 +0000
+@@ -184,21 +184,6 @@
+             android:summary="@string/summary_list_loglevels_preference"
+             android:title="@string/title_list_loglevels_preference"/>
+ 
+-        <EditTextPreference
+-            android:defaultValue="anonymous"
+-            android:key="firebase/crashlytics/user"
+-            android:dialogTitle="@string/dialog_title_firebase_user_preference"
+-            android:title="@string/title_firebase_user_preference"
+-            android:summary="@string/summary_firebase_user_preference" />
+-
+-
+-        <CheckBoxPreference
+-            android:enabled="true"
+-            android:defaultValue="true"
+-            android:key="firebase/crashlytics/enabled"
+-            android:summary="@string/summary_enable_crashlytics_preference"
+-            android:title="@string/title_enable_crashlytics_preference"/>
+-
+     </PreferenceCategory>
+ 
+     <PreferenceCategory android:title="About">
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-tv/build.gradle /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-tv/build.gradle
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/android-tv/build.gradle	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/android-tv/build.gradle	2026-08-25 23:58:26.514690446 +0000
+@@ -1,9 +1,4 @@
+ apply plugin: 'com.android.application'
+-apply plugin: 'com.google.gms.google-services' // Google services Gradle plugin
+-
+-// Apply the Crashlytics Gradle plugin
+-apply plugin: 'com.google.firebase.crashlytics'
+-
+ def computeVersionCode()
+ {
+     return appVersionCode
+@@ -141,14 +136,6 @@
+     implementation "androidx.leanback:leanback:1.0.0"
+     api "com.github.bumptech.glide:glide:3.8.0"
+ 
+-    // Import the BoM for the Firebase platform
+-    implementation platform('com.google.firebase:firebase-bom:30.0.0')
+-
+-    // Declare the dependencies for the Crashlytics and Analytics libraries
+-    // When using the BoM, you don't specify versions in Firebase library dependencies
+-    implementation 'com.google.firebase:firebase-crashlytics'
+-    implementation 'com.google.firebase:firebase-analytics'
+-
+ 
+ }
+ 
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/build.gradle /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/build.gradle
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/build.gradle	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/build.gradle	2026-08-25 23:58:26.513958543 +0000
+@@ -13,10 +13,6 @@
+     dependencies {
+         classpath 'com.android.tools.build:gradle:4.0.2'
+         classpath 'org.robovm:robovm-gradle-plugin:1.6.0'
+-        classpath 'com.google.gms:google-services:4.3.10'
+-
+-        // Add the Crashlytics Gradle plugin
+-        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.8.1'
+     }
+ }
+ 
+diff -ruN /mnt/data/sagetv_fb_original/sagetv-miniclient-master/pipeline/Jenkinsfile /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/pipeline/Jenkinsfile
+--- /mnt/data/sagetv_fb_original/sagetv-miniclient-master/pipeline/Jenkinsfile	2022-09-27 23:48:22.000000000 +0000
++++ /mnt/data/sagetv_fb_refactor/sagetv-miniclient-master/pipeline/Jenkinsfile	2026-08-25 23:58:26.517844047 +0000
+@@ -234,10 +234,6 @@
+             {
+                 script
+                 {
+-                    withCredentials([file(credentialsId: 'SageTVAndroidClient-GoogleServicesJSON-Firebase', variable: 'google_services_json')])
+-                    {
+-                        sh "cp ${google_services_json} ./android-tv"
+-                    }
+ 
+                     sh "./gradlew clean"
+                     sh "./gradlew -PstorePass=${STORE_PASSWORD} -Pkeystore=\"${KEYSTORE}\" -Palias=${KEY_ALIAS} -PkeyPass=${KEY_PASSWORD} bundle${VARIANT}"

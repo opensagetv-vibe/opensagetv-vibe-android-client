@@ -1,0 +1,12 @@
+SageTV MiniClient Dev v0.5.66
+
+Changed files update.
+
+Key changes:
+- --issues-only now starts every selected media operation from a fresh playback session.
+- Per-check playback startup failures are media failures, not INFRA_ERROR.
+- Media3 Pull MPEG-TS timestamp search multiplier is reduced from 8x to 4x as a controlled Fire TV experiment.
+- No Media3 Push, GSY System, or legacy Exo behavioral rewrite is included.
+
+Android source changed: rebuild/reinstall the Dev APK before testing the 4x Media3 experiment.
+Expected debugStatusVersion remains 10.

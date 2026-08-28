@@ -1,0 +1,23 @@
+SageTV MiniClient Dev v0.5.54
+
+Native MiniClient text injection for MCP automation
+
+Problem
+- Full player matrix intermittently reached SageTV Search with the Android IME visible but no recording text entered.
+- adb input text depends on Fire TV focus/IME timing and is not reliable across repeated case restarts.
+- The earlier debug direct attempt was also wrong because it sent lowercase ASCII as SageTV keyCode.
+
+Fix
+- Added debug op input_text_native and MCP tool dev_input_text_native.
+- Native text waits for SageTV MenuHint.hasTextInput and writes directly to MiniClientConnection.postKeyEvent().
+- Encoding exactly mirrors KeyMapProcessor.handleDefaultEvent():
+  * lowercase letter: uppercase java.awt/AWT virtual keyCode + lowercase keyChar
+  * uppercase letter: uppercase keyCode + SHIFT_MASK + uppercase keyChar
+  * space: Keys.VK_SPACE + ' '
+  * digits/punctuation: character code + character
+- Normal harness text path (text-char-delay-ms=0) now uses native MiniClient keyboard events.
+- Fire TV IME may still appear because SageTV requests it, but automation does not depend on it; MCP hides it directly after native text injection.
+- Positive text-char-delay-ms remains the legacy Android/ADB diagnostic path only.
+- Debug status version is now 4.
+
+This release changes Android debug source and requires rebuilding/reinstalling the debug APK.

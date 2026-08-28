@@ -1,0 +1,10 @@
+SageTV MiniClient Dev v0.4.7
+
+Purpose: make the Dev Gradle root layout self-repairing after the root build.gradle was observed being replaced by android-shared/build.gradle after update extraction.
+
+After overlaying this update, run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+
+The first command will automatically restore source/dev/build.gradle from config/dev-root-build.gradle.canonical if needed, preserving the damaged copy as source/dev/build.gradle.bad.

@@ -1,0 +1,30 @@
+SageTV MiniClient Dev v0.3.0 -> v0.3.1 update
+
+Purpose:
+Fire OS returned no SageTVDevTelemetry INFO records through logcat even while video was playing.
+This patch makes player telemetry dual-output: logcat plus an app-private file. MCP reads the
+private file through Android run-as first and uses logcat only as a fallback.
+
+Install:
+Extract this ZIP directly over the existing SageTV-MiniClient-Dev project root and overwrite files.
+
+Docker image rebuild: NOT required.
+Dev APK rebuild/reinstall: REQUIRED because Android source changed.
+
+Run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+  ./dev.sh install
+  ./dev.sh launch
+
+Start video playback, then from another shell:
+  ./dev.sh mcp-telemetry
+
+Expected transport:
+  Telemetry transport: run-as-file
+
+Optional run-as check:
+  ./dev.sh adb shell run-as org.opensagetv.miniclient.dev.debug id
+
+Playback logic is unchanged; this patch changes diagnostic transport only.

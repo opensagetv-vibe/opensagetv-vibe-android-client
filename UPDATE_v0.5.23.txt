@@ -1,0 +1,6 @@
+SageTV MiniClient Dev v0.5.23
+
+- MCP Search automation now dismisses the Android keyboard with BACK after typing.
+- Default: Search -> type "meet the press" -> keyboard BACK/dismiss -> Down -> Right -> Right -> Right -> Play/Pause -> Play/Pause.
+- No Enter/Next and no initial Play/Pause are sent by default.
+- MCP/host-only; no Android APK rebuild required.

@@ -1,0 +1,26 @@
+SageTV MiniClient Dev v0.5.64
+
+Purpose
+-------
+Improve long-wait diagnosis using the v0.5.63 exact-event evidence and classify backend startup failures correctly.
+
+Changes
+-------
+- Added lightweight Dev-app crash/process probes at 5 s, 15 s, and 30 s during every long media recovery wait.
+- Added the same milestone crash/process checks to startup playback verification.
+- A new Dev-package crash signature, process death, or PID restart stops the current wait early and records `PLAYER_CRASHED` (or `STARTUP_PLAYER_CRASHED`).
+- Each milestone stores compact player/A-V/Pull-I/O state plus crash/process evidence.
+- Crash detection compares the Dev-specific signature fingerprint so an unrelated app changing Android's crash buffer does not false-trigger.
+- GSY/System playback-start failures are now classified as `STARTUP_PLAYBACK_FAILED` rather than MCP infrastructure failures.
+- Android error event traps now include Media3/Exo error code names and IJK/System integer error codes.
+- Exo/Media3 Push flush/reprepare exceptions are now logged and trapped rather than silently swallowed.
+- `debugStatusVersion` is 10 so the next matrix cannot accidentally run against the older v0.5.63 APK.
+- Added `MATRIX_REVIEW_20260827_221623.md` with evidence and next experiments from the supplied v0.5.63 matrix.
+
+Important interpretation
+------------------------
+A/V recovery remains the operation PASS/FAIL rule. Seek landing remains diagnostic-only. The four v0.5.63 180-second watchdogs were all Media3-family PUSH debug-local seek stress cases; normal server-driven PUSH Comskip recovered in about 3 seconds. The repeatable ~33-second Media3 Pull Comskip delay is real and remains the primary performance investigation.
+
+Build
+-----
+Android debug source changed. Rebuild/reinstall and verify `debugStatusVersion=10`.

@@ -1,0 +1,10 @@
+SageTV MiniClient Dev v0.5.52
+
+Persistent ADB runtime shell
+- One adb shell is opened after adb_connect and reused for the MCP server lifetime.
+- Runtime shell commands are serialized and framed with unique completion markers.
+- Added adb_session_status for persistent shell PID/restart/command counters.
+- app status, input/key, wake, debug broadcasts, dumpsys and other runtime shell operations reuse the session.
+- Install/uninstall/pull/screenshot/adb connect remain separate ADB operations where required.
+- Normal Search text remains one-shot by default: --text-char-delay-ms 0.
+- No Android APK rebuild required.

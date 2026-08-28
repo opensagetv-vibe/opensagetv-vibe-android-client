@@ -1,0 +1,7 @@
+SageTV MiniClient Dev v0.5.51
+
+Search text reliability fix:
+- Normal startup now uses one-shot Android `input text` again.
+- `--text-char-delay-ms` default is 0.
+- Positive delays remain available only for explicit diagnostic use.
+- No Android APK source changes; rebuild/install is not required.

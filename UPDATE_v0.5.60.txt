@@ -1,0 +1,13 @@
+SageTV MiniClient Dev v0.5.60
+
+Host/MCP-only update. No APK rebuild required.
+
+Changes:
+- Adds --hardware-only as a convenience alias for --decoders hardware.
+- Hardware-only full matrix contains 21 cases.
+- Player-matrix Comskip now sends short native SageTV RIGHT/LEFT commands and observes recovery with host-side video/audio counters.
+- Removes the long Android BroadcastReceiver Comskip observation path from the full player matrix, avoiding ~60-second infrastructure failures while video is already healthy.
+- Comskip landing position is diagnostic-only.
+
+Recommended hardware-only command:
+./dev.sh mcp-player-matrix --server 192.168.10.175 --text "meet the press" --hardware-only --watchdog-ms 180000

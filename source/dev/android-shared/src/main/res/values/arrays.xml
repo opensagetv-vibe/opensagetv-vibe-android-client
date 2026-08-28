@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="entries_list_loglevels_preference">
+        <item>DEBUG</item>
+        <item>INFO</item>
+        <item>WARN</item>
+        <item>ERROR</item>
+    </string-array>
+
+    <string-array name="entryvalues_list_loglevels_preference">
+        <item>debug</item>
+        <item>info</item>
+        <item>warn</item>
+        <item>error</item>
+    </string-array>
+
+    <string-array name="entries_list_streaming_mode_preference">
+        <item>Push</item>
+        <item>Pull</item>
+        <item>Fixed</item>
+    </string-array>
+
+    <string-array name="entryvalues_list_streaming_mode_preference">
+        <item>dynamic</item>
+        <item>pull</item>
+        <item>fixed</item>
+    </string-array>
+
+    <string-array name="entries_list_auto_connect_delay_preference">
+        <item>1 Second</item>
+        <item>2 Seconds</item>
+        <item>5 Seconds</item>
+        <item>8 Seconds</item>
+        <item>10 Seconds</item>
+    </string-array>
+
+    <string-array name="entryvalues_list_auto_connect_delay_preference">
+        <item>1</item>
+        <item>2</item>
+        <item>5</item>
+        <item>8</item>
+        <item>10</item>
+    </string-array>
+
+    <string-array name="entries_list_mem_cache_preference">
+        <item>32 mb</item>
+        <item>64 mb</item>
+        <item>96 mb</item>
+        <item>128 mb</item>
+        <item>160 mb</item>
+        <item>192 mb</item>
+    </string-array>
+
+    <string-array name="entryvalues_list_mem_cache_preference">
+        <item>32</item>
+        <item>64</item>
+        <item>96</item>
+        <item>128</item>
+        <item>160</item>
+        <item>192</item>
+    </string-array>
+
+    <string-array name="entries_list_disk_cache_preference">
+        <item>128 mb</item>
+        <item>256 mb</item>
+        <item>512 mb</item>
+        <item>1024 mb</item>
+    </string-array>
+
+    <string-array name="entryvalues_list_disk_cache_preference">
+        <item>128</item>
+        <item>256</item>
+        <item>512</item>
+        <item>1024</item>
+    </string-array>
+
+    <string-array name="entries_exoplayer_ffmpeg_extension_preference">
+        <item>Off</item>
+        <item>On - Use if needed</item>
+        <item>Preferred - Always use if possible</item>
+    </string-array>
+
+    <string-array name="entryvalues_exoplayer_ffmpeg_extension_preference">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
+    <string-array name="entries_list_transcoding_formats_preference">
+        <item>Matroska (MKV)</item>
+        <item>DVD (MPEG-PS)</item>
+    </string-array>
+    <string-array name="entryvalues_list_transcoding_formats_preference">
+        <item>matroska</item>
+        <item>dvd</item>
+    </string-array>
+    <string-array name="entries_list_video_bitrate_preference">
+        <item>1000 kbps</item>
+        <item>2000 kbps</item>
+        <item>3000 kbps</item>
+        <item>4000 kbps</item>
+        <item>5000 kbps</item>
+        <item>6000 kbps</item>
+        <item>7000 kbps</item>
+        <item>8000 kbps</item>
+        <item>9000 kbps</item>
+        <item>10000 kbps</item>
+    </string-array>
+    <string-array name="entryvalues_list_video_bitrate_preference">
+        <item>1000</item>
+        <item>2000</item>
+        <item>3000</item>
+        <item>4000</item>
+        <item>5000</item>
+        <item>6000</item>
+        <item>7000</item>
+        <item>8000</item>
+        <item>9000</item>
+        <item>10000</item>
+    </string-array>
+    <string-array name="entries_list_video_fps_preference">
+        <item>Use Source</item>
+        <item>24 fps</item>
+        <item>29.97 fps</item>
+        <item>59.94 fps</item>
+    </string-array>
+    <string-array name="entryvalues_list_video_fps_preference">
+        <item>SOURCE</item>
+        <item>24</item>
+        <item>29.97</item>
+        <item>59.94</item>
+    </string-array>
+    <string-array name="entries_list_video_resolution_preference">
+        <item>Use Source</item>
+        <item>CIF (352x240/288)</item>
+        <item>D1 (720x480/576)</item>
+        <item>720 (1280x720)</item>
+        <item>1080 (1920x1080)</item>
+    </string-array>
+    <string-array name="entryvalues_list_video_resolution_preference">
+        <item>SOURCE</item>
+        <item>CIF</item>
+        <item>D1</item>
+        <item>720</item>
+        <item>1080</item>
+    </string-array>
+    <string-array name="entries_list_audio_codec_preference">
+        <item>AC3</item>
+        <item>MP2</item>
+    </string-array>
+    <string-array name="entryvalues_list_audio_codec_preference">
+        <item>ac3</item>
+        <item>mp2</item>
+    </string-array>
+    <string-array name="entries_list_audio_bitrate_preference">
+        <item>96 kbps</item>
+        <item>112 kbps</item>
+        <item>128 kbps</item>
+        <item>160 kbps</item>
+        <item>192 kbps</item>
+    </string-array>
+    <string-array name="entryvalues_list_audio_bitrate_preference">
+        <item>96</item>
+        <item>112</item>
+        <item>128</item>
+        <item>160</item>
+        <item>192</item>
+    </string-array>
+    <string-array name="entries_list_audio_channels_preference">
+        <item>Use Source</item>
+        <item>1 (Mono)</item>
+        <item>2 (Stereo)</item>
+        <item>5.1</item>
+    </string-array>
+    <string-array name="entryvalues_list_audio_channels_preference">
+        <item></item>
+        <item>1</item>
+        <item>2</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="entries_list_transcoding_setting_preference">
+        <item>When Needed</item>
+        <item>Always</item>
+    </string-array>
+    <string-array name="entryvalues_list_transcoding_setting_preference">
+        <item>needed</item>
+        <item>always</item>
+    </string-array>
+    <string-array name="entries_list_remuxing_setting_preference">
+        <item>When Needed</item>
+        <item>Always</item>
+        <item>Off</item>
+    </string-array>
+    <string-array name="entryvalues_list_remuxing_setting_preference">
+        <item>needed</item>
+        <item>always</item>
+        <item>off</item>
+    </string-array>
+    <string-array name="entries_list_default_player">
+        <item>ExoPlayer Legacy (working baseline)</item>
+        <item>Media3 ExoPlayer (Google current)</item>
+        <item>IJKPlayer (Original 0.8.8 runtime)</item>
+        <item>GSYVideoPlayer (selectable engine)</item>
+    </string-array>
+    <string-array name="entryvalues_list_default_player">
+        <item>exoplayer</item>
+        <item>media3</item>
+        <item>ijkplayer</item>
+        <item>gsyplayer</item>
+    </string-array>
+
+    <string-array name="entries_gsy_player_engine">
+        <item>Auto</item>
+        <item>Media3 / ExoPlayer</item>
+        <item>Android System MediaPlayer (Media3 fallback)</item>
+        <item>Legacy ExoPlayer</item>
+    </string-array>
+    <string-array name="entryvalues_gsy_player_engine">
+        <item>auto</item>
+        <item>media3</item>
+        <item>system</item>
+        <item>legacy_exo</item>
+    </string-array>
+    <string-array name="entries_list_decoding_method">
+        <item>Hardware</item>
+        <item>Software</item>
+        <item>Fallback</item>
+    </string-array>
+    <string-array name="entryvalues_list_decoding_method">
+        <item>hardware</item>
+        <item>software</item>
+        <item>hardware_preferred</item>
+    </string-array>
+    <string-array name="entries_gsy_probe_size">
+        <item>512 KiB</item><item>1 MiB</item><item>2 MiB</item><item>4 MiB</item>
+    </string-array>
+    <string-array name="entryvalues_gsy_probe_size">
+        <item>524288</item><item>1048576</item><item>2097152</item><item>4194304</item>
+    </string-array>
+    <string-array name="entries_gsy_analyze_duration">
+        <item>1 second</item><item>3 seconds</item><item>5 seconds</item><item>10 seconds</item>
+    </string-array>
+    <string-array name="entryvalues_gsy_analyze_duration">
+        <item>1000000</item><item>3000000</item><item>5000000</item><item>10000000</item>
+    </string-array>
+    <string-array name="entries_gsy_framedrop">
+        <item>Off</item><item>Normal (1)</item><item>Aggressive (5)</item>
+    </string-array>
+    <string-array name="entryvalues_gsy_framedrop">
+        <item>0</item><item>1</item><item>5</item>
+    </string-array>
+    <string-array name="entries_gsy_min_frames">
+        <item>1</item><item>2</item><item>3</item><item>5</item><item>10</item>
+    </string-array>
+    <string-array name="entryvalues_gsy_min_frames">
+        <item>1</item><item>2</item><item>3</item><item>5</item><item>10</item>
+    </string-array>
+    <string-array name="entries_list_remuxing_formats_preference">
+        <item>Matroska (MKV)</item>
+        <item>DVD (MPEG-PS)</item>
+        <item>MPEG-TS</item>
+    </string-array>
+    <string-array name="entryvalues_list_remuxing_formats_preference">
+        <item>matroska</item>
+        <item>dvd</item>
+        <item>mpegts</item>
+    </string-array>
+    <string-array name="entries_list_container_preference">
+        <item>Automatic</item>
+        <item>Enabled</item>
+        <item>Disabled</item>
+    </string-array>
+    <string-array name="entryvalues_list_container_preference">
+        <item>automatic</item>
+        <item>enabled</item>
+        <item>disabled</item>
+    </string-array>
+
+
+    <string-array name="entries_codec_queueing_mode">
+        <item>Sync (Recommended)</item>
+        <item>Auto</item>
+        <item>Async</item>
+    </string-array>
+    <string-array name="entryvalues_codec_queueing_mode">
+        <item>sync</item>
+        <item>auto</item>
+        <item>async</item>
+    </string-array>
+
+</resources>

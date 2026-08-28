@@ -1,0 +1,13 @@
+SageTV MiniClient Dev v0.2.8 update
+
+Fixes only the Logger/ILogger javac regression test harness.
+The test now creates its temporary output directory before invoking javac.
+
+Apply by extracting this ZIP over the existing project root.
+
+Then run:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh build
+
+No Docker image rebuild is required.

@@ -1,0 +1,11 @@
+SageTV MiniClient Dev v0.5.70 packaging repair
+
+The original v0.5.70 runtime-tuning ZIP assumed an intermediate v0.5.69 backend-correction patch that was generated but not delivered before the work was interrupted.
+
+This repair carries the missing v0.5.69 files forward so v0.5.70 is self-consistent:
+- GSY System preference falls back to Media3 instead of immediately terminating playback.
+- GSY engine display/resource metadata matches the fallback behavior.
+- The current matrix regression test is included.
+- TASK_CODEX now requires future overwrite ZIPs to carry forward any undelivered intermediate changes.
+
+No version or debugStatusVersion change is required. Remain on v0.5.70 / debugStatusVersion=13.

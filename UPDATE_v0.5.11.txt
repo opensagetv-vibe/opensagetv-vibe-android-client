@@ -1,0 +1,8 @@
+SageTV MiniClient Dev v0.5.11
+
+- Adds debug-build-only MCP playback automation using one-shot state snapshots (no continuous player callbacks).
+- Adds exact SageCommand injection, repeatable command sequences, seek-delta checks, state polling and diagnostic checkpoints.
+- Adds ./dev.sh mcp-seek-test for +30, -10, rapid +30,+30,-10,+60,-30, and pause/resume checks on the current recording.
+- Visible Streaming Mode label changed from Dynamic to Push/Dynamic; persisted value remains "dynamic".
+- Main Settings now refreshes Default Player, Decoding Method and Streaming Mode summaries when returning from a sub-page.
+- No player playback implementation changes in this release.

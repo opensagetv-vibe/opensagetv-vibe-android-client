@@ -1,0 +1,23 @@
+SageTV MiniClient Dev v0.2.7 update
+==================================
+
+Fixes debug APK signing for this repository.
+
+Problem:
+  android-tv/build.gradle expects debug signing alias: client
+  v0.2.5 generated the standard Android alias: androiddebugkey
+
+Fix:
+  scripts/ensure_debug_keystore.sh now creates/verifies alias 'client'.
+  If adb/debug.keystore already exists and only has androiddebugkey, the script
+  preserves that keystore and adds the missing 'client' alias in place.
+
+Apply:
+  Extract this ZIP over the existing SageTV-MiniClient-Dev project and overwrite.
+
+Then run:
+  ./dev.sh ensure-debug-keystore
+  ./dev.sh test
+  ./dev.sh build
+
+No Docker image rebuild is required.

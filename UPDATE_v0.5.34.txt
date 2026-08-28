@@ -1,0 +1,10 @@
+v0.5.34 - deterministic Android/MCP automation startup
+
+- Added debug APK-owned UI readiness fields to snapshot: debugStatusVersion=1, uiState, automationReady.
+- automationReady is true only when connected on Main Menu, no popup, no text input/keyboard context, and no active player.
+- Added MCP tools: firetv_wake, dev_app_status, kill_dev_app, and dev_prepare_clean_start.
+- dev_prepare_clean_start checks whether the Dev process is running, requests a normal session/task exit first, re-checks, force-stops only if still running, verifies the process is gone, then optionally wakes Android/Fire TV.
+- Fresh playback/session/Media3 matrix startup now uses the clean-start flow, verifies the relaunched process is running, connects, and waits for app-owned automationReady=true.
+- If the fixed SageTV client ID reconnects into a stale Search/text-input UI, the harness sends direct SageTV HOME and waits again before Search.
+- This changes Android debug source and requires rebuilding/reinstalling the debug APK.
+- v0.5.33 Pull seek I/O diagnostics remain intact; this release only fixes deterministic startup/readiness around the next diagnostic run.

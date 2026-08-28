@@ -1,0 +1,12 @@
+SageTV MiniClient Dev v0.2.10 update
+
+Fixes ./dev.sh mcp-test when using an already-built Docker image whose baked-in entrypoint does not yet know the mcp-test verb.
+
+Install:
+1. Extract these files over the existing SageTV-MiniClient-Dev project root.
+2. Overwrite when prompted.
+3. No Docker image rebuild is required.
+4. Run: ./dev.sh mcp-test
+
+Expected final line:
+MCP FIRE TV SMOKE TEST: PASS

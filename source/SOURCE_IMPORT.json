@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "imported_utc": "2026-08-26T00:10:13.871815+00:00",
+  "archive_name": "sagetv-miniclient-master.zip",
+  "archive_sha256": "f45c930f3810b56d88f751120ca6fa692ae9b01dd2adce62a3d926b2ab336a79",
+  "git_head_if_present": null,
+  "baseline_tree": "/workspace/source/existing",
+  "dev_tree": "/workspace/source/dev"
+}

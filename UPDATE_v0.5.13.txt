@@ -1,0 +1,8 @@
+SageTV MiniClient Dev v0.5.13
+
+MCP automation-only update.
+- Uses a 5-second preference quantum for FF/REW calibration by default.
+- Prevents player landing error from being learned as the configured skip interval.
+- Uses closest practical command plans instead of aborting on non-divisible semantic steps.
+- Reports semantic and represented targets separately.
+- No Android player code changed; no APK rebuild required from v0.5.12.

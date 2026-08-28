@@ -1,0 +1,8 @@
+SageTV MiniClient Dev v0.5.24
+
+- Added one explicit multiline MCP input tool: dev_send_sequence(sequence).
+- Added ./dev.sh mcp-send-sequence.
+- Supported sequence actions: command, sendkey, sendtext, delay.
+- Actions execute only in the listed order; no implicit keys, text, or delays.
+- Supports stdin multiline blocks, --file, or --sequence.
+- MCP/host-only; no Android APK rebuild required.

@@ -1,0 +1,9 @@
+SageTV MiniClient Dev v0.5.28
+
+Adds host-side Media3 Push/Dynamic vs Pull seek-resume matrix automation.
+No Android player/APK source changed.
+
+Run:
+  ./dev.sh mcp-media3-matrix --server 192.168.10.175
+
+The test uses fresh sessions, the v0.5.27 stable-UI gate, the exact native recording-start sequence, real A/V output-health seek checks, pause/resume verification, side-by-side recovery timing, JSON report output, and automatic checkpoints for >2 second recovery.

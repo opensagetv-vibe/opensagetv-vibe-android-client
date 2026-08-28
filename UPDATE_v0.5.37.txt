@@ -1,0 +1,5 @@
+SageTV MiniClient Dev v0.5.37
+
+Fixes Fire TV automation startup after clean-stop. Automated tests no longer launch the generic Android launcher/ServersActivity before direct SageTV connection. dev_app_status now uses pidof, ps -A, and resumed-Activity evidence so a visible Dev Activity cannot be reported as not running.
+
+No Android source changed from v0.5.36. If v0.5.36 debug APK is already installed, overwrite these host/MCP files and rerun without rebuilding the APK.

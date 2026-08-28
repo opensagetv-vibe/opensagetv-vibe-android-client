@@ -1,0 +1,5 @@
+SageTV MiniClient Dev v0.5.58
+
+Fix: absolute-seek verification no longer blocks on stale BaseMediaPlayerImpl wrapper flags. Legacy Exo may leave seekPending=true when seek(0) is a no-op and no discontinuity callback fires, even while playback is healthy. MCP now verifies backend-local position + backend READY/error state and reports stale wrapper-flag sample counts.
+
+Host/MCP only. No APK rebuild required; debugStatusVersion 6 is sufficient.

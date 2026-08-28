@@ -1,0 +1,10 @@
+SageTV MiniClient Dev v0.5.47
+
+Changes:
+- True per-step media watchdog. Default 180000 ms is a fresh 3-minute window for each action.
+- Debug APK advertises maxRecoveryWatchdogMs=300000 and MCP verifies requested/applied watchdog values.
+- ADB long-running debug broadcasts no longer truncate at the old 90-second shell timeout.
+- Absolute seek in the complete player matrix inherits --watchdog-ms unless --seek-timeout-s overrides it.
+- Startup navigation adds DOWN after the first play_pause and before the second play_pause.
+
+IMPORTANT: Android debug source changed. Rebuild/install the APK before testing v0.5.47 watchdog timing.

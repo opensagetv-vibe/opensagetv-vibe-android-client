@@ -1,0 +1,13 @@
+SageTV MiniClient Dev v0.4.0 -> v0.4.1 recovery update
+
+Purpose:
+- Restore source/dev/build.gradle if it was accidentally replaced by source/dev/core/build.gradle.
+- Add regression protection against the same root/core Gradle-file swap.
+
+No player runtime Java files are changed.
+
+After extracting over the project root:
+  ./dev.sh test
+  ./dev.sh validate
+  ./dev.sh image
+  ./dev.sh build

@@ -1,0 +1,9 @@
+SageTV MiniClient Dev v0.5.55
+
+Fire TV wake/launch reliability fix
+
+- firetv_wake now sends KEYCODE_WAKEUP then KEYCODE_HOME.
+- dev.sh launch / AdbClient.launch resolves the installed Dev MAIN/LAUNCHER activity and starts it using am start -W.
+- monkey is fallback-only.
+- Fixes Fire OS monkey rc=251 / SYS_KEYS has no physical keys.
+- Host/MCP-only: no Android APK rebuild required.
