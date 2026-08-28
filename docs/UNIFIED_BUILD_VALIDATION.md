@@ -6,7 +6,7 @@ Validated on 2026-08-28 with Windows Docker Desktop and the shared
 ## Architecture
 
 - Development image: `opensagetv-vibe-build-env:u26-j11`
-- Image ID: `sha256:fcfc91e941a7eadf4d2c3e670cc2761e8ac15e02b480e3dedb179dcd3820dd05`
+- Image ID: `sha256:327a6bc70b719e9111143b5cd3c8af8314aa9a71dc2b6cf3fe0ad9ed4e1b9983`
 - Reusable container: `opensagetv-vibe-dev`
 - Shared cache: `opensagetv-vibe-gradle-cache` under `/work/.gradle/android`
 - Android repository mount: `/workspace/android-client`
@@ -26,7 +26,7 @@ Java 17 and Java 8 are selected only for Android commands. `JAVA_HOME` and
 | Gate | Result |
 |---|---|
 | Unified environment/Java isolation | PASS |
-| Project manifest (1,209 files) | PASS |
+| Project manifest (1,210 files) | PASS |
 | Scaffold/static tests (151) | PASS |
 | MCP tests (35) | PASS |
 | Full project validator | PASS |
