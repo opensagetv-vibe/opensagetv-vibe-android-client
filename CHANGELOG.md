@@ -1,11 +1,1590 @@
 # Changelog
 
+## Unreleased
+
+- Prepared the independently migrated Android client for its first public Vibe
+  source/APK release. The GitHub repository is a true fork of
+  `OpenSageTV/sagetv-miniclient`, the active implementation is isolated under
+  `opensagetv.vibe.miniclient`, and the protected v0.5.75 comparison project is
+  unchanged. Added the common contribution, security, third-party, source-only
+  CI, deterministic source/APK packaging, and unified-workflow contracts.
+  Removed the private SMB configuration-share default and test credentials;
+  local commissioning values remain in ignored configuration. The unified
+  prepublication gate passed 451 repository/static tests, 63 MCP tests, Core
+  JUnit, all validation checks, a clean 60-task debug APK build, and strict APK
+  inspection. The exact committed-artifact hash is recorded after the final
+  clean-tree rebuild.
+- Removed obsolete Android manifest `package` attributes now that AGP uses the
+  explicit Gradle `namespace` declarations. This removes misleading AGP
+  warnings without changing the application ID or Java namespace.
+- Made the exact-MediaFile MCP replay contract test insensitive to normal
+  multiline Python formatting. The test still requires the typed
+  `media_file_id` entry point and its direct `sagex.watch` behavior, but no
+  longer reports a false regression when the function signature is wrapped.
+- Added read-only H.262 interlace observation without claiming an Android
+  deinterlacer. The bounded elementary-stream scanner distinguishes progressive
+  sequences, interlaced sequences, field pictures, interlaced frame pictures,
+  progressive-frame/telecine content, and unknown data; Media3, legacy Exo,
+  and native DVD extractors feed it while forwarding unchanged bytes. MCP
+  exposes the observation and counters and always reports selectable
+  deinterlace control as unavailable. Core tests and the clean 60-task build
+  pass. On AFTMM/API-25 `.25`, both Media3 and legacy Exo hardware Pull report
+  `interlaced_sequence_interlaced_frames` for the 1080i fixture. Native DVD
+  reports the same classification with 172 observed interlaced frame pictures,
+  hardware MTK MPEG-2, advancing real-time A/V, and zero dropped frames.
+- Separated Android audio decoding evidence from encoded-sink and passthrough
+  claims. Capability negotiation now uses a device-local audio profile while
+  debug/MCP reports platform decoders, active encoded-sink support, and
+  playability independently. The active-player summary no longer labels an
+  AC3/EAC3/DTS MIME type as proof of passthrough, and SageTV HBR/audio-output
+  passthrough remains unadvertised. A repeatable generated-fixture MCP matrix
+  physically passed AC3 and EAC3 direct Pull on AFTMM/API-25 `.25`; DTS was
+  absent from both decoder and sink support and correctly forced SageTV away
+  from direct Pull. Focused tests and the clean 60-task build pass; exact APK
+  SHA-256 is
+  `04f6d5106d3043c93163cd1af390027e3cfd8d072190aa869a17f07f26d90c1d`.
+- Closed the retained Media3 fast-switch recovery gap. Completed-file Pull and
+  SMB Direct replacements now arm an eight-second first-video-frame watchdog;
+  an error or timeout performs exactly one normal full-player fallback, while
+  a newer OPENURL, first frame, or release cancels the stale watchdog. Focused
+  Python tests, Core JUnit, and the clean 60-task Android build pass. The exact
+  APK SHA-256
+  `c5658c7d0036107e0b30b4eaecdf6514bcec2cdc21d02e7c7b59ebf1fc739605`
+  physically passed both Pull and SMB Direct retained switches on AFTMM/API-25
+  `.25`, first against the same deterministic fixture and then from
+  `VibeSeekTest-1080i-MPEG2-AC3-CC.ts` to the distinct completed
+  `ThisOldHouse-WalpoleADURetroVibes-63775847-0.ts`. Every run retained hardware
+  MPEG-2, rendered the replacement first frame, and recorded zero fallbacks.
+- Reconciled the active-only backlog with already commissioned work: optional
+  Home/background recovery and paused backend-gated frame step were complete
+  and documented, so their stale unchecked entries were removed.
+- Added bounded GFX image-allocation recovery without weakening a real OOM.
+  Android may evict exactly one disposable LRU UI image and retry an allocation
+  once; no entry or a second OOM rethrows immediately. Renderer surfaces are
+  excluded, closed/superseded connections receive no unload callback, and
+  invalid/overflowing dimensions are rejected before allocation. Attempts,
+  evictions, successes, and failures are exposed through debug/MCP state. Four
+  Core recovery cases, protocol characterization, and MCP retention tests pass.
+  The exact APK SHA-256
+  `58d8affb6d41ce6e1c1166cf9daa9af8c156f16bc0e2473ad54c77bc4af37efd`
+  then passed Media3 hardware MPEG-2 Pull on `.25` with 2,577 rendered frames,
+  zero dropped frames, all recovery counters zero during normal playback, and
+  no duplicate local caption overlay.
+- Implemented the standard SageTV hardware-extender caption path for Android
+  extractor-backed players. Media3 and legacy ExoPlayer now tap encoded CEA
+  samples before local decoding, convert valid three-byte `cc_data` units into
+  SageTV's eight-byte CC records, and publish event 225 after the server
+  negotiates `SUBTITLES_CALLBACKS`. Duplicate 608/708 extractor copies are
+  suppressed, seeks/new loads flush callback state, and local cue rendering is
+  suppressed only while raw callback packets are active. GSY inherits the
+  implementation through its Exo delegates; IJK now honestly advertises no
+  callback producer. Added Core unit coverage and MCP telemetry for negotiated
+  state, callback count, and bytes. Re-audited the other server-side extender
+  branches and documented which capability combinations Android already uses
+  and which firmware-only features remain deliberately unadvertised. Physical
+  Commissioning now passes on the exact rebuilt APK. Against the
+  stock-compatible `.175` server, Media3 completed the standard
+  Off/CC1/CC2/Off/CC1 STV sequence with matching decoded/wire counters, no
+  Android overlay, and post-seek callback recovery. Legacy Exo then produced
+  1,017 decoded events/35,096 bytes with identical wire bytes and recovered
+  after FF in 1.02 seconds. Its remaining duplicate-overlay race was fixed by
+  detaching only `SubtitleView` while preserving the extractor tap. The same
+  fresh-install race was subsequently reproduced and fixed in Media3. IJK stayed
+  playable, negotiated no callback capability, and emitted zero event-225
+  bytes. The physical harness now has an explicit unsupported-backend fallback
+  gate so future capability drift fails the build/test workflow.
+- Completed a truly cold-cache Android build and added the previously missing
+  trusted checksums for the Guava 33.3.1 Android/JRE parent POMs and JUnit
+  5.10.2 module metadata. A fresh Gradle user home now builds the APK without
+  relying on artifacts that happened to exist in the reusable container. The
+  refreshed 1,340-file release source archive then passed 445 tests and a
+  second cold-cache 60-task build; its APK reproduced the canonical SHA-256
+  `92b92345ecd3328a41f917bf232a65006af8e0532770b97e94b5686fefd0a5ff`.
+- Restored physical remote long press across OpenGL/GDX render surfaces and
+  authored DVD menus. MiniClient activities now own key dispatch above
+  decoder/render-view focus, Fire OS platform flags, repeat timing,
+  release-duration, and a bounded hold timer all retain the configured mapping,
+  and a DVD menu intercepts only short navigation/select presses. Added the
+  missing Active Player Adjustments gear to both Android-TV navigation resource
+  variants and made the optional view null-safe; this fixes the previously
+  swallowed `NavigationDialog` null dereference. An automated hold on physical
+  AFTMM/API-25 `.25` opened the complete overlay after the fix.
+- Completed the local GitHub/source/handoff release workflow from independent
+  checkouts. Source archives now retain POSIX executable modes and validate
+  from their complete manifest even when `.git` is intentionally absent.
+  Android root commands pass the invoking checkout to the one unified
+  `opensagetv-vibe-dev` container, preventing an independent verification tree
+  from silently testing the canonical checkout. An untouched Windows v0.5.75
+  worktree applied the v0.5.85 changed-files ZIP, normalized 483 files only
+  after proving exact UTF-8 CRLF-to-LF equivalence, removed all 355 obsolete
+  paths, passed 438 project tests, 57 MCP tests, Core Gradle tests, validation,
+  and a clean 60-task APK build, then installed/launched successfully on `.25`.
+  The canonical clean build reproduced the independently updated APK
+  byte-for-byte at SHA-256
+  `b2718f3681685458e2f322c0dfe4bd90d0f7d217dd7afe4360703b8e47e614d4`.
+  Actual content drift remains a pre-extraction failure.
+- Made the GitHub source/APK bundle generator work in the same Git-less
+  manifest-verified checkout used by extracted source archives and the unified
+  container. It records `project-manifest` provenance when `.git` is absent;
+  normal Git checkouts retain exact revision and dirty-state enforcement.
+  The resulting canonical gate passes 439 project tests, 57 MCP tests, and
+  Core Gradle tests.
+- Extracted the final publication source ZIP into an isolated Git-less
+  directory and proved its complete 1,339-file manifest, validation, Core
+  tests, fresh debug-keystore bootstrap, and all 62 clean APK tasks. Private
+  signing material remains correctly excluded from source archives.
+- Removed the duplicate Activity weak reference left behind after extracting
+  keyboard/debug observation into `UiKeyboardDebugState`, registered the
+  active-player overlay and display-refresh controller in the lifecycle owner
+  inventory, and pinned the reviewed stock-caption/display-refresh Base player
+  form in the complete unit-test package. These omissions were discovered by
+  the independent changed-files workflow rather than hidden by the canonical
+  checkout.
+
+- Added a bounded 0/250/500/1000/1500 ms HDMI-settle control to Active Player
+  Adjustments. A delay is used only after a real display-mode change and only
+  before the existing server-owned DVD decoder replacement; ordinary Pull/SMB
+  playback is never locally paused and stale delayed reloads are cancelled.
+  The active value and pending delay are exported in MCP telemetry. The exact
+  APK exposed and changed the value live on `.25` while hardware playback
+  continued. Decoded-PCM gain/downmix/audio-delay controls remain deliberately
+  absent because neither active Exo sink exposes a proven runtime-safe A/V
+  offset contract; the existing Audio offset row fails closed instead of
+  claiming to alter encoded AC-3 output.
+- Added an opt-in compact active-player process overlay. It reports the active
+  backend/source, playback state/time/rate, buffer capacity/ahead, and current
+  text-subtitle presentation while video continues. The overlay updates once
+  per second, owns weak Activity/player references, removes its callbacks and
+  view after 30 seconds, and can be shown/hidden deterministically through the
+  debug MCP surface. On physical AFTMM/API-25 `.25`, hardware MPEG-2 Pull
+  playback continued with zero dropped frames; MCP proved `visible=true` and
+  automatic `visible=false` after the deadline. Evidence is
+  `artifacts/firetv/active-player-compact-overlay-mcp.png`.
+- Completed the stock-server/hardware-extender caption audit. Stock
+  `MiniPlayer.setClosedCaptioningState()` returns `false` and has no command
+  that publishes the STV checkbox state. Proprietary extenders instead
+  advertised `GFX_SUBTITLES`, decoded caption packets in firmware, and returned
+  them to SageTV through subtitle callback type 225 for server-side rendering.
+  Android has never produced those packets, so its profile now honestly
+  advertises `GFX_SUBTITLES=FALSE`. The optional Vibe `VIDEO_CC_STATE` path is
+  unchanged; unmodified servers retain immediate, explicit Off/CC1/CC2 client
+  controls and now show a precise compatibility explanation when STV authority
+  is selected.
+- Added bounded on-the-fly presentation controls for locally rendered Media3
+  and legacy-Exo text captions: 8-32% bottom safe-area presets, 75-150% text
+  sizing, and Android-system, outlined, or black-box styles. Session-only and
+  saved-device-default scopes are separate; authored DVD bitmap SPUs reject
+  the control rather than pretending to change. MCP snapshot fields expose the
+  exact active values. The physical `.25` hardware-Pull gate changed safe area
+  from 18% to 25% without a decoder reload while video/audio continued with
+  `OMX.MTK.VIDEO.DECODER.MPEG2` and zero dropped video frames.
+- Added the long-press `Active Player Adjustments` surface for real, bounded
+  on-the-fly playback control. It reports the resolved player/source, applies
+  aspect, caption mode/track, DVD subtitle offset, active audio track, and
+  refresh policy immediately, and separates session-only changes from saved
+  device defaults. Backend, decoding, codec-queue, and DVD timestamp changes
+  use one server-owned same-position decoder replacement; the physical Aladdin
+  gate retained the DVD position and resumed hardware MPEG-2. Unsupported
+  audio offset and encoded-output passthrough changes fail visibly without
+  altering playback. Live diagnostics can be refreshed or exported to the
+  app-private external diagnostics directory.
+- Completed the reordered native DVD cadence/control gates on AFTMM/API-25
+  `.25`. A 20-second HDMI capture of Aladdin at 8:00 contained no sustained
+  freeze and no decoder drops. Both the raw VOB reference and physical capture
+  contain the same exact 3:2 film cadence (about 20% repeated 30-fps capture
+  frames), proving the client is not adding the reported high-motion cadence.
+  The deterministic authored DVD then passed menu/submenu, main-title, chapter
+  next/previous, audio, subtitle change/toggle, pause/resume, per-command A/V
+  recovery, STOP, and teardown. A missing-disc case failed safely without a
+  crash. Evidence is in `artifacts/firetv/dvd-25-aladdin-8m-active-controls.mp4`,
+  `dvd-25-authored-final-control-regression.json`, and
+  `dvd-25-missing-disc-safe-failure.json`.
+
+- Added a private, backward-compatible MiniClient server-seek event for
+  server-owned DVD Push sessions. The MCP disc gate now observes the exact DVD
+  STC/VOBU landing and performs at most two bounded correction seeks instead of
+  mistaking Media3's cell-local clock for SageTV's absolute DVD timeline.
+- Added deterministic `--start-ms` disc-test positioning; the physical
+  non-Pro Fire TV gate landed Aladdin at 478,380 ms for a requested 480,000 ms
+  target and passed hardware audio/video recovery within the 2,500 ms limit.
+
+- Completed the Android native ABI/page-size gate. The TV APK now deliberately
+  ships the paired ARMv7 and ARM64 ABIs instead of advertising an incomplete
+  x86/x86_64 legacy-IJK set. Both ARM directories contain exactly
+  `libffmpegJNI.so`, `libgdx.so`, `libijkffmpeg.so`, `libijkplayer.so`, and
+  `libijksdl.so`; the unused, ARM32-only GDX FreeType helper is excluded even
+  from stale incremental working trees. Rebuilt the pinned ExoPlayer 2.18.0
+  FFmpeg extension from FFmpeg revision
+  `839f98ff6719cf2db0cbd88cd787a1b19b9cbf47` with 16 KB ELF `LOAD`
+  alignment. The AAR SHA-256 is
+  `e9e34c833298c1177247b3f7cfef8e8be45035ff4f8076d667b8f5c9dc9c4b12`.
+  Its source-offer hash and strict Gradle verification metadata were updated.
+  The APK inspector now fails closed on an unexpected ABI, unequal ARM native
+  sets, invalid ELF, or sub-16-KB ARM64 `LOAD` alignment. Targeted tests passed
+  56/56; the clean 60-task build and 16 KB APK ZIP check passed. The exact APK
+  SHA-256 is
+  `5538372d6431f6419a8d152d97072c7b6142cfb80b8bb569631be56cda07cdb4`.
+  That artifact was installed in place on AFTMM/API-25 `.25` and passed a
+  direct SageTV Pull hardware MPEG-2/AC3 playback gate.
+- Closed the bounded GSY/System experiment without exposing an unsafe default.
+  A debug-only `gsy_system_probe` gate now runs the real Android System
+  `MediaPlayer` against SageTV's Pull `MediaDataSource`; normal System selection
+  still resolves directly to Media3. On the commissioned AFTMM/API-25 Fire TV,
+  the generated MPEG-2/AC3 fixture reproducibly caused System MediaPlayer error
+  `1/-2147483648`. The adapter contained that asynchronous failure, reopened the
+  same SageTV session through Media3 exactly once, and recovered advancing A/V
+  with hardware `OMX.MTK.VIDEO.DECODER.MPEG2`. MCP now fails closed unless it
+  observes either a genuinely active System backend or the single documented
+  Media3 fallback, and exposes the resolved engine, fallback count, and reason.
+- Added negotiated playback-rate command 30 for completed random-access Pull
+  and SMB Direct playback. Media3, legacy ExoPlayer, and both corresponding GSY
+  delegates accept native forward 0.5x-2x rates and bounded seek-based
+  +/-4x-256x scan; live/growing, circular, Push, Fixed/MIM, DVD, external-link,
+  and GSY/System sessions retain their established behavior. A three-second
+  scan cadence lets SMB rebuffer and render between discontinuities; the
+  original sub-second cadence was rejected by a physical no-false-pass test.
+  SageTV Core negotiates `VIBE_PLAYBACK_RATE`, so old clients keep the original
+  one-shot seek fallback. Both Exo backends now honor SageTV's trick-play mute
+  command instead of silently ignoring it. The reusable hardware-only gate
+  passed Media3 and legacy Exo over Pull and SMB Direct, both GSY delegates over
+  Pull, and server-driven Smooth FF/REW on the commissioned AFTMM/API-25 Fire
+  TV. STOP resets 1x and cancels scan callbacks. The full gate passed 423
+  project/static tests, 56 MCP tests, Core JUnit, project validation, and a
+  clean 60-task Android build. The exact clean APK SHA-256 is
+  `8500c503b79869bfaafa3e012916972e95c4b75fb2d6a5b0ed050898b1d10a3f`;
+  after an in-place install on `.25`, that artifact repeated server-negotiated
+  Pull and SMB Direct playback-rate gates with the hardware MPEG-2 decoder.
+- Added conservative Media3 fast file replacement for compatible completed
+  Pull and SMB Direct media. A replacement retains the player and Surface,
+  swaps only the MediaSource/datasource, and falls back exactly once to the
+  established full-load path if setup or asynchronous playback fails. Live,
+  circular, Push, Fixed, HTTP/external-link, DVD, uninitialized, and legacy-
+  unknown loads remain on the full-load path with an explicit eligibility
+  reason. Debug telemetry exposes attempts, first-frame successes, fallbacks,
+  reason, and target URL without enabling continuous analytics. The reusable
+  `mcp-fast-switch-test` passed on the commissioned AFTMM/API-25 Fire TV for
+  both SageTV Pull and SMB Direct: each produced one hardware MPEG-2 switch,
+  one rendered-first-frame success, and zero fallbacks. A deliberately missing
+  file also proved the single full-load fallback without process death. The
+  final clean 60-task APK is
+  `15a28b08c7c3febe6e08b7ff6519ca375110c30bb3e7282ed10b0ee67b7d7ae8`;
+  that exact in-place install repeated both physical datasource gates.
+- Replaced Square Otto with the project-owned, typed `VibeEventBus` and
+  `VibeEventListener` contract. Dispatch remains synchronous on the posting
+  thread and preserves registration order, while listener registration and
+  removal are explicit and duplicate-safe. `EVENT_OWNERSHIP.md` records every
+  publisher/subscriber and lifecycle boundary, and executable tests cover
+  event completeness, registration order, duplicate registration, and removal.
+  The selected runtime graph consequently dropped from 123 to 122 coordinates;
+  no Otto classes, Gradle declaration, lockfile entry, notice, or captured
+  runtime dependency remains. The full gate passed 413 project/static tests,
+  56 MCP tests, Core JUnit, and the clean 60-task Android build. The exact APK
+  (`96074525bc2136f107e1138881dc6008c9279665f98e820090ee0898344db16a`)
+  then passed physical Media3 hardware Push playback, connection/event FIFO,
+  worker teardown/reconnect, retained HOME/return playback, navigation-overlay
+  display, video-info display/refresh, and native keyboard-event dispatch on
+  the commissioned AFTMM/API-25 Fire TV (`192.168.10.25`). Physical evidence
+  includes `artifacts/firetv/connection-ordering-20260905-083905.json`.
+- Completed the remaining connection/UI configuration and bounded debug-
+  telemetry extraction. `ConnectionCapabilityProfile` now owns common-profile
+  loading, codec/container discovery, prepared capability lists, and profile
+  fallback while `MiniClientConnection` retains only the established wire
+  ordering. `UiSessionConfiguration` owns the one-time legacy background-policy
+  migration and immutable keep/resume/timeout values. `UiKeyboardDebugState`
+  owns the weak resumed-Activity reference plus requested/suppressed/visibility
+  observations while `UIActivityLifeCycleHandler` retains actual keyboard and
+  lifecycle behavior. New ownership tests pass with the complete 409 static/
+  project, 56 MCP, Core JUnit, and clean 60-task Android build gates. On the
+  normal AFTMM/API-25 Fire TV, Push connection ordering passed media-before-GFX,
+  FIFO pause/play recovery, HOME close of all four workers, foreground new-
+  generation reconnect, and explicit teardown. The separate retained-session
+  gate passed exact-connection HOME/return, Surface recreation, automatic
+  resume, preservation of a manual pause, repeated playback, and teardown.
+- Completed the GitHub publication dependency/license gate. The selected
+  runtime graph is now a generated, fail-closed 123-coordinate inventory in
+  `third_party/RUNTIME_DEPENDENCIES.csv`; every coordinate maps to a packaged
+  notice/license family, and LGPL/native AAR rebuild material records the
+  exact binary hashes and pinned upstream source revisions. The obsolete
+  Ostermiller GPL circular buffer was replaced with the project's Apache-2.0
+  `BoundedCircularByteBuffer`, removing that runtime dependency rather than
+  relying on a source offer. The publication packager validates the complete
+  project manifest, nested APK/source hashes, required legal files, duplicate
+  and unsafe archive paths, and a clean worktree for a release invocation.
+  The full gate passed 406 project tests, 56 MCP tests, all Core JUnit tests,
+  project validation, a clean 60-task Android build, and independent archive
+  inspection. The resulting debug APK SHA-256 is
+  `41d81c69815ef6cab4ebe963680bc0aa0e232061d245ae4d4276d6a8bfa6eaf1`.
+  The clean APK then passed physical Media3 Push playback on the normal
+  AFTMM/API-25 Fire TV (`192.168.10.25`): `SAGETV_PUSH`, hardware
+  `OMX.MTK.VIDEO.DECODER.MPEG2`, advancing audio/video/timeline and captions,
+  zero retry count, and zero dropped frames during the verification window.
+- Fixed Native hardware DVD film cadence on both commissioned Amazon devices.
+  Some DVD MPEG-PS cells provide a PES PTS only for selected MPEG-2 pictures;
+  Media3 extrapolated the missing values in decode order, and the MediaTek
+  decoder then produced non-monotonic display/release times while reordering
+  I/P/B pictures. `Mpeg2PictureTimestampCompleter` now scans bounded sequence,
+  GOP, picture, and picture-coding metadata, preserves every authored PTS, and
+  reconstructs only missing telecined-picture display times from
+  `temporal_reference` and `repeat_first_field`. Metadata remains committed in
+  byte order and no media payload or delayed `TrackOutput` metadata is
+  buffered. The physically tested clean `0.5.85` APK (`f36e8396e428f917cbc6f912e1a370076e7b7bfdd173355c0c6945de31eac35f`)
+  held 1.0217x real time on AFTKRT/API-30 with 756 video outputs over the
+  20-second measurement window, zero drops, zero non-positive releases, and
+  zero release gaps; AFTMM/API-25 held 1.0131x with 1,019 outputs and zero
+  drops, skips, non-positive releases, or gaps. Pause/play, 2x FF/RW, and
+  next/previous chapter recovered A/V on both, and the authored
+  menu/audio/subtitle/chapter
+  regression passed on the Pro.
+- Made the old-server caption compatibility query safe during partially
+  initialized/mock sessions. A missing preference store now means the legacy
+  override is inactive instead of tearing down a newly created DVD player.
+  This also restored all 146 Core tests as a mandatory full-suite gate.
+- Closed the Fire TV Pro caption compatibility gate after the caption
+  renderer re-enable and STV/explicit-service authority fixes were installed.
+  The owner verified CEA-608 captions working on the AFTKRT/API-30 `.29`
+  device. The later Native hardware DVD cadence, lag, A/V sync, and transport
+  gate passed on the exact clean `0.5.85` APK on both commissioned devices and
+  is tracked independently from captions and launcher artwork.
+- Migrated every active Java class and Android component from the legacy
+  `sagex.miniclient.*` namespace to the independent
+  `opensagetv.vibe.miniclient.*` root. The established launcher class endings
+  remain `phone.ServersActivity` and `tv.MainActivity`, making legacy-to-Vibe
+  comparisons mechanical while their fully qualified component identities are
+  distinct. Frozen `source/existing` and the protected JVL package were not
+  changed.
+- Restored the launcher resource structure used by the working legacy APK.
+  The standard launcher inherits `@mipmap/ic_launcher_v2`; the Leanback
+  launcher explicitly uses `@drawable/banner_v2` for icon, banner, and logo.
+  Removed five TV-module mipmap overrides and the application `roundIcon`
+  declaration that were absent from the working layout and could change Fire
+  OS resource selection. The Vibe and legacy banners are both 320x180 8-bit
+  non-interlaced RGB PNGs.
+- Removed the unsuccessful separately installed Fire TV launcher package and
+  reduced build, install, MCP, and logo workflows to one Vibe client APK. The
+  main APK now retains both its standard and Leanback launcher activities in
+  debug builds. Adaptive icon generation now places visible vector artwork in
+  the foreground over an opaque background, and validation rejects a fully
+  transparent foreground before Gradle runs. The Leanback activity uses the
+  generated 16:9 artwork for its icon/banner/logo while the application keeps
+  a conventional square icon. Physical AFTMM/API-25 testing proved that the
+  current Fire OS sideload library renders the application icon in a centered
+  square card even when both launcher activities declare the 320x180 banner;
+  forcing the banner into `application@icon` does not produce a wide card.
+  Version code `2101108`, clean installation, and launcher-cache refresh now
+  produce a visible Vibe icon that launches the independent Vibe activity.
+  Update installs can temporarily retain a blank/stale Fire OS card until its
+  library refresh or device restart. The packaged 16:9 banner remains correct
+  for Android TV and store/catalog artwork. The legacy
+  `jvl.sage.miniclient.android.tv.debug` package is explicitly untouched.
+- Fixed caption re-enabling without restarting playback. Selecting `Off`
+  disables both ExoPlayer's text renderer and text track type; the Media3 and
+  legacy Exo enable paths now restore both before applying CC1/CC2. Previously
+  the UI and telemetry could report CC1 selected while the renderer remained
+  disabled and emitted no cues until the video was restarted. The new physical
+  `--toggle-off-on` caption gate passed without a restart on Media3 and legacy
+  ExoPlayer using the timed CEA-608 fixture; screenshots are
+  `artifacts/firetv/20260904-235030_caption-media3-dynamic-visible.png` and
+  `artifacts/firetv/20260904-235234_caption-exoplayer-dynamic-visible.png`.
+- Added an old-server caption compatibility policy and exposed it both under
+  Audio and Caption settings and the MiniClient long-press navigation overlay
+  as `SageTV STV`, `Off`, `CC1`, and `CC2`. The selection applies immediately
+  during playback. Vibe-patched servers remain authoritative through
+  `VIDEO_CC_STATE`; documentation now states clearly that true STV checkbox
+  mirroring requires the updated SageTV `Sage.jar`, while explicit CC1/CC2 is
+  available against an unmodified server.
+- Strengthened the caption physical gate with an eight-second continuity check
+  after same-session Off-to-On. The Media3 hardware Push fixture produced 183
+  additional non-empty cue updates with a longest progress gap of 1.691 seconds;
+  the visual result is
+  `artifacts/firetv/20260904-235525_caption-media3-dynamic-visible.png`.
+
+## v0.5.85
+
+- Completed the Kodi-derived generated hardware-codec matrix on the normal
+  AFTMM/API-25 Fire TV using Media3 Pull with hardware video decoding. MPEG-2,
+  MPEG-4 Part 2, H.263, H.264 Baseline/High, HEVC Main/Main10, VP8, VP9
+  Profile 0/Profile 2, and an H.264 mid-stream 640x360-to-1280x720 format
+  change all passed with the expected MediaTek hardware decoder. A truncated
+  H.264 startup remained process-safe. The MPEG-4 B-frame generator now records
+  real reordered MP4 packets with distinct PTS/DTS values; an eight-packet
+  controlled extractor model removes PTS and proves the retained-DTS fallback
+  without enabling an unverified production timestamp rewrite. AV1 and secure
+  DRM remain explicit hardware/asset skips. Evidence is
+  `artifacts/firetv/kodi-codec-matrix-media3-pull-aftmm.json`.
+- Audited the native Android hardware path against Kodi's current MediaCodec
+  implementation. Added bounded MPEG-2 GOP timestamp completion for the
+  Kodi-identified MediaTek OMX/Codec2 and NVIDIA OMX missing-PTS cases, kept
+  tunneled playback explicitly disabled, and applied the existing user codec
+  disable rule consistently to Media3, legacy Exo, and IJK. Media3/Exo retain
+  their own MIME/profile/secure/capability checks; no runtime-derived automatic
+  blacklist was introduced.
+- Confirmed that Media3 already owns Kodi-equivalent keyframe-after-flush,
+  timed frame release, output draining, and codec flush/reinitialization
+  behavior. Recorded MPEG-4 Part 2 missing-PTS/DTS fallback and VC-1 MIME
+  aliases as fixture-gated non-DVD follow-ups instead of applying unverified
+  codec workarounds globally.
+- Physically A/B tested the Kodi-derived MPEG-2 timestamp rule on the AFTKRT
+  Fire TV Pro with the same real DVD, native SageTV Push bytes, synchronous
+  MediaCodec queueing, and `OMX.MTK.VIDEO.DECODER.MPEG2`. At the same
+  61.795-second input point, recurring frame-release gaps fell from 31 with the
+  rule disabled to 10 with it enabled; both runs consumed 47,417,344 bytes,
+  remained playing, and reported no player error. The final Auto APK was then
+  rebuilt, installed in place, and passed the remote native-DVD gate. The
+  subsequent clean-workflow APK (SHA-256
+  `d8bec749d33eb5331a5d046ac5638297a52266780808400d828b714efa6c1bb0`)
+  also passed exact-path native hardware start, pause/play recovery, advancing
+  audio/video, and STOP teardown on the AFTKRT/API-30 device; evidence is
+  `artifacts/firetv/dvd-firetv-pro-29-kodi-rules-clean-build.json`.
+
+- Physically tested the reported Fire TV forced-banner sideload workaround on
+  the AFTMM/API-25 device with clean uninstalls and reboots. Forcing the 16:9
+  banner into `android:icon` removed the companion from Apps & Channels; the
+  corrected single-activity `LAUNCHER` + `LEANBACK_LAUNCHER` variant was also
+  omitted. Debug builds now retain the main APK's inherited square-icon
+  `LAUNCHER` entry and hide only its duplicate Leanback entry. A clean install
+  displayed `OpenSageTV Vibe`, launched `MainActivity`, and preserved the
+  restored server configuration. The companion remains optional.
+- Corrected Fire TV launcher artwork handling. The API-29 compatibility
+  launcher now uses its generated square icon for Fire OS's sideload fallback
+  while retaining the 320x180 banner on its Leanback activity; its sibling
+  logo project also emits the opaque 1280x720 Amazon catalog asset. Debug
+  builds avoid duplicate Leanback intent exposure while preserving direct and
+  explicit companion-to-client launching.
+- Replaced hand-maintained launcher/banner/in-app artwork with the deterministic
+  `opensagetv-vibe-logo` pipeline. Unified Android commands regenerate,
+  validate, atomically install, and SHA-record all 25 required resources before
+  Gradle runs; no host Python or font installation is required. The resulting
+  debug APK SHA-256 is
+  `f265158cfe2c40ab24ff268e35efa4092ae08169bc9175cf30d6761b7499f690`;
+  it was installed in place on the normal AFTMM/API-25 test Fire TV at
+  `192.168.10.25`, preserving app data, and resumed `MainActivity` without a
+  fatal exception.
+
+- Completed the deterministic regular-video fixture handoff from the authored
+  DVD work. The canonical MPEG-TS generator now proves burned PTS/frame,
+  whole-second visual and audio sync pulses, dual 5.1/stereo AC-3, in-band
+  CEA-608/708, and Comskip sidecar generation. The Ubuntu 26 unified build
+  image was rebuilt as `u26-j11-release-v7` (image ID `27acc132879e...`) with
+  FFmpeg/ffprobe, dvdauthor/spumux/spuunmux, ImageMagick, fontconfig, DejaVu
+  fonts, and Pillow permanently installed and validated. A real four-second
+  fixture was generated and probed inside the one reusable container.
+- Closed the remote-DVD task after its final gate: 382 project tests, 56 MCP
+  tests, Core JUnit, validation, and a clean 60-task APK build pass. The
+  DVD-tested APK at that gate had SHA-256
+  `75cfc4b606e0246094cab529ced7e06aa0790156d92fa2ebeb68cc9d8d8aac91`
+  and was installed in place on the normal AFTMM/API-25 Fire TV with app data
+  preserved; its launcher resumed without a Dev-process fatal exception.
+  Blu-ray/BDMV remains separately `SKIPPED` until a valid fixture exists.
+- Closed the finite compatibility/fallback implementation task and promoted
+  its rules to the permanent contributor contract. The same APK has physical
+  evidence for preserved/current Core, missing/old/current MIM, a real
+  mid-session FFmpeg failure, explicit fail-closed behavior, Native/Pull
+  recovery, SMB Auto fallback, and bounded user/MCP diagnostics. The durable
+  compatibility matrix now reflects completed frame-step and DVD Hybrid/MIM
+  commissioning instead of their former pre-test status.
+- Fixed startup crashes on the Amazon AFTKRT Fire TV Pro running Fire OS API
+  30. Fullscreen setup now obtains `WindowInsetsController` from the attached
+  decor view, tolerates a temporarily unavailable controller, and falls back
+  to the legacy system-UI flags instead of dereferencing Fire OS's unattached
+  `DecorView`. Settings and launcher fullscreen setup now runs after content
+  view attachment.
+- Made initialization failure containment and discovery restart safe. An early
+  renderer failure can no longer cause a second `TextView` null dereference
+  before the error layout exists, and `ServerDiscovery` recreates its named
+  executor after shutdown instead of rejecting a later discovery request.
+- Made physical automation compatible with Android 10+ background-activity
+  restrictions. `dev_connect_server` brings the Dev app to the foreground
+  before its debug receiver starts the requested renderer, and focused-window
+  inspection falls back to ActivityManager's resumed Activity on Fire OS
+  builds that omit `mCurrentFocus`/`mFocusedApp`.
+- Physically commissioned the fixes on `192.168.10.29` (Amazon AFTKRT, API
+  30): three Settings open/back cycles retained one process with zero fatal
+  exceptions; discovery found both test servers; GDX connected; and OpenGL
+  hardware Media3 Pull passed startup, pause/play, HOME teardown, reconnect,
+  and explicit shutdown. Installed APK SHA-256 was
+  `75cfc4b606e0246094cab529ced7e06aa0790156d92fa2ebeb68cc9d8d8aac91`.
+
+- Completed the explicit MIM main-title policy gate on the authored DVD fixture using
+  `mcp-disc-test` with `--disc-policy mim_main_feature`. Hardware A/V startup,
+  command recovery, and STOP/teardown now pass consistently with `playerActive` and
+  decoder counters returning to false/inactive after stop. Evidence:
+  `artifacts/test-results/vibe-authored-dvd-mim-main-feature-policy-gate-attempt2.json`.
+- Completed physical Hybrid DVD main-title commissioning on the authored
+  fixture. MIM title startup, pause/play, FF/REW with fresh datasource epochs,
+  chapter changes, audio/subtitle selection, and subtitle toggle all recover
+  with advancing A/V on the hardware Media3 path. Core now defers MIM until a
+  title payload exists and releases its decoder lock while paused; Android no
+  longer reuses an ended MIM reader generation after FF/REW.
+- Added explicit runtime MIM-failure recovery reporting. When Hybrid has already
+  been negotiated and FFmpeg fails at title startup, Android recognizes Core's
+  `fallback=mim_failure` marker, tells the user that native DVD playback was
+  restored, and exposes `discMimRuntimeFallback` plus a bounded compatibility
+  reason to MCP. A real mid-session fault injection restored native hardware
+  MPEG-2 with advancing audio/video and no player error; the test FFmpeg binary
+  was immediately restored and SHA-256 verified.
+- Made authored DVD subtitle synchronization directly observable. Both English
+  and Spanish SPU cues now print the shared cue number, authored PTS, nearest
+  video frame, and chapter while the video burns its live PTS/frame from the
+  same clock. An executable generator test verifies the exact cue-2 contract
+  (`00:00:02.000`, frame 60, chapter 1) instead of relying only on prose.
+- Corrected the fixture's DVD `SetSTN` authoring: normal English/Spanish
+  subtitles use enabled register values 64/65, while 63 remains subtitles-off.
+  The previous 0/1 values selected a language but left the DVD display-enable
+  bit clear. Deep authoring validation passes, and physical Media3/hardware
+  runs now strictly observe selectors 64 and 65; the Spanish screenshot pairs
+  burned PTS 00:00:06.573 with SPU PTS 00:00:06.000.
+- Completed a second source-by-source audit of the DVD Presentation Engine
+  v2.1 handoff after the subtitle and navigation fixes. Its 19 standalone tests
+  and Android compile pass in the unified image. Sixteen selected portable
+  source files match the handoff exactly except for trailing-newline formatting;
+  every non-imported bridge, parser, drain, timestamp, overlay, Surface, and
+  forced-subtitle component now has an explicit decision and verification row
+  in `docs/DISC_PLAYBACK_DISCOVERY.md`.
+- Completed the same-APK old/new Core compatibility matrix. The preserved
+  pre-DISC `Sage.jar` passes ordinary Pull, SMB Direct, Fixed/MIM, Native DISC,
+  and Hybrid Native fallback. Because old Core cannot query the new per-client
+  policy, Android now reports that limitation and retains Native safely. The
+  current negotiated Core fails unsupported explicit Hybrid with fallback off
+  before playback. The current JAR and exact SHA-256 were restored afterward.
+- Added bounded compatibility fault injection for missing MIM and preserved MIM
+  0.4.5. Explicit Fixed cannot start with either unavailable/incompatible
+  component, does not corrupt the server, and ordinary hardware Pull recovers.
+  Exact MIM 0.4.7 files were restored and verified from their SHA-256 manifest.
+- Fixed the green/blank embedded-preview regression without rebuilding the
+  player or decoder. The player-owned Surface remains attached while SageTV's
+  video rectangle transitions between fullscreen and the STV preview. Physical
+  hardware tests pass for Push, Pull, SMB Direct, Fixed/MIM, and Native DISC;
+  screenshots verify real video rather than relying on counters alone.
+- Completed the released-source audit of historical extender and desktop
+  behavior. The durable matrix distinguishes proven protocol/server behavior
+  from closed-firmware inference for capabilities, buffering/bandwidth,
+  growing files, live-edge seeking, captions, aspect/interlace, standby,
+  reconnect, remote input, fast switching, DISC, and compatibility workarounds.
+  Concrete proven behavior is implemented or represented by an explicit
+  deferred task; no firmware-only guess was enabled globally.
+- Made the long multi-disc MCP runner line-buffer its per-disc progress when it
+  runs without a TTY in Docker/CI, preventing an active drive-spin/startup
+  matrix from appearing stalled until the final JSON is written.
+- Re-ran the complete private corpus on the final installed APK with restored
+  current Core/MIM: all 51 populated Unraid DVD structures again passed real
+  hardware A/V startup, STOP and crash checks, and the empty ROGUE_ONE structure
+  failed safely twice. A fresh independent HDMI capture contains 1920x1080
+  moving video (29 sampled unique frames) and non-silent stereo PCM
+  (`mean_volume=-22.5 dB`, `max_volume=-3.7 dB`).
+
+- Fixed legacy Exo hardware playback across HOME/background Surface recreation.
+  Legacy Exo had bound the current raw `Surface`; Fire OS released it while the
+  player retained and retried it, causing `ERROR_CODE_DECODING_FAILED` followed
+  by `The surface has been released`/`ERROR_CODE_DECODER_INIT_FAILED`. It now
+  binds the `SurfaceView`, allowing ExoPlayer to own holder callbacks and attach
+  the recreated Surface. Two exact-path hardware Pull repetitions passed on the
+  API-25 Fire TV with the same MiniClient connection, advancing A/V, automatic
+  resume, explicit user-pause preservation, and teardown.
+
+- Added a dedicated **Home and background recovery** options screen. Users can
+  independently retain the same SageTV session, allow/deny automatic playback
+  resume, and select a bounded disconnect timeout. Automatic recovery sends
+  PLAY only when the background state machine itself paused active playback;
+  user-paused and idle sessions remain untouched.
+- Extended debug/MCP configuration and telemetry with
+  `resumeBackgroundPlayback`, and extended the strict lifecycle gate with
+  enabled/disabled auto-resume and timeout cases. Media3 hardware Pull passes
+  advancing A/V, exact connection generation, Surface reattachment, manual
+  pause, explicit PLAY, timeout disconnect, and teardown on API 25. Legacy Exo
+  also passes same-session Surface recreation on API 25 after binding its
+  `SurfaceView` instead of a released raw `Surface`.
+- Completed the API-30 retained-session gate on the commissioned Fire TV Pro.
+  Fire OS emits a MediaSession pause before the delayed application-background
+  transition; the background state machine now coalesces that already-applied
+  pause and retains ownership of the matching resume. MediaSession pause is no
+  longer forwarded twice while background-session preservation is enabled.
+  Resume repaint is also serialized through `ConnectionEventRouter` instead of
+  writing the SageTV event socket from Android's main thread. This removes the
+  observed `NetworkOnMainThreadException`, duplicate reconnects, stale-player
+  teardown, and subsequent Pull read-position failure. Media3 hardware Pull now
+  passes automatic resume, disabled automatic resume plus explicit PLAY,
+  manual-pause preservation, exact connection retention, Surface recreation,
+  configured timeout disconnect, replay, and teardown on both API 30 and API
+  25. The tested incremental APK SHA-256 is
+  `3295d35f427ae895ee66ea6474b4061375f3270fce5b5192a693508659094a12`.
+  The final clean-build APK
+  `c18cfdee04868b250b99381f85d45c00b6c5e2bd8fbf1e499fbe5fa27a78351b`
+  then repeated the exact-session automatic-resume, user-pause, replay, and
+  teardown gate on API 25.
+- Corrected Fire OS process-status automation: a live PID remains authoritative
+  during ordinary HOME even if its package stopped bit is stale from an earlier
+  force-stop, while teardown separately recognizes a committed force-stop and
+  reports a briefly terminating PID instead of misclassifying HOME or hanging.
+- Added a negotiated server-controlled remote DVD implementation without
+  replacing the player backends. Android now handles legacy MiniClient DVD
+  commands 32-37, lazy `push:dvd`, CLUT/SPU highlight state, and server-owned
+  navigation. Media3's DVD-only MPEG-PS extractor separates private AC-3
+  substreams, honors first-access-unit pointers, and rejects false sync headers
+  before hardware decode. Bounded development runs observed hardware MPEG-2/
+  AC-3 on authored `SCOOBY_DOO_AND_BATMAN` and menu-less `ALADDIN`, plus several
+  ALADDIN controls. The Native Media3/hardware gate is now commissioned below;
+  Hybrid/MIM and compatibility fallback remain open in `TASKS.md`.
+  A matching from-beginning Core request no longer inherits a saved disc
+  resume point. Blu-ray physical commissioning is explicitly SKIPPED because
+  no BDMV fixture exists on the supplied private share; existing main-title
+  source/host behavior remains intact.
+- Corrected the physical DVD MPEG-2 cadence and cell-drain failures found on the
+  commissioned Amazon AFTMM/API-25 Fire TV. The DVD extractor reconstructs
+  omitted telecined-picture display timestamps from bounded GOP metadata while
+  preserving authored PTS and immediate byte-order `TrackOutput` delivery. DVD
+  `0x100` EMPTY/PAUSE
+  polls now signal generation-scoped end-of-input only after all bytes in the
+  current Push epoch reach the extractor; queued audio/video drains normally,
+  the server receives `-2`, and a later FLUSH or non-FLUSH segment resumes on a
+  fresh reader generation without closing the MiniClient session. This removed
+  the repeatable 292-second READY/BUFFERING deadlock at the end of
+  `VTS_03_1.VOB`.
+- Changed only complete, single-picture authored DVD menu sequences from a
+  five-second to a 500 ms synthetic sample cadence. The old interval made
+  Media3 declare the video renderer starved, stop menu audio at 17.45 seconds,
+  and could overshoot the real A/V tail by nearly five seconds. Moving title
+  video is not repeated or otherwise affected. The supplied
+  `SCOOBY_DOO_AND_BATMAN` run now crosses the long-title boundary, displays the
+  authored root menu and buttons, keeps menu audio/video READY through 130
+  seconds, drains it cleanly, and reports no player/decoder error. All 47 DVD
+  protocol tests, the Push generation unit tests, 53 MCP tests, Core tests, and
+  debug APK assembly pass.
+- Fixed repeated authored DVD submenu entry on Fire TV. Replacement menu cells
+  now retain the existing Surface binding while `stop()` releases the prior
+  decoder, preventing Fire OS from reporting a decoded one-picture buffer
+  without latching it to the Surface. The DVD FLUSH path also resets its
+  generation drain guard, so equal-sized authored menu cells receive their own
+  transient end-of-input instead of being mistaken for an already drained
+  cell. Four final root-to-Languages cycles rendered the submenu and active
+  button highlight without locking.
+- Corrected DVD subtitle visibility to follow SageTV's VM/STV state. The HD
+  MiniDVDPlayer protocol uses bit 7 (`0x80`) for disabled title subpictures and
+  bit 6 (`0x40`) for enabled subpictures; Android now decodes both forms and
+  retains the selected low-five-bit stream id. Explicit `None` and the STV
+  Subtitles checkbox now suppress ordinary and forced movie subtitle text,
+  while an active VM button highlight remains renderable for menu navigation.
+  Debug/MCP state now records the last overall, audio, and subtitle DVD stream
+  values; the supplied disc physically reported `128` off and `64` on.
+- Corrected DVD audio selection when private AC-3 streams are discovered in a
+  different order than SageTV's language order. Media3 previously could keep
+  the first discovered `0x82` Portuguese stream when the server-selected
+  English `0xBD80` group was published after `STATE_READY`. Android now retains
+  SageTV's packed stream request across DVD cell replacements and reapplies it
+  from `onTracksChanged`. Debug/MCP telemetry records the requested, applied,
+  selected, and available format IDs. On the supplied disc the main feature
+  physically reported SageTV request `48512`, applied stream `48512`, and
+  selected Media3 format ID `48512` while hardware MPEG-2/AC-3 output advanced.
+  All 50 focused DVD protocol tests and debug APK assembly pass.
+- Physically verified the authored Special Features submenu on Fire TV: root
+  button navigation opens it, its Main Menu button returns to the authored root,
+  and Special Features opens again with the correct background and active SPU
+  highlight. The repeated navigation completed without a stale frame, malformed
+  menu error, decoder error, or invalid Surface.
+- Reviewed every source, test, and Markdown file in the Apache-2.0
+  `SageTV-Android-DVD-Presentation-Engine-v2.1` handoff archive (SHA-256
+  `7B9BF785F4547C245F3C313DAA86831A028152882739CA41AFFF6E5321053D4D`) and
+  verified its complete source manifest and standalone test runner. Integrated
+  its platform-neutral bounded per-stream SPU assembler, strict DVD control/
+  RLE decoder, `CHG_COLCON`/CLUT/button compositor, palette utilities, physical
+  audio-stream decoder, PTS helpers, diagnostics, and deterministic fixtures.
+  The Android adapter deliberately preserves the physically proven Vibe
+  Media3 transport, cell clock, Surface, drain, and SageTV/STV subtitle-off
+  semantics; the handoff's alternative end-to-end bridge, timestamp rewriter,
+  input gate, Android overlay view, and forced-only stream policy were reviewed
+  but not imported. Added a 5,000-fragment deterministic malformed-SPU stress
+  test, bounded debug counters, MPEG-audio PES selection support, and explicit
+  stale-SPU clearing on `STP_DSP` so a later highlight cannot resurrect an old
+  authored bitmap.
+- Added negotiated DISC policy and option properties between Android and Core:
+  `VIBE_DISC_POLICY`, `VIBE_DISC_SKIP_MENUS`, `VIBE_DISC_SKIP_PREVIEWS`, and
+  `VIBE_DISC_NATIVE_FALLBACK`. An unavailable explicit Hybrid/MIM request now
+  fails closed without damaging the MiniPlayer session when fallback is off;
+  with fallback enabled it returns to Native Media3 playback. Both paths pass
+  physical MCP commissioning against the updated Unraid server.
+- Corrected the two distinct bypass behaviors. Skip menus now asks the Ogle VM
+  for the longest authored title instead of assuming DVD title 1 is the main
+  feature; skip previews retains menus and enters the authored root menu. The
+  Scooby fixture physically shows the feature for the first case and the real
+  animated root menu for the second.
+- Characterized legacy Exo DVD independently. A direct DVD-only legacy
+  `PsExtractor` removes generic-sniff ambiguity, but only two of six
+  representative discs passed strict hardware startup; four exposed transient
+  audio-track or decoder initialization failures. DVD requests for legacy Exo
+  therefore resolve to the commissioned Media3 backend with visible/logged
+  compatibility feedback instead of claiming unsupported parity.
+- Expanded the private-disc discovery gate with a read-only Unraid scan: 52
+  `VIDEO_TS` directories, 51 populated DVD structures, one intentionally empty
+  invalid structure, and no `BDMV` fixture. No private media or credentials
+  were copied into the repository.
+- Added a reusable `mcp-disc-test` root workflow and server-path inventory for
+  bounded real-device DVD startup, pushed-byte, player-error, crash, STOP, and
+  teardown gates. Menu-less ALADDIN, an authored LEGO disc, a Polish/PAL disc,
+  and the largest five-IFO/fifteen-VOB fixture pass the representative Media3
+  hardware matrix. The empty ROGUE_ONE structure fails safely without a client
+  crash. Corrected relative `--paths-file` resolution so the command works from
+  the documented project-root workflow.
+- Captured independent HDMI A/V evidence after the presentation-engine merge:
+  1920x1080 MJPEG at approximately 29.75 fps plus stereo PCM, transcoded to a
+  compact H.264/AAC evidence copy. The extracted frame visibly confirms the
+  authored Scooby root menu and correctly aligned active Play button. Physical
+  HDMI evidence supplements, rather than replaces, decoder/protocol/crash
+  telemetry.
+- Fixed late AC-3 discovery in video-first DVD cells. `private_stream_1` can
+  carry only SPU data, so seeing PES id `0xBD` no longer falsely marks audio as
+  discovered or calls Media3 `endTracks()` before a real `0x80..0x87` AC-3
+  substream creates its TrackOutput. Also clear outgoing-cell audio overrides
+  and mark a retained SageTV audio request applied only after its replacement
+  TrackGroup override is committed. The three failures discovered by the first
+  51-disc sweep (`RAYA_AND_THE_LAST_DRAGON`, `SOUL`, and `F9_UPD75`) now pass
+  hardware A/V startup and STOP in a focused physical regression.
+- Added an explicit expected-safe-startup-failure mode to `mcp-disc-test` for
+  empty/invalid DVD structures, and made command sequences retain a compact
+  post-command state while requiring the player to remain active/error-free.
+  Fixed the root `install APK` workflow to resolve project-relative paths under
+  `/workspace/android-client` just like APK inspection.
+- Completed the bounded Native Media3/hardware DVD inventory gate: all 51
+  populated Unraid `VIDEO_TS` structures pass real A/V startup, pushed-media,
+  player-error, crash, STOP, and teardown checks. The single empty ROGUE_ONE
+  structure remains an expected safe startup failure, and no BDMV fixture was
+  found, so Blu-ray remains SKIPPED. Evidence is
+  `artifacts/firetv/dvd-presentation-v21-all-unraid-dvds-final.json` and
+  `artifacts/firetv/dvd-empty-structure-safe-failure.json`.
+- Hardened `mcp-disc-test` so the MiniPlayer PAUSE state is checked as state 3,
+  every command preserves its screenshot and compact state before a recovery
+  assertion, and selected transport/stream commands require real post-command
+  A/V counter advancement. The strict gate exposed a Core defect instead of
+  accepting the wrapper's PLAY state as a false pass.
+- Fixed DVD Skip Back near the beginning in Vibe Core. `VideoFrame` previously
+  let a negative disc time reach the Java/Ogle VM, which calculated a negative
+  sector, flushed the client, and stopped supplying media while Android still
+  reported a live player. Core now clamps disc seeks to zero before
+  `MiniDVDPlayer.seek()`. The formerly failing title-select, `ff_2`, `rew_2`,
+  FF/PLAY, REW/PLAY, and chapter sequence passes strict A/V recovery on Fire TV.
+  Five complete stop/restart cycles and a six-disc chapter/control matrix also
+  pass. Evidence is
+  `artifacts/firetv/dvd-scooby-verified-transport-recovery-core-clamp.json`,
+  `artifacts/firetv/dvd-scooby-five-cycle-stop-restart-soak.json`, and
+  `artifacts/firetv/dvd-representative-six-strict-controls.json`.
+- Added a reusable Windows HDMI validation capture script with configurable
+  DirectShow video/audio devices and bounded runtime. The final capture contains
+  1920x1080 MJPEG title video and stereo 44.1 kHz PCM audio; its extracted frame
+  shows clean Scooby title playback without a stale menu overlay. Evidence is
+  `artifacts/firetv/dvd-presentation-v21-final-hdmi-av-18s.avi`, its
+  `.ffprobe.json`, and `dvd-presentation-v21-final-hdmi-frame.png`.
+- Corrected `mcp_session_test.py` optional streaming/decoding defaults so an
+  omitted selection is not sent through argparse's value normalizer as an
+  invalid empty string.
+
+- Added `THIRD_PARTY_NOTICES.md` as the consolidated direct-runtime license
+  inventory and executable checks for the opaque native bundles. The audit
+  records Ostermiller Utilities as GPL-2.0, Logback Android as EPL-1.0 or
+  LGPL-2.1, and Glide's component-specific BSD/Apache/MIT terms. It also
+  verifies the checked-in IJK FFmpeg binary contains `--disable-gpl` and
+  `--disable-nonfree`, while the active Exo FFmpeg extension is decoder-only
+  and contains no GPL/nonfree enable flag. Full transitive reconciliation and
+  publication packaging remain open and are not reported as complete.
+
+- Added an on-demand `MediaCodecList` device capability profile that records
+  hardware/software classification, supported MIME types, codec profile
+  levels, maximum dimensions, and adaptive/secure/tunneled features without
+  adding a continuous analytics listener or guessing deinterlace quality.
+  Media3 and legacy Exo now use the same platform-aware classification while
+  preserving explicit hardware, software, and ordered hardware-preferred
+  fallback policies. The debug receiver and MCP expose the inventory plus the
+  decoder actually selected for a bounded test. The clean APK SHA-256 is
+  `ad7e89e3ec92c9116b61e39ce887706069edc6c820e8cfc29d2436172d64f005`.
+  On Amazon AFTMM/API 25, both Media3 and legacy Exo hardware Pull selected
+  `OMX.MTK.VIDEO.DECODER.MPEG2` for the canonical 1080i fixture with one
+  initialization and no player error; evidence is
+  `artifacts/firetv/codec-capability-media3-pull.json` and
+  `artifacts/firetv/codec-capability-exoplayer-pull.json`. The complete gate
+  passes 298 project/static tests, 49 MCP tests, Core JUnit, validation, and
+  all 60 clean APK tasks.
+
+- Added backend-neutral preferred track selection. Users can configure BCP-47
+  audio/subtitle languages, CEA-608 CC1-CC4, or CEA-708 Service 1-63 under the
+  new Audio and Caption Track Settings page. SageTV/STV remains the sole
+  caption Off/On authority; the Android preference only resolves a preferred
+  track after the STV enables captions. Media3 and legacy Exo2 now expose the
+  caption accessibility channel, apply preferred audio language through their
+  track selectors, retain pending STV selection until track discovery, and use
+  the selected broadcast service in their TS extractor configuration. MCP
+  configuration/telemetry and the physical caption gate cover these settings.
+  Amazon AFTMM/API-25 hardware Pull passed explicit Media3 CEA-708 Service 1
+  and legacy Exo2 CEA-608 CC1 with real rendered cues; evidence is
+  `artifacts/firetv/20260831-021518_caption-media3-pull-visible.png` and
+  `artifacts/firetv/20260831-021650_caption-exoplayer-pull-visible.png`. The
+  final clean APK SHA-256 is
+  `b9ee3c91ca3ad74b15bfe74efe3f6592aebbf885af9b458993f8eb99fd647841`;
+  its exact install repeated the Media3 hardware Pull gate with 498 ms
+  caption/timeline drift as
+  `artifacts/firetv/20260831-022831_caption-media3-pull-visible.png`.
+
+- Added bounded, payload-free connection lifecycle diagnostics for generation,
+  worker start/stop state, protocol command/reply counts, event/GFX queue depth,
+  reconnect, and close state, with debug/MCP visibility and host tests. Replaced
+  the unretained `ANDROID-MINICLIENT` thread with a lifecycle-owned single-
+  thread executor/Future. Pause/destroy now cancel and invalidate the request;
+  a late result closes its exact connection and cannot publish an event or UI
+  error into a destroyed activity.
+- Physically proved the connection change on Amazon AFTMM/API 25. The durable
+  ordering gate retained media-before-GFX startup, ordered replies, bounded FIFO
+  drain, all-worker HOME teardown, a newer foreground generation, and explicit
+  close. The hardware Pull lifecycle gate then passed advancing A/V,
+  foreground reconnect, surface recreation, three exact-path replays, and
+  final no-process teardown. Ordering evidence is
+  `artifacts/firetv/connection-ordering-20260830-230236.json`. The consolidated
+  gate passes 288 project/static tests, 47 MCP tests, Core JUnit, validation,
+  and all 60 clean APK tasks; the final clean APK SHA-256 is
+  `ee0a20389d582657bddcaaf40ca88770a2d3cff7c87deda61bb4ed201d8562b4`.
+- Continued the connection extraction behind the same physical gate. A
+  connection owner now retains Media/GFX sockets and all four protocol worker
+  handles, makes close idempotent, and waits on one bounded deadline. Explicit
+  Media-worker readiness replaces the blind 100 ms startup sleep.
+  `ConnectionEventRouter` retains the single 100-event FIFO and reconnect
+  suppression; `GfxFrameExchange` owns one exact header/body pair until serial
+  dispatch completes; and `ConnectionFileTransferOwner` gives named concurrent
+  transfers connection-owned socket/stream/file cancellation. An atomic
+  diagnostics snapshot correction prevents equal queued/dequeued counts from
+  being paired with a stale depth during MCP verification. Current physical
+  evidence is `artifacts/firetv/connection-ordering-20260830-230236.json` from
+  the exact clean-installed APK above.
+- Extracted reconnect eligibility/event suppression into
+  `ConnectionReconnectState` and replaceable GFX input/event output lifetime
+  into `ConnectionProtocolStreams`. Focused tests cover the original
+  negotiated-support, live, first-frame, encryption, replacement, and
+  idempotent-close rules. The post-extraction physical gate passed using only
+  the canonical captioned/comskip fixture; evidence is
+  `artifacts/firetv/connection-ordering-20260830-231530.json`.
+- Removed the superseded non-captioned `VibeSeekTest-1080i-MPEG2-AC3.ts` and
+  matching `.edl` locally and from the commissioned Unraid test instance. The
+  connection gate now defaults to
+  `/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` so future omitted-path
+  runs use the newest embedded-caption fixture.
+- Split `GFXCMD2` behind a characterized family map into lifecycle/frame,
+  drawing, image/cache, font, surface/video, and transform/batch handlers. A
+  shared allocator preserves the original handle namespace, image/cache state
+  remains serial, unsupported commands retain their prior results, and raw
+  native delegation remains ahead of the Java handlers. `GFXCMD2` is now about
+  260 lines instead of roughly 950. The MCP connection gate gained an explicit
+  `opengl|gdx` renderer selector and reports its selection. The complete split
+  passed the canonical captioned/comskip fixture on OpenGL and GDX. The exact
+  final clean APK was installed and repeated those gates as
+  `connection-ordering-20260830-235310.json` (OpenGL) and
+  `connection-ordering-20260830-235518.json` (GDX).
+- Replaced the duplicated OpenGL/GDX `GFXCMD_INIT` 100 ms readiness polling
+  loops with a shared, one-shot `RendererReadinessGate`. Resize publishes
+  readiness, renderer close/deinit cancels and releases a waiter, late readiness
+  cannot revive a cancelled renderer, and interruption is preserved. Focused
+  JUnit and APK compilation pass; physical post-change evidence is
+  `connection-ordering-20260830-235947.json` (OpenGL) and
+  `connection-ordering-20260831-000156.json` (GDX).
+- Made delayed keyboard visibility work lifecycle-owned: one explicit main-
+  looper handler replaces view-local delayed work, replacement removes the
+  preceding request, and pause/destroy invalidate and remove pending work.
+  Media3 and legacy Exo progress/seek-recovery scheduling now share one explicit
+  main-looper handler per player and remove the progress callback during release
+  or replacement. Both hardware Pull lifecycle gates pass with advancing A/V,
+  HOME/return surface recreation, replay, and final process teardown. The final
+  exact clean-installed OpenGL connection gate is
+  `connection-ordering-20260831-002155.json`, and the commissioned device
+  preference was directly verified as
+  `use_opengl_ui=true`.
+- Replaced Push transport polling with notification-driven back-pressure. Core
+  `PushBufferDataSource` now wakes producer/consumer waits on open, bytes, EOS,
+  flush, close, and release; Media3, legacy Exo, and the GSY adapter consume
+  that blocking contract directly. IJK now has a release-aware datasource-open
+  monitor, atomic detach/release, and an unconditional zero-length seek probe
+  response instead of a probe accidentally gated by verbose logging. Focused
+  Core/Android tests pass. Physical hardware Push playback passes on Media3,
+  legacy Exo, and IJK; IJK exact-file playback, pause/play, crash inspection,
+  and clean exit all pass on Amazon AFTMM/API 25.
+- Gave each `SmbDirectSession` one retained, idempotent cleanup owner instead of
+  constructing untracked cleanup threads. Post-change Pull/SMB large-seek A/B
+  passes on Media3 (415/772 ms) and legacy Exo (333/1013 ms). SMB supplied
+  92,425,984 and 86,396,672 bytes respectively while MediaServer media reads
+  remained zero; only the 17-byte shadow protocol exchange was observed. The
+  bounded SageTV Pull growing-file SIZE retry remains documented and
+  intentional because the protocol has no asynchronous file-growth signal.
+  The consolidated post-transport gate passes 289 project/static tests, 47 MCP
+  tests, Core JUnit, validation, and all 60 clean APK tasks. The clean APK
+  SHA-256 is
+  `cb57f588955b07bd18a310e8de8ef20a151861f48a3ca568b50d3cd548e733e4`.
+  That exact installed artifact passed media-before-GFX startup, pause/play A/V
+  recovery, HOME teardown of all four connection workers, newer-generation
+  reconnect, and explicit close as
+  `artifacts/firetv/connection-ordering-20260831-005301.json`.
+- Migrated the Leanback launcher/server browser from framework fragments to
+  AndroidX (`FragmentActivity`, `BrowseSupportFragment`, support
+  `DialogFragment`, and `FragmentContainerView`) without changing its server
+  records or connection behavior. Static regression coverage, Android compile,
+  install, and physical Fire TV navigation pass. The launcher renders, Add
+  Server opens and reaches its Add action using only D-pad navigation, and the
+  temporary Auto Connect exercise completed without a fragment exception. The
+  commissioned device's Auto Connect preference was restored to `false` after
+  the test.
+- Removed the remaining playback-overlay framework fragments without forcing
+  libGDX into an incompatible activity hierarchy. Lifecycle-owned
+  `NavigationDialog`, `VideoInfoDialog`, and `HelpDialog` provide one
+  implementation for the OpenGL `Activity` and libGDX `AndroidApplication`;
+  pause/destroy dismiss the retained overlay set. A static guard now fails on
+  framework Fragment imports, transactions, or `getFragmentManager()` calls.
+  OpenGL physically rendered all three dialogs over the canonical captioned
+  fixture; libGDX rendered navigation, and HOME teardown produced no leaked-
+  window, bad-token, unregister, or fatal-runtime signature. The complete
+  60-task clean APK SHA-256 is
+  `ef16e5a24cb1d6cb41e7aaa160bdb559cf7dec3055746adb25366d7c8056a398`.
+  That exact clean-installed artifact passed the connection/lifecycle gate as
+  `connection-ordering-20260831-013302.json` (OpenGL) and
+  `connection-ordering-20260831-013520.json` (GDX).
+- Completed the physical storage lifecycle gate on Fire OS API 25. The existing
+  app-private `Documents/logs` plus FileProvider share flow remains the
+  permission-free user path. Disposable sentinels in the Dev app's internal
+  files directory and app-specific external log directory both survived an
+  exact `adb install -r` upgrade. Uninstall then removed
+  `/sdcard/Android/data/org.opensagetv.miniclient.dev.debug` completely, and
+  the exact clean APK was reinstalled. No production package or user media was
+  touched.
+- Completed centralized fullscreen commissioning. Exact-path initial and three
+  repeated starts retain the calibrated 1920x1080 SageTV destination; OpenGL
+  and libGDX overlays, Video Info, Help, Fire TV system overlays, HOME/return,
+  and teardown pass. The Fire TV keyboard was physically shown over active
+  playback (`mInputShown=true`), remained inside the calibrated full-screen
+  window, and cleared its active request after the debug IME-hide operation.
+  Evidence is `artifacts/firetv/keyboard-fullscreen.png`; no active production
+  class outside `AppUtil` directly changes system-UI flags.
+- Closed the Android feature-foundation gate after reconciling the executable
+  scheduling inventory with physical evidence. Every discovered production
+  async/connection/transport/renderer/keyboard/player/SMB/overlay owner has
+  explicit cancellation or teardown; the bounded SageTV growing-file SIZE
+  retry is intentionally retained because its protocol has no notification.
+  Remaining large-class decomposition, dependency churn, predictive-Back API
+  33+ commissioning, fast switching, rates, GSY, and publication work is now
+  clearly below the deferred boundary rather than falsely blocking unrelated
+  feature development.
+- Extracted the proven common Media3/legacy-Exo behavior into small typed,
+  backend-neutral components without changing player construction or the
+  protected base-player contract. `PlayerRuntimeConfig` captures one immutable
+  per-load tuning snapshot; `PlaybackSyncPointPolicy` owns direction-aware
+  sync-point selection; `PullSeekRecoveryMonitor` owns the cancellable,
+  generation-guarded recovery timer; and typed health/datasource contracts
+  replace reflection for the two primary backends while retaining a fallback
+  for IJK/System diagnostics.
+- Commissioned the extraction with hardware decoding on the Amazon AFTMM.
+  Media3 and legacy Exo hardware Pull each retained exact paused 33 ms frame
+  advance, advancing output, and safe playing rejection; Media3 Push retained
+  safe unsupported behavior. Pull/SMB Direct large-seek A/B passed on both
+  backends with typed source evidence. Media3 recovered in 529/564 ms and
+  legacy Exo in 742/634 ms for Pull/SMB respectively. SMB read 94,508,032 and
+  95,556,608 media bytes while MediaServer media-read bytes remained zero;
+  only the documented 23-byte shadow protocol reply was observed. The
+  consolidated gate passes 281 project/static tests, 47 MCP tests, Core JUnit,
+  full validation, and all 60 clean APK tasks. The clean APK SHA-256 is
+  `27cf142fd7f4b4587926cb608da54c8c277a2d2644382e4b36f4c1ebc1f0d8f2`;
+  that exact APK was clean-installed and passed full-screen Media3 hardware
+  Pull with advancing MPEG-2 video, AC-3 audio, captions, typed datasource
+  counters, a valid 1920x1080 surface, and no player error.
+- Implemented MiniPlayer protocol command 28 end to end. The Core dispatcher
+  now decodes the signed frame count and returns an explicit supported result;
+  Media3, legacy ExoPlayer, and IJK perform bounded exact seeks while paused,
+  remain paused, and reject Push, playing, zero-count, stale-session, and GSY
+  System cases without disturbing playback. Capability advertisement is
+  limited to forced random-access Pull/SMB modes. The historical repeated-
+  PAUSE shortcut now delegates to the same player contract and falls through
+  to SageTV when unsupported.
+- Added the debug/MCP `dev_frame_step` tool and durable
+  `mcp-frame-step-test`. Physical hardware MPEG-2 Pull gates passed on Media3
+  and legacy ExoPlayer with a 33 ms position advance, one newly rendered
+  frame, retained pause state, and exact command/invoke/return event evidence.
+  A playing request and a physical Media3 Push request both returned
+  unsupported cleanly. No software-decoder case was used. The complete gate
+  passes 276 project/static tests, 47 MCP tests, Core JUnit, full validation,
+  and the clean 60-task APK build. The exact clean APK installed and rechecked
+  on the Fire TV is SHA-256
+  `c32a200f5eda42e1380763db513738985a5d98a081dd83d2638a38fd1d07beb6`.
+- Added a serialized `PlaybackSessionController` with monotonically increasing
+  session and operation generations for load, seek, play/pause, flush,
+  inactive-file transition, surface replacement, recovery, stop, and free.
+  Base, Media3, and legacy ExoPlayer now reject queued work, listener events,
+  progress callbacks, recovery watchdogs, and surface callbacks belonging to
+  an obsolete player session. The explicitly reviewed `BaseMediaPlayerImpl`
+  SHA-256 is
+  `acfb0c04c5dc3c967a5eaac9b814a5274fbe1534f3fd8fadf1c7067bd5f0a0a8`.
+  The installed hardware-test APK SHA-256 is
+  `97d29f0a7700864d7b8c9cc50fe8928a8a593758765e29aa38d247fe062b7c63`.
+- Physically commissioned the session controller on Media3 and legacy
+  ExoPlayer with hardware decoding: Pull background/foreground and surface
+  replacement, three repeated starts, process teardown, Push and Pull FF/REW,
+  caption retention, completed-file EOF, and real 2.1 to 5.1 live-TV changes
+  all pass. Push replacement-stream recovery was 3.031-3.041 seconds and Pull
+  seek recovery was 1.012-1.039 seconds. Evidence is retained under
+  `artifacts/firetv/session-controller-*-20260830.log` and the matching
+  `20260830-20*_caption-*-visible.png` screenshots. Legacy ExoPlayer remains
+  the default and no server protocol or transport capability changed.
+- Revalidated the completed controller tree in the unified Ubuntu 26 build
+  environment: 270 project/static tests, 46 MCP tests, Core JUnit, full source
+  validation, and manifest/diff integrity all pass.
+- Moved Media3 and legacy ExoPlayer caption overlays above the SageTV STV
+  timeline with a shared 0.18 bottom-padding fraction. The deterministic A/53
+  fixture now emits CEA-608 CC1 roll-up on row 14 and was regenerated as a
+  900-second canonical file (SHA-256
+  `b54b5475e4edce1dd248d263e04e54721a01d3dc4ab5b7f41ec125dc692a473e`).
+- Strengthened `mcp-caption-test` to restart the deterministic fixture, use the
+  stable middle roll-up cue, reject caption/media-clock drift over one second,
+  pause without seeking for the absolute STV-timeline screenshot, and keep the
+  paused OSD visible for a default 12-second test-only evidence window. Normal SageTV OSD
+  timing is unchanged. Hardware Fixed/MIM and Push both pass: the retained
+  screenshots are `20260830-190054_caption-media3-fixed-visible.png` and
+  `20260830-190557_caption-media3-push-visible.png`; their stable middle cue is
+  0.5 and 1.0 seconds behind the displayed STV time respectively.
+- Added repeatable server-owned `--seek-command` caption gates. The exact
+  Fixed/MIM FF, REW, FF_2 sequence recovered real A/V and stable captions in
+  328-331 ms per operation, then measured 4 ms of caption/media-clock cadence
+  drift. Post-seek screenshot
+  `20260830-191129_caption-media3-fixed-visible.png` remains within the
+  established one-second visual STV tolerance and clears the timeline.
+- The matching hardware Push FF/REW/FF_2 gate passes with a transport-aware
+  3,000 ms replacement-stream settle. A 300 ms check raced the server's second
+  FLUSH and correctly failed with zero replacement bytes; the durable default
+  now waits for that Push restart without changing Fixed timing. Post-seek
+  screenshot `20260830-191636_caption-media3-push-visible.png` shows stable
+  cue 3:37.0 versus STV 3:38 and 4 ms cadence drift.
+- Installed the caption-overlay build on the commissioned Fire TV. The debug
+  APK SHA-256 is
+  `cdd9b311e95721edfaa9cb352f6347b306d0ab55775c5419bdefd9423ceae6fb`.
+- Added an unknown-duration growing-media live-edge fallback to Media3 and
+  legacy ExoPlayer. When duration is unavailable, each backend clamps an
+  out-of-range request against its buffered edge minus the existing two-second
+  live margin; completed media and no-buffer cases retain their prior behavior.
+  Focused Core/static tests pass. On real channel 2.1 hardware Pull, Media3
+  clamped 86,400,000 ms to 9,174 ms and recovered advancing A/V in 9,491 ms;
+  its independent repeat reached 5,734 ms and recovered in 6,262 ms. Legacy
+  ExoPlayer reached 8,643 ms and recovered in 9,222 ms. All runs emitted
+  `seek_clamped_live_edge`. The installed APK containing both backends is
+  SHA-256 `a4b9d29788e68f0e4d24f6c0fc05b3a9ea4916f9a1a744b1b18eaf41f2f5ab7b`.
+- Increased the completed-file exact-end guard from 500 ms to 5,000 ms after
+  physical evidence showed that 500 ms landed inside the fixture's final GOP,
+  produced repeated Media3 timeout/recovery cycles, and never reached a clean
+  end state. The five-second margin leaves decodable MPEG-2 content and still
+  reaches natural EOF. Hardware Pull exact-EOF gates now pass on Media3 and
+  legacy ExoPlayer at the 899,959 ms fixture duration with a clean ended state,
+  no delete prompt, and no process death. The installed APK SHA-256 is
+  `4f3cd3653ed7c0cf62b0ce692da88762cacf67563de7758e4f114b9089044983`.
+- Passed the exact MIM 0.4.7 hardware-only seven-selection matrix: legacy
+  ExoPlayer, Media3, IJK, GSY Auto, GSY Media3, GSY legacy Exo, and bounded GSY
+  System-safe-delegate prerecorded plus real 2.1/5.1 live gates. Every MIM job
+  was fresh Intel VAAPI/`h264_vaapi`, matched the requested input, stopped
+  cleanly, and left no orphan. Evidence is
+  `artifacts/firetv/fixed-mim-20260830_180555/FIXED_MIM_MATRIX.json`. Android
+  software-decoder cases were deliberately not rerun in this commissioning
+  pass; their older results remain historical evidence only.
+
+- Revalidated the complete v0.5.85 headless release gate in the unified
+  Ubuntu 26 environment: 262 project/static tests, 46 MCP tests, Core JUnit,
+  full source validation, the clean 60-task debug APK build, the 149-task
+  debug/release bundle pipeline, lint, signing, bundletool validation, and
+  universal APK-set generation all pass. Artifact SHA-256 values are
+  `2e6ceab87dfd17d032e10701131b0db167587a4d6638b11634c8548a6faf3451`
+  (debug APK),
+  `54067927e00b893e6237a87d40cd12f47c2ab872041b7564024ed5c553578177`
+  (debug AAB),
+  `b94255cf1ecbb701a1758537dc7a186f5efe039879297baa6e78cabe924fc4c5`
+  (release-candidate AAB), and
+  `ec1f473d5285f9e4df932979c27ba4688797d14ea8fcf84b910f0d87998d75bb`
+  (debug APKS). The release candidate remains deliberately non-publishable
+  until the production identity and signer are approved.
+
+- User-verified on 2026-08-30 that
+  `VibeSeekTest-1080i-MPEG2-AC3-CC.ts` carries working captions. This validates
+  the generated media itself; automated Android/STV caption selection,
+  transport, seek, retention, and teardown gates remain independent evidence.
+- Added the canonical deterministic broadcast-style seek fixture generator.
+  It creates 1080i MPEG-2 video, 5.1 and stereo AC-3, burned-in PTS/frame
+  markers, real in-band ATSC A/53 GA94 CEA-608 CC1 plus CEA-708 Service 1
+  captions every 0.5 seconds, and prerecorded Comskip `.edl` intervals.
+- Made fixture generation fail if stream-copy muxing does not retain exactly
+  one GA94 payload for every coded MPEG-2 picture. MCP reports the payload
+  count, caption transport/services, output hash, and can publish both the
+  `.ts` and `.edl` through the existing SMB fixture workflow.
+- Separated synthetic fixture captions from live-TV policy: no synthetic text
+  is ever injected into real media. Real HDHomeRun 2.1/5.1 channel changes
+  remain the authoritative growing-live transition test.
+
+## v0.5.84
+
+- Fixed the client-side fullscreen compatibility fallback that could race the
+  SageTV STV/Core transition and toggle `MediaPlayer OSD` back to `Main Menu`
+  with video in the embedded preview. The fallback now gives the STV a bounded
+  2.5-second ownership window, consumes `MENU_HINT`, never sends the toggle
+  while an OSD or popup owns navigation, and remains available for a stable
+  stock-server preview.
+- Corrected MCP fullscreen validation to use SageTV's actual video destination
+  rectangle instead of the always-fullscreen Android `SurfaceView`. Debug
+  status version 18 exposes destination and UI rectangles, preventing the
+  former false pass where a 572x322 Main Menu preview sat on a 1920x1080
+  surface. The pre/post screenshots are
+  `artifacts/firetv/fullscreen-regression-20260830/current-user-regression.png`
+  and `state-aware-post-fix.png`. The rebuilt Dev APK SHA-256 is
+  `2e6ceab87dfd17d032e10701131b0db167587a4d6638b11634c8548a6faf3451`.
+- Physically verified the initial exact-path start plus three stop/restart
+  starts on Amazon AFTMM/API 25 with legacy ExoPlayer hardware Pull. Every run
+  retained `MediaPlayer OSD`, a 1920x1080 destination at 0,0, advancing MPEG-2
+  video and AC-3 audio, and no crash.
+
+## v0.5.83
+
+- Eliminated the exact-path commissioning race that could briefly enter
+  `MediaPlayer OSD` and then toggle back to the SageTV Main Menu preview. The
+  Vibe Core event now enters the canonical playback menu directly, while MCP
+  waits two seconds for a server/STV-driven transition before sending a
+  backward-compatible `TV` command and requires 750 ms of stable fullscreen
+  state. The physical Fixed/MIM rerun remained fullscreen and passed at
+  `artifacts/firetv/fixed-mim-20260830_132155/FIXED_MIM_MATRIX.json`.
+- Made post-restart MIM verification reproducible with
+  `scripts/query_unraid_mim_status.sh`, avoiding nested-shell SSH argument
+  loss. The isolated server's active, appdata, and pinned wrappers now report
+  0.4.6; its selected wrapper and `ffmpeg.real` hashes match the unified build
+  output. A fresh Intel VAAPI/h264_vaapi prerecorded job passed controls,
+  restart, teardown, stable fullscreen, and zero-orphan validation.
+- Removed GSY's unused transitive Media3 Cast and Session surface while
+  explicitly retaining the already-tested non-Cast AndroidX/Kotlin versions.
+  Cast, MediaRouter, DataTransport, Bluetooth validation, and ProfileInstaller
+  components are absent from the rebuilt debug and release-candidate manifests;
+  the release APK inspector now rejects their accidental return. The strict
+  build, debug/release AAB pipeline, release-candidate APK inspection, and
+  physical generated-fixture hardware Pull startup/fullscreen/FF/REW/pause/
+  resume gates pass. The seek harness now supports rapid-only repeated runs
+  from a fixed fixture position. After one retained intermittent failure,
+  zero-delay 16-command FF/REW stress passed three fixed-position repeats on
+  each combination of Media3/legacy ExoPlayer and Pull/SMB Direct. Pull
+  recovered in 0.906-1.662 seconds and SMB Direct in 2.541-3.636 seconds.
+  The generated fixture's 120-180 second commercial marker also passed on all
+  four combinations with an exact SageTV-owned 180000 ms seek. First physical
+  read/first frame timing was 625/799 ms (Media3 SMB), 539/728 ms (legacy Exo
+  SMB), 911/1112 ms (Media3 Pull), and 2483/2560 ms (legacy Exo Pull).
+- Restored the exact MIM 0.4.6 Linux artifacts on the isolated Unraid test
+  server after detecting an appdata-mounted 0.4.5 wrapper. Added an explicit
+  Fixed-matrix caption policy so cue-less synthetic fixtures record captions
+  as skipped instead of producing either a false failure or a false caption
+  pass. Legacy ExoPlayer software decode then passed the complete generated
+  prerecorded Fixed control/restart sequence. IJK passed that sequence and
+  four 2.1/5.1 live changes in three consecutive commissioning runs. Every run
+  reported fresh Intel VAAPI/h264_vaapi jobs and zero MIM orphans. Intel Fixed
+  is now supported as an opt-in path; the default remains disabled.
+- Completed the hardened incremental-update runner gate: all 17 archive,
+  metadata, full-manifest, deletion, baseline-drift, selection, idempotency,
+  and resume tests pass. The forced validation failure resumes at VALIDATE
+  without repeating TEST, then completes BUILD, INSTALL, and deterministic
+  DEV001 launch exactly once.
+- Extended the deterministic seek fixture generator to create and optionally
+  publish bounded `.edl` commercial markers beside the MPEG-TS file. The MCP
+  generator now reports the sidecar, publishes both files to SMB, and no
+  longer contains a dead duplicate metadata function. The Comskip harness can
+  wait for a delayed STV-owned automatic skip, proves the corresponding server
+  seek target, reports source-read/first-frame timing, and uses server-owned
+  reverse/forward positioning for Push instead of an invalid client-local seek.
+- Completed the controlled `use_nio_transfers=false`/`true` MediaServer A/B on
+  the same generated recording, Media3 hardware decoder, Fire TV, and large
+  SageTV seek. Non-NIO Pull recovered in 340/434 ms (first read 85/167 ms;
+  first frame 621/692 ms). NIO Pull recovered in 447/638 ms (first read
+  558/178 ms; first frame 728/828 ms). Every run delivered positive, consistent
+  MediaServer byte counts and recovered A/V; NIO did not improve this case, so
+  the partial-write hypothesis is not supported by this experiment. The
+  isolated server was restored to `use_nio_transfers=false`.
+- Verified that legacy ExoPlayer already exposes matching Pull open/read/wait/
+  byte/error telemetry physically, so the obsolete telemetry backlog item was
+  removed rather than duplicating the counters.
+- Captured repeated genuine SageTV-owned Push reposition operations followed
+  by `server_flush_command`, `server_anchor_set`, player reprepare, first video
+  frame, and sustained A/V recovery. This closes the protocol-ordering evidence
+  gate without assigning local seek ownership to the Push backend. The affected
+  checkpoints were recovered from the old container-only artifact path before
+  correcting all active MCP defaults to the bind-mounted repository path.
+- Replaced stale `/workspace/artifacts/firetv` configuration and script
+  fallbacks with the unified checkout path
+  `/workspace/android-client/artifacts/firetv`; direct MCP calls now retain
+  diagnostics under the project just like `dev.sh` calls.
+- Added exact server-path fixture support to the runtime tuning matrix and
+  corrected its fast-start logic so exact-path cases do not incorrectly query
+  a Search/Sagex MediaFile ID. Repeated Media3 Push Sync versus Auto three
+  times on the same generated recording, Fire TV, server, and hardware decoder.
+  Sync recovered in 7196/6477/7418 ms with no watchdog; Auto recovered in
+  8752/4236 ms and expired the 50.650 s watchdog once. Sync won two of three,
+  had far lower variance, and avoided the observed stall, so the existing Sync
+  default is retained while both modes remain classified as slow recovery.
+- Completed and published `docs/PLAYER_SERVER_COMPATIBILITY.md` with explicit
+  stock-server, Vibe `Sage.jar`, and FFmpeg/MIM boundaries plus independent
+  Media3, legacy Exo, IJK, and GSY delegate rows. PASS, FAIL, SKIPPED, and
+  unsupported conditions remain distinct. Legacy ExoPlayer remains the frozen
+  default pending an independently authorized measured backend change.
+- Confirmed restored detailed Push telemetry physically: channel/stream/target
+  bandwidth, mux/buffer time, pushed/read bytes and counts, read rate/wait,
+  anchors, flushes, decoder output, and bounded MCP snapshots are present in
+  the generated Push evidence. The obsolete implementation task was removed.
+
+- Revalidated the final clean APK in the unified development container: 255
+  project tests, 42 MCP tests, Core JUnit, validation, and all 60 clean Gradle
+  tasks pass. The exact APK (`6368dffcccb43ebc566a25f1fcfe7fd603a5fa567a367619662aef37e2f2b34f`)
+  was installed in place on Amazon AFTMM/API 25 while preserving `DEV001`.
+  Legacy Exo and Media3 then passed hardware SMB Direct start, FF/REW, large
+  jump, pause/play, repeated start, stop/restart, fullscreen, crash, and
+  teardown gates using `VibeSeekTest-1080i-MPEG2-AC3.ts`. The physical profile
+  save/list/load/overwrite/delete gate also passed and removed its test file.
+- Re-enabled the previously hard-disabled app-private file logging and Share
+  Log preferences, corrected their obsolete public-SD-card guidance, and made
+  sharing deterministically select the newest log. On Fire TV the app created
+  `Documents/logs/sagetv-miniclient.txt`; its FileProvider URI opened X-plore's
+  share destination without storage permission. File logging was returned to
+  off after the gate. A generated-fixture screenshot and 1920x1080 surface
+  telemetry also prove full calibrated-viewport playback on the current device.
+- Made the deterministic generated fixture the default for ordinary session,
+  lifecycle, EOF, Pull/SMB, and Fixed/MIM examples and tests. Meet the Press is
+  retained only where its real CEA captions or `.edl` markers are required.
+
+- Implemented optional SMB Direct/Shadow Pull for Media3 and legacy
+  ExoPlayer using SMBJ 0.13.0 (SMB2/SMB3), longest-prefix Windows/UNC path
+  mappings, configurable read-ahead, explicit failure, and Auto fallback.
+  MiniPlayer control and ordinary Pull codec/container negotiation remain
+  unchanged; credentials are separate and redacted.
+- Kept the stock MediaServer shadow file synchronized with exactly one counted
+  byte at the matching offset for each non-sequential SMB access. Physical A/B
+  tests proved `OPEN + SIZE` and a byte-zero-only probe do not cause stock
+  SageTV to emit the required STV seek/Comskip command after an Android-local
+  seek. Normal media bytes remain SMB-owned and continuous fake reads are not
+  generated.
+- Added deterministic exact-path/start support, SMB mapping configuration, and
+  server-owned positioning to the MCP session/Comskip harnesses. Known-marker
+  tests now require both a new server seek sequence and a target landing; the
+  harness restores fullscreen before issuing RIGHT/LEFT and handles chained
+  server seeks without creating a false A/V failure.
+- Physically passed the complete generated `VibeSeekTest-1080i-MPEG2-AC3.ts`
+  SMB matrix on Media3 and legacy ExoPlayer: start, seek, FF/REW, large jumps,
+  pause/play, two repeat starts, stop/restart, crash check, and teardown. Real
+  Meet the Press `.edl` tests passed Media3 RIGHT at 985.220 seconds and legacy
+  Exo LEFT within 22 ms of that marker endpoint.
+- Added versioned/checksummed named MiniClient profiles on a configurable SMB
+  configuration share. Saves use a temporary file plus atomic rename,
+  credentials are rejected from the profile, and importing a stored Client ID
+  requires a separate duplicate-session warning and confirmation. Physical
+  commissioning on the `.175` SMB2/SMB3 share passed create, atomic overwrite,
+  list/load/delete, checksum/schema/partial/credential rejection, missing-share
+  failure, concurrent-write exclusion, credential redaction, UI selection, and
+  the two-step warned Client-ID replacement path while retaining `DEV001`.
+- Added monotonic seek-correlation evidence for the physical source read, first
+  observed queued decoder input (100 ms observation bound), exact rendered-first-
+  frame callback, and sustained output recovery. The same generated MPEG-2/AC-3
+  fixture passed large-jump Pull/SMB A/B tests on legacy Exo and Media3. Pull
+  recorded SageTV MediaServer bytes; SMB recorded zero ordinary MediaServer
+  media bytes, positive SMB bytes, and only 17 bounded shadow bytes.
+- Added a fail-closed Fixed/FFmpeg-MIM commissioning matrix that records the
+  exact Android backend/decoder, Fixed parameters, selected server MIM backend
+  and encoder, job freshness/input, caption gate, prerecorded/live results,
+  and unavailable GPU vendors. Hardware use is obtained from `ffmpeg
+  --mim-status`; CPU load is never accepted as proof.
+- Physically commissioned Intel VAAPI Fixed playback on Amazon AFTMM/API 25.
+  Legacy ExoPlayer and Media3 hardware modes passed completed playback
+  controls and four exact live changes across 2.1/5.1. Media3 software and
+  fallback modes passed; legacy Exo fallback passed, while legacy Exo forced
+  software failed bounded prerecorded pause/play recovery and remains FAIL.
+- Independently commissioned GSY Auto, Media3, and legacy-Exo delegates.
+  GSY System is intentionally a safe Media3 fallback and was run last. IJK
+  completed playback passes, but two runs failed on the fourth live transition
+  back to 2.1, so MIM remains disabled by default.
+- Corrected IJK's Push datasource contract to block for data instead of
+  returning a temporary zero-length read. This is retained as a correctness
+  fix but did not conceal or resolve the independent fourth-channel failure.
+- Made debug telemetry unwrap the active GSY delegate so caption and playback
+  health checks observe the actual Media3/legacy-Exo engine.
+- Verified server-side failed-hardware fallback by deliberately supplying a
+  nonexistent render device. MIM reported software/libx264 and Media3 passed
+  completed/live playback. Restored `/dev/dri/renderD128` and verified VAAPI
+  selection afterward.
+- Added `docs/PLAYER_SERVER_COMPATIBILITY.md` with explicit stock SageTV,
+  Vibe `Sage.jar`, FFmpeg/MIM, player, transport, Android decode, server GPU,
+  caption, and physical-evidence boundaries.
+- Documented the implemented `OPENURL`/player/source-selector/SMB/shadow call
+  path and its playback-session ownership boundary in `PLAYER_ARCHITECTURE.md`.
+- Deployed the exact FFmpeg/MIM 0.4.6 Linux artifact to the isolated Unraid
+  test container and reran the supported Media3 Fixed/hardware gate. Exact-path
+  prerecorded playback, captions, seek/jump/pause/restart/stop, and four live
+  2.1/5.1 transitions passed. Fail-closed server telemetry proved fresh
+  `vaapi`/`h264_vaapi` jobs, hardware encode, matching input, stopped state,
+  and an empty active-job list after both tests.
+
+## v0.5.81
+
+- Removed the independent Android closed-caption switch and made the SageTV
+  STV's caption state authoritative. Core forwards `VIDEO_CC_STATE` after
+  every media load; Android safely maps STV Off to no caption track and STV On
+  to the available broadcast caption track, including a pending selection
+  applied after asynchronous track discovery. The default physical caption
+  gate no longer invokes the Android debug selector, preventing false passes.
+  Both Media3 and legacy ExoPlayer hardware Push/Dynamic rendered visible
+  CEA-608/708 Meet the Press captions on Amazon AFTMM/API 25 solely from the
+  STV's saved `last_cc_state=1`.
+- Rebuilt the complete Dev APK and both AAB variants in the unified container.
+  The host gate passes 232 project tests, 41 MCP tests, Core JUnit, validation,
+  and all 60 clean APK tasks. Current hashes are Dev APK
+  `39ae41d48f71af3efab1254aa960fe566af008aad51f68359ac7bca32ec85550`,
+  debug AAB
+  `6c29d43089fa7a442c2ebb57b49c10e142e7aa899da20ef0cc5ba0d7c99b950b`,
+  release-candidate AAB
+  `2b8570577ba0c09c10df76eb29315a0616b157fb268cc7a4802499dd35500cf1`,
+  and debug APKS
+  `ed0c8a99efc897ff5e1236dcc33c8d136c601521f2eafc4ab706165d9017044a`.
+
 ## Unreleased — OpenSageTV Vibe migration
 
+- Added a reproducible Android App Bundle workflow using the unified image's
+  checksum-pinned bundletool 1.18.3. It builds and validates debug and
+  development-signed release-candidate AABs, creates a signed universal debug
+  APK set, and refuses installation unless the bundle package is exactly
+  `org.opensagetv.miniclient.dev.debug`. The real AFTMM/API 25 bundletool
+  installation passed and preserved both configured servers. The release
+  candidate remains deliberately non-publishable pending production identity
+  and signing approval.
+- Added explicit D-pad/IME focus order to the Add Server dialog so Android TV
+  users can move from Server Name to Server Address to Add without a touch
+  screen. Added a structural regression test for the remote-navigation chain;
+  physically verified the complete focus path on Amazon AFTMM/API 25. Settings,
+  preference-dialog cancel, HOME, relaunch, and preserved server configuration
+  also pass without an Android crash or ANR.
+
+- Physically verified all three client-ID launch paths on Amazon AFTMM/API 25:
+  the scripted default activates/persists DEV001, an explicit `--client-id`
+  activates the requested value after the guarded restart, and a direct
+  Leanback launcher start retains that normal persisted identity. Restored
+  DEV001 after the test.
+- Audited the current APK against the August 2026 Google Play TV requirements.
+  Target SDK 36, four ABI directories, and 16 KB APK ZIP alignment pass. The
+  app is not publication-ready: the workflow has no AAB artifact; native ABI
+  contents are not paired; ARM64 and x86_64 `libffmpegJNI.so` plus x86_64
+  `libgdx.so` have 4 KB ELF `LOAD` alignment; and production identity, signing,
+  listing, Data Safety, and Play Console review configuration remain open.
+- Restored broadcast closed captions for Push/Dynamic and Pull MPEG-TS on both Media3 and
+  legacy ExoPlayer. Media3 now overrides incomplete PMT caption descriptors
+  with explicit CEA-608/708 formats; ExoPlayer 2.18 uses a narrowly wrapped
+  default extractor factory that replaces only the TS extractor with the same
+  declarations. Fixed null-safe subtitle-track descriptions, normalized
+  SageTV's `8192` disabled-track sentinel at the MCP boundary, and added
+  debug-only track/cue/overlay telemetry plus an exact-path physical caption
+  gate. Caption views now attach to the Activity content root above SageTV's
+  GL surface; the GL surface uses media-overlay ordering instead of globally
+  obscuring Android views. The gate requires a currently active cue on an
+  attached overlay and captures a screenshot before disabling captions.
+  Media3 and legacy ExoPlayer each passed both hardware Push/Dynamic and Pull:
+  CEA-608/708 discovery, selection, visibly rendered Meet the Press captions,
+  disable, and crash checks on Amazon AFTMM/API 25.
+- The current physically tested Dev APK SHA-256 is
+  `39ae41d48f71af3efab1254aa960fe566af008aad51f68359ac7bca32ec85550`.
+  The current host gate passes 232 project tests, 41 MCP tests, Core JUnit,
+  validation, and all 60 clean APK build tasks.
+- Replaced the process-global no-op legacy audio-focus helper with a
+  lifecycle-owned `AudioFocusController`. API 26+ uses `AudioFocusRequest`
+  and media `AudioAttributes`, API 25 retains the supported stream fallback,
+  transient/duck loss pauses and resumes only previously playing media,
+  permanent loss does not auto-resume, and generation checks reject stale
+  callbacks after abandonment. Added debug-only competing-focus MCP controls
+  and a deterministic physical gate. Media3 and legacy ExoPlayer hardware
+  Pull both passed transient, duck, existing-user-pause, permanent-loss,
+  advancing-A/V recovery, teardown, and crash checks on Amazon AFTMM/API 25.
+  GSY System was intentionally excluded from this focused gate and remains
+  last in any future full player matrix.
+- The audio-focus revision's clean tested Dev APK SHA-256 was
+  `7719f75c1e012b0de5de161a8c662439a625c6545ad04df91f08b5a647c0c7f2`;
+  the full gate passes 219 project tests, 40 MCP tests, Core JUnit, validation,
+  and all 60 clean APK build tasks.
+- Added a negotiated, backward-compatible SageTV media-state URL extension.
+  Supporting Android clients now receive authoritative major/minor format
+  hints, encoder information, completed/growing state, circular/timeshift
+  state, and buffer size; older MiniClients continue receiving the unchanged
+  URL. Physical completed recordings carried `active=0`, while genuine
+  server-driven live recordings on 2.1 and 5.1 carried `active=1`.
+- Added opt-in MiniClient event 231 and MCP `dev_set_live_channel` for exact
+  dotted ATSC channel selection. The physical gate now refuses false passes
+  using authoritative `channel=` identity while correctly accepting a healthy
+  request for the already-active channel. Media3 and legacy ExoPlayer hardware
+  Pull each passed 10 alternating 2.1/5.1 changes; GSY Auto, Media3, and legacy
+  Exo passed four each, and GSY System passed a bounded two-change run on
+  Amazon AFTMM/API 25.
+- Added `dev mcp-live-test`, constrained by default to known-good 2.1 and 5.1.
+  OpenDCT correlation measured successful embedded-FFmpeg stream detection at
+  roughly 0.4–1.8 seconds. Direct Pull does not use the optional MIM addon,
+  which remains disabled pending its own physical promotion matrix.
+
+- Repeated the final live gate after commissioning the exact exported server
+  image on Unraid. Media3 and legacy ExoPlayer each passed initial A/V plus
+  exact 5.1/2.1 transitions. GSY System was deliberately tested last and
+  bounded to two transitions; it produced advancing A/V and exited without
+  crashing the Amazon AFTMM/API 25 device. The tested Dev APK SHA-256 is
+  `32c76981c51da7e6997c276fb84972a425cbef2aeeaa9d6049e8e7fa1394e543`.
+- Strengthened `mcp-lifecycle-test` to verify the actual playback surface
+  lifecycle instead of inferring it from process state. On the commissioned
+  Fire TV, both Media3 and legacy ExoPlayer proved a valid/visible initial
+  surface, a hidden or released surface after HOME, a recreated valid/visible
+  surface after foreground return, advancing recovered A/V, clean replay, and
+  final no-process teardown.
+
+- Fixed completed MPEG-TS end-of-file handling in Pull mode. Pull reads are
+  bounded at the known SageTV file size, potentially active files briefly
+  recheck `SIZE` so growth can continue, and Media3 promotes its otherwise
+  permanent tail-buffering state to SageTV EOS only after a stable boundary is
+  confirmed. Legacy ExoPlayer retains its native ended-state behavior.
+- Added a shared tested seek-bound policy and retained SageTV load hints in
+  backend-owned media contexts without changing the frozen
+  `BaseMediaPlayerImpl` baseline. Exact-end seeks are clamped to a playable
+  tail position, and negotiated Core metadata now replaces the old extension-
+  based completed/growing guess when the server supports it.
+- Added `dev mcp-eof-test` with exact server-path playback, crash checks, and
+  optional controlled seek/read diagnostics. Physical exact EOF now passes on
+  Amazon AFTMM/API 25 for Media3 and legacy ExoPlayer against the real
+  `/var/media/tv/MeetthePress-65149351-0.ts` recording. FFprobe confirmed the
+  2,111,735,004-byte recording and its final video timestamps are healthy;
+  the failing path was isolated from FFmpeg/MIM before the client fix.
+- Expanded the normal host gate to include Core Gradle JUnit. The current 214
+  scaffold/static tests, 38 MCP tests, Core JUnit suite, and clean 60-task APK
+  build pass. The physically tested debug APK SHA-256 is
+  `32c76981c51da7e6997c276fb84972a425cbef2aeeaa9d6049e8e7fa1394e543`.
+- Fixed a real MiniClient media-protocol deadlock found by physical lifecycle
+  testing. `MEDIACMD_DVD_STREAMS` now always returns its required four-byte
+  reply, including unavailable-player and track-selection failure paths,
+  instead of leaving SageTV blocked until its 30-second socket timeout.
+- Moved Media3 and legacy ExoPlayer audio/subtitle track selection onto the
+  Android main/player thread. This removes Media3's wrong-thread exception
+  during repeated playback startup without changing the default backend.
+- Hardened connection teardown against late reconnect workers: connection and
+  socket state is safely published, reconnect sockets cannot be installed
+  after shutdown, timers are cancelled, and an obsolete connection cannot
+  clear a newer active session. Corrected `ConnectionLost` so it preserves the
+  supplied reconnecting state.
+- Added and passed a physical completed-playback lifecycle gate on Amazon
+  AFTMM/API 25. Initial A/V, HOME/background, foreground reconnect, three
+  repeated exact-path starts, and final force-stop/no-process teardown pass
+  against `192.168.10.232` in all four Media3/legacy-ExoPlayer and Push/Pull
+  combinations. Server logs contain no new 30-second media-command timeout
+  after the fix. The tested debug APK SHA-256 is
+  `346126781eb851a0931f5fb6a119e20c3190410ebec21de0b7b353bc250c4245`.
+- Expanded the host gate to 210 scaffold/static tests and 38 MCP tests,
+  including executable guards for reconnect ownership, mandatory DVD-stream
+  replies, and player-thread track selection.
+- Added debug-only exact-path playback through MiniClient event 230. MCP can
+  request `/var/media/tv/MeetthePress-65149351-0.ts` without Search/STV focus
+  navigation while the server-side feature remains opt-in.
+- Fixed the MCP playback verifier's omitted stream-expectation helper, which
+  previously returned a tool exception after playback had already started.
+  The commissioned Fire TV now reports PASS for advancing MPEG-2 video and
+  AC-3 audio on a valid 1920x1080 full-screen surface.
+- Verified exact-path startup against the final Unraid image at
+  `192.168.10.232`, including automatic `MediaPlayer OSD` entry and separate
+  fast-forward/rewind recovery passes.
+- Characterized the existing connection/protocol/lifecycle contract before
+  splitting the remaining oversized classes. The new architecture note and
+  seven executable guards preserve Media-before-GFX startup, two-stage GFX
+  framing/dispatch, serialized event writes, reconnect eligibility,
+  close/unblock ordering, renderer ownership, and activity pause/close order.
+  This is host-side evidence only; matching physical ordering is still open.
+- Clean-installed the current debug APK on the guarded Amazon AFTMM target
+  after detecting that the previously installed Dev APK predated the
+  microphone-permission removal. The installed target-SDK-36 package now has
+  no `RECORD_AUDIO` request, discovery displays `192.168.10.175` and
+  `192.168.10.232`, and the 66-tool MCP smoke test passes. Deterministic
+  exact-path playback now connects directly to the intended test server.
+- Confirmed from the sibling container project that the commissioned Android
+  test target is Unraid container `sagetv-vibe-server-u26-gpu-j11` at
+  `192.168.10.232`. Corrected all five active MCP playback/matrix defaults from
+  the obsolete `.175` address and made cross-project fact lookup a contributor
+  requirement before asking the user.
+- Completed the behavior-equivalent debug control decomposition.
+  `DevTestReceiver` is now a small dispatcher; debug-only owners separately
+  handle session/UI commands, synchronous player commands, asynchronous
+  seek/Comskip health checks, execution, parsing, configuration, tuning,
+  client identity, snapshots, and response envelopes. Contract source tests
+  and Android debug compilation preserve the existing ADB/MCP wire format.
+- Replaced anonymous server-discovery threads with a named single-thread
+  executor whose pending request and socket are cancelled on replacement,
+  close, and `MiniClient.shutdown()`. Replaced the TV background-artwork Timer
+  with one explicit main-looper callback removed on replacement/destruction.
+- Replaced test-only `mockito-all` 1.10.19 and JUnit 4.12 with Mockito Core
+  4.11.0 and JUnit 4.13.2. Core tests now pass on the unified image's JDK 17
+  without opening JDK internals.
+- Hardened the MCP playback-start gate: server recording tests require video
+  and audio output by default, require a valid video surface, reject player
+  errors, recognize SageTV's `AskToDeleteRecording`/EOF state, and return a
+  structured missing-output timeout before a matrix operation can run.
+- Captured the resolved debug runtime dependency graph at
+  `artifacts/reports/gradle-runtime-dependencies.txt`. The unused Cast surface
+  is retained because a trial exclusion changed 28 aligned AndroidX artifacts;
+  removal remains physically gated rather than silently changing the runtime.
+- Added `docs/DEPENDENCY_AUDIT.md` and queried all 342 locked Maven
+  coordinate/version pairs through OSV. Fourteen advisory-bearing Protobuf/
+  Netty coordinates were limited to non-runtime configurations; license notice
+  gaps remain explicitly open rather than being reported as complete.
+- Migrated every legacy settings `PreferenceFragment` to AndroidX
+  `PreferenceFragmentCompat`, converted their host activities to AppCompat,
+  and migrated the codec dialog to the AndroidX fragment manager without
+  changing preference resources, keys, or defaults. Added a regression scan
+  that rejects platform `android.preference` APIs in the settings package.
+- Centralized the last direct fullscreen flag calls from ConnectingActivity in
+  `AppUtil`, bound its delayed UI work to the main looper, and cancel all
+  pending callbacks on destroy. A source guard now prevents fullscreen calls
+  from being scattered again.
+- Removed the unused microphone permission and feature declaration after an
+  active-source audit found no recording API or microphone runtime path.
+- Added deterministic debug/release APK inspection for package identity,
+  permissions, debug/MCP implementation leakage, private material, and signer
+  identity. The locally built release candidate passes the content boundary
+  and deliberately fails the production gate because only a development
+  signing key is available.
+- Fixed `dev inspect-apk` so component-relative APK paths resolve beneath the
+  mounted Android workspace instead of the unified container's `/workspace`
+  parent.
+- Passed 207 scaffold/static tests, 38 MCP tests, the full validator, and a
+  clean 60-task debug build. Debug APK inspection passes at SHA-256
+  `5fb803855d0440e0a6efe8e793f6ee24876376d9fefd46238649636e3827b067`.
+  The 88-task release build passes all content checks at SHA-256
+  `afe6ec0ce4ae9ebfc3c427484cf6c9b2c0c867c176a292ab61f895b7d961f0c7`;
+  strict release inspection correctly blocks its development certificate.
+
+- Completed the active Android scheduling/lifecycle inventory across the
+  `source/dev` Java tree. `docs/ANDROID_FRAMEWORK_MODERNIZATION.md` now records
+  every raw Thread, Timer, sleep, Handler, and delayed-callback owner together
+  with affinity, current cancellation, lifecycle risk, and a behavior-safe
+  migration boundary. A unittest scan fails when a new owner is not listed.
+- Fixed the Windows `dev.cmd adb` path so dash-prefixed raw ADB arguments such
+  as `-s`, `-p`, and `-c` reach ADB unchanged instead of being parsed as
+  abbreviated PowerShell wrapper parameters.
+- Converted the API-36 static checks from pytest-style functions to the
+  repository's actual unittest runner. Those three checks are no longer
+  silently skipped. The expanded gate passes 180 scaffold/static and 35 MCP
+  tests plus full source validation in the reused unified development
+  container.
+- Began physical Phase 1 commissioning on Amazon AFTMM/API 25. Guarded install
+  affected only `org.opensagetv.miniclient.dev.debug`; discovery displayed
+  both available SageTV servers, and the APK pulled from the device exactly
+  matched SHA-256
+  `60e1d19ab15968ef48e24691cfd14f8998ce0bc6e6e8bda960f6d65e8d8aa668`.
+  Server selection and the remaining physical baseline are still pending and
+  are not reported as PASS.
+
+- Aligned Android with the cross-project takeover contract: added the common
+  workflow document and `dev all` gate, standardized handoff ZIP creation, and
+  retained the hardened Android update runner and compatible package ID.
+- Completed dependency reproducibility for the unified Android workflow: the
+  Gradle distribution has a pinned SHA-256, all project configurations use
+  dependency lockfiles, downloaded Gradle artifacts use checksum verification
+  metadata, and direct Python/MCP requirements are exact pins backed by the
+  unified image's full transitive lock.
+- Updated the unified Android invocation to export the mounted
+  `opensagetv-vibe-build-env` root. The component-root and build-environment-
+  root workflows now run the same 174 scaffold/static and 35 MCP tests without
+  relying on a checkout-specific working directory.
+- Verified `android-all` in the existing `opensagetv-vibe-dev` container using
+  image `sha256:922da6854807a919ddf4467542e46903bda00d6f787fe6727a8c237c0216d39d`;
+  validation and all 60 clean Gradle tasks passed and produced APK SHA-256
+  `60e1d19ab15968ef48e24691cfd14f8998ce0bc6e6e8bda960f6d65e8d8aa668`.
 - Integrated normal Android build/test/validation/MCP work with the sibling
   Ubuntu 26 unified build environment and its one `opensagetv-vibe-dev`
-  container. The standalone Jammy Compose image remains only as an explicit
-  isolated-checkout recovery fallback.
+  container. The retired component Dockerfile and Compose path are not used.
 - Kept Java 11 as the unified image default while selecting JDK 17 only for the
   active Android build and JDK 8 only for the frozen v0.5.75 comparison build.
 - Reproduced the Phase 1 APK byte-for-byte in the unified image after all 151
@@ -36,6 +1615,134 @@
 - Verified Phase 1 with 150 scaffold/static tests, 35 MCP tests, the full
   validator, and a clean 60-task build. The renamed APK is byte-identical to
   the pre-refactor baseline artifact.
+
+
+## v0.5.80
+
+- Consolidated project documentation: release history now lives only in this
+  changelog, `TASKS.md` is the only active backlog, and stable operational
+  guidance lives in README/HANDOFF/AGENTS and `docs/`.
+- Replaced per-version `UPDATE_v*.txt` metadata with one stable
+  `release.properties` file containing the current `VERSION` and
+  `REQUIRES_BUILD` values. Incremental updates no longer create version-named
+  Markdown or text files.
+- Added repository-owned `dev.ps1` and `update.ps1` Windows entry points. They
+  pass the sibling unified-build path explicitly into WSL, preventing Docker
+  Desktop's temporary bind-mount path from hiding `opensagetv-vibe-build-env`.
+- Made `update.sh` the sole update implementation and removed both misspelled
+  legacy workflow filenames.
+- Fixed full-manifest generation so tracked files intentionally deleted in the
+  working tree are omitted instead of causing a `FileNotFoundError`.
+- Passed the consolidated Windows/unified workflow: 172 scaffold/static tests,
+  35 MCP tests, the full validator, and a clean 60-task
+  API 36 APK build. The APK SHA-256 is
+  `c5528ce23aaab636e62949b2e981f6487cc33417a6400be2465544f019f086a1`.
+- Hardened API 36 log sharing against a detached settings fragment and attached
+  the FileProvider URI as `ClipData` so temporary read permission propagates
+  reliably to the selected share target.
+- Added stable `release-deletions.lst` handling so incremental updates can
+  reproduce intentional cleanup. Preflight rejects symlink entries, unsafe or
+  manifest-conflicting removal paths, directories, control-file removal, and
+  parent-symlink escapes before deleting only explicit files.
+- Made task synchronization part of the completion workflow: a proven task is
+  removed immediately from component `TASKS.md`, synchronized with parent
+  `task.md` when mirrored, and recorded in CHANGELOG/HANDOFF with evidence.
+- Removed redundant/misleading build, compile, connect, install, and workspace
+  wrapper scripts. `dev.sh`/`dev.cmd` and `update.sh`/`update.cmd` are now the
+  complete host interfaces; the unit runner syntax-checks the canonical shell
+  entry points directly.
+- Removed the component-owned Jammy Dockerfile and Compose project. All root
+  commands now require `opensagetv-vibe-build-env`, reuse
+  `opensagetv-vibe-dev`, and fail clearly when the sibling workflow is absent
+  instead of silently creating an old standalone image/container.
+- Consolidated the obsolete standalone Phase 1 validation document into the
+  migration baseline evidence and removed its retired Docker identities from
+  active documentation.
+- Reviewed the complete uncommitted v0.5.76-v0.5.79 API 36, FileProvider,
+  deterministic-launch, resumable-update, test, documentation, and launcher-
+  branding changes without modifying the protected original project.
+- Fixed Windows/WSL unified-environment detection: `dev.sh` now recognizes the
+  sibling wrapper even when NTFS does not expose its executable bit and invokes
+  it through Bash. Normal commands again reuse `opensagetv-vibe-dev` instead of
+  unexpectedly building the standalone rollback image.
+- Hardened update preflight before extraction. Update ZIPs now reject unsafe or
+  duplicate paths, require a complete full-checkout manifest, verify every
+  packaged payload hash, and verify every untouched baseline file hash.
+- Made update-runner tests callable from native Windows through WSL and added
+  missing-manifest/unlisted-payload rejection coverage.
+- Expanded the update-runner suite to cover corrupt archives, traversal and
+  duplicate entries, symlinks, release-version mismatch, payload and baseline
+  hash drift, explicit removals, host-only/build-required releases, highest-
+  version/newest-package selection, interruption immediately after extraction,
+  and restart at the first incomplete preparation phase. The complete host
+  suite now passes 173 tests plus all 35 MCP tests.
+- Consolidated the obsolete chronological and AI-specific task backlogs into
+  one current `TASKS.md`; durable diagnostic rules moved to
+  `docs/PLAYBACK_DIAGNOSTICS.md`.
+- Synchronized the active Android workflow/framework/playback/release backlog
+  with the parent workspace and corrected stale targetSdk 30 documentation.
+- Kept `REQUIRES_BUILD=true` because the cumulative uncommissioned release
+  still contains the API 36 and launcher-resource APK changes.
+- Proved `test` and `validate` through both direct Linux/WSL Bash and the
+  Windows `dev.cmd` wrapper while invoked outside the repository. Every path
+  reused the installed `opensagetv-vibe-build-env:u26-j11` image and running
+  `opensagetv-vibe-dev` container; no component image or container was created.
+- Audited all current root CMD, PowerShell, and shell entry points. PowerShell
+  parsing, Bash syntax, and out-of-directory `dev.cmd help`/`update.cmd --help`
+  all passed. New provenance metadata uses stable `.properties` files rather
+  than creating version-specific `.txt` or Markdown files.
+- Fixed checkout-aware reuse in the shared build-environment wrappers. The
+  unified container now carries a normalized sibling-workspace label; a moved
+  or newly cloned project recreates the same named container with correct bind
+  mounts, while Windows and WSL calls for one checkout reuse one container.
+  A wrong-label regression test passed and its temporary container was removed.
+- Proved a separately committed clean sibling-layout checkout from an unrelated
+  host directory. Its own root wrappers reused the installed unified image,
+  rebound the one named container, passed 173 scaffold/static and 35 MCP tests,
+  passed full validation, and completed all 60 clean Gradle tasks without
+  reading `SageTV-MiniClient-Dev`. Its APK had the expected distinct debug
+  signature because the ignored private debug key was intentionally not copied.
+  The container was rebound to the real workspace and the temporary checkout
+  was deleted afterward.
+
+## v0.5.79
+
+- Replaced the Android launcher artwork with the user-provided `branding/SageTV-Vibe.png` source image; no AI-redrawn logo is used in the APK.
+- Regenerated the standard launcher icon at Android density sizes 48/72/96/144/192 px (`mdpi` through `xxxhdpi`) and matching round-icon resources.
+- Regenerated the adaptive-icon 108dp layers at 108/162/216/324/432 px. The supplied artwork is the adaptive background and the foreground layer is transparent, preserving the original composition while allowing the launcher mask to control the outer shape.
+- Changed the Leanback `MainActivity` icon override from the old TV banner to `@mipmap/ic_launcher_v2` and declared `@mipmap/ic_launcher_v2_round` at application level. The existing 16:9 `banner_v2` remains the Android TV banner/logo.
+- Added static tests for launcher icon dimensions and manifest references. Android resources/manifests changed, so this update requires BUILD and INSTALL.
+- Hardened the automatic update metadata parser so only exact standalone `UPDATE_VERSION=` and `REQUIRES_BUILD=true|false` assignments are treated as metadata; human-readable prose can no longer shadow a valid assignment.
+- Added a regression test reproducing the original v0.5.79 package failure and documented the mandatory finished-ZIP metadata preflight in README/HANDOFF/AGENTS.
+
+## v0.5.78
+
+- Renamed the canonical combined workflow to `unzip_test_valitdate_build_install_lanuch.sh`; the old script name remains as a compatibility forwarder.
+- Added automatic update discovery under `artifacts/downloads`: only a `changed-files-only` ZIP with a semantic version newer than the current `VERSION` is applied.
+- Update ZIPs are verified before extraction and must declare `REQUIRES_BUILD=true|false` in `UPDATE_v<version>.txt`. BUILD/INSTALL run only when required.
+- Added resumable per-version state under ignored `artifacts/update_runner/state.env`; successful TEST/VALIDATE/BUILD/INSTALL steps are skipped on rerun, so a completed version goes straight to deterministic DEV001 launch after the update check.
+- Standardized future update-package metadata: every patch includes `VERSION`, `UPDATE_v<version>.txt`, the complete full-checkout manifest, CHANGELOG, and affected documentation.
+- Established the permanent project rule that every behavior/code/script change must update the relevant documentation in the same patch.
+- Host workflow/tests/docs only; no Android APK/player/Docker change, so `REQUIRES_BUILD=false`.
+
+## v0.5.77
+
+- Fixed scripted launches so `./dev.sh launch` now defaults to deterministic SageTV client ID `44:45:56:30:30:31` (`DEV001`), matching the existing automated MCP/player-test wrappers.
+- `./dev.sh launch --client-id ID` remains available for an explicit override. Direct/manual launches from the Fire TV/Android launcher are unchanged and continue using the app's normal persisted client ID.
+- Updated `test_valitdate_build_install_lanuch.sh` to pass `44:45:56:30:30:31` explicitly on its LAUNCH step, so build/install/launch validation cannot silently use a previously persisted random client ID.
+- Host/test tooling only; no Android APK/player/Docker changes are required for this fix.
+- Corrected the handoff/update manifest workflow: compact handoffs preserve `PROJECT_MANIFEST_FULL.sha256` as the full-checkout baseline, incremental ZIPs update only intended manifest entries, and generated root AI-handoff/changed-files ZIP artifacts are excluded from project-manifest enumeration so packaging cannot stale the checkout.
+
+## v0.5.76
+
+- API-36 source/build changes remain as originally delivered. The later v0.5.77 handoff workflow supersedes the temporary v0.5.76 manual-manifest workaround: normal changed-files ZIPs again include a complete updated full-checkout `PROJECT_MANIFEST.sha256`, so the user only extracts the ZIP and runs `./dev.sh test`.
+- Raised `targetSdkVersion` from 30 to 36 while keeping `compileSdkVersion=36` and Build Tools 36.0.0; Docker/build-image configuration is unchanged.
+- Added explicit `android:exported=true` to the phone and Leanback launcher activities for modern Android manifest requirements.
+- Added the Android 16 predictive-Back compatibility opt-out so the existing SageTV `KEYCODE_BACK` remote mapping remains intact during this target-SDK migration; a native Back-callback migration remains future work.
+- Added the API-36 large-screen restricted-resizability compatibility property to preserve the existing landscape TV behavior during this migration.
+- Updated immersive fullscreen handling to `WindowInsetsController` on API 30+ while retaining the legacy system-UI flags below API 30.
+- Removed obsolete external-storage/phone-state permissions. File logging now uses app-specific storage and FileProvider `content://` sharing.
+- No playback backend, Media3/Exo/IJK/GSY tuning, client-ID, MCP contract, or Docker changes. Rebuild/install required.
 
 ## v0.5.75
 - Automated MCP/player test wrappers now default to client ID `44:45:56:30:30:31` (`DEV001`) when `--client-id` is omitted; explicit `--client-id` wins.
@@ -1088,3 +2795,109 @@
 - Fixed matrix defaults force real encoding (`fixed_encoding/preference=always`, `fixed_remuxing/preference=off`) instead of allowing SageTV to skip encoding or remux instead.
 - Added the same Fixed parameter CLI options to single playback/session and Media3 matrix entry points.
 - Debug status version advanced to 8 because the debug receiver configuration contract changed.
+
+## Historical entries recovered during documentation consolidation
+
+The following summaries were previously present only in per-version update
+notes. They are retained here so those obsolete files can be removed without
+losing release history.
+
+### v0.5.32
+
+- Tested a Media3 Pull large-seek latency experiment by increasing only its
+  SageTV network read buffer from 256 KiB to 1 MiB; Dynamic/Push, Legacy Exo,
+  IJK, decoder policy, TS search, and Comskip commands were unchanged.
+
+### v0.5.31
+
+- Corrected Comskip automation to send native SageTV RIGHT/LEFT commands rather
+  than normal video arrow mappings, while retaining A/V recovery, surface,
+  decoder, and timeline evidence.
+
+### v0.5.30
+
+- Removed production defaults for Search-based recording selection. Every
+  Search test must now receive explicit, non-empty, single-line `--text`.
+
+### v0.5.19
+
+- Added the MCP-only native Search helper (`dev_search`) and the
+  `mcp-search-test` host command without requiring an APK rebuild.
+
+### v0.5.5
+
+- Fixed zero-position seeks and asynchronous seek completion in both Exo
+  backends, removed UI-thread polling/sleeps, and corrected paused IJK frame
+  stepping from one second to approximately one 30 fps frame.
+- Deliberately deferred Push/Pull timeline rebasing, a shared seek coordinator,
+  decoder changes, and GSY seek restructuring.
+
+### v0.5.3
+
+- Excluded GSY's unused legacy RTMP client and Media3 RTMP datasource from the
+  GSY Exo2 dependency without adding any TLS bypass or changing player engines.
+
+### v0.5.2
+
+- Restored the original SageTV IJK 0.8.8 Java/JNI runtime and separated it from
+  GSYVideoPlayer. GSY gained Auto, Media3, Android System, and Legacy Exo
+  engines plus SageTV Push/Pull `MediaDataSource` bridges.
+
+### v0.5.1
+
+- Prevented the confirmed MTK MPEG-2 MediaCodec input-buffer failure loop on
+  AFTMM/mantis by selecting bundled FFmpeg software decode for MPEG-2 while
+  retaining hardware decode for other codecs/devices.
+
+### v0.5.0
+
+- Established four selectable backends (Legacy Exo, Media3, IJK, and GSY), a
+  shared decoding-method preference, and a dedicated GSY settings screen.
+
+### v0.4.9
+
+- Added an IJK MPEG-2 hardware compatibility experiment using synchronous
+  MediaCodec, a larger probe/analyze budget, MTK decoder preference, and a
+  reversible software-decoding setting.
+
+### v0.4.8
+
+- Defaulted IJK MPEG-2 to bundled FFmpeg software decoding, retained hardware
+  decode for AVC/HEVC, added an opt-in MPEG-2 hardware preference, and handled
+  player errors without a duplicate completion cascade.
+
+### v0.4.7
+
+- Made the Dev root Gradle file self-repairing from a canonical copy and
+  preserved damaged input for diagnosis.
+
+### v0.4.5
+
+- Connected GDX to the three-backend factory, ensured Media3 selection really
+  used Media3, rolled back an unsuccessful SurfaceView experiment, and added
+  external player diagnostics.
+
+### v0.4.4
+
+- Tested explicit SurfaceView binding/order changes across Legacy Exo, Media3,
+  IJK, and the GDX overlay in response to black/video-output failures.
+
+### v0.4.1
+
+- Restored the Dev root Gradle file after an accidental module-file overwrite
+  and added regression protection for the same layout corruption.
+
+### v0.3.7
+
+- Re-enabled logcat-only read-only telemetry for a clean-install experiment;
+  it was subsequently removed after proving instrumentation affected startup.
+
+### v0.2.4
+
+- Corrected MCP unittest invocation to use discovery instead of treating the
+  filesystem path as a Python module.
+
+### v0.2.3
+
+- Fixed WSL/Docker Desktop workspace mounting by passing the repository's
+  absolute root to Compose instead of relying on a stale external path.

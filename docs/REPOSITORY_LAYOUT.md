@@ -7,7 +7,7 @@ opensagetv-vibe-android-client/
   mcp/                 Python MCP server and protocol tests
   tests/               host/build/static regression tests
   scripts/             build, validation, MCP, and device-safe helpers
-  docker/              reproducible Android/JDK/ADB/Python toolchain
+  docker/              entrypoint used inside the unified build container
   config/              tracked examples; local firetv.toml is ignored
   artifacts/           ignored APK/checksum output
   adb/                 ignored ADB identity and debug signing key
@@ -26,11 +26,14 @@ graph. It exists solely as an external emergency rollback and comparison copy.
 
 ## Docker identities
 
-- Image: `opensagetv-vibe-android-client-dev:jammy-j17`
-- Reusable container: `opensagetv-vibe-android-dev`
-- Gradle cache: `opensagetv-vibe-android-gradle-cache`
-- Bind mount: this repository to `/workspace`
+- Normal image: `opensagetv-vibe-build-env:u26-j11`
+- Normal reusable container: `opensagetv-vibe-dev`
+- Android mount: `/workspace/android-client`
+- Shared Android Gradle cache: `/work/.gradle/android`
 
-Normal commands use `docker compose exec` against the same named container.
-They do not create a phase container per invocation. `./dev.sh image` is needed
-when the Dockerfile changes; bind-mounted source edits need no image rebuild.
+Normal `dev.sh`/`dev.cmd` commands delegate to the sibling unified build
+environment and reuse that container. Bind-mounted source edits need no image
+rebuild.
+
+There is no component Dockerfile or Compose project. Toolchain/image ownership
+belongs exclusively to the sibling `opensagetv-vibe-build-env` repository.

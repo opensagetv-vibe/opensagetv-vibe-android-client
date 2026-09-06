@@ -9,7 +9,7 @@ Copy this file into `artifacts/firetv/` for each baseline device/build.
 - Upstream commit:
 - Development commit/patch state:
 - APK SHA-256:
-- Application ID: `org.opensagetv.miniclient.dev.debug`
+- Application ID: `opensagetv.vibe.miniclient.debug`
 
 ## Fire TV
 

@@ -1,9 +1,0 @@
-SageTV MiniClient Dev v0.5.44
-
-Fixes Search startup regression:
-- Restore proven legacy Android OS sendtext/input-text timing.
-- Wait for SageTV hasTextInput, then type immediately.
-- Verify IME visible after typing; direct-hide and verify hidden afterward.
-- Do not use dev_sage_command_sequence before playback exists.
-- Send ff/right/play_pause/play_pause individually with dev_sage_command.
-- Host/MCP/scripts only; installed v0.5.42+ debug APK does not need rebuild for this update.

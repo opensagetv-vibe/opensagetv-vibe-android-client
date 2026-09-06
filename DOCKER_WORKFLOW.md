@@ -1,69 +1,70 @@
-# OpenSageTV Vibe Android Docker workflow
+# Android Docker workflow
 
-All Android/JDK/ADB/Python/MCP build and deployment work remains inside Docker.
+## Normal architecture
 
-Normal commands reuse one container named `opensagetv-vibe-android-dev` and one
-cache volume named `opensagetv-vibe-android-gradle-cache`. Run `./dev.sh image`
-only when `docker/Dockerfile` or image dependencies change; bind-mounted source
-changes need only `test`, `validate`, or `build`.
+The Android repository is a mounted component of the sibling
+`opensagetv-vibe-build-env` project. Normal commands reuse:
 
-## Build or update the image
+```text
+image:     opensagetv-vibe-build-env:u26-j11
+container: opensagetv-vibe-dev
+workspace: /workspace/android-client
+JDK:       /opt/java/jdk17
+```
 
-The player modernization changes the Android build toolchain, so run once after extracting the update:
+Java 11 remains the unified server/build-environment default. Android selects
+JDK 17 only for its Gradle tasks. The frozen `source/existing` build selects its
+required legacy toolchain separately.
+
+## Host commands
+
+Linux/WSL:
 
 ```bash
 ./dev.sh image
-```
-
-## Dual toolchain
-
-The single Dev Docker image intentionally contains two Java/Android SDK toolchains.
-
-### Dev / Media3
-
-- JDK 17
-- AGP 8.13.2
-- Gradle 8.13 wrapper
-- platform 36
-- Build Tools 36.0.0
-- NDK 21.0.6113669
-
-Normal `./dev.sh build` uses this toolchain.
-
-### Untouched source/existing
-
-- JDK 8 at `/opt/java/jdk8`
-- source's original Gradle 6.1.1 / AGP 4.0.2
-- platform 29
-- Build Tools 29.0.2
-- NDK 21.0.6113669
-
-`build-existing` prepends `/opt/java/jdk8/bin` and sets `JAVA_HOME=/opt/java/jdk8`, preserving the old baseline even though the container default is Java 17.
-
-## Normal Dev flow
-
-```bash
 ./dev.sh test
 ./dev.sh validate
 ./dev.sh build
-./dev.sh install
-./dev.sh launch
+./dev.sh shell
 ```
 
-`build` always performs a clean Gradle build. `install` verifies the Dev package, uninstalls only `org.opensagetv.miniclient.dev.debug`, then performs a fresh install.
+Windows Command Prompt or PowerShell:
 
-## Untouched baseline build
-
-```bash
-./compile_existing_app.sh
+```bat
+dev.cmd image
+dev.cmd test
+dev.cmd validate
+dev.cmd build
+dev.cmd shell
 ```
 
-This never installs the resulting APK.
+The PowerShell wrapper converts the sibling build-environment path to an
+explicit WSL path. This is required because Docker Desktop can expose the
+current repository through a temporary `/mnt/wsl/...` bind path whose parent
+does not contain sibling repositories.
 
-## Preflight
+The unified image is rebuilt only when its toolchains/dependencies change.
+Source edits reuse the running container and Gradle caches.
 
-```bash
-./dev.sh preflight
-```
+## Device commands
 
-The preflight reports the default Dev Java runtime, the bundled legacy JDK 8, old/new Android SDK components, ADB tooling, MCP runtime, source trees and Fire TV connectivity.
+Configure `config/firetv.toml`, complete manual first-time setup after a fresh
+install, and then use the guarded install/launch/MCP commands. Package mutation
+must remain restricted to `opensagetv.vibe.miniclient.debug`.
+
+## Incremental update
+
+Run `./update.sh` or `update.cmd`. The Windows `.cmd` entry points invoke their
+repository PowerShell implementation without changing the machine-wide
+execution policy. The runner:
+
+1. selects the highest newer changed-files ZIP;
+2. validates ZIP integrity, safe/unique paths, `VERSION`,
+   `release.properties`, `release-deletions.lst`, symbolic-link safety, and the
+   full manifest before extraction;
+3. applies it once;
+4. resumes TEST, VALIDATE, optional BUILD/INSTALL, and LAUNCH from durable state
+   under `artifacts/update_runner`.
+
+Every package uses the stable `release.properties`; release history is updated
+only in `CHANGELOG.md`. Never create per-version update text/Markdown files.

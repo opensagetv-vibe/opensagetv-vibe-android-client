@@ -1,63 +1,153 @@
-# Player Architecture — v0.5.7
+# Android player architecture
 
-## Goal
-
-Keep SageTV's `MiniPlayerPlugin` lifecycle and custom PUSH/PULL sources while comparing independent engines under one SageTV seek/timeline contract.
+The Android client preserves SageTV's `MiniPlayerPlugin` lifecycle and custom
+Push/Pull data sources while keeping playback engines independently selectable.
 
 ```text
 PlayerFactory
-  -> EXOPLAYER   -> Exo2MediaPlayerImpl        [2.18.1, default]
-  -> MEDIA3      -> Media3MediaPlayerImpl      [1.11.0]
-  -> IJKPLAYER   -> IJKMediaPlayerImpl         [original SageTV IJK 0.8.8]
-  -> GSYPLAYER   -> GSYMediaPlayerImpl
-                       -> Auto
-                       -> Media3 delegate
-                       -> Android System MediaPlayer
-                       -> Legacy Exo delegate
+  -> EXOPLAYER -> Exo2MediaPlayerImpl (default)
+  -> MEDIA3    -> Media3MediaPlayerImpl
+  -> IJKPLAYER -> IJKMediaPlayerImpl (original SageTV IJK runtime)
+  -> GSYPLAYER -> GSYMediaPlayerImpl
+                    -> Auto
+                    -> Media3 delegate
+                    -> Android System MediaPlayer (commissioning probe only)
+                    -> Legacy Exo delegate
 ```
 
-Legacy IJK and GSY are independent. GSY's IJK/ex_so runtime is not packaged.
+Legacy IJK and GSY are independent. GSY's conflicting IJK/ex_so native runtime
+is intentionally not packaged.
 
-## Phase A / v0.5.7 findings
+Android System MediaPlayer cannot consume the SageTV Pull `MediaDataSource` on
+the commissioned AFTMM/API-25 device: it returns error `1/-2147483648` before
+rendering. The real System path is therefore reachable only through the
+debug-only `gsy_system_probe` commissioning gate. A failure is contained and
+reopens the same load once through Media3. The ordinary UI `System` choice and
+`Auto` remain fail-safe on Media3.
 
-- Exo Legacy Pull startup now passes after the v0.5.6 range fix, but SageTV FLUSH exposed a second bug: the Exo2/Media3 backend `flush()` reset the MediaSource to position zero after the local seek. v0.5.7 makes that destructive reset PUSH-only.
-- Media3 shares the same corrected Pull seek/flush contract.
-- IJK Pull remains the passing control path and is unchanged.
-- GSY Auto now resolves to Media3, the currently known-good SageTV-aware engine, rather than automatically selecting System for custom streams. System stays explicitly selectable.
-- GSY/System PUSH waits for real bytes in the Android MediaDataSource bridge; GSY/System Pull teardown is now idempotent/thread-safe.
-- Phase B should centralize SageTV absolute/backend-relative timeline state. Phase C should normalize PUSH/Dynamic server rebase versus local player seek behavior.
+## Transport ownership
 
-## Shared Decoding Method
+- Pull reads a SageTV file/data source and performs Android-local seeks.
+- Push/Fixed receives a server-owned stream and FLUSH/rebase semantics.
+- HTTP and future transport hooks must remain possible without pretending they
+  share the SageTV Push/Pull timeline contract.
 
-Decoder policy remains separate from seek/timeline work. Hardware / Software / Hardware Preferred stay exposed for all top-level backends, with each independent engine applying the policy it can actually support. No decoder changes are part of v0.5.6.
+## SMB Direct / Shadow Pull audit
 
-## Transport reserve
+SMB Direct is an alternative byte source for ordinary SageTV Pull playback;
+it is not another player backend and does not bypass the MiniPlayer session.
+The implemented call path is:
 
-Current SageTV PUSH/PULL remains the baseline. Future HTTP MPEG-TS, HLS, RTMP, and SRT paths should remain possible. Unused dependencies can be excluded from today's runtime graph, but future transport hooks/capabilities should not be removed solely because they are not currently active.
+```text
+MiniClientConnection property negotiation
+  -> streaming_mode controls PUSH_AV_CONTAINERS/PULL_AV_CONTAINERS
+MediaCmd.MEDIACMD_OPENURL
+  -> MediaUrlContext removes Vibe metadata and preserves the original path
+  -> MiniPlayerPlugin.load(..., url, server, active, bufferSize)
+Media3MediaPlayerImpl / Exo2MediaPlayerImpl
+  -> BaseMediaPlayerImpl constructs stv://server/original-path
+  -> Media3PullDataSource / Exo2PullDataSource
+  -> SmbSourceSelector
+       -> SageTV Pull: BufferedPullDataSource -> SimplePullDataSource
+       -> SMB Direct: ReadAheadDataSource -> SmbDirectSession -> SMBJ
+                         + ShadowMediaServerSession
+```
 
-## v0.5.2 player isolation update
+The selector owns the SMB file and shadow MediaServer connection across Exo
+extractor range closes; those closes flush only read-ahead state.
+`BaseMediaPlayerImpl.releasePlayer()` is the final playback-session cleanup
+boundary. The shadow sends normal `OPEN`, `SIZE`, and `CLOSE`. Stock SageTV
+also requires its file-position state to follow non-sequential player reads for
+STV-owned seek/Comskip decisions, so each non-sequential SMB access issues one
+same-offset, one-byte shadow `READ`. These bytes are counted explicitly as
+`shadowReadBytes`; ordinary media bytes remain SMB-owned and continuous fake
+reads are prohibited.
 
-Legacy **IJKPlayer** and **GSYVideoPlayer** are separate. IJK uses the original local 0.8.8 Java/JNI AARs and never uses GSY. GSY has its own `gsy_player_engine` setting with Auto / Media3-Exo / Android System / Legacy Exo. Auto currently chooses Media3 for SageTV sources; System remains explicitly selectable while its custom MediaDataSource compatibility is hardened. GSY's modern IJK/ex_so runtime is intentionally not packaged because it collides with the legacy `tv.danmaku.ijk` namespace and `libijk*.so` names.
-## Seek/timeline refactor boundary (v0.5.5 Phase A)
+For explicit SMB Direct, property negotiation behaves like forced Pull for
+container selection while continuing to report the normal video/audio codecs.
+It must never use `VIDEO_CODECS=NONE`, `AUDIO_CODECS=NONE`, or a fixed
+`videocodec=NONE`/`audiocodec=NONE` request. Auto fallback changes only the byte
+source after SageTV has selected ordinary Pull and records its reason.
 
-Phase A intentionally fixes only low-risk backend behavior. ExoPlayer Legacy and Media3 issue asynchronous seeks without blocking the UI thread and accept exact zero seeks. Their `seekPending` state is cleared only by a seek discontinuity callback, not by arbitrary timeline changes. IJK repeated-Pause frame stepping uses an assumed 30 fps step (~33 ms) instead of the previous 1000 ms jump.
+The selected protocol library is [SMBJ](https://github.com/hierynomus/smbj),
+an Apache-2.0 Java SMB2/SMB3 client. Its configuration explicitly detects
+Android, excludes the desktop SPNEGO authenticator there, retains NTLM, and
+supports SMB 2.0.2 through SMB 3.1.1. This matches the repository license and
+avoids SMB1-only operation. The dependency remains isolated in
+`android-shared`; pure path mapping and shadow-session protocol code remain in
+`core` so they can be host-unit-tested without Android.
 
-The larger architectural problem remains deliberately unfixed in Phase A: SageTV absolute time, backend-relative time, and PUSH stream rebasing are still handled differently by each backend. A later phase will centralize that SageTV timeline/seek contract without forcing the backend player APIs themselves to become identical.
+Physical Amazon AFTMM/API 25 testing against the isolated server proves both
+Media3 and legacy ExoPlayer start, seek, FF/REW, large-jump, pause/resume,
+repeat-start, stop/restart, and teardown using the generated deterministic
+`VibeSeekTest-1080i-MPEG2-AC3-CC.ts` fixture. Real Meet the Press marker tests
+prove server-owned Comskip in both directions. `OPEN + SIZE` and a byte-zero-
+only probe were both measured and rejected because the server did not issue
+the required seek.
 
+The Pull/SMB A/B harness records the exact server seek-command time, the first
+physical datasource read after that command, the first observed queued decoder
+input, the exact rendered-first-frame callback, and sustained recovery. The
+decoder-input timestamp is a bounded 100 ms polling observation; it is not
+misrepresented as a direct MediaCodec callback. Datasources expose the last
+physical read time and position separately from buffered reads, so a seek that
+is satisfied entirely by read-ahead does not create false transport evidence.
+Byte ownership must also agree: Pull requires positive MediaServer media bytes,
+while SMB Direct requires positive SMB bytes and zero ordinary MediaServer
+media bytes apart from the explicitly counted bounded shadow reads.
 
+SageTV absolute time, backend-relative time, growing files, and Push rebasing
+remain backend-specific. The shared `PlaybackSessionController` now assigns a
+monotonic generation to each load and operation. Base, Media3, and legacy Exo
+reject listener, progress, recovery, queued UI, and surface callbacks from a
+replaced or stopped session without changing those backend timeline rules.
+Reconnect keeps the active playback generation unless SageTV supplies a new
+load; stop and free invalidate it.
 
-## v0.5.8 Pull progressive seek-map tuning
+## Compatible Media3 file replacement
 
-The Exo-based Pull paths use a custom progressive extractor configuration because SageTV PVR recordings commonly use MPEG-TS. The default `TsExtractor` timestamp search window can fail to find PCR timestamps on some broadcast files, leaving the progressive timeline non-seekable or resolving seeks back to the default position. Pull therefore uses an 8x timestamp search window plus closest-sync seeks. Dynamic/PUSH keeps the default extractor configuration. This is deliberately backend-specific plumbing; the later shared timeline refactor must not hide whether the underlying player can actually seek.
+Media3 can retain its player and Surface when a new load is proven safe by the
+pure `MediaReplacementPolicy`. The policy accepts only initialized, ready,
+completed, non-circular Pull or SMB Direct media. The implementation constructs
+a new source/session, calls `setMediaSource(..., true)`, and releases the prior
+datasource only after the replacement is installed. First rendered frame marks
+success. A synchronous setup failure or asynchronous player error performs one
+normal full-load fallback; it cannot loop back into fast replacement.
 
-## v0.5.9 Exo Pull resume-latency profile
+Push, Fixed/MIM, DVD, HTTP/external-link, live/growing, circular, and legacy
+loads with unknown metadata deliberately remain full loads. Debug builds expose
+bounded counters and target/reason state, and `mcp-fast-switch-test` supplies a
+repeatable physical Pull/SMB gate without changing the production SageTV
+control-session contract.
 
-v0.5.8 established correct MPEG-TS seek maps for Exo-based Pull playback. Device testing then showed correct timeline/seek targets but delayed visible-frame resumption. v0.5.9 keeps seek semantics unchanged and optimizes the refill path:
+## Current behavior constraints
 
-- `BufferedPullDataSource` default remains 32 KiB.
-- Exo2/Media3 Pull instantiate it with 256 KiB to reduce SageTV protocol round trips.
-- Exo2/Media3 Pull use a dedicated low-latency LoadControl (5 s min, 20 s max, 500 ms after seek, 1000 ms after rebuffer).
-- Dynamic/PUSH, IJK, and GSY System do not inherit these tuning values.
-- GSY Auto receives the behavior only because it delegates to Media3.
+- Legacy Exo remains the default.
+- Media3/Legacy Exo use custom MPEG-TS Pull extractor/load-control behavior.
+- IJK retains device/codec-specific MPEG-2 compatibility handling.
+- GSY Auto uses the SageTV-aware engine selected by current implementation;
+  Android System remains an explicit compatibility path.
+- Decoder policy stays separate from transport/timeline refactoring.
+- Completed forced Pull/SMB sessions may negotiate command 30. Native forward
+  rate is bounded to 0.5x-2x; 4x-256x forward/reverse uses a three-second
+  seek-scan cadence so a hardware frame can render between discontinuities.
+  STOP/free invalidates the controller, pause cancels its scheduled tick, and
+  unsupported rates retain the prior accepted rate. Other transports and
+  GSY/System do not advertise this capability.
+- `BaseMediaPlayerImpl` remains protected by an explicit reviewed-hash gate;
+  its authorized session-controller plus bounded DVD diagnostics integration
+  SHA-256 is
+  `63fc269f13e7e5a75f4e55b8e3b39016e9056ffc6c71baf117e6c8b596ebc9dd`.
 
-This remains an optimization of the existing SageTV Pull transport, not a replacement for future HTTP MPEG-TS/HLS/RTMP/SRT work.
+## Refactor direction
+
+First preserve media load metadata (`timeshifted`, buffer size, major/minor and
+encoding hints), add measured live-edge/EOF seek protection, and expose existing
+server/client buffer evidence. Only after behavior is characterized should
+common runtime configuration, seek policy, recovery, and telemetry snapshots
+move out of the engine classes. Session generation has moved into the shared
+controller after matching Media3/legacy Exo hardware baselines and is now a
+preserved invariant.
+
+See `TASKS.md` for active work and `docs/PLAYBACK_DIAGNOSTICS.md` for the
+required evidence standard.

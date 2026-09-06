@@ -1,9 +1,0 @@
-SageTV MiniClient Dev v0.5.68
-
-Host-side focused retest filtering.
-
-- --exclude-players omits whole player families.
-- --exclude-gsy-engines omits selected GSY engines such as system.
-- --exclude-case-id omits exact generated cases.
-- Matrix JSON records exclusions under retestExclusions.
-- No Android playback code changed; debugStatusVersion remains 11 and no APK rebuild is required solely for v0.5.68.

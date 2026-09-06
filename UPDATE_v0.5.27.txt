@@ -1,7 +1,0 @@
-SageTV MiniClient Dev v0.5.27
-
-Fix: wait for the SageTV UI to be fully ready before native playback automation sends Search.
-
-The connection socket can report connected before the UI finishes loading. The MCP wait tool now supports requiring a non-empty menu hint that remains stable for a configurable interval. `mcp-playback-test` and `mcp-session-test` default to 2000 ms.
-
-No Android APK/player code changed.

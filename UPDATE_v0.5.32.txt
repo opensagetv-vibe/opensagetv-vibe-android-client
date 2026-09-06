@@ -1,9 +1,0 @@
-SageTV MiniClient Dev v0.5.32
-
-Media3 Pull large-seek latency experiment.
-
-Device v0.5.31: direct Comskip correctness PASS in Dynamic and Pull, but Pull required ~3.63 s to recover after both RIGHT and LEFT marker jumps versus <1 s in Dynamic.
-
-Change: Media3PullDataSource SageTV network read buffer 256 KiB -> 1 MiB only. Existing 8x TS timestamp search, LoadControl, decoder policy, Dynamic/PUSH, Legacy Exo, IJK, and direct Comskip commands are unchanged.
-
-Requires debug APK rebuild/install before retest.

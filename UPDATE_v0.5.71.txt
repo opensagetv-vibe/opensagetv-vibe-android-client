@@ -1,7 +1,0 @@
-SageTV MiniClient Dev v0.5.71
-
-Host-side MCP tuning-matrix enhancement:
-- --streaming accepts pull,push / push,pull.
-- Push ignores Pull-only tuning dimensions and varies only meaningful codec-mode combinations.
-- Combined reports preserve per-streaming counts and ignored dimensions.
-- No APK rebuild required; debugStatusVersion remains 13.

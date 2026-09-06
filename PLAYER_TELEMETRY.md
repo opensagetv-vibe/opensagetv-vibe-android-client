@@ -1,30 +1,28 @@
-# Player Telemetry Status — v0.5.63
+# Player diagnostic instrumentation policy
 
-Continuous/background playback telemetry remains **disabled**. v0.5.63 permits only the bounded debug exact-event trap mechanism described below.
+Continuous/background playback telemetry is disabled. Fire TV testing proved
+that extra player instrumentation can alter or prevent startup, so diagnostics
+must be bounded, explicit, and absent from production behavior.
 
-Fire TV AFTMM testing established that adding instrumentation callbacks inside the legacy player runtime can prevent video startup. Clean uninstall/install testing confirmed the hooks themselves—not APK replacement behavior—were responsible.
+Current rules:
 
-Current rule:
+- no background telemetry hooks in `BaseMediaPlayerImpl`;
+- no added AnalyticsListener polling in Exo2 or Media3;
+- no continuous IJK callback collection;
+- debug builds may snapshot state from callbacks that already exist;
+- the debug event ring is bounded and cleared/read explicitly;
+- MCP must return unavailable rather than stale data when a metric is disabled.
 
-- `BaseMediaPlayerImpl`: no telemetry hooks
-- `Exo2MediaPlayerImpl`: no AnalyticsListener telemetry instrumentation; debug builds can call bounded exact-event traps from the existing listener
-- `IJKMediaPlayerImpl`: no continuous telemetry; debug builds can record bounded event snapshots
-- `Media3MediaPlayerImpl`: no AnalyticsListener/background telemetry; debug builds can call bounded exact-event traps from the existing listener
-- MCP player-telemetry result remains disabled rather than returning stale data
+Preferred evidence:
 
-Use external diagnostics instead:
+- one-shot debug player state;
+- bounded exact-event traps;
+- logcat and crash-buffer capture;
+- MediaCodec, AudioTrack, Surface, and focused-window diagnostics;
+- screenshots/screen recordings;
+- datasource read/wait counters;
+- correlated SageTV server/FFmpeg timestamps.
 
-- MCP `collect_playback_diagnostics`
-- logcat capture
-- MediaCodec diagnostics
-- screenshots
-- screen recordings
-- ADB remote-key/seek sequences
-
-If an internal measurement is unavoidable later, introduce **one explicitly opt-in hook at a time**, rebuild with uninstall-before-install, and prove ordinary playback startup after each individual hook.
-
-## v0.5.63 debug exact-event traps
-
-Continuous player telemetry remains disabled. v0.5.63 adds a narrower debug-only mechanism for MCP/Codex diagnosis: event traps reuse already-registered player callbacks and take one `PlaybackHealthProbe` snapshot only when an important event occurs. They do not install an AnalyticsListener, do not run a background polling loop, and are absent as an implementation class from release builds.
-
-The trap ring is bounded to 32 events and can be cleared/read explicitly through MCP. SageTV protocol-thread traps timestamp the event immediately and schedule the counter snapshot on the Android main thread rather than blocking the media command. This is intentionally different from the earlier continuous instrumentation that affected startup.
+If internal measurement is unavoidable, add one opt-in measurement at a time,
+rebuild/install cleanly, and prove ordinary startup before interpreting its
+output. See `docs/PLAYBACK_DIAGNOSTICS.md` for experiment and attribution rules.

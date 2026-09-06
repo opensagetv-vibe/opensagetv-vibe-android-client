@@ -1,8 +1,0 @@
-SageTV MiniClient Dev v0.5.31
-
-- Corrects Comskip automation to send direct native SageTV RIGHT/LEFT commands.
-- Matches the manually proven mcp-send-sequence path: `command right` / `command left`.
-- Stops using normal video-playing arrow mappings, which are FF/REW short-press actions.
-- Preserves the existing instrumented A/V recovery, decoder, surface, and landing-timeline checks.
-- Updates standalone Comskip test, Media3 Push/Pull Comskip matrix, tests, help, README, TASKS and HANDOFF.
-- Host/MCP only; no APK rebuild required.

@@ -42,15 +42,15 @@ in Docker before Phase 1 began.
    `opensagetv-vibe-android-client` repository/image/container names, remove
    operational references to the old workspace path, make Docker commands
    reuse one named development container, and establish current documentation.
-3. **Source-layout cleanup.** Retain `source/existing` as the frozen v0.5.75
-   comparison tree, define `source/dev` as the only active Android source, and
-   move chronological investigation material into indexed historical areas
-   without losing evidence.
+3. **Source-layout cleanup — complete.** Retain `source/existing` as the frozen
+   comparison tree, define `source/dev` as the only active Android source, move
+   release history into `CHANGELOG.md`, and keep durable diagnostic rules in
+   stable documents rather than version-named notes.
 4. **Unified build integration — complete locally.** This repository is a
    mounted component of `opensagetv-vibe-build-env`; normal build, test,
    validation, MCP, release-artifact, and provenance work uses the one
-   `opensagetv-vibe-dev` container. The standalone Compose definition remains
-   only as an isolated-checkout rollback until publication/commissioning.
+   `opensagetv-vibe-dev` container. Component-owned Dockerfile/Compose
+   definitions were removed so no command can silently create a second image.
 5. **Independent Android regression gates.** Run unit, validator, clean Gradle,
    APK identity, MCP protocol, install/launch, and physical player matrices.
    Device-backed installation and playback are explicit commissioning gates;
@@ -58,15 +58,16 @@ in Docker before Phase 1 began.
 
 ## Compatibility decisions
 
-- Version remains `0.5.75` during structural migration.
-- The Dev application ID remains `org.opensagetv.miniclient.dev.debug` so it
+- The frozen comparison baseline remains v0.5.75; the active checkout version
+  is always read from `VERSION` and recorded in `CHANGELOG.md`.
+- The Dev application ID remains `opensagetv.vibe.miniclient.debug` so it
   stays isolated from production and remains comparable to the known-good APK.
 - No package under `jvl.sage.miniclient` may be installed, launched, stopped,
   uninstalled, cleared, or overwritten by project automation.
 - Legacy Exo remains the default player while Media3 stays isolated until the
   device-backed release gates pass.
-- The old `SAGETV_WINDOWS_ROOT` variable remains only as a compatibility input;
-  new configuration uses `OPENSAGETV_VIBE_ANDROID_ROOT`.
+- Host paths are resolved from the root scripts and the sibling unified build
+  environment; no legacy Windows-root environment variable is required.
 - The original directory may be used for explicit comparison, but no build,
   test, MCP, or packaging command may require it.
 
@@ -78,6 +79,16 @@ pushed. When the owner approves publication, the intended remote is
 Preserve the exact baseline import commit and all subsequent logical migration
 commits when publishing.
 
-Phase 1 post-change evidence is recorded in
-[docs/PHASE1_VALIDATION.md](docs/PHASE1_VALIDATION.md). The migrated APK is
+Initial post-change equivalence evidence is consolidated in
+[docs/BASELINE_VALIDATION.md](docs/BASELINE_VALIDATION.md). The migrated APK was
 byte-identical to the pre-refactor baseline build.
+
+## Intentional source replacement
+
+Normal build/test/package operations must never import from the old workspace.
+If an owner explicitly authorizes replacing the frozen or active source,
+perform it as a reviewed migration: record the upstream repository/tag/commit,
+stage the new tree inside this repository, compare required libraries and build
+files, run validation and clean builds, update provenance and the full project
+manifest, and commit it separately. Do not use the emergency bootstrap path as
+an implicit network dependency.

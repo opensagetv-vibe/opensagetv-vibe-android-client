@@ -4,7 +4,9 @@ Date: 2026-08-28
 
 Host workspace: Windows, `C:\TMP_SAGETV_DOCKER`
 
-Validation image: `sagetv-miniclient-dev-dev:latest`
+The retired pre-migration container was used read-only for this one baseline
+comparison. Its identity is intentionally not part of the current workflow;
+current Docker evidence is in `UNIFIED_BUILD_VALIDATION.md`.
 
 ## Original project (read-only)
 
@@ -65,3 +67,12 @@ in-container build path so all callers receive identical behavior.
 No device install, production-package command, or live playback test was run
 during the structural baseline. Those require an explicitly commissioned
 Android target.
+
+## Initial migration equivalence
+
+After repository identity/orchestration changes, 150 scaffold/static tests, 35
+MCP tests, the full validator, and all 60 Gradle tasks passed. The resulting APK
+retained SHA-256
+`839113f460fed5e6f37ec244ea6a2fbc574c32e5f9b131085c95a349bb364a69`,
+identical to the copied-project baseline. That proved the structural migration
+had not changed the application before later API 36 work began.

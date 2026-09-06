@@ -1,61 +1,71 @@
-# Unified Ubuntu 26 build validation
+# Unified Android build validation
 
-Validated on 2026-08-28 with Windows Docker Desktop and the shared
-`opensagetv-vibe-build-env:u26-j11` image.
+Validated on 2026-08-28 from Windows Docker Desktop through the repository's
+`dev.cmd` entry point.
 
-## Architecture
+## Environment
 
-- Development image: `opensagetv-vibe-build-env:u26-j11`
-- Image ID: `sha256:327a6bc70b719e9111143b5cd3c8af8314aa9a71dc2b6cf3fe0ad9ed4e1b9983`
+- Unified image: `opensagetv-vibe-build-env:u26-j11`
+- Image ID: `sha256:922da6854807a919ddf4467542e46903bda00d6f787fe6727a8c237c0216d39d`
+- Build-environment version: `u26-j11-release-v4`
+- Running container image ID: identical to the tagged image ID
 - Reusable container: `opensagetv-vibe-dev`
-- Shared cache: `opensagetv-vibe-gradle-cache` under `/work/.gradle/android`
-- Android repository mount: `/workspace/android-client`
-- Default image Java: OpenJDK 11.0.32
-- Active Android Java: Temurin 17.0.20 under `/opt/java/jdk17`
-- Frozen baseline Java: Temurin 8u502 under `/opt/java/jdk8`
-- Android SDK: platforms/build tools 29 and 36
-- Android NDK: 21.0.6113669
-- Android platform tools: 37.0.1
-- Python MCP: 2.1.1 in an isolated virtual environment
+- Android workspace: `/workspace/android-client`
+- Default unified Java: OpenJDK 11
+- Android Java: Temurin 17 at `/opt/java/jdk17`
+- Frozen comparison Java: Temurin 8 at `/opt/java/jdk8`
+- Android compile/build tools: 36 / 36.0.0
 
-Java 17 and Java 8 are selected only for Android commands. `JAVA_HOME` and
-`JDK_HOME` remain OpenJDK 11 globally for SageTV Core and server work.
+The Android workflow has no component-owned Dockerfile or Compose image to
+start. It resolves the sibling checkout from the launcher location and reuses
+the currently installed unified image/container.
 
 ## Results
 
 | Gate | Result |
 |---|---|
-| Unified environment/Java isolation | PASS |
-| Project manifest (1,210 files) | PASS |
-| Scaffold/static tests (151) | PASS |
-| MCP tests (35) | PASS |
-| Full project validator | PASS |
-| Clean Gradle build (60 tasks) | PASS |
-| APK present and signed with Dev key | PASS |
-| Phase 1 APK byte equivalence | PASS |
-| Device install/launch/playback | SKIPPED — explicit commissioning gate |
+| Windows CMD/PowerShell to WSL path handoff | PASS |
+| Independent committed sibling checkout and automatic rebind | PASS |
+| Unified image selected and reused | PASS |
+| Full project manifest | PASS (1,094 files before final documentation pass) |
+| Scaffold/static tests | PASS (174) |
+| MCP tests | PASS (35) |
+| Full source validator | PASS |
+| Clean Gradle build | PASS (60/60 tasks) |
+| Dev package/min/target/compile SDK | PASS (`opensagetv.vibe.miniclient.debug`, 23/36/36) |
+| FileProvider/permissions/exported component inspection | PASS with follow-up audits in `TASKS.md` |
+| Device install/launch/playback | SKIPPED - physical commissioning remains open |
 
-APK:
+Latest clean APK after log-sharing hardening:
 
 ```text
 artifacts/firetv/OpenSageTV-Vibe-Android-Client-debug.apk
-SHA-256 839113f460fed5e6f37ec244ea6a2fbc574c32e5f9b131085c95a349bb364a69
+SHA-256 60e1d19ab15968ef48e24691cfd14f8998ce0bc6e6e8bda960f6d65e8d8aa668
 ```
-
-The hash is identical to the pre-refactor and Phase 1 standalone-image APK.
-The build-environment migration therefore changed toolchain ownership and
-orchestration without changing the generated application.
 
 ## Commands
 
-From the sibling build-environment repository:
+Windows:
 
-```bash
-./opensagetv-vibe-dev.sh android-info
-./opensagetv-vibe-dev.sh android-all
+```bat
+dev.cmd test
+dev.cmd validate
+dev.cmd build
 ```
 
-From this repository, `./dev.sh test`, `validate`, `build`, and MCP/device
-commands automatically use the sibling unified environment when it is present.
-Set `OPENSAGETV_VIBE_ANDROID_STANDALONE=true` only for the isolated-checkout
-fallback.
+Linux/WSL:
+
+```bash
+./dev.sh test
+./dev.sh validate
+./dev.sh build
+```
+
+These commands must resolve to `/workspace/android-client` in
+`opensagetv-vibe-dev`.
+
+The same final gate also passed from the unified build-environment root with
+`opensagetv-vibe-dev.ps1 android-all`. Dependency resolution is guarded by the
+Gradle distribution SHA-256, per-project lockfiles,
+`gradle/verification-metadata.xml`, the exact Python lock installed by the
+image, and an exact Android platform-tools revision check.

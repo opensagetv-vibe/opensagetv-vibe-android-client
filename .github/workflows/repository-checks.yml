@@ -1,0 +1,33 @@
+name: Repository checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify shell syntax
+        run: |
+          bash -n dev.sh update.sh docker/entrypoint.sh
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+      - name: Run source contract tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Verify release metadata
+        run: |
+          test "$(cat VERSION)" = "$(sed -n 's/^VERSION=//p' release.properties)"
+          test "$(grep -c '^VERSION=' release.properties)" -eq 1
+          test "$(grep -Ec '^REQUIRES_BUILD=(true|false)$' release.properties)" -eq 1
+      - name: Verify tracked source manifest
+        run: python scripts/project_manifest.py --check

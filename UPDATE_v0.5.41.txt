@@ -1,6 +1,0 @@
-SageTV MiniClient Dev v0.5.41
-
-Fix: automated Search text now uses Android OS input text after verified IME visibility.
-The v0.5.40 in-app virtual-keyboard View.dispatchKeyEvent path could block the debug BroadcastReceiver on Fire TV.
-
-This update is host/MCP-only. If the v0.5.40 APK is already installed, do not rebuild solely for v0.5.41.

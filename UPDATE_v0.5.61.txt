@@ -1,8 +1,0 @@
-SageTV MiniClient Dev v0.5.61
-
-- User selections: decoding=hardware|software|fallback; streaming=push|pull|fixed.
-- Persisted compatibility remains hardware_preferred for fallback and dynamic for push.
-- Added complete Fixed encoding/remux parameters to MCP/debug configuration and snapshots.
-- Player matrix passes/verifies all settings before playback.
-- Fixed default forces encoding: preference=always, remuxing=off.
-- Debug status version 8. APK rebuild/install required.
