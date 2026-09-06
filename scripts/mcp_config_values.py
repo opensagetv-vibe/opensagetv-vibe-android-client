@@ -5,15 +5,15 @@ backward-compatible with existing SageTV client profiles.
 """
 from __future__ import annotations
 
-STREAMING_SELECTIONS = ("push", "pull", "fixed")
+STREAMING_SELECTIONS = ("push", "pull", "smb_direct", "smb_auto", "fixed")
 DECODING_SELECTIONS = ("hardware", "software", "fallback")
 
 FIXED_ENCODING_PREFERENCES = ("needed", "always")
-FIXED_ENCODING_FORMATS = ("matroska", "dvd")
+FIXED_ENCODING_FORMATS = ("matroska", "dvd", "mpegts")
 FIXED_VIDEO_BITRATES_KBPS = (1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000)
 FIXED_VIDEO_FPS = ("source", "24", "29.97", "59.94")
 FIXED_VIDEO_RESOLUTIONS = ("source", "cif", "d1", "720", "1080")
-FIXED_AUDIO_CODECS = ("ac3", "mp2")
+FIXED_AUDIO_CODECS = ("aac", "ac3", "mp2")
 FIXED_AUDIO_BITRATES_KBPS = (96, 112, 128, 160, 192)
 FIXED_AUDIO_CHANNELS = ("source", "1", "2", "6")
 FIXED_REMUXING_PREFERENCES = ("needed", "always", "off")
@@ -22,13 +22,16 @@ FIXED_REMUXING_FORMATS = ("matroska", "dvd", "mpegts")
 FIXED_DEFAULTS = {
     # Matrix default intentionally forces the fixed transcoder so Fixed really tests encoding.
     "fixed_encoding_preference": "always",
-    "fixed_encoding_format": "matroska",
+    "fixed_encoding_format": "mpegts",
     "fixed_video_bitrate_kbps": 4000,
     "fixed_video_fps": "source",
     "fixed_key_frame_interval": 10,
     "fixed_use_b_frames": True,
     "fixed_video_resolution": "source",
-    "fixed_audio_codec": "ac3",
+    # AAC is decoded reliably by both Android Exo generations after a Fixed
+    # MPEG-TS rebase. MIM translates SageTV Core's obsolete libfaac spelling to
+    # modern FFmpeg's native aac encoder without changing the wire codec.
+    "fixed_audio_codec": "aac",
     "fixed_audio_bitrate_kbps": 128,
     "fixed_audio_channels": "source",
     "fixed_remuxing_preference": "off",
@@ -41,6 +44,11 @@ _STREAMING_ALIASES = {
     "push/dynamic": "push",
     "pull": "pull",
     "fixed": "fixed",
+    "smb": "smb_direct",
+    "smb_direct": "smb_direct",
+    "smb direct": "smb_direct",
+    "smb_auto": "smb_auto",
+    "smb auto": "smb_auto",
 }
 _DECODING_ALIASES = {
     "hardware": "hardware",
@@ -55,6 +63,8 @@ _STREAMING_PREFERENCES = {
     "push": "dynamic",
     "pull": "pull",
     "fixed": "fixed",
+    "smb_direct": "smb_direct",
+    "smb_auto": "smb_auto",
 }
 _DECODING_PREFERENCES = {
     "hardware": "hardware",
@@ -146,7 +156,7 @@ def add_fixed_encoding_args(parser) -> None:
                         help="Fixed transcoding policy: needed or always. Matrix default always forces an encoding test.")
     parser.add_argument("--fixed-encoding-format", choices=FIXED_ENCODING_FORMATS,
                         default=FIXED_DEFAULTS["fixed_encoding_format"],
-                        help="Fixed encoded container: matroska or dvd")
+                        help="Fixed encoded container: matroska, dvd, or mpegts")
     parser.add_argument("--fixed-video-bitrate-kbps", type=int, choices=FIXED_VIDEO_BITRATES_KBPS,
                         default=FIXED_DEFAULTS["fixed_video_bitrate_kbps"])
     parser.add_argument("--fixed-video-fps", type=str.lower, choices=FIXED_VIDEO_FPS,

@@ -16,17 +16,19 @@ spec.loader.exec_module(module)
 
 
 class MCPPlayerMatrixTests(unittest.TestCase):
-    def test_full_matrix_expands_to_63_configuration_cases(self):
+    def test_full_matrix_expands_to_105_configuration_cases(self):
         cases = module.build_cases(
             list(module.PLAYERS),
             list(module.STREAMING_MODES),
             list(module.DECODERS),
             list(module.GSY_ENGINES),
         )
-        self.assertEqual(len(cases), 63)
+        self.assertEqual(len(cases), 105)
         ids = {case.id for case in cases}
         self.assertIn("exoplayer__push__hardware", ids)
         self.assertIn("media3__pull__software", ids)
+        self.assertIn("media3__smb_direct__hardware", ids)
+        self.assertIn("exoplayer__smb_auto__fallback", ids)
         self.assertIn("ijkplayer__fixed__fallback", ids)
         self.assertIn("gsyplayer__pull__hardware__gsy_auto", ids)
         self.assertIn("gsyplayer__pull__hardware__gsy_media3", ids)
@@ -76,15 +78,24 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertNotIn('call_dict(client, "dev_run_relative_seek_check", {', script)
         self.assertNotIn('call_dict(client, "dev_run_comskip_check", {', script)
 
+    def test_matrix_can_use_exact_server_path_without_search_navigation(self):
+        script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--server-path"', script)
+        self.assertIn('one of --text or --server-path is required', script)
+        self.assertIn('if server_path.strip():', script)
+        self.assertIn('call_dict(client, "dev_play_server_path"', script)
+        self.assertIn('"reason": "exact_server_path_requested"', script)
+        self.assertIn('"serverPath": args.server_path', script)
 
-    def test_hardware_only_selection_is_21_cases(self):
+
+    def test_hardware_only_selection_is_35_cases(self):
         cases = module.build_cases(
             list(module.PLAYERS),
             list(module.STREAMING_MODES),
             ["hardware"],
             list(module.GSY_ENGINES),
         )
-        self.assertEqual(len(cases), 21)
+        self.assertEqual(len(cases), 35)
         self.assertTrue(all(case.decoder == "hardware" for case in cases))
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
         self.assertIn('--hardware-only', script)
@@ -135,7 +146,8 @@ class MCPPlayerMatrixTests(unittest.TestCase):
     def test_fixed_streaming_has_complete_encoding_parameters(self):
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
         config = (SCRIPTS / "mcp_config_values.py").read_text(encoding="utf-8")
-        receiver = (ROOT / "source/dev/android-tv/src/debug/java/sagex/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugPlayerConfigCommands.java").read_text(encoding="utf-8")
+        state = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java").read_text(encoding="utf-8")
         for option in (
             "--fixed-encoding-preference", "--fixed-encoding-format", "--fixed-video-bitrate-kbps",
             "--fixed-video-fps", "--fixed-key-frame-interval", "--fixed-use-b-frames",
@@ -288,10 +300,10 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertIn('"startupMediaFailures": startup_media_failures', script)
 
     def test_android_error_traps_include_backend_error_identity(self):
-        media3 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
-        exo2 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
-        ijk = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
-        system = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/gsy/GSYSystemMediaPlayerImpl.java").read_text(encoding="utf-8")
+        media3 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
+        exo2 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
+        ijk = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
+        system = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/gsy/GSYSystemMediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn('player_error_" + error.getErrorCodeName()', media3)
         self.assertIn('flush_reprepare_error_', media3)
         self.assertIn('player_error_" + error.getErrorCodeName()', exo2)
@@ -303,9 +315,10 @@ class MCPPlayerMatrixTests(unittest.TestCase):
 
     def test_exact_event_traps_are_collected_for_each_matrix_action(self):
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
-        receiver = (ROOT / "source/dev/android-tv/src/debug/java/sagex/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
-        trap = (ROOT / "source/dev/android-tv/src/debug/java/sagex/miniclient/android/tv/debug/PlaybackEventTraps.java").read_text(encoding="utf-8")
-        media_cmd = (ROOT / "source/dev/core/src/main/java/sagex/miniclient/MediaCmd.java").read_text(encoding="utf-8")
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        state = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java").read_text(encoding="utf-8")
+        trap = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/PlaybackEventTraps.java").read_text(encoding="utf-8")
+        media_cmd = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
         self.assertIn("'dev_clear_player_events'", script)
         self.assertIn("'dev_player_events'", script)
@@ -313,7 +326,7 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertIn('"events_clear".equals(op)', receiver)
         self.assertIn('videoRendered', trap)
         self.assertIn('audioHeadFrames', trap)
-        self.assertIn('serverRequestedSeekMs', receiver)
+        self.assertIn('serverRequestedSeekMs', state)
         self.assertIn('PlaybackDebugEventBridge.recordAsync("server_seek_command"', media_cmd)
         self.assertIn('def dev_player_events()', server)
 

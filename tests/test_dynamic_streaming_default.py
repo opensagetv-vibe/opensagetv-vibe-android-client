@@ -8,7 +8,7 @@ DEV = ROOT / "source/dev"
 
 class DynamicStreamingDefaultTests(unittest.TestCase):
     def test_android_pref_store_defaults_to_dynamic(self):
-        text = (DEV / "android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java").read_text(encoding="utf-8")
+        text = (DEV / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/prefs/AndroidPrefStore.java").read_text(encoding="utf-8")
         self.assertIn('STREAMING_MODE_DEFAULT = "dynamic";', text)
         self.assertNotIn('STREAMING_MODE_DEFAULT = "fixed";', text)
 

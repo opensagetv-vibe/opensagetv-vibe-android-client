@@ -235,7 +235,14 @@ def main() -> int:
     parser.add_argument("--rew-ms", type=int, default=0, help="Override primary REW magnitude for optional semantic timeline tests")
     parser.add_argument("--large-command", default="", help="Optional SageCommand key for the user's comskip/large-skip action")
     parser.add_argument("--large-expected-ms", type=int, default=None, help="Optional expected large-skip timeline distance; output health remains authoritative")
+    parser.add_argument("--rapid-only", action="store_true", help="Skip single FF/REW and pause/resume checks; run only the rapid output-health stress")
+    parser.add_argument("--rapid-repeats", type=int, default=1, help="Repeat the rapid output-health stress this many times")
+    parser.add_argument("--rapid-reset-ms", type=int, default=None, help="Before each rapid repeat, use the debug seek control to recover at this absolute fixture time")
     args = parser.parse_args()
+    if args.rapid_repeats < 1:
+        parser.error("--rapid-repeats must be >= 1")
+    if args.rapid_reset_ms is not None and args.rapid_reset_ms < 0:
+        parser.error("--rapid-reset-ms must be >= 0")
 
     client = MCPProcess()
     failures = 0
@@ -317,7 +324,7 @@ def main() -> int:
             rapid_label = "rapid mixed FF/REW output-health stress"
 
         basic_health_failed = False
-        for label, commands, expected in normal_checks:
+        for label, commands, expected in ([] if args.rapid_only else normal_checks):
             print(f"Plan: {label}: commands={commands} timelineExpected={expected if timeline_calibration else 'INFO only'}")
             result = call_dict(
                 client,
@@ -347,48 +354,85 @@ def main() -> int:
             print(f"MCP PLAYBACK HEALTH SUITE: FAIL ({failures} checks)", file=sys.stderr)
             return 1
 
-        print(
-            f"Rapid output-health stress: commands={len(rapid_commands)} "
-            + (f"timelineExpected={rapid_expected:+d} ms" if timeline_calibration else "timelineExpected=INFO only")
-        )
-        rapid_result = call_dict(
-            client,
-            "dev_run_seek_check",
-            {
-                "commands": rapid_commands,
-                "expected_net_ms": rapid_expected,
-                "tolerance_ms": args.tolerance_ms if timeline_calibration else 2_000_000_000,
-                "delay_ms": args.delay_ms,
-                "settle_ms": args.settle_ms,
-                "recovery_timeout_ms": args.recovery_timeout_ms,
-                "verify_playback_ms": args.verify_playback_ms,
-                "health_poll_ms": args.health_poll_ms,
-            },
-            timeout=90.0,
-        )
-        if not print_result(rapid_label, rapid_result):
-            failures += 1
-            checkpoint(client, "mcp_rapid_output_health")
+        rapid_recoveries: list[int] = []
+        for repeat_index in range(1, args.rapid_repeats + 1):
+            if args.rapid_reset_ms is not None:
+                reset = call_dict(
+                    client,
+                    "dev_seek_time",
+                    {
+                        "target_ms": args.rapid_reset_ms,
+                        "tolerance_ms": args.tolerance_ms,
+                        "timeout_s": max(15.0, args.recovery_timeout_ms / 1000.0),
+                        "stable_ms": max(1200, args.verify_playback_ms),
+                    },
+                    timeout=max(30.0, args.recovery_timeout_ms / 1000.0 + 20.0),
+                )
+                if not reset.get("passed"):
+                    failures += 1
+                    print(f"FAIL: rapid repeat {repeat_index} reset to {args.rapid_reset_ms} ms did not recover")
+                    checkpoint(client, f"mcp_rapid_reset_{repeat_index}_fail")
+                    break
+                print(
+                    f"PASS: rapid repeat {repeat_index} reset: target={args.rapid_reset_ms} ms "
+                    f"reached={reset.get('reached_ms')} ms recovery={reset.get('recoveryMs')} ms"
+                )
+
+            print(
+                f"Rapid output-health stress repeat {repeat_index}/{args.rapid_repeats}: commands={len(rapid_commands)} "
+                + (f"timelineExpected={rapid_expected:+d} ms" if timeline_calibration else "timelineExpected=INFO only")
+            )
+            rapid_result = call_dict(
+                client,
+                "dev_run_seek_check",
+                {
+                    "commands": rapid_commands,
+                    "expected_net_ms": rapid_expected,
+                    "tolerance_ms": args.tolerance_ms if timeline_calibration else 2_000_000_000,
+                    "delay_ms": args.delay_ms,
+                    "settle_ms": args.settle_ms,
+                    "recovery_timeout_ms": args.recovery_timeout_ms,
+                    "verify_playback_ms": args.verify_playback_ms,
+                    "health_poll_ms": args.health_poll_ms,
+                },
+                timeout=90.0,
+            )
+            repeat_label = rapid_label if args.rapid_repeats == 1 else f"{rapid_label} repeat {repeat_index}"
+            if print_result(repeat_label, rapid_result):
+                rapid_recoveries.append(int(rapid_result.get("recoveryMs", -1)))
+            else:
+                failures += 1
+                checkpoint(client, f"mcp_rapid_output_health_repeat_{repeat_index}")
+                break
+
+        if rapid_recoveries:
+            print(
+                "Rapid stress recovery summary: "
+                f"passes={len(rapid_recoveries)}/{args.rapid_repeats} "
+                f"min={min(rapid_recoveries)} ms median={int(median(rapid_recoveries))} ms "
+                f"max={max(rapid_recoveries)} ms"
+            )
 
         # Keep the simple transport state check for pause/resume. The skip checks above are the
         # authoritative video/audio output checks; pause intentionally stops output.
-        call_dict(client, "dev_sage_command", {"command": "pause"})
-        time.sleep(0.75)
-        paused = call_dict(client, "dev_player_state")
-        pause_ok = int(paused.get("state", -1)) == 3
-        print(("PASS" if pause_ok else "FAIL") + f": pause state={paused.get('state')}")
-        if not pause_ok:
-            failures += 1
-            checkpoint(client, "mcp_pause_fail")
+        if not args.rapid_only:
+            call_dict(client, "dev_sage_command", {"command": "pause"})
+            time.sleep(0.75)
+            paused = call_dict(client, "dev_player_state")
+            pause_ok = int(paused.get("state", -1)) == 3
+            print(("PASS" if pause_ok else "FAIL") + f": pause state={paused.get('state')}")
+            if not pause_ok:
+                failures += 1
+                checkpoint(client, "mcp_pause_fail")
 
-        call_dict(client, "dev_sage_command", {"command": "play"})
-        time.sleep(0.75)
-        resumed = call_dict(client, "dev_player_state")
-        play_ok = int(resumed.get("state", -1)) == 2
-        print(("PASS" if play_ok else "FAIL") + f": resume state={resumed.get('state')}")
-        if not play_ok:
-            failures += 1
-            checkpoint(client, "mcp_resume_fail")
+            call_dict(client, "dev_sage_command", {"command": "play"})
+            time.sleep(0.75)
+            resumed = call_dict(client, "dev_player_state")
+            play_ok = int(resumed.get("state", -1)) == 2
+            print(("PASS" if play_ok else "FAIL") + f": resume state={resumed.get('state')}")
+            if not play_ok:
+                failures += 1
+                checkpoint(client, "mcp_resume_fail")
 
         if args.large_command:
             large_expected = args.large_expected_ms if args.large_expected_ms is not None else 0

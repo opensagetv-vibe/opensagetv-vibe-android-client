@@ -8,6 +8,7 @@ import json
 import sys
 import time
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Any
 
@@ -341,7 +342,7 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
     if requested:
         path = Path(requested)
     else:
-        root = Path("/workspace/artifacts/firetv")
+        root = Path(os.environ.get("SAGETV_ARTIFACT_DIR", Path(__file__).resolve().parents[1] / "artifacts" / "firetv"))
         root.mkdir(parents=True, exist_ok=True)
         path = root / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_player_tuning_matrix.json")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -351,9 +352,10 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Sweep runtime Media3/legacy Exo2 tuning combinations through MCP")
-    p.add_argument("--server", default="192.168.10.175")
+    p.add_argument("--server", default="192.168.10.232")
     p.add_argument("--port", type=int, default=31099)
-    p.add_argument("--text", required=True)
+    p.add_argument("--text", default="", help="SageTV Search text when --server-path is not supplied")
+    p.add_argument("--server-path", default="", help="Exact SageTV server-side MediaFile path for deterministic fixture runs")
     p.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     p.add_argument("--streaming", default="pull", help="Comma list: pull,push (either order accepted)")
     p.add_argument("--decoding", choices=("hardware", "software", "fallback"), default="hardware")
@@ -391,6 +393,8 @@ def main() -> int:
     p.add_argument("--leave-running", action="store_true")
     add_fixed_encoding_args(p)
     args = p.parse_args()
+    if not args.text.strip() and not args.server_path.strip():
+        p.error("one of --text or --server-path is required")
 
     try:
         fixed = fixed_config_from_args(args)
@@ -447,7 +451,7 @@ def main() -> int:
                             fast_start_fallback_count += 1
                             print(f"WARN: fast replay failed; falling back to full isolated startup: {fast_exc}", file=sys.stderr)
                             startup = start_case(
-                                client, case, server=args.server, port=args.port, text=args.text,
+                                client, case, server=args.server, port=args.port, text=args.text, server_path=args.server_path,
                                 text_char_delay_ms=args.text_char_delay_ms, connect_timeout_s=args.connect_timeout_s,
                                 ui_stable_ms=args.ui_stable_ms, playback_timeout_s=args.playback_timeout_s,
                                 verify_ms=args.startup_verify_ms, fixed_config=fixed, tuning_config=tuning_config,
@@ -455,7 +459,7 @@ def main() -> int:
                             startup_path = "isolated_fallback"
                     else:
                         startup = start_case(
-                            client, case, server=args.server, port=args.port, text=args.text,
+                            client, case, server=args.server, port=args.port, text=args.text, server_path=args.server_path,
                             text_char_delay_ms=args.text_char_delay_ms, connect_timeout_s=args.connect_timeout_s,
                             ui_stable_ms=args.ui_stable_ms, playback_timeout_s=args.playback_timeout_s,
                             verify_ms=args.startup_verify_ms, fixed_config=fixed, tuning_config=tuning_config,
@@ -464,7 +468,7 @@ def main() -> int:
                     state = startup["state"]
                     startup_ms = int((time.monotonic() - startup_started) * 1000.0)
                     print(f"STARTUP {label}: {startup_path} {startup_ms} ms")
-                    if args.startup_mode == "fast" and cached_media_file_id is None:
+                    if args.startup_mode == "fast" and cached_media_file_id is None and not args.server_path:
                         current_media = call_dict(client, "dev_current_media_file", {}, timeout=30.0)
                         raw_media_id = current_media.get("mediaFileId")
                         if current_media.get("ok") and raw_media_id is not None:
@@ -472,6 +476,8 @@ def main() -> int:
                             print(f"PASS: cached MediaFile ID {cached_media_file_id} for fast tuning replays")
                         else:
                             print(f"WARN: could not cache current MediaFile ID; remaining combinations will use isolated startup: {current_media}", file=sys.stderr)
+                    elif args.startup_mode == "fast" and args.server_path:
+                        print("PASS: exact server path will be replayed with an isolated player for each tuning case")
                     if int(state.get("debugStatusVersion", 0) or 0) < 13:
                         raise RuntimeError(f"debugStatusVersion={state.get('debugStatusVersion')} need >=13 / v0.5.70")
                     obs = run_check(client, args, f"tuning/{streaming}/{base_label}/{args.check}")
@@ -503,7 +509,8 @@ def main() -> int:
         } for i, x in enumerate(ranked)]
         report = {
             "schema": 1, "suite": "player_runtime_tuning_matrix", "server": args.server, "port": args.port,
-            "searchText": args.text, "player": args.player, "streaming": args.streaming,
+            "searchText": args.text, "serverPath": args.server_path,
+            "player": args.player, "streaming": args.streaming,
             "streamingModes": modes, "decoding": args.decoding, "check": args.check,
             "combinationCount": total_combinations,
             "combinationCountByStreaming": {mode: len(grids[mode]) for mode in modes},

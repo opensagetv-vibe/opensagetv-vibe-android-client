@@ -39,7 +39,7 @@ def main() -> int:
     # Do not hard-reset user work. Checkout only succeeds cleanly when safe.
     run(["git", "checkout", args.ref], cwd=dest)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=dest, text=True).strip()
-    (dest / "UPSTREAM_BASELINE.txt").write_text(
+    (dest / "UPSTREAM_BASELINE.properties").write_text(
         f"repository={args.repo}\nref={args.ref}\ncommit={head}\n", encoding="utf-8"
     )
 

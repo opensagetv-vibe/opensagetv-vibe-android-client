@@ -26,7 +26,7 @@ mkdir -p \
 
 require_project_mount() {
   local missing=0 marker
-  for marker in dev.sh scripts/run_unit_tests.sh mcp/pyproject.toml docker-compose.yml; do
+  for marker in dev.sh update.sh scripts/run_unit_tests.sh mcp/pyproject.toml release.properties; do
     if [[ ! -f "$WORKSPACE/$marker" ]]; then
       echo "ERROR: workspace bind is missing $marker" >&2
       missing=1
@@ -34,15 +34,13 @@ require_project_mount() {
   done
   if [[ "$missing" -ne 0 ]]; then
     cat >&2 <<EOF
-ERROR: /workspace is not the OpenSageTV Vibe Android Client repository root.
-The Docker bind source is pointing at the wrong host directory.
+ERROR: the unified Android workspace is not the OpenSageTV Vibe Android Client repository root.
+The opensagetv-vibe-build-env mount is pointing at the wrong sibling directory.
 
 Current container workspace: $WORKSPACE
-Expected project markers: dev.sh, scripts/, mcp/, docker-compose.yml
+Expected project markers: dev.sh, update.sh, scripts/, mcp/, release.properties
 
-Normally no path configuration is required; the directory containing dev.sh is mounted automatically.
-To override it explicitly from WSL:
-  OPENSAGETV_VIBE_ANDROID_ROOT=/mnt/c/path/to/opensagetv-vibe-android-client ./dev.sh <command>
+Place opensagetv-vibe-android-client beside opensagetv-vibe-build-env and rerun the root workflow.
 EOF
     exit 2
   fi
@@ -65,8 +63,8 @@ usage() {
   cat <<'USAGE'
 OpenSageTV Vibe Android Client development environment
 
-All Android/ADB/Python/MCP/Gradle work runs in this image.
-Workspace bind: current repository by default (OPENSAGETV_VIBE_ANDROID_ROOT can override)
+All Android/ADB/Python/MCP/Gradle work runs in opensagetv-vibe-build-env.
+Workspace bind: /workspace/android-client from the sibling repository layout
 
 Commands:
   import-source ZIP [--replace]
@@ -75,13 +73,16 @@ Commands:
   bootstrap-existing     Clone pinned untouched GitHub baseline
   bootstrap-both         Clone pinned baseline into both trees; refactor Dev tree
   validate               Validate isolated app identity/Firebase removal
-  build                  Build isolated Dev debug APK + SHA-256
+  build                  Build the Vibe client debug APK
+  bundle                 Build/validate debug and release-candidate AABs plus debug APK set
+  bundle-install         Install the package-verified debug AAB APK set on the configured device
   build-existing         Build untouched baseline APK + SHA-256 (never installs)
   test                   Run scaffold unit/static tests
   preflight              Verify toolchain/workspace/config/Fire TV connectivity
   connect                Connect configured Fire TV through container ADB
   install [apk]          Safely verify and install Dev APK only
-  launch|stop|uninstall  Control isolated Dev app only
+  launch                 Launch the Vibe client APK
+  stop|uninstall         Control isolated Dev app only
   device-info            Print Fire TV identity/build information
   logcat [args...]       Read Fire TV logcat
   adb [args...]          Raw ADB diagnostic escape hatch
@@ -109,6 +110,7 @@ build_dev_apk() {
   cp -f "$APK" "$OUT"
   sha256sum "$OUT" | tee "$OUT.sha256"
   echo "Built isolated Dev APK: $OUT"
+
 }
 
 build_existing_apk() {
@@ -128,10 +130,82 @@ build_existing_apk() {
   OUT="$ARTIFACTS/existing/OpenSageTV-Vibe-Android-Client-v0.5.75-baseline-debug.apk"
   cp -f "$APK" "$OUT"
   sha256sum "$OUT" | tee "$OUT.sha256"
-  [[ -f "$EXISTING_SRC/UPSTREAM_BASELINE.txt" ]] && cp -f "$EXISTING_SRC/UPSTREAM_BASELINE.txt" "$ARTIFACTS/existing/UPSTREAM_BASELINE.txt"
+  [[ -f "$EXISTING_SRC/UPSTREAM_BASELINE.properties" ]] && cp -f "$EXISTING_SRC/UPSTREAM_BASELINE.properties" "$ARTIFACTS/existing/UPSTREAM_BASELINE.properties"
   [[ -f "$WORKSPACE/source/SOURCE_IMPORT.json" ]] && cp -f "$WORKSPACE/source/SOURCE_IMPORT.json" "$ARTIFACTS/existing/SOURCE_IMPORT.json"
   echo "Built UNMODIFIED baseline APK: $OUT"
   echo "This command DOES NOT install or replace the working MiniClient on the Fire TV."
+}
+
+build_dev_bundles() {
+  require_dev_source
+  "$PROJECT/scripts/ensure_debug_keystore.sh"
+  python3 "$PROJECT/scripts/validate_project.py"
+  : "${BUNDLETOOL_JAR:?The unified image does not provide BUNDLETOOL_JAR}"
+  [[ -s "$BUNDLETOOL_JAR" ]] || { echo "ERROR: bundletool is missing: $BUNDLETOOL_JAR" >&2; exit 3; }
+  mkdir -p "$ARTIFACTS/firetv" "$ARTIFACTS/reports"
+  chmod +x "$DEV_SRC/gradlew"
+  cd "$DEV_SRC"
+  ./gradlew --no-daemon \
+    :android-tv:bundleDebug \
+    :android-tv:bundleRelease \
+    -Pkeystore="$ANDROID_USER_HOME/debug.keystore" \
+    -PstorePass=android \
+    -Palias=client \
+    -PkeyPass=android
+
+  local debug_source release_source debug_out release_out apks_out
+  debug_source="$(find android-tv/build/outputs/bundle/debug -type f -name '*.aab' | head -n 1)"
+  release_source="$(find android-tv/build/outputs/bundle/release -type f -name '*.aab' | head -n 1)"
+  [[ -n "$debug_source" && -n "$release_source" ]] || {
+    echo "ERROR: Gradle completed but both Android App Bundles were not found" >&2
+    exit 3
+  }
+
+  debug_out="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-debug.aab"
+  release_out="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-release-candidate.aab"
+  apks_out="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-debug.apks"
+  cp -f "$debug_source" "$debug_out"
+  cp -f "$release_source" "$release_out"
+
+  /opt/java/jdk17/bin/java -jar "$BUNDLETOOL_JAR" validate --bundle="$debug_out" \
+    > "$ARTIFACTS/reports/bundletool-debug-validate.txt"
+  /opt/java/jdk17/bin/java -jar "$BUNDLETOOL_JAR" validate --bundle="$release_out" \
+    > "$ARTIFACTS/reports/bundletool-release-candidate-validate.txt"
+  /opt/java/jdk17/bin/java -jar "$BUNDLETOOL_JAR" build-apks \
+    --bundle="$debug_out" \
+    --output="$apks_out" \
+    --mode=universal \
+    --ks="$ANDROID_USER_HOME/debug.keystore" \
+    --ks-pass=pass:android \
+    --ks-key-alias=client \
+    --key-pass=pass:android \
+    --overwrite
+
+  sha256sum "$debug_out" | tee "$debug_out.sha256"
+  sha256sum "$release_out" | tee "$release_out.sha256"
+  sha256sum "$apks_out" | tee "$apks_out.sha256"
+  echo "PASS: bundletool validated both AABs and generated the debug universal APK set"
+  echo "NOTICE: $release_out uses the development identity/signer and is not publishable"
+}
+
+install_dev_bundle() {
+  local debug_out="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-debug.aab"
+  local apks_out="$ARTIFACTS/firetv/OpenSageTV-Vibe-Android-Client-debug.apks"
+  : "${BUNDLETOOL_JAR:?The unified image does not provide BUNDLETOOL_JAR}"
+  [[ -s "$debug_out" && -s "$apks_out" ]] || {
+    echo "ERROR: debug AAB/APK set is absent; run bundle first" >&2
+    exit 3
+  }
+  local package_name
+  package_name="$(/opt/java/jdk17/bin/java -jar "$BUNDLETOOL_JAR" dump manifest \
+    --bundle="$debug_out" --xpath=/manifest/@package)"
+  [[ "$package_name" = opensagetv.vibe.miniclient.debug ]] || {
+    echo "ERROR: refusing bundle install for unexpected package: $package_name" >&2
+    exit 4
+  }
+  python3 -m sagetv_dev_mcp.cli connect
+  /opt/java/jdk17/bin/java -jar "$BUNDLETOOL_JAR" install-apks --apks="$apks_out"
+  echo "PASS: installed package-verified debug AAB APK set: $package_name"
 }
 
 case "${1:-shell}" in
@@ -159,6 +233,12 @@ case "${1:-shell}" in
     ;;
   build)
     build_dev_apk
+    ;;
+  bundle)
+    build_dev_bundles
+    ;;
+  bundle-install)
+    install_dev_bundle
     ;;
   build-existing)
     build_existing_apk

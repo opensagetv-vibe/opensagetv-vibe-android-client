@@ -213,7 +213,7 @@ def write_report(report: dict[str, Any], requested_path: str) -> Path:
     if requested_path:
         path = Path(requested_path).expanduser()
     else:
-        artifact_dir = Path(os.environ.get("SAGETV_ARTIFACT_DIR", "/workspace/artifacts/firetv"))
+        artifact_dir = Path(os.environ.get("SAGETV_ARTIFACT_DIR", Path(__file__).resolve().parents[1] / "artifacts" / "firetv"))
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = artifact_dir / f"{stamp}_media3_comskip_matrix.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -223,7 +223,7 @@ def write_report(report: dict[str, Any], requested_path: str) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run fresh-session Media3 Push vs Pull debug-direct Comskip matrix")
-    parser.add_argument("--server", default="192.168.10.175")
+    parser.add_argument("--server", default="192.168.10.232")
     parser.add_argument("--port", type=int, default=31099)
     parser.add_argument("--modes", default="push,pull", help="Comma-separated: push,pull (legacy dynamic alias accepted)")
     parser.add_argument("--directions", default="right,left", help="Comma-separated: right,left")

@@ -6,13 +6,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ClientIdCliTests(unittest.TestCase):
     def test_debug_receiver_exposes_client_id_get_set_and_dynamic_snapshot(self):
-        receiver = (ROOT / "source/dev/android-tv/src/debug/java/sagex/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        client_commands = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugClientIdCommands.java").read_text(encoding="utf-8")
+        state_provider = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java").read_text(encoding="utf-8")
         self.assertIn('"client_id_get".equals(op)', receiver)
         self.assertIn('"client_id_set".equals(op)', receiver)
-        self.assertIn('prefs.setString(PrefStore.Keys.client_id, id);', receiver)
-        self.assertIn('client.getCurrentConnection().getClientID()', receiver)
-        self.assertIn('out.append(";configuredClientId=")', receiver)
-        self.assertIn('out.append(";debugStatusVersion=14")', receiver)
+        self.assertIn('DebugClientIdCommands.status(context)', receiver)
+        self.assertIn('DebugClientIdCommands.configure(context, intent)', receiver)
+        self.assertIn('prefs.setString(PrefStore.Keys.client_id, id);', client_commands)
+        self.assertIn('client.getCurrentConnection().getClientID()', client_commands)
+        self.assertIn('out.append(";configuredClientId=")', state_provider)
+        self.assertIn('out.append(";debugStatusVersion=21")', state_provider)
+        self.assertIn('DebugStateProvider.snapshot(context, MAX_RECOVERY_WATCHDOG_MS)', receiver)
         self.assertNotIn('DEV_FIXED_CLIENT_ID', receiver)
 
     def test_mcp_and_cli_expose_client_id_override(self):
@@ -47,12 +52,22 @@ class ClientIdCliTests(unittest.TestCase):
         ):
             self.assertIn(f'run_automated_mcp_test {script} "$@"', dev)
 
+    def test_scripted_launch_defaults_to_deterministic_id(self):
+        dev = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        combined = (ROOT / "update.sh").read_text(encoding="utf-8")
+        self.assertIn('run_scripted_launch()', dev)
+        self.assertIn('run_scripted_launch "$@"', dev)
+        self.assertIn('SCRIPTED LAUNCH CLIENT ID', dev)
+        self.assertRegex(dev, r'mcp_client_id\.py"? --ensure "\$client_id" --quiet')
+        self.assertIn('SCRIPTED_CLIENT_ID="44:45:56:30:30:31"', combined)
+        self.assertIn('./dev.sh launch --client-id "$SCRIPTED_CLIENT_ID"', combined)
+
     def test_docs_require_first_time_setup_before_automation(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        task = (ROOT / "TASK_CODEX.md").read_text(encoding="utf-8")
+        diagnostics = (ROOT / "docs" / "PLAYBACK_DIAGNOSTICS.md").read_text(encoding="utf-8")
         self.assertIn('first-time setup', readme.lower())
         self.assertIn('before any automated MCP/player test', readme)
-        self.assertIn('FIRST-TIME SETUP', task)
+        self.assertIn('Complete first-time setup manually', diagnostics)
 
 
 if __name__ == "__main__":

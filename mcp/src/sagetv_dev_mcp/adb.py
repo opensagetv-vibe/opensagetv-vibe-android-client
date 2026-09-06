@@ -13,10 +13,8 @@ from typing import Any, Iterable
 
 TELEMETRY_TAG = "SageTVDevTelemetry"
 TELEMETRY_FILE = "sagetv_dev_player_telemetry.log"
-DEV_CONTROL_ACTION = "org.opensagetv.miniclient.dev.DEBUG_CONTROL"
-DEV_CONTROL_COMPONENT = "sagex.miniclient.android.tv.debug.DevTestReceiver"
-
-
+DEV_CONTROL_ACTION = "opensagetv.vibe.miniclient.DEBUG_CONTROL"
+DEV_CONTROL_COMPONENT = "opensagetv.vibe.miniclient.android.tv.debug.DevTestReceiver"
 def normalize_streaming_config(value: str) -> str:
     """Map user-facing streaming selection to the stable Android preference value."""
     key = str(value or "").strip().lower()
@@ -27,6 +25,11 @@ def normalize_streaming_config(value: str) -> str:
         "push/dynamic": "dynamic",
         "pull": "pull",
         "fixed": "fixed",
+        "smb": "smb_direct",
+        "smb_direct": "smb_direct",
+        "smb direct": "smb_direct",
+        "smb_auto": "smb_auto",
+        "smb auto": "smb_auto",
     }
     if key not in aliases:
         raise ValueError(f"unsupported streaming selection: {value}")
@@ -291,20 +294,24 @@ class AdbClient:
         return self.shell(f"am force-stop {self.dev_package}")
 
     def _resolve_launcher_component(self) -> str:
-        """Resolve the package MAIN/LAUNCHER Activity without starting it."""
+        """Resolve the TV launcher first, then the ordinary phone launcher."""
         package = shlex.quote(self.dev_package)
-        output = self.shell(
-            "cmd package resolve-activity --brief "
-            "-a android.intent.action.MAIN "
-            "-c android.intent.category.LAUNCHER "
-            + package,
-            timeout=15,
-            check=False,
-        ).strip()
-        for line in reversed(output.splitlines()):
-            candidate = line.strip()
-            if "/" in candidate and not candidate.lower().startswith("no activity"):
-                return candidate
+        for category in (
+            "android.intent.category.LEANBACK_LAUNCHER",
+            "android.intent.category.LAUNCHER",
+        ):
+            output = self.shell(
+                "cmd package resolve-activity --brief "
+                "-a android.intent.action.MAIN "
+                f"-c {category} "
+                + package,
+                timeout=15,
+                check=False,
+            ).strip()
+            for line in reversed(output.splitlines()):
+                candidate = line.strip()
+                if "/" in candidate and not candidate.lower().startswith("no activity"):
+                    return candidate
         return ""
 
     def launch(self) -> str:
@@ -374,8 +381,20 @@ class AdbClient:
                 if self.dev_package in resumed:
                     break
         foreground = bool(resumed and self.dev_package in resumed)
-        running = bool(pids) or foreground
-        running_source = pid_source if pids else ("resumedActivity" if foreground else "none")
+        package_text = self.shell(
+            f"dumpsys package {shlex.quote(self.dev_package)}", timeout=45, check=False
+        )
+        force_stopped = any("stopped=true" in line for line in package_text.splitlines())
+        # An explicit debug broadcast can start the Dev receiver/process while
+        # Fire OS leaves PackageUserState.stopped set from an earlier force-stop.
+        # A real PID is therefore authoritative running evidence. Callers that
+        # force-stop must wait for the PID to disappear instead of guessing from
+        # the package bit.
+        running = foreground or bool(pids)
+        running_source = (
+            "resumedActivity" if foreground else
+            (pid_source if running else ("packageStopped" if force_stopped else "none"))
+        )
         return {
             "package": self.dev_package,
             "running": running,
@@ -383,6 +402,7 @@ class AdbClient:
             "pids": pids,
             "foreground": foreground,
             "resumedActivity": resumed,
+            "forceStopped": force_stopped,
         }
 
     def wake(self) -> dict[str, Any]:
@@ -441,6 +461,7 @@ class AdbClient:
         self._ensure_dev_package(self.dev_package)
         graceful_timeout_s = max(0.25, min(float(graceful_timeout_s), 10.0))
         result: dict[str, Any] = {"initial": self.app_status(), "forceStopUsed": False}
+        final_status: dict[str, Any] | None = None
         if result["initial"]["running"]:
             result["gracefulExit"] = self.request_graceful_exit()
             deadline = time.monotonic() + graceful_timeout_s
@@ -452,9 +473,22 @@ class AdbClient:
             if status["running"]:
                 result["forceStopUsed"] = True
                 result["forceStop"] = self.force_stop()
-                time.sleep(0.25)
-        result["stopped"] = self.app_status()
-        if result["stopped"]["running"]:
+                deadline = time.monotonic() + 15.0
+                status = self.app_status()
+                while status["running"] and time.monotonic() < deadline:
+                    time.sleep(0.25)
+                    status = self.app_status()
+                final_status = status
+        result["stopped"] = final_status if final_status is not None else self.app_status()
+        force_stop_committed = bool(
+            result["forceStopUsed"]
+            and result["stopped"].get("forceStopped")
+            and not result["stopped"].get("foreground")
+        )
+        result["terminationPending"] = bool(
+            force_stop_committed and result["stopped"].get("running")
+        )
+        if result["stopped"]["running"] and not force_stop_committed:
             raise RuntimeError(f"Dev app is still running after force-stop: {result['stopped']}")
         if wake:
             result["wake"] = self.wake()
@@ -589,11 +623,39 @@ class AdbClient:
     def player_state_snapshot(self) -> dict[str, Any]:
         return self.dev_control("snapshot")
 
+    def codec_capabilities(self) -> dict[str, Any]:
+        """Collect the debug APK's on-device MediaCodec profile on demand."""
+        return self.dev_control("codec_capabilities")
+
+    def smb_profile(self, operation: str, *, name: str = "", overwrite: bool = False) -> dict[str, Any]:
+        normalized = str(operation).strip().lower()
+        if normalized not in {"list", "save", "load", "delete"}:
+            raise ValueError("profile operation must be list/save/load/delete")
+        if normalized != "list" and not str(name).strip():
+            raise ValueError("profile name is required")
+        return self.dev_control(
+            "profile_" + normalized,
+            foreground=False,
+            timeout_s=45.0,
+            name=str(name).strip(),
+            overwrite="true" if overwrite else "false",
+        )
+
+    def open_smb_profile_settings(self) -> dict[str, Any]:
+        return self.dev_control("profile_ui", foreground=False)
+
     def player_event_traps(self) -> dict[str, Any]:
         return self.dev_control("events")
 
     def clear_player_event_traps(self) -> dict[str, Any]:
         return self.dev_control("events_clear")
+
+    def set_datasource_capture(self, enabled: bool) -> dict[str, Any]:
+        """Enable the bounded raw Push-byte capture for the next playback."""
+        return self.dev_control(
+            "capture_datasource",
+            enabled="true" if enabled else "false",
+        )
 
     def set_player_config(
         self,
@@ -602,6 +664,11 @@ class AdbClient:
         streaming: str = "",
         decoding: str = "",
         gsy_engine: str = "",
+        gsy_system_probe: bool | None = None,
+        preferred_audio_language: str = "",
+        preferred_subtitle_language: str = "",
+        preferred_caption_standard: str = "",
+        preferred_caption_service: int | str = "",
         fixed_encoding_preference: str = "",
         fixed_encoding_format: str = "",
         fixed_video_bitrate_kbps: int | str = "",
@@ -614,6 +681,24 @@ class AdbClient:
         fixed_audio_channels: str = "",
         fixed_remuxing_preference: str = "",
         fixed_remuxing_format: str = "",
+        smb_mappings: str = "",
+        smb_username: str = "",
+        smb_password: str = "",
+        smb_domain: str = "",
+        smb_clear_auth: bool = False,
+        smb_profile_directory: str = "",
+        smb_profile_username: str = "",
+        smb_profile_password: str = "",
+        smb_profile_domain: str = "",
+        smb_profile_clear_auth: bool = False,
+        keep_session_in_background: bool | None = None,
+        resume_background_playback: bool | None = None,
+        background_session_timeout_seconds: int | str | None = "",
+        disc_playback_policy: str = "",
+        disc_skip_menus: bool | None = None,
+        disc_skip_previews: bool | None = None,
+        disc_compatibility_fallback: bool | None = None,
+        disc_mpeg2_timestamp_repair: str = "",
     ) -> dict[str, Any]:
         requested_streaming = str(streaming or "").strip().lower()
         requested_decoding = str(decoding or "").strip().lower()
@@ -624,6 +709,13 @@ class AdbClient:
             "streaming": applied_streaming,
             "decoding": applied_decoding,
             "gsy_engine": gsy_engine,
+            "gsy_system_probe": (
+                "true" if gsy_system_probe else "false"
+            ) if isinstance(gsy_system_probe, bool) else "",
+            "preferred_audio_language": preferred_audio_language,
+            "preferred_subtitle_language": preferred_subtitle_language,
+            "preferred_caption_standard": preferred_caption_standard,
+            "preferred_caption_service": preferred_caption_service,
             "fixed_encoding_preference": fixed_encoding_preference,
             "fixed_encoding_format": fixed_encoding_format,
             "fixed_video_bitrate_kbps": fixed_video_bitrate_kbps,
@@ -636,6 +728,37 @@ class AdbClient:
             "fixed_audio_channels": fixed_audio_channels,
             "fixed_remuxing_preference": fixed_remuxing_preference,
             "fixed_remuxing_format": fixed_remuxing_format,
+            "smb_mappings": smb_mappings,
+            "smb_username": smb_username,
+            "smb_password": smb_password,
+            "smb_domain": smb_domain,
+            "smb_clear_auth": "true" if smb_clear_auth else "",
+            "smb_profile_directory": smb_profile_directory,
+            "smb_profile_username": smb_profile_username,
+            "smb_profile_password": smb_profile_password,
+            "smb_profile_domain": smb_profile_domain,
+            "smb_profile_clear_auth": "true" if smb_profile_clear_auth else "",
+            "keep_session_in_background": (
+                "true" if keep_session_in_background else "false"
+            ) if isinstance(keep_session_in_background, bool) else "",
+            "resume_background_playback": (
+                "true" if resume_background_playback else "false"
+            ) if isinstance(resume_background_playback, bool) else "",
+            "background_session_timeout_seconds": (
+                max(0, min(int(background_session_timeout_seconds), 86400))
+                if background_session_timeout_seconds not in (None, "") else ""
+            ),
+            "disc_playback_policy": disc_playback_policy,
+            "disc_skip_menus": (
+                "true" if disc_skip_menus else "false"
+            ) if isinstance(disc_skip_menus, bool) else "",
+            "disc_skip_previews": (
+                "true" if disc_skip_previews else "false"
+            ) if isinstance(disc_skip_previews, bool) else "",
+            "disc_compatibility_fallback": (
+                "true" if disc_compatibility_fallback else "false"
+            ) if isinstance(disc_compatibility_fallback, bool) else "",
+            "disc_mpeg2_timestamp_repair": disc_mpeg2_timestamp_repair,
         }
         result = self.dev_control("config", **extras)
         if requested_streaming:
@@ -720,14 +843,42 @@ class AdbClient:
         address: str = "",
         port: int = 31099,
         save: bool = True,
+        renderer: str = "",
     ) -> dict[str, Any]:
-        return self.dev_control(
+        # Android 10+ blocks an Activity launch requested by a background
+        # BroadcastReceiver.  The API 30 Fire TV therefore needs the Dev app
+        # brought to the foreground before the receiver starts the selected
+        # renderer.  Older Fire OS allowed this and hid the automation bug.
+        status = self.app_status()
+        foreground_launch = False
+        launch_result = ""
+        if not status.get("foreground"):
+            launch_result = self.launch()
+            foreground_launch = True
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                status = self.app_status()
+                if status.get("foreground"):
+                    break
+                time.sleep(0.25)
+            if not status.get("foreground"):
+                raise RuntimeError(
+                    "Dev app did not become foreground before server connection; "
+                    "Android would block the renderer Activity launch"
+                )
+
+        result = self.dev_control(
             "connect",
             server_name=server_name,
             address=address,
             port=max(1, min(int(port), 65535)),
             save="true" if save else "false",
+            renderer=renderer,
         )
+        result["automationForegroundLaunched"] = foreground_launch
+        if launch_result:
+            result["automationForegroundLaunchResult"] = launch_result.strip()
+        return result
 
     def exit_session(self) -> dict[str, Any]:
         return self.dev_control("exit")
@@ -788,8 +939,41 @@ class AdbClient:
             raise ValueError("action must be play, pause, or stop")
         return self.dev_control("player_control", action=value)
 
+    def request_competing_audio_focus(self, mode: str) -> dict[str, Any]:
+        value = str(mode).strip().lower()
+        if value not in {"transient", "duck", "permanent"}:
+            raise ValueError("mode must be transient, duck, or permanent")
+        return self.dev_control("audio_focus_request", foreground=False, mode=value)
+
+    def abandon_competing_audio_focus(self) -> dict[str, Any]:
+        return self.dev_control("audio_focus_abandon", foreground=False)
+
+    def set_subtitle_track(self, index: int) -> dict[str, Any]:
+        value = int(index)
+        if value < -1:
+            raise ValueError("subtitle index must be -1 (off) or >= 0")
+        return self.dev_control("subtitle_control", foreground=False, index=value)
+
     def seek_relative(self, delta_ms: int) -> dict[str, Any]:
         return self.dev_control("seek_relative", delta_ms=int(delta_ms))
+
+    def frame_step(self, amount: int) -> dict[str, Any]:
+        value = int(amount)
+        if value == 0:
+            raise ValueError("amount must be a non-zero signed frame count")
+        return self.dev_control("frame_step", amount=value)
+
+    def playback_rate(self, rate: float) -> dict[str, Any]:
+        value = float(rate)
+        if not -256.0 <= value <= 256.0:
+            raise ValueError("rate must be between -256 and 256")
+        return self.dev_control("playback_rate", rate=value)
+
+    def media3_fast_switch_file(self, server_path: str) -> dict[str, Any]:
+        value = str(server_path or "").strip()
+        if not value:
+            raise ValueError("server_path is required")
+        return self.dev_control("fast_switch_file", server_path=value)
 
     def comskip(self, direction: str) -> dict[str, Any]:
         requested = str(direction).strip().lower()
@@ -896,6 +1080,18 @@ class AdbClient:
     def seek_time(self, target_ms: int) -> dict[str, Any]:
         return self.dev_control("seek_time", target_ms=max(0, int(target_ms)))
 
+    def server_seek_time(self, target_ms: int) -> dict[str, Any]:
+        return self.dev_control("server_seek_time", target_ms=max(0, int(target_ms)))
+
+    def show_active_player_adjustments(self) -> dict[str, Any]:
+        return self.dev_control("active_player_adjustments")
+
+    def set_active_player_overlay(self, visible: bool = True) -> dict[str, Any]:
+        return self.dev_control(
+            "active_player_overlay",
+            visible="true" if visible else "false",
+        )
+
     def local_player_seek(self, target_ms: int) -> dict[str, Any]:
         # Compatibility alias for older backend-isolation callers.
         return self.dev_control("seek_absolute", target_ms=max(0, int(target_ms)))
@@ -1000,7 +1196,29 @@ class AdbClient:
         return cp.stdout + cp.stderr
 
     def focused_window(self) -> str:
-        return self.shell("dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp'", timeout=30)
+        # Some Fire OS releases (notably the API 30 AFTKRT build) omit both
+        # mCurrentFocus and mFocusedApp from `dumpsys window windows`.  A grep
+        # pipeline then exits 1 even though ADB and the foreground app are
+        # healthy.  Read the unfiltered service output and fall back to the
+        # activity manager's resumed-activity record instead.
+        window = self.shell("dumpsys window windows", timeout=30, check=False)
+        matches = [
+            line.strip()
+            for line in window.splitlines()
+            if "mCurrentFocus" in line or "mFocusedApp" in line
+        ]
+        if matches:
+            return "\n".join(matches) + "\n"
+
+        activities = self.shell("dumpsys activity activities", timeout=30, check=False)
+        matches = [
+            line.strip()
+            for line in activities.splitlines()
+            if "mResumedActivity" in line or "topResumedActivity" in line
+        ]
+        if matches:
+            return "\n".join(matches) + "\n"
+        return "Focused window unavailable in window/activity service output\n"
 
     def detect_apk_package(self, apk: Path) -> str:
         if not apk.exists():

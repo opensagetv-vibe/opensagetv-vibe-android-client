@@ -5,12 +5,16 @@
 !/adb/.gitkeep
 /artifacts/*
 !/artifacts/.gitkeep
+!/artifacts/downloads/
+/artifacts/downloads/*
+!/artifacts/downloads/.gitkeep
 /artifacts/existing/
 /artifacts/firetv/
 /incoming/*
 !/incoming/.gitkeep
 /logs/*
 !/logs/.gitkeep
+/output/
 /recordings/*
 !/recordings/.gitkeep
 /screenshots/*

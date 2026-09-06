@@ -24,7 +24,7 @@ exit 2
                 encoding="utf-8",
             )
             fake_adb.chmod(0o755)
-            c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug", adb=str(fake_adb))
+            c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug", adb=str(fake_adb))
             try:
                 self.assertEqual(c.connect(), "connected")
                 first = c.persistent_shell_status()
@@ -47,18 +47,18 @@ exit 2
             c._ensure_dev_package("jvl.sage.miniclient.android.tv.debug")
 
     def test_refuses_wrong_package(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with self.assertRaises(PermissionError):
             c._ensure_dev_package("com.example.other")
 
     def test_key_alias(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with patch.object(c, "shell", return_value="") as shell:
             c.key("ff")
             shell.assert_called_once_with("input keyevent KEYCODE_MEDIA_FAST_FORWARD")
 
     def test_input_text_encodes_spaces_and_next_uses_enter(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with patch.object(c, "shell", return_value="") as shell:
             c.input_text("meet the press")
             c.key("next")
@@ -66,7 +66,7 @@ exit 2
         self.assertEqual(shell.call_args_list[1].args[0], "input keyevent KEYCODE_ENTER")
 
     def test_input_text_paced_uses_one_device_shell_with_device_side_delays(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with patch.object(c, "shell", return_value="") as shell:
             result = c.input_text_paced("a b", char_delay_ms=10)
         shell.assert_called_once()
@@ -84,7 +84,7 @@ exit 2
 
 
     def test_wake_sends_home_after_wakeup(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         replies = [
             "mWakefulness=Dreaming\nDisplay Power: state=ON\n",
             "",
@@ -101,22 +101,35 @@ exit 2
         self.assertEqual(result["homeKey"], "KEYCODE_HOME")
 
     def test_launch_wakes_and_uses_resolved_activity_before_monkey(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
-        component = "org.opensagetv.miniclient.dev.debug/sagex.miniclient.android.tv.MainActivity"
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        component = "opensagetv.vibe.miniclient.debug/opensagetv.vibe.miniclient.android.tv.MainActivity"
         with patch.object(c, "wake", return_value={"wakeKey": "KEYCODE_WAKEUP", "homeKey": "KEYCODE_HOME"}) as wake, \
              patch.object(c, "shell", side_effect=[component + "\n", "Starting: Intent {...}\nStatus: ok\n"]) as shell:
             result = c.launch()
         wake.assert_called_once_with()
         self.assertIn("Status: ok", result)
         self.assertIn("cmd package resolve-activity --brief", shell.call_args_list[0].args[0])
+        self.assertIn("android.intent.category.LEANBACK_LAUNCHER", shell.call_args_list[0].args[0])
         self.assertEqual(shell.call_args_list[1].args[0], f"am start -W -n {component}")
         self.assertFalse(any("monkey -p" in call.args[0] for call in shell.call_args_list))
 
+    def test_launch_falls_back_to_phone_launcher_when_no_leanback_activity_exists(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        component = "opensagetv.vibe.miniclient.debug/opensagetv.vibe.miniclient.android.phone.ServersActivity"
+        with patch.object(c, "wake", return_value={"wakeKey": "KEYCODE_WAKEUP", "homeKey": "KEYCODE_HOME"}), \
+             patch.object(c, "shell", side_effect=["No activity found\n", component + "\n", "Status: ok\n"]) as shell:
+            result = c.launch()
+        self.assertIn("Status: ok", result)
+        self.assertIn("android.intent.category.LEANBACK_LAUNCHER", shell.call_args_list[0].args[0])
+        self.assertIn("android.intent.category.LAUNCHER", shell.call_args_list[1].args[0])
+        self.assertEqual(shell.call_args_list[2].args[0], f"am start -W -n {component}")
+
     def test_app_status_does_not_launch_package(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         replies = [
             "1234\n",
-            "mResumedActivity: ActivityRecord{ x org.opensagetv.miniclient.dev.debug/.MainActivity }\n",
+            "mResumedActivity: ActivityRecord{ x opensagetv.vibe.miniclient.debug/.MainActivity }\n",
+            "User 0: installed=true stopped=false enabled=0\n",
         ]
         with patch.object(c, "shell", side_effect=replies) as shell:
             status = c.app_status()
@@ -127,11 +140,12 @@ exit 2
 
 
     def test_app_status_treats_resumed_dev_activity_as_running_when_pidof_is_empty(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         replies = [
             "",
             "USER PID PPID NAME\n",
-            "mResumedActivity: ActivityRecord{ x org.opensagetv.miniclient.dev.debug/sagex.miniclient.android.phone.ServersActivity }\n",
+            "mResumedActivity: ActivityRecord{ x opensagetv.vibe.miniclient.debug/opensagetv.vibe.miniclient.android.phone.ServersActivity }\n",
+            "User 0: installed=true stopped=false enabled=0\n",
         ]
         with patch.object(c, "shell", side_effect=replies):
             status = c.app_status()
@@ -141,11 +155,12 @@ exit 2
         self.assertEqual(status["pids"], [])
 
     def test_app_status_falls_back_to_ps_for_background_dev_process(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         replies = [
             "",
-            "u0_a123 7457 1 0 0 org.opensagetv.miniclient.dev.debug\n",
+            "u0_a123 7457 1 0 0 opensagetv.vibe.miniclient.debug\n",
             "mResumedActivity: ActivityRecord{ x com.amazon.tv.launcher/.ui.HomeActivity_vNext }\n",
+            "User 0: installed=true stopped=false enabled=0\n",
         ]
         with patch.object(c, "shell", side_effect=replies):
             status = c.app_status()
@@ -154,8 +169,40 @@ exit 2
         self.assertEqual(status["runningSource"], "ps")
         self.assertEqual(status["pids"], ["7457"])
 
+    def test_app_status_treats_real_pid_as_running_despite_stale_stopped_bit(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        replies = [
+            "7457\n",
+            "mResumedActivity: ActivityRecord{ x com.amazon.tv.launcher/.ui.HomeActivity_vNext }\n",
+            "User 0: installed=true stopped=true enabled=0\n",
+        ]
+        with patch.object(c, "shell", side_effect=replies):
+            status = c.app_status()
+        self.assertTrue(status["running"])
+        self.assertTrue(status["forceStopped"])
+        self.assertEqual(status["runningSource"], "pidof")
+
+    def test_focused_window_uses_window_manager_when_available(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        window = "  mCurrentFocus=Window{123 opensagetv.vibe.miniclient.debug/.MainActivity}\n"
+        with patch.object(c, "shell", return_value=window) as shell:
+            result = c.focused_window()
+        self.assertIn("mCurrentFocus", result)
+        shell.assert_called_once_with("dumpsys window windows", timeout=30, check=False)
+
+    def test_focused_window_falls_back_to_resumed_activity_on_fire_os_api30(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        activities = (
+            "mResumedActivity: ActivityRecord{fdd5644 u0 "
+            "opensagetv.vibe.miniclient.debug/opensagetv.vibe.miniclient.android.gdx.MiniClientGDXActivity}\n"
+        )
+        with patch.object(c, "shell", side_effect=["mObscuringWindow=null\n", activities]) as shell:
+            result = c.focused_window()
+        self.assertIn("mResumedActivity", result)
+        self.assertEqual(shell.call_args_list[1].args[0], "dumpsys activity activities")
+
     def test_prepare_clean_start_force_stops_only_if_graceful_exit_leaves_process(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         statuses = [
             {"running": True},
             {"running": True},
@@ -172,7 +219,7 @@ exit 2
         self.assertTrue(result["readyToLaunch"])
 
     def test_install_dev_apk_uninstalls_before_clean_install(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with tempfile.TemporaryDirectory() as td:
             apk = Path(td) / "dev.apk"
             apk.write_bytes(b"apk")
@@ -187,20 +234,18 @@ exit 2
                     return subprocess.CompletedProcess(args, 0, stdout="Success\n", stderr="")
                 raise AssertionError(args)
 
-            with patch.object(c, "detect_apk_package", return_value="org.opensagetv.miniclient.dev.debug"), \
+            with patch.object(c, "detect_apk_package", return_value="opensagetv.vibe.miniclient.debug"), \
                  patch.object(c, "run", side_effect=fake_run):
                 result = c.install_dev_apk(apk)
 
-            self.assertEqual(calls[0], ["uninstall", "org.opensagetv.miniclient.dev.debug"])
+            self.assertEqual(calls[0], ["uninstall", "opensagetv.vibe.miniclient.debug"])
             self.assertEqual(calls[1], ["install", str(apk)])
             self.assertNotIn("-r", calls[1])
             self.assertIn("uninstall: Success", result)
             self.assertIn("install: Success", result)
 
-
-
     def test_client_id_debug_controls_use_explicit_receiver_ops(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with patch.object(c, "dev_control", side_effect=[
             {"ok": True, "op": "client_id_get", "configuredClientId": "44:45:56:30:30:31"},
             {"ok": True, "op": "client_id_set", "configuredClientId": "44:45:56:30:30:31"},
@@ -215,7 +260,7 @@ exit 2
         self.assertEqual(control.call_args_list[1].kwargs["generate"], "false")
 
     def test_parse_debug_broadcast_snapshot(self):
-        text = 'Broadcasting: Intent { act=org.opensagetv.miniclient.dev.DEBUG_CONTROL }\nBroadcast completed: result=1, data="ok=true;op=snapshot;connected=true;player=media3;state=2;mediaTimeMs=123456"\n'
+        text = 'Broadcasting: Intent { act=opensagetv.vibe.miniclient.DEBUG_CONTROL }\nBroadcast completed: result=1, data="ok=true;op=snapshot;connected=true;player=media3;state=2;mediaTimeMs=123456"\n'
         result = parse_broadcast_result(text)
         self.assertTrue(result["ok"])
         self.assertTrue(result["connected"])
@@ -224,21 +269,72 @@ exit 2
         self.assertEqual(result["mediaTimeMs"], 123456)
 
     def test_debug_control_builds_explicit_dev_only_broadcast(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = 'Broadcast completed: result=1, data="ok=true;op=config;player=media3;streaming=pull;decoding=hardware;gsyEngine=auto"\n'
         with patch.object(c, "shell", return_value=output) as shell:
-            result = c.set_player_config(player="media3", streaming="pull", decoding="hardware", gsy_engine="auto")
+            result = c.set_player_config(player="media3", streaming="pull", decoding="hardware",
+                                         gsy_engine="auto", gsy_system_probe=True)
         command = shell.call_args.args[0]
-        self.assertIn("org.opensagetv.miniclient.dev.DEBUG_CONTROL", command)
-        self.assertIn("org.opensagetv.miniclient.dev.debug/sagex.miniclient.android.tv.debug.DevTestReceiver", command)
+        self.assertIn("opensagetv.vibe.miniclient.DEBUG_CONTROL", command)
+        self.assertIn("opensagetv.vibe.miniclient.debug/opensagetv.vibe.miniclient.android.tv.debug.DevTestReceiver", command)
         self.assertIn("--es player media3", command)
         self.assertIn("--es streaming pull", command)
+        self.assertIn("--es gsy_system_probe true", command)
         self.assertEqual(result["player"], "media3")
+
+    def test_background_recovery_options_are_forwarded_independently(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;op=config;'
+                  'keepSessionInBackground=true;resumeBackgroundPlayback=false;'
+                  'backgroundSessionTimeoutSeconds=60"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.set_player_config(
+                keep_session_in_background=True,
+                resume_background_playback=False,
+                background_session_timeout_seconds=60,
+            )
+        command = shell.call_args.args[0]
+        self.assertIn("--es keep_session_in_background true", command)
+        self.assertIn("--es resume_background_playback false", command)
+        self.assertIn("--es background_session_timeout_seconds 60", command)
+        self.assertFalse(result["resumeBackgroundPlayback"])
+
+    def test_audio_focus_controls_use_non_foreground_debug_broadcasts(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", side_effect=[
+            {"ok": True, "op": "audio_focus_request", "mode": "duck", "granted": True},
+            {"ok": True, "op": "audio_focus_abandon", "abandoned": True},
+        ]) as control:
+            requested = c.request_competing_audio_focus("DUCK")
+            abandoned = c.abandon_competing_audio_focus()
+        self.assertTrue(requested["granted"])
+        self.assertTrue(abandoned["abandoned"])
+        self.assertEqual(control.call_args_list[0].args[0], "audio_focus_request")
+        self.assertEqual(control.call_args_list[0].kwargs, {"foreground": False, "mode": "duck"})
+        self.assertEqual(control.call_args_list[1].args[0], "audio_focus_abandon")
+        self.assertEqual(control.call_args_list[1].kwargs, {"foreground": False})
+
+    def test_audio_focus_rejects_unknown_mode(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with self.assertRaisesRegex(ValueError, "transient, duck, or permanent"):
+            c.request_competing_audio_focus("exclusive")
+
+    def test_subtitle_control_uses_non_foreground_debug_broadcast(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", return_value={
+            "ok": True, "op": "subtitle_control", "index": 0, "accepted": True,
+        }) as control:
+            result = c.set_subtitle_track(0)
+        self.assertTrue(result["accepted"])
+        self.assertEqual(control.call_args.args[0], "subtitle_control")
+        self.assertEqual(control.call_args.kwargs, {"foreground": False, "index": 0})
+        with self.assertRaisesRegex(ValueError, "-1 \\(off\\) or >= 0"):
+            c.set_subtitle_track(-2)
 
 
 
     def test_set_player_config_passes_complete_fixed_encoding_block(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=config;player=media3;streaming=fixed;decoding=hardware;'
                   'gsyEngine=auto;fixedEncodingPreference=always;fixedEncodingFormat=matroska;fixedVideoBitrateKbps=6000;'
                   'fixedVideoFps=SOURCE;fixedKeyFrameInterval=10;fixedUseBFrames=true;fixedVideoResolution=720;'
@@ -267,9 +363,31 @@ exit 2
         self.assertEqual(result["fixedVideoBitrateKbps"], 6000)
         self.assertEqual(result["fixedRemuxingPreference"], "off")
 
+    def test_set_player_config_passes_language_and_caption_service_preferences(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;op=config;'
+                  'preferredAudioLanguage=es;preferredSubtitleLanguage=en;'
+                  'preferredCaptionStandard=cea708;preferredCaptionService=3"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.set_player_config(
+                preferred_audio_language="es",
+                preferred_subtitle_language="en",
+                preferred_caption_standard="cea708",
+                preferred_caption_service=3,
+            )
+        command = shell.call_args.args[0]
+        for expected in (
+            "--es preferred_audio_language es",
+            "--es preferred_subtitle_language en",
+            "--es preferred_caption_standard cea708",
+            "--es preferred_caption_service 3",
+        ):
+            self.assertIn(expected, command)
+        self.assertEqual(result["preferredCaptionService"], 3)
+
 
     def test_player_tuning_builds_debug_only_broadcast(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=tuning;tuningActive=true;'
                   'tuningMedia3TsSearchMultiplier=4;tuningMedia3PullReadKb=512;'
                   'tuningMedia3SeekPolicy=next;tuningMedia3CodecMode=async;appliesNextPlayback=true"\n')
@@ -291,7 +409,7 @@ exit 2
         self.assertEqual(result["tuningMedia3PullReadKb"], 512)
 
     def test_player_tuning_get_uses_dedicated_debug_op(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = 'Broadcast completed: result=1, data="ok=true;op=tuning_get;tuningActive=false;tuningMedia3TsSearchMultiplier=8"\n'
         with patch.object(c, "shell", return_value=output) as shell:
             result = c.get_player_tuning()
@@ -299,13 +417,25 @@ exit 2
         self.assertFalse(result["tuningActive"])
         self.assertEqual(result["tuningMedia3TsSearchMultiplier"], 8)
 
+    def test_codec_capabilities_uses_dedicated_debug_op(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;op=codec_capabilities;'
+                  'codecProfileCount=2;codecInterlaceCapability=not_reported_by_android"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.codec_capabilities()
+        self.assertIn("--es op codec_capabilities", shell.call_args.args[0])
+        self.assertEqual(result["codecProfileCount"], 2)
+        self.assertEqual(result["codecInterlaceCapability"], "not_reported_by_android")
+
     def test_session_connect_and_exit_build_debug_broadcasts(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         connect_out = ('Broadcast completed: result=1, data="ok=true;op=connect;source=direct_address;'
                        'serverName=Test;serverAddress=192.168.1.2;serverPort=31099"\n')
         exit_out = 'Broadcast completed: result=1, data="ok=true;op=exit;wasConnected=true;destination=MainActivity"\n'
-        with patch.object(c, "shell", side_effect=[connect_out, exit_out]) as shell:
-            connected = c.connect_server(server_name="Test", address="192.168.1.2", port=31099, save=True)
+        with patch.object(c, "app_status", return_value={"foreground": True}), \
+             patch.object(c, "shell", side_effect=[connect_out, exit_out]) as shell:
+            connected = c.connect_server(server_name="Test", address="192.168.1.2", port=31099,
+                                         save=True, renderer="gdx")
             exited = c.exit_session()
         self.assertEqual(connected["serverAddress"], "192.168.1.2")
         self.assertTrue(exited["wasConnected"])
@@ -314,11 +444,28 @@ exit 2
         self.assertIn("--es server_name Test", connect_command)
         self.assertIn("--es address 192.168.1.2", connect_command)
         self.assertIn("--es save true", connect_command)
+        self.assertIn("--es renderer gdx", connect_command)
         exit_command = shell.call_args_list[1].args[0]
         self.assertIn("--es op exit", exit_command)
 
+    def test_session_connect_foregrounds_app_before_api30_receiver_activity_launch(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        connected = {"ok": True, "serverAddress": "192.168.1.2"}
+        with patch.object(c, "app_status", side_effect=[
+                {"foreground": False}, {"foreground": True}]) as status, \
+             patch.object(c, "launch", return_value="Status: ok") as launch, \
+             patch.object(c, "dev_control", return_value=connected) as control:
+            result = c.connect_server(address="192.168.1.2", save=False, renderer="opengl")
+        launch.assert_called_once_with()
+        self.assertEqual(status.call_count, 2)
+        control.assert_called_once_with(
+            "connect", server_name="", address="192.168.1.2", port=31099,
+            save="false", renderer="opengl")
+        self.assertTrue(result["automationForegroundLaunched"])
+        self.assertEqual(result["automationForegroundLaunchResult"], "Status: ok")
+
     def test_android_skip_check_builds_debug_broadcast_and_parses_delta(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=skip_check;commands=ff,ff,ff;'
                   'timelineBeforeMs=100000;timelineAfterMs=132200;timelineDeltaMs=32200;'
                   'playbackAdjustedDeltaMs=30050;elapsedMs=2150;beforeState=2;afterState=2"\n')
@@ -331,7 +478,7 @@ exit 2
         self.assertEqual(result["playbackAdjustedDeltaMs"], 30050)
 
     def test_android_comskip_check_uses_dedicated_debug_operation_and_parses_landing(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=comskip_check;commands=right;direction=right;'
                   'timelineBeforeMs=100000;videoRecoveryTimelineMs=161000;'
                   'audioRecoveryTimelineMs=161050;outputRecoveryTimelineMs=161100;'
@@ -350,7 +497,7 @@ exit 2
         self.assertTrue(result["outputHealthy"])
 
     def test_long_debug_media_watchdog_extends_adb_transport_timeout(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=comskip_check;direction=right;'
                   'recoveryTimeoutMs=180000;outputHealthy=false"\n')
         with patch.object(c, "shell", return_value=output) as shell:
@@ -358,11 +505,12 @@ exit 2
         self.assertGreaterEqual(shell.call_args.kwargs["timeout"], 213.0)
 
     def test_direct_debug_text_player_relative_seek_and_comskip_build_broadcasts(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         outputs = [
             'Events injected: 8\n',
             'Broadcast completed: result=1, data="ok=true;op=ime_hide;requested=true"\n',
             'Broadcast completed: result=1, data="ok=true;op=player_control;action=pause;accepted=true"\n',
+            'Broadcast completed: result=1, data="ok=true;op=frame_step;amount=1;accepted=true"\n',
             'Broadcast completed: result=1, data="ok=true;op=seek_relative;deltaMs=10000;targetMs=30000;accepted=true"\n',
             'Broadcast completed: result=1, data="ok=true;op=comskip;direction=right;accepted=true"\n',
             'Broadcast completed: result=1, data="ok=true;op=relative_seek_check;deltasMs=10000,-10000;outputHealthy=true"\n',
@@ -373,6 +521,7 @@ exit 2
             self.assertEqual(text_result["inputPath"], "android_os_input_text")
             self.assertTrue(c.hide_ime()["requested"])
             self.assertTrue(c.player_control("pause")["accepted"])
+            self.assertTrue(c.frame_step(1)["accepted"])
             self.assertEqual(c.seek_relative(10000)["deltaMs"], 10000)
             self.assertEqual(c.comskip("right")["direction"], "right")
             self.assertTrue(c.android_relative_seek_check([10000, -10000])["outputHealthy"])
@@ -381,12 +530,19 @@ exit 2
         self.assertIn("--es op ime_hide", commands[1])
         self.assertIn("--es op player_control", commands[2])
         self.assertIn("--es action pause", commands[2])
-        self.assertIn("--es op seek_relative", commands[3])
-        self.assertIn("--es delta_ms 10000", commands[3])
-        self.assertIn("--es op comskip", commands[4])
-        self.assertIn("--es direction right", commands[4])
-        self.assertIn("--es op relative_seek_check", commands[5])
-        self.assertIn("--es deltas_ms 10000,-10000", commands[5])
+        self.assertIn("--es op frame_step", commands[3])
+        self.assertIn("--es amount 1", commands[3])
+        self.assertIn("--es op seek_relative", commands[4])
+        self.assertIn("--es delta_ms 10000", commands[4])
+        self.assertIn("--es op comskip", commands[5])
+        self.assertIn("--es direction right", commands[5])
+        self.assertIn("--es op relative_seek_check", commands[6])
+        self.assertIn("--es deltas_ms 10000,-10000", commands[6])
+
+    def test_frame_step_rejects_zero_before_broadcast(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with self.assertRaisesRegex(ValueError, "non-zero"):
+            c.frame_step(0)
 
     def test_parses_player_telemetry_line_for_future_reuse(self):
         line = "08-26 03:00:00.000 I SageTVDevTelemetry: player=EXO2 event=SNAPSHOT positionMs=12345 isPlaying=true outputFps=29.97"
@@ -396,19 +552,19 @@ exit 2
         self.assertEqual(event["positionMs"], 12345)
 
     def test_player_telemetry_is_disabled_during_baseline_recovery(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         telemetry = c.player_telemetry(max_events=10)
         self.assertEqual(telemetry["transport"], "disabled-pretelemetry-baseline")
         self.assertEqual(telemetry["event_count"], 0)
         self.assertIsNone(telemetry["active_player"])
 
     def test_wait_for_player_event_is_disabled_during_baseline_recovery(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with self.assertRaises(RuntimeError):
             c.wait_for_player_event("READY", timeout_s=0.1)
 
     def test_seek_time_builds_required_target_broadcast(self):
-        c = AdbClient("1.2.3.4:5555", "org.opensagetv.miniclient.dev.debug")
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = 'Broadcast completed: result=1, data="ok=true;op=seek_time;targetMs=30000;beforeMs=120000;accepted=true"\n'
         with patch.object(c, "shell", return_value=output) as shell:
             result = c.seek_time(30000)

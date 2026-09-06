@@ -13,25 +13,69 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PROJECT_MANIFEST.sha256"
 
 
+def is_generated_delivery_artifact(name: str) -> bool:
+    """Return True for root-level ZIPs produced by handoff/update packaging."""
+    path = Path(name)
+    if len(path.parts) != 1 or path.suffix.lower() != ".zip":
+        return False
+    lower_name = path.name.lower()
+    return "-ai-handoff-v" in lower_name or "changed-files-only" in lower_name
+
+
 def repository_files() -> list[str]:
-    result = subprocess.run(
-        [
-            "git",
-            "-c",
-            f"safe.directory={ROOT}",
-            "-C",
-            str(ROOT),
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-        ],
-        check=True,
-        capture_output=True,
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={ROOT}",
+                "-C",
+                str(ROOT),
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
+            check=False,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        result = None
+
+    if result is not None and result.returncode == 0:
+        names = result.stdout.decode("utf-8").split("\0")
+    else:
+        # GitHub source archives intentionally contain no .git directory. Their
+        # signed file set is the manifest itself, so verify those exact paths
+        # instead of making extracted users install or initialize Git first.
+        if not MANIFEST.is_file():
+            detail = "git unavailable" if result is None else result.stderr.decode(
+                "utf-8", errors="replace"
+            ).strip()
+            raise RuntimeError(
+                "cannot enumerate a non-Git checkout without PROJECT_MANIFEST.sha256"
+                + (f": {detail}" if detail else "")
+            )
+        names = []
+        seen: set[str] = set()
+        for line in MANIFEST.read_text(encoding="ascii").splitlines():
+            if "  " not in line:
+                raise ValueError("malformed PROJECT_MANIFEST.sha256 entry")
+            _, name = line.split("  ", 1)
+            path = Path(name)
+            if path.is_absolute() or ".." in path.parts or name in seen:
+                raise ValueError(f"unsafe or duplicate manifest path: {name}")
+            seen.add(name)
+            names.append(name)
+    return sorted(
+        name
+        for name in names
+        if name
+        and name != MANIFEST.name
+        and not is_generated_delivery_artifact(name)
+        and (ROOT / name).is_file()
     )
-    names = result.stdout.decode("utf-8").split("\0")
-    return sorted(name for name in names if name and name != MANIFEST.name)
 
 
 def digest(path: Path) -> str:
@@ -65,6 +109,36 @@ def check_manifest() -> int:
         print("FAIL: PROJECT_MANIFEST.sha256 is stale")
         print(f"  missing/changed entries: {len(expected_set - actual_set)}")
         print(f"  obsolete entries: {len(actual_set - expected_set)}")
+
+        def by_path(lines: list[str]) -> dict[str, str]:
+            values: dict[str, str] = {}
+            for line in lines:
+                if "  " in line:
+                    value, name = line.split("  ", 1)
+                    values[name] = value
+            return values
+
+        actual_by_path = by_path(actual)
+        expected_by_path = by_path(expected)
+        changed_paths = sorted(
+            name
+            for name in actual_by_path.keys() & expected_by_path.keys()
+            if actual_by_path[name] != expected_by_path[name]
+        )
+        missing_paths = sorted(expected_by_path.keys() - actual_by_path.keys())
+        obsolete_paths = sorted(actual_by_path.keys() - expected_by_path.keys())
+
+        for label, names in (
+            ("changed", changed_paths),
+            ("missing", missing_paths),
+            ("obsolete", obsolete_paths),
+        ):
+            if names:
+                print(f"  {label} paths ({len(names)}):")
+                for name in names[:20]:
+                    print(f"    {name}")
+                if len(names) > 20:
+                    print(f"    ... and {len(names) - 20} more")
         return 1
     print(f"PASS: PROJECT_MANIFEST.sha256 ({len(expected)} files)")
     return 0

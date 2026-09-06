@@ -17,9 +17,9 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEV_APPLICATION_ID = "org.opensagetv.miniclient.dev"
-DEV_APP_NAME = "SageTV MiniClient Dev"
-DEV_DEBUG_APP_NAME = "SageTV MiniClient Dev Debug"
+DEV_APPLICATION_ID = "opensagetv.vibe.miniclient"
+DEV_APP_NAME = "OpenSageTV Vibe"
+DEV_DEBUG_APP_NAME = "OpenSageTV Vibe"
 
 
 def read(path: Path) -> str:
@@ -107,7 +107,7 @@ def patch_shared_gradle(root: Path, dry_run: bool, changes: list[str]) -> None:
 
 
 def patch_application_java(root: Path, dry_run: bool, changes: list[str]) -> None:
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/MiniclientApplication.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/MiniclientApplication.java"
     old = read(p)
     new = remove_matching_lines(old, [
         "import com.google.firebase.crashlytics.FirebaseCrashlytics;",
@@ -118,7 +118,7 @@ def patch_application_java(root: Path, dry_run: bool, changes: list[str]) -> Non
 
 
 def patch_pref_store(root: Path, dry_run: bool, changes: list[str]) -> None:
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/prefs/AndroidPrefStore.java"
     old = read(p)
     new = old
     new = re.sub(
@@ -137,16 +137,16 @@ def patch_pref_store(root: Path, dry_run: bool, changes: list[str]) -> None:
 
 
 def patch_settings_fragment(root: Path, dry_run: bool, changes: list[str]) -> None:
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings/SettingsFragment.java"
     old = read(p)
     new = remove_matching_lines(old, ["import com.google.firebase.crashlytics.FirebaseCrashlytics;"])
     write_if_changed(p, old, new, dry_run, changes)
 
 
 def patch_logger(root: Path, dry_run: bool, changes: list[str]) -> None:
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/util/Logger.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/util/Logger.java"
     old = read(p)
-    new = 'package sagex.miniclient.android.util;\n\nimport org.slf4j.LoggerFactory;\n\nimport sagex.miniclient.logging.ILogger;\n\n/**\n * Android logger implementation backed by SLF4J only.\n *\n * <p>All logging remains local through the existing SLF4J backend. The\n * metadata methods remain as no-ops to preserve the shared {@link ILogger}\n * interface after cloud crash-reporting removal.</p>\n */\npublic class Logger implements ILogger\n{\n    private org.slf4j.Logger log;\n\n    public static Logger getLogger(Class cls)\n    {\n        Logger logger = new Logger();\n        logger.log = LoggerFactory.getLogger(cls);\n        return logger;\n    }\n\n    public static Logger getLogger(String name)\n    {\n        Logger logger = new Logger();\n        logger.log = LoggerFactory.getLogger(name);\n        return logger;\n    }\n\n    @Override\n    public ILogger getLoggerInstance(String name)\n    {\n        return Logger.getLogger(name);\n    }\n\n    @Override\n    public ILogger getLoggerInstance(Class cls)\n    {\n        return Logger.getLogger(cls);\n    }\n\n    @Override\n    public void recordException(Throwable t)\n    {\n        log.error("Unhandled exception", t);\n    }\n\n    @Override\n    public void logError(String message)\n    {\n        log.error(message);\n    }\n\n    @Override\n    public void logError(String message, Throwable t)\n    {\n        log.error(message, t);\n    }\n\n    @Override\n    public void logWarning(String message)\n    {\n        log.warn(message);\n    }\n\n    @Override\n    public void logWarning(String message, Throwable t)\n    {\n        log.warn(message, t);\n    }\n\n    @Override\n    public void logDebug(String message)\n    {\n        log.debug(message);\n    }\n\n    @Override\n    public void logDebug(String message, Throwable t)\n    {\n        log.debug(message, t);\n    }\n\n    @Override\n    public void logInfo(String message)\n    {\n        log.info(message);\n    }\n\n    @Override\n    public void logInfo(String message, Throwable t)\n    {\n        log.info(message, t);\n    }\n\n    @Override\n    public void logTrace(String message)\n    {\n        log.trace(message);\n    }\n\n    @Override\n    public void logTrace(String message, Throwable t)\n    {\n        log.trace(message, t);\n    }\n\n    @Override\n    public void setCustomKey(String key, String value)\n    {\n        // Cloud crash-report metadata is no longer used.\n    }\n\n    @Override\n    public void setUserID(String userID)\n    {\n        // Cloud crash-report user metadata is no longer used.\n    }\n}\n'
+    new = 'package opensagetv.vibe.miniclient.android.util;\n\nimport org.slf4j.LoggerFactory;\n\nimport opensagetv.vibe.miniclient.logging.ILogger;\n\n/**\n * Android logger implementation backed by SLF4J only.\n *\n * <p>All logging remains local through the existing SLF4J backend. The\n * metadata methods remain as no-ops to preserve the shared {@link ILogger}\n * interface after cloud crash-reporting removal.</p>\n */\npublic class Logger implements ILogger\n{\n    private org.slf4j.Logger log;\n\n    public static Logger getLogger(Class cls)\n    {\n        Logger logger = new Logger();\n        logger.log = LoggerFactory.getLogger(cls);\n        return logger;\n    }\n\n    public static Logger getLogger(String name)\n    {\n        Logger logger = new Logger();\n        logger.log = LoggerFactory.getLogger(name);\n        return logger;\n    }\n\n    @Override\n    public ILogger getLoggerInstance(String name)\n    {\n        return Logger.getLogger(name);\n    }\n\n    @Override\n    public ILogger getLoggerInstance(Class cls)\n    {\n        return Logger.getLogger(cls);\n    }\n\n    @Override\n    public void recordException(Throwable t)\n    {\n        log.error("Unhandled exception", t);\n    }\n\n    @Override\n    public void logError(String message)\n    {\n        log.error(message);\n    }\n\n    @Override\n    public void logError(String message, Throwable t)\n    {\n        log.error(message, t);\n    }\n\n    @Override\n    public void logWarning(String message)\n    {\n        log.warn(message);\n    }\n\n    @Override\n    public void logWarning(String message, Throwable t)\n    {\n        log.warn(message, t);\n    }\n\n    @Override\n    public void logDebug(String message)\n    {\n        log.debug(message);\n    }\n\n    @Override\n    public void logDebug(String message, Throwable t)\n    {\n        log.debug(message, t);\n    }\n\n    @Override\n    public void logInfo(String message)\n    {\n        log.info(message);\n    }\n\n    @Override\n    public void logInfo(String message, Throwable t)\n    {\n        log.info(message, t);\n    }\n\n    @Override\n    public void logTrace(String message)\n    {\n        log.trace(message);\n    }\n\n    @Override\n    public void logTrace(String message, Throwable t)\n    {\n        log.trace(message, t);\n    }\n\n    @Override\n    public void setCustomKey(String key, String value)\n    {\n        // Cloud crash-report metadata is no longer used.\n    }\n\n    @Override\n    public void setUserID(String userID)\n    {\n        // Cloud crash-report user metadata is no longer used.\n    }\n}\n'
     write_if_changed(p, old, new, dry_run, changes)
 
 
@@ -254,7 +254,7 @@ echo "PASS: no active Firebase/Crashlytics/Google Services references found"
 
 def patch_dynamic_streaming_default(root: Path, dry_run: bool, changes: list[str]) -> None:
     """Make fresh Dev installs default to dynamic streaming, not fixed transcoding."""
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/prefs/AndroidPrefStore.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/prefs/AndroidPrefStore.java"
     old = read(p)
     new, count = re.subn(
         r'public static final String STREAMING_MODE_DEFAULT = "(?:fixed|dynamic|pull)";',
@@ -284,7 +284,7 @@ def patch_dynamic_streaming_default(root: Path, dry_run: bool, changes: list[str
 def patch_original_client_id(root: Path, dry_run: bool, changes: list[str]) -> None:
     """Keep upstream generated/persisted client ID behavior in the isolated Dev source tree."""
     # ClientIDGenerator must remain a generic converter/generator; do not force a test ID.
-    p = root / "core/src/main/java/sagex/miniclient/util/ClientIDGenerator.java"
+    p = root / "core/src/main/java/opensagetv/vibe/miniclient/util/ClientIDGenerator.java"
     old = read(p)
     new = re.sub(
         r'\n    /\*\* Fixed SageTV client identity used by the isolated Dev app\. ASCII: DEV001\. \*/\n'
@@ -293,7 +293,7 @@ def patch_original_client_id(root: Path, dry_run: bool, changes: list[str]) -> N
     write_if_changed(p, old, new, dry_run, changes)
 
     # Android resolver: generate once when missing, persist, then reuse.
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/UIActivityLifeCycleHandler.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/UIActivityLifeCycleHandler.java"
     old = read(p)
     new, count = re.subn(
         r'    @Override\n    public String getMACAddress\(\)\n    \{.*?\n    \}\n\n    public PlayerSurfaceView getVideoView',
@@ -315,7 +315,7 @@ def patch_original_client_id(root: Path, dry_run: bool, changes: list[str]) -> N
     write_if_changed(p, old, new, dry_run, changes)
 
     # Shared resolver follows the same persisted/generated behavior.
-    p = root / "core/src/main/java/sagex/miniclient/util/RandomMACAddressResolver.java"
+    p = root / "core/src/main/java/opensagetv/vibe/miniclient/util/RandomMACAddressResolver.java"
     old = read(p)
     new, count = re.subn(
         r'    @Override\n    public String getMACAddress\(\) \{.*?\n    \}\n',
@@ -334,9 +334,9 @@ def patch_original_client_id(root: Path, dry_run: bool, changes: list[str]) -> N
     write_if_changed(p, old, new, dry_run, changes)
 
     # Wire protocol uses the generated/persisted ID and preserves original per-server override support.
-    p = root / "core/src/main/java/sagex/miniclient/MiniClientConnection.java"
+    p = root / "core/src/main/java/opensagetv/vibe/miniclient/MiniClientConnection.java"
     old = read(p)
-    new = old.replace("import sagex.miniclient.util.ClientIDGenerator;\n", "")
+    new = old.replace("import opensagetv.vibe.miniclient.util.ClientIDGenerator;\n", "")
     fixed_block = (
         '        // The isolated Dev app must keep the same SageTV client identity across\n'
         '        // clean uninstall/reinstall cycles. Ignore generated and per-server IDs.\n'
@@ -357,7 +357,7 @@ def patch_original_client_id(root: Path, dry_run: bool, changes: list[str]) -> N
     write_if_changed(p, old, new, dry_run, changes)
 
     # Settings retain the original editable ID behavior; plain text is converted to six-byte ID form.
-    p = root / "android-shared/src/main/java/sagex/miniclient/android/ui/settings/SettingsFragment.java"
+    p = root / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings/SettingsFragment.java"
     old = read(p)
     new, count = re.subn(
         r'            final Preference clientid = \(Preference\) findPreference\(Keys\.client_id\);.*?\n\n\n        \}\n        catch \(Throwable t\)',
@@ -421,7 +421,11 @@ def scan_active_firebase(root: Path) -> list[dict[str, object]]:
     include_suffixes = {".java", ".kt", ".gradle", ".xml", ".properties", ".yml", ".yaml"}
     include_names = {"Jenkinsfile", ".gitignore"}
     for p in root.rglob("*"):
-        if not p.is_file() or any(part in excluded_dirs for part in p.parts):
+        if (
+            not p.is_file()
+            or p.name == "verification-metadata.xml"
+            or any(part in excluded_dirs for part in p.parts)
+        ):
             continue
         if p.suffix.lower() not in include_suffixes and p.name not in include_names:
             continue

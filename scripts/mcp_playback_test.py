@@ -38,15 +38,23 @@ sendtext {requested}
 delay 50
 sendkey BACK
 delay 100
-command ff
 command right
-command play_pause
-command down
+command right
+command right
+command select
+delay 250
 command select
 """
 
 
-def start_recording_via_search(client: MCPProcess, text: str, *, search_timeout_s: float = 8.0, text_char_delay_ms: int = 0) -> dict:
+def start_recording_via_search(
+    client: MCPProcess,
+    text: str,
+    *,
+    search_timeout_s: float = 8.0,
+    text_char_delay_ms: int = 0,
+    media_type: str = "videos",
+) -> dict:
     """Start the requested recording through SageTV Search.
 
     Normal automation uses the MiniClient's native keyboard-event protocol directly.
@@ -70,6 +78,29 @@ def start_recording_via_search(client: MCPProcess, text: str, *, search_timeout_
     if not search.get("passed"):
         raise RuntimeError(f"SageTV Search did not reach text-input state: {search}")
 
+    normalized_media_type = str(media_type).strip().lower()
+    if normalized_media_type not in {"tv", "videos"}:
+        raise ValueError("media_type must be tv or videos")
+
+    # Search remembers its last media type and field. Normalize from the text
+    # box to Title and then to the left-most TV tab; select Videos explicitly
+    # when requested. Repeated LEFT at the first item is intentionally safe.
+    filter_commands = ["up", "left", "left", "up", "left", "left", "left"]
+    if normalized_media_type == "videos":
+        filter_commands.append("right")
+    filter_commands.extend(["down", "down"])
+    filter_results = []
+    for command in filter_commands:
+        filter_results.append(call_dict(
+            client, "dev_sage_command", {"command": command}, timeout=30.0
+        ))
+        # SageTV7 rebuilds the category/results widgets after media-type
+        # changes.  The old 50 ms burst could outrun that rebuild and leave
+        # the search on TV even though Videos was requested.
+        time.sleep(0.25)
+    result["searchMediaType"] = normalized_media_type
+    result["filterCommands"] = filter_results
+
     injected = call_dict(client, "dev_type_text", {
         "text": requested,
         "submit": False,
@@ -90,13 +121,49 @@ def start_recording_via_search(client: MCPProcess, text: str, *, search_timeout_
         else:
             result["hideIme"] = {"skipped": True, "reason": "ime_not_visible"}
 
+        # SageTV7's Search keyboard leaves focus on Back after native text
+        # entry. Three deterministic Right events focus the first visible
+        # result. The prior ff/right/play_pause/down sequence depended on the
+        # current keypad focus and could select a non-Watch popup action.
         post_commands = []
-        for command in ("ff", "right", "play_pause", "down", "select"):
+        for command in ("right", "right", "right", "select"):
             try:
                 command_result = call_dict(client, "dev_sage_command", {"command": command}, timeout=30.0)
             except Exception as exc:
                 raise RuntimeError(f"post-Search SageTV command failed: command={command}: {exc}") from exc
             post_commands.append({"command": command, "result": command_result})
+            time.sleep(0.25)
+
+        options = call_dict(client, "dev_wait_for_ui", {
+            "popup_contains": "option",
+            "timeout_s": search_timeout_s,
+        }, timeout=search_timeout_s + 10.0)
+        result["resultOptions"] = options
+        if not options.get("passed"):
+            raise RuntimeError(f"Search result did not open its Options popup: {options}")
+
+        watch_now = call_dict(client, "dev_sage_command", {"command": "select"}, timeout=30.0)
+        post_commands.append({"command": "select_watch_now", "result": watch_now})
+
+        # A partially watched recording adds a second prompt. Its default is
+        # Resume Playback; choose it once. A never-watched recording starts
+        # immediately and needs no extra command.
+        prompt_deadline = time.monotonic() + search_timeout_s
+        resume_selected = False
+        final_start_state = {}
+        while time.monotonic() < prompt_deadline:
+            final_start_state = call_dict(client, "dev_player_state", {}, timeout=30.0)
+            popup = str(final_start_state.get("popupName") or "").strip()
+            normalized_popup = popup.lower()
+            if "resume" in normalized_popup and "restart" in normalized_popup and not resume_selected:
+                resume = call_dict(client, "dev_sage_command", {"command": "select"}, timeout=30.0)
+                post_commands.append({"command": "select_resume_default", "popup": popup, "result": resume})
+                resume_selected = True
+            elif bool(final_start_state.get("playerActive")) and not popup:
+                break
+            time.sleep(0.20)
+        result["postSelectionState"] = final_start_state
+        result["resumePromptSelected"] = resume_selected
         result["postSearchCommands"] = post_commands
     finally:
         try:
@@ -115,14 +182,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Launch/configure/connect MiniClient and start the standard test recording through native client input"
     )
-    parser.add_argument("--server", default="192.168.10.175", help="SageTV server IP/address")
+    parser.add_argument("--server", default="192.168.10.232", help="SageTV server IP/address")
     parser.add_argument("--port", type=int, default=31099, help="SageTV MiniClient port")
     parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default="media3")
-    parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default="push", help="Streaming selection: push, pull, fixed (legacy dynamic accepted)")
+    parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default="push", help="Streaming selection: push, pull, smb_direct, smb_auto, fixed (legacy dynamic accepted)")
     parser.add_argument("--decoding", "--decoder", dest="decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default="hardware", help="Decoding selection: hardware, software, fallback (legacy hardware_preferred accepted)")
     add_fixed_encoding_args(parser)
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="auto")
+    parser.add_argument("--gsy-system-probe", action="store_true",
+                        help="Debug-only: exercise Android System MediaPlayer and verify its fail-safe fallback")
     parser.add_argument("--text", required=True, help="Required SageTV Search text used to start the test recording")
+    parser.add_argument("--server-path", default="", help="Prefer an exact server-side MediaFile path through the opt-in Vibe protocol extension")
     parser.add_argument("--text-char-delay-ms", type=int, default=0, help="Text input mode: 0 uses MiniClient native key events; >0 enables legacy Android/ADB diagnostic pacing (ms)")
     parser.add_argument("--connect-timeout-s", type=float, default=30.0)
     parser.add_argument(
@@ -135,6 +205,11 @@ def main() -> int:
     parser.add_argument("--verify-ms", type=int, default=1500)
     parser.add_argument("--leave-running", action="store_true", help="Leave the MiniClient running after a failed test too")
     args = parser.parse_args()
+    if args.gsy_system_probe and not (
+        args.player == "gsyplayer" and args.gsy_engine == "system"
+        and args.streaming == "pull"
+    ):
+        parser.error("--gsy-system-probe requires --player gsyplayer --gsy-engine system --streaming pull")
     fixed_config = fixed_config_from_args(args)
     try:
         validate_fixed_config(fixed_config)
@@ -164,6 +239,7 @@ def main() -> int:
             "streaming": streaming_preference(args.streaming),
             "decoding": decoding_preference(args.decoding),
             "gsy_engine": args.gsy_engine,
+            "gsy_system_probe": args.gsy_system_probe,
             **fixed_config,
         })
         print(json.dumps(configured, indent=2, sort_keys=True))
@@ -208,18 +284,56 @@ def main() -> int:
         print(f"PASS: connected to requested server {args.server}; automationReady=true")
         print(json.dumps(state, indent=2, sort_keys=True))
 
-        print("STEP: open Search, verify Android keyboard, type recording name, and start recording")
-        search_start = start_recording_via_search(client, args.text, text_char_delay_ms=args.text_char_delay_ms)
-        print(json.dumps(search_start, indent=2, sort_keys=True))
+        if args.server_path.strip():
+            print(f"STEP: start exact server MediaFile path: {args.server_path!r}")
+            direct_start = call_dict(client, "dev_play_server_path", {
+                "server_path": args.server_path,
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": args.verify_ms,
+            }, timeout=args.playback_timeout_s + 35.0)
+            print(json.dumps(direct_start, indent=2, sort_keys=True))
+            if not direct_start.get("passed"):
+                raise RuntimeError(f"Direct server-path playback failed: {direct_start}")
+        else:
+            print("STEP: open Search, verify Android keyboard, type recording name, and start recording")
+            search_start = start_recording_via_search(client, args.text, text_char_delay_ms=args.text_char_delay_ms)
+            print(json.dumps(search_start, indent=2, sort_keys=True))
 
-        print("STEP: wait for real playback to start")
-        playback = call_dict(client, "dev_wait_for_playback_started", {
-            "timeout_s": args.playback_timeout_s,
-            "verify_ms": args.verify_ms,
-        }, timeout=args.playback_timeout_s + 15.0)
-        print(json.dumps(playback, indent=2, sort_keys=True))
-        if not playback.get("passed"):
-            raise RuntimeError(f"Playback did not become healthy: {playback}")
+            print("STEP: wait for real playback to start")
+            playback = call_dict(client, "dev_wait_for_playback_started", {
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": args.verify_ms,
+            }, timeout=args.playback_timeout_s + 15.0)
+            print(json.dumps(playback, indent=2, sort_keys=True))
+            if not playback.get("passed"):
+                raise RuntimeError(f"Playback did not become healthy: {playback}")
+
+        if args.gsy_system_probe:
+            probe = call_dict(client, "dev_player_state", {}, timeout=30.0)
+            resolved = str(probe.get("gsyResolvedEngine", "")).strip().lower()
+            fallback_count = int(probe.get("gsySystemFallbackCount", 0))
+            fallback_reason = str(probe.get("gsySystemFallbackReason", ""))
+            backend = str(probe.get("health_backendClass", ""))
+            if resolved == "system":
+                if "GSYSystemMediaPlayerImpl" not in backend:
+                    raise RuntimeError(f"System probe reported inconsistent active backend: {probe}")
+                outcome = "SYSTEM_ACTIVE"
+            elif resolved == "media3":
+                if fallback_count != 1 or fallback_reason != "android_system_player_error":
+                    raise RuntimeError(f"System probe did not prove one bounded fail-safe fallback: {probe}")
+                if "Media3MediaPlayerImpl" not in backend:
+                    raise RuntimeError(f"System fallback did not resolve to Media3: {probe}")
+                outcome = "MEDIA3_FALLBACK"
+            else:
+                raise RuntimeError(f"System probe did not expose its resolved backend: {probe}")
+            print("GSY SYSTEM PROBE: PASS " + json.dumps({
+                "outcome": outcome,
+                "resolvedEngine": resolved,
+                "fallbackCount": fallback_count,
+                "fallbackReason": fallback_reason,
+                "backendClass": backend,
+                "videoDecoder": probe.get("health_videoDecoder", ""),
+            }, sort_keys=True))
 
         print("MCP PLAYBACK START TEST: PASS")
         passed = True

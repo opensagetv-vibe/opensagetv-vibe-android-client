@@ -199,7 +199,64 @@ class SagexApiClient:
         return contains, "contains"
 
     def watch(self, context: str, media_file_id: int) -> Any:
-        return self.call("Watch", f"mediafile:{int(media_file_id)}", context=context)
+        try:
+            return self.call("Watch", f"mediafile:{int(media_file_id)}", context=context)
+        except SagexApiError as exc:
+            # Older Sagex releases successfully dispatch Watch but cannot encode
+            # SageTV's asynchronous Catbert task handle as JSON.  The response is
+            # therefore an API serialization error even though playback has been
+            # accepted.  Recognize only that exact compatibility failure; all real
+            # authentication, lookup, transport, and SageTV errors still propagate.
+            detail = str(exc)
+            if "Cannot Serialize" in detail and "Catbert$AsyncTaskID" in detail:
+                return {
+                    "accepted": True,
+                    "asynchronous": True,
+                    "serializationCompatibility": "Catbert$AsyncTaskID",
+                }
+            raise
+
+    def seek(self, context: str, target_ms: int) -> Any:
+        """Ask SageTV's VideoFrame to seek the active UI session.
+
+        This is intentionally different from seeking the Android backend
+        directly.  Server-owned Push/DVD sessions must reposition their reader
+        and begin sending bytes for the new timeline coordinate.
+        """
+        target_ms = int(target_ms)
+        if target_ms < 0:
+            raise ValueError("target_ms must be >= 0")
+        try:
+            return self.call("Seek", target_ms, context=context)
+        except SagexApiError as exc:
+            detail = str(exc)
+            if "Cannot Serialize" in detail and "Catbert$AsyncTaskID" in detail:
+                return {
+                    "accepted": True,
+                    "asynchronous": True,
+                    "serializationCompatibility": "Catbert$AsyncTaskID",
+                }
+            raise
+
+    @staticmethod
+    def _result_value(payload: Any) -> Any:
+        if isinstance(payload, dict) and "Result" in payload:
+            return payload["Result"]
+        return payload
+
+    def closed_caption_state(self, context: str) -> str:
+        payload = self.call("GetMediaPlayerClosedCaptionState", context=context)
+        return str(self._result_value(payload) or "").strip()
+
+    def set_closed_caption_state(self, context: str, state: str) -> Any:
+        requested = str(state or "").strip()
+        if requested.casefold() == "off":
+            requested = "Captions Off"
+        elif requested.upper() in ("CC1", "CC2", "TEXT1", "TEXT2"):
+            requested = requested.upper().replace("TEXT", "Text")
+        else:
+            raise ValueError("caption state must be Off, CC1, CC2, Text1, or Text2")
+        return self.call("SetMediaPlayerClosedCaptionState", requested, context=context)
 
     def current_media_file_id(self, context: str) -> int | None:
         payload = self.call("GetCurrentMediaFile", context=context, fields=("MediaFileID", "MediaTitle"))

@@ -2,8 +2,8 @@
 # Copy to opensagetv-vibe-android-client/config/firetv.toml and edit locally.
 # Then edit the Fire TV address.
 device = "192.168.1.50:5555"
-dev_package = "org.opensagetv.miniclient.dev.debug"
+dev_package = "opensagetv.vibe.miniclient.debug"
 adb = "adb"
-artifact_dir = "/workspace/artifacts/firetv"
+artifact_dir = "/workspace/android-client/artifacts/firetv"
 # Optional. aapt is already available in the development image.
 aapt = "/opt/android-sdk/build-tools/29.0.2/aapt"

@@ -6,8 +6,8 @@ diff -ruN existing/.dev-refactor.json dev/.dev-refactor.json
 +  "schema": 2,
 +  "timestamp_utc": "2026-08-26T00:10:14.362945+00:00",
 +  "upstream_head": null,
-+  "dev_application_id_base": "org.opensagetv.miniclient.dev",
-+  "expected_debug_application_id": "org.opensagetv.miniclient.dev.debug",
++  "dev_application_id_base": "opensagetv.vibe.miniclient",
++  "expected_debug_application_id": "opensagetv.vibe.miniclient.debug",
 +  "visible_name_release": "SageTV MiniClient Dev",
 +  "visible_name_debug": "SageTV MiniClient Dev Debug",
 +  "changed_files": [
@@ -402,7 +402,7 @@ diff -ruN existing/android-tv/build.gradle dev/android-tv/build.gradle
      defaultConfig {
  
 -        applicationId "jvl.sage.miniclient.android.tv.debug"
-+        applicationId "org.opensagetv.miniclient.dev"
++        applicationId "opensagetv.vibe.miniclient"
          minSdkVersion androidMinSdkVersion
          targetSdkVersion androidTargetSdkVersion
          // versionCode API (2 digits), SCREEN (2 digits), VERSION (3 digits)

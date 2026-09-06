@@ -5,7 +5,10 @@ from pathlib import Path
 import hashlib
 import json
 import re
+import subprocess
+import tempfile
 import time
+from urllib.parse import unquote, urlparse
 from mcp.server import MCPServer
 
 from .adb import AdbClient
@@ -17,6 +20,8 @@ cfg = load_config()
 adb = AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt)
 atexit.register(adb.close)
 mcp = MCPServer("SageTV Dev Fire TV MCP")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SEEK_FIXTURE_DIR = PROJECT_ROOT / "artifacts" / "test-media"
 
 
 
@@ -124,21 +129,109 @@ def _parse_trap_recent(value: object) -> list[dict]:
 
 def _compact_state(state: dict) -> dict:
     keys = (
-        "player", "streaming", "decoding", "gsyEngine", "connected", "playerActive",
+        "player", "streaming", "decoding", "gsyEngine", "gsySystemProbe",
+        "gsyResolvedEngine", "gsySystemFallbackCount", "gsySystemFallbackReason",
+        "preferredAudioLanguage", "preferredSubtitleLanguage",
+        "preferredCaptionStandard", "preferredCaptionService",
+        "keepSessionInBackground", "resumeBackgroundPlayback",
+        "backgroundSessionTimeoutSeconds",
+        "discPlaybackPolicy", "discSkipMenus", "discSkipPreviews",
+        "discCompatibilityFallback", "discMpeg2TimestampRepair",
+        "connected", "playerActive",
+        "legacyCaptionCallbacksNegotiated", "legacyCaptionWireEventCount",
+        "legacyCaptionWireBytes", "legacyCaptionCallbackActive",
+        "imageAllocationRecoveryAttempts", "imageAllocationRecoveryEvictions",
+        "imageAllocationRecoverySuccesses", "imageAllocationRecoveryFailures",
+        "legacyCaptionCallbackCount", "legacyCaptionCallbackBytes",
         "serverName", "serverAddress", "serverPort", "clientId", "uiContextHint", "menuName", "popupName", "hasTextInput",
         "debugStatusVersion", "maxRecoveryWatchdogMs", "uiState", "automationReady", "imeRequested", "imeSuppressedForDebug", "imeVisibleKnown", "imeVisible",
-        "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "timelineSource", "serverAnchorMs",
+        "connectionTraceAvailable", "connectionGeneration", "connectionServer",
+        "connectionCreatedMonotonicMs", "connectionAlive", "connectionCloseRequested",
+        "connectionCloseComplete", "connectionMediaWorkerRunning",
+        "connectionGfxWorkerRunning", "connectionGfxReadWorkerRunning",
+        "connectionEventRouterRunning", "connectionMediaCommandCount",
+        "connectionMediaReplyCount", "connectionGfxReadCount",
+        "connectionGfxDispatchCount", "connectionGfxReplyCount",
+        "connectionEventQueuedCount", "connectionEventDequeuedCount",
+        "connectionReconnectCount", "connectionGfxQueueDepth",
+        "connectionGfxQueueMaxDepth", "connectionEventQueueDepth",
+        "connectionEventQueueMaxDepth", "connectionEventSequence", "connectionRecent",
+        "appVisibilityState", "backgroundTransitionGeneration", "pausedByBackground",
+        "wasPlayingBeforeBackground", "backgroundMonotonicMs", "foregroundMonotonicMs",
+        "backgroundPauseRequestCount", "backgroundPlayRequestCount",
+        "backgroundPreservedCount", "backgroundLostCount",
+        "appStartedActivityCount", "appBackground",
+        "backgroundSessionTimeoutMs", "backgroundSessionTimeoutDeadlineMonotonicMs",
+        "backgroundSessionTimeoutCount",
+        "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "playbackRate", "timelineSource", "serverAnchorMs",
         "serverRequestedSeekMs", "serverSeekSequence", "serverSeekMonotonicMs", "serverSeekWallMs", "serverSeekAgeMs",
         "serverFlushSequence", "serverFlushMonotonicMs", "serverFlushAgeMs",
         "serverAnchorSequence", "serverAnchorMonotonicMs", "serverAnchorAgeMs", "bufferLeft",
+        "serverChannelBandwidthKbps", "serverStreamBandwidthKbps", "serverTargetBandwidthKbps",
+        "serverMuxTimeMs", "clientBufferTimeMs", "clientBufferAvailableBytes",
+        "lastPushPayloadBytes", "lastPushFlags", "lastPushReply",
+        "dvdSessionPending", "dvdPushedBytes", "dvdLastReadBytes",
+        "dvdDrainPollCount", "dvdDrainReadyCount", "detailedPushSampleSequence",
+        "dvdInitCount", "dvdPushCommandCount", "dvdPushMediaCount",
+        "dvdNewCellCount", "dvdClutCount", "dvdSpuControlCount",
+        "dvdStcCount", "dvdStreamCount", "dvdLastStreamType",
+        "dvdLastStreamPosition", "dvdLastAudioStreamPosition",
+        "dvdLastSubtitleStreamPosition", "dvdFormatCount", "dvdTransientEosCount",
+        "discOldServerNativeFallback", "discMimRuntimeFallback",
+        "discCompatibilityReason",
+        "dvdRequestedAudioStream", "dvdAppliedAudioStream",
+        "dvdSelectedAudioFormatId", "dvdAvailableAudioFormatIds",
+        "dvdSpuFragments", "dvdCompletedSpuPackets", "dvdMalformedSpuPackets",
+        "dvdDecodedSpuEvents", "dvdDroppedSpuEvents", "dvdOverlaysPresented",
+        "dvdOverlaysCleared", "dvdOverlayEventsScheduled", "dvdOverlayEventsApplied",
+        "dvdOverlayEventsStale", "dvdLastOverlayEventUs", "dvdLastOverlayClockUs",
+        "dvdLastOverlayOpaquePixels", "dvdHighlightVisible",
+        "dvdHighlightX1", "dvdHighlightY1", "dvdHighlightX2", "dvdHighlightY2",
+        "dvdHighlightPaletteWord",
+        "dvdLatestVideoSampleUs", "dvdLatestAudioSampleUs", "dvdAvSampleDeltaUs",
+        "dvdVideoTimestampCorrectionCount", "dvdMpeg2TimestampRepairEnabled",
+        "dvdMpeg2ReportedFrameRateHz", "dvdMpeg2SequenceFrameRateHz",
+        "dvdMpeg2EffectiveFieldDurationUs", "dvdMpeg2TelecineCadenceSeen",
+        "dvdDiscontinuityRebaseCount", "dvdPtsTrace", "dvdFrameMetadataCount",
+        "dvdStc45Khz", "dvdLogicalClockBaseMs", "dvdRenderedVideoClockDeltaUs",
+        "dvdLastFramePresentationDeltaUs", "dvdLastFrameReleaseDeltaUs",
+        "dvdMaxFrameReleaseDeltaUs", "dvdFrameReleaseGapCount",
+        "dvdFrameReleaseNonPositiveCount", "dvdFrameReleaseUnder10MsCount",
+        "dvdFrameRelease10To25MsCount", "dvdFrameRelease25To45MsCount",
+        "dvdFrameRelease45To75MsCount", "dvdFrameRelease75To100MsCount",
+        "dvdFrameCadenceTrace",
+        "detailedPushSampleMonotonicMs", "detailedPushSampleWallMs", "detailedPushSampleAgeMs",
         "lastFileReadPos", "videoWidth", "videoHeight",
+        "videoDestX", "videoDestY", "videoDestWidth", "videoDestHeight",
+        "videoUiWidth", "videoUiHeight", "videoLayoutStateError",
+        "fastSwitchAttemptCount", "fastSwitchSuccessCount",
+        "fastSwitchFallbackCount", "fastSwitchAwaitingFirstFrame",
+        "fastSwitchLastReason", "fastSwitchTargetUrl",
+        "subtitleTrackCount", "selectedSubtitleTrack", "selectedSubtitleTrackRaw", "subtitleTracks",
+        "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "lastSubtitleCueText", "currentSubtitleCueText",
+        "subtitleOverlayAttached", "subtitleStateError",
         "health_probeSupported", "health_probeProvider", "health_probeReason",
         "health_topLevelPlayerClass", "health_backendClass", "health_backendPlayerClass", "health_dataSourceClass",
         "health_dataSourceOpenCount", "health_dataSourceOpenWaitMs", "health_dataSourceLastOpenPosition",
+        "sourceOpenMonotonicMs", "sourceFirstReadMonotonicMs", "sourceFirstReadPosition",
+        "health_dataSourceLastOpenMonotonicMs", "health_dataSourceFirstReadAfterOpenMonotonicMs",
+        "health_dataSourceFirstReadAfterOpenPosition",
         "health_dataSourceNetworkReadCount", "health_dataSourceNetworkReadRequestedBytes",
         "health_dataSourceNetworkReadBytes", "health_dataSourceNetworkReadWaitMs",
         "health_dataSourceNetworkReadMaxRequestedBytes", "health_dataSourceNetworkReadErrors",
         "health_dataSourceNetworkLastReadPosition",
+        "health_dataSourceReadCount", "health_dataSourceReadRequestedBytes", "health_dataSourceReadBytes",
+        "health_dataSourceReadWaitMs", "health_dataSourceReadRateKbps",
+        "health_dataSourcePushCount", "health_dataSourcePushedBytes",
+        "playbackSource", "sageOriginalPath", "smbMappedPath", "smbConnected",
+        "shadowMediaServerConnected", "shadowOpenSent", "shadowSizeSent", "shadowReadBytes",
+        "smbBytesRead", "smbReadCount", "smbSeekCount", "smbLastReadLatencyMs",
+        "smbFallbackCount", "smbFallbackReason",
+        "health_playbackSource", "health_sageOriginalPath", "health_smbMappedPath",
+        "health_smbConnected", "health_shadowMediaServerConnected", "health_shadowOpenSent",
+        "health_shadowSizeSent", "health_shadowReadBytes", "health_smbBytesRead",
+        "health_smbReadCount", "health_smbSeekCount", "health_smbLastReadLatencyMs",
+        "health_smbFallbackCount", "health_smbFallbackReason",
         "health_bufferLeft", "health_lastFileReadPos",
         "health_pushMode", "health_playerReady", "health_seekPending", "health_flushed", "health_errorState", "health_retryCount",
         "health_playbackState", "health_playWhenReady", "health_isPlaying", "health_isLoading",
@@ -146,6 +239,9 @@ def _compact_state(state: dict) -> dict:
         "health_videoMime", "health_videoCodecString", "health_videoDecoder", "health_videoDecoderKind",
         "health_videoWidth", "health_videoHeight", "health_videoRendered", "health_videoSkipped", "health_videoDropped",
         "health_videoQueuedInput", "health_videoDecoderInitCount", "health_videoDecoderReleaseCount",
+        "health_mpeg2InterlaceObservation", "health_mpeg2SequenceExtensionSeen",
+        "health_mpeg2ProgressiveFrameCount", "health_mpeg2InterlacedFrameCount",
+        "health_mpeg2FieldPictureCount",
         "health_audioMime", "health_audioCodecString", "health_audioDecoder", "health_audioDecoderKind",
         "health_audioChannels", "health_audioFormatSampleRate", "health_audioRendered", "health_audioSkipped", "health_audioDropped",
         "health_audioQueuedInput", "health_audioDecoderInitCount", "health_audioDecoderReleaseCount",
@@ -180,7 +276,32 @@ def _counter_advanced(before: int | None, after: int | None) -> bool:
     return a < b and a > 0
 
 
-def _playback_health_from_pair(before: dict, after: dict) -> tuple[bool, dict]:
+def _stream_expectations(*states: dict) -> tuple[bool, bool]:
+    """Determine which A/V outputs must advance without allowing a vacuous pass."""
+    video_expected = any(bool(
+        state.get("health_videoMime")
+        or state.get("health_videoDecoder")
+        or (
+            int(state.get("health_videoWidth", 0) or 0) > 0
+            and int(state.get("health_videoHeight", 0) or 0) > 0
+        )
+    ) for state in states if isinstance(state, dict))
+    audio_expected = any(bool(
+        state.get("health_audioMime")
+        or state.get("health_audioDecoder")
+        or state.get("health_audioTrackPresent")
+        or int(state.get("health_audioChannels", 0) or 0) > 0
+    ) for state in states if isinstance(state, dict))
+    return video_expected, audio_expected
+
+
+def _playback_health_from_pair(
+    before: dict,
+    after: dict,
+    *,
+    expect_video: bool | None = None,
+    expect_audio: bool | None = None,
+) -> tuple[bool, dict]:
     player_active = bool(after.get("playerActive"))
     state_playing = int(after.get("state", -1)) == 2
     probe_supported = bool(after.get("health_probeSupported", False) or before.get("health_probeSupported", False))
@@ -197,8 +318,9 @@ def _playback_health_from_pair(before: dict, after: dict) -> tuple[bool, dict]:
         # several backends can leave those fields stale while A/V output advances.
         ready = bool(after.get("health_playerReady", False))
         is_playing = bool(after.get("health_isPlaying", False))
-        video_expected = bool(after.get("health_videoMime") or before.get("health_videoMime"))
-        audio_expected = bool(after.get("health_audioMime") or before.get("health_audioMime"))
+        detected_video, detected_audio = _stream_expectations(before, after)
+        video_expected = detected_video if expect_video is None else bool(expect_video)
+        audio_expected = detected_audio if expect_audio is None else bool(expect_audio)
         surface_ok = (not video_expected) or bool(after.get("health_surfaceValid", False))
         video_advancing = (not video_expected) or _counter_advanced(
             before.get("health_videoRendered"), after.get("health_videoRendered")
@@ -224,7 +346,7 @@ def _playback_health_from_pair(before: dict, after: dict) -> tuple[bool, dict]:
             "no_error": no_error,
             "verdict_basis": "av_output_counters",
         })
-        return video_advancing and audio_advancing, details
+        return video_advancing and audio_advancing and surface_ok and no_error, details
 
     # Fallback only for backends where the detailed output probe is unavailable.
     if not player_active or not state_playing:
@@ -240,7 +362,124 @@ def _playback_health_from_pair(before: dict, after: dict) -> tuple[bool, dict]:
     return advancing, details
 
 
-def _wait_for_playback(timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
+def _dvd_static_menu_health(state: dict) -> tuple[bool, dict]:
+    """Recognize a decoded DVD infinite-still menu as healthy output.
+
+    A DVD menu with ``still=inf`` intentionally stops advancing after its
+    short MPEG presentation segment.  Requiring decoder/audio counters to
+    continue advancing therefore misclassifies a valid, interactive menu as a
+    playback stall.  Keep this exception narrow: the MiniDVD session, decoded
+    video, a valid surface, and a non-empty composed DVD SPU overlay must all
+    be present, and any player error still fails the gate.
+    """
+    player_active = bool(state.get("playerActive"))
+    session_pending = bool(state.get("dvdSessionPending"))
+    video_rendered = int(state.get("health_videoRendered", 0) or 0)
+    overlay_presented = int(state.get("dvdOverlaysPresented", 0) or 0)
+    overlay_pixels = int(state.get("dvdLastOverlayOpaquePixels", 0) or 0)
+    surface_ok = bool(state.get("health_surfaceValid", False))
+    no_error = not bool(state.get("health_errorState", False)) and not bool(
+        state.get("health_playerError")
+    )
+    passed = (
+        player_active
+        and session_pending
+        and video_rendered > 0
+        and overlay_presented > 0
+        and overlay_pixels > 0
+        and surface_ok
+        and no_error
+    )
+    return passed, {
+        "player_active": player_active,
+        "dvd_session_pending": session_pending,
+        "video_rendered": video_rendered,
+        "overlay_presented": overlay_presented,
+        "overlay_opaque_pixels": overlay_pixels,
+        "surface_ok": surface_ok,
+        "no_error": no_error,
+        "verdict_basis": "dvd_static_menu" if passed else "dvd_static_menu_incomplete",
+    }
+
+
+def _startup_terminal_failure(state: dict) -> dict | None:
+    menu = str(state.get("menuName") or "")
+    popup = str(state.get("popupName") or "")
+    context = str(state.get("uiContextHint") or "")
+    normalized_ui = " ".join((menu, popup, context)).lower().replace("_", "")
+    if "asktodeleterecording" in normalized_ui or (
+        "delete" in normalized_ui and "recording" in normalized_ui
+    ):
+        return {
+            "code": "eof_delete_prompt",
+            "message": "SageTV reached AskToDeleteRecording before startup completed",
+            "menuName": menu,
+            "popupName": popup,
+            "uiContextHint": context,
+        }
+    player_error = str(state.get("health_playerError") or "")
+    if bool(state.get("health_errorState")) or player_error:
+        return {
+            "code": "player_error",
+            "message": player_error or "player entered an error state",
+        }
+    return None
+
+
+def _is_resume_restart_prompt(state: dict) -> bool:
+    popup = str(state.get("popupName") or "").lower()
+    return "resume" in popup and "restart" in popup
+
+
+def _resolve_resume_restart_prompt(
+    timeout_s: float = 5.0,
+    restart_from_beginning: bool = False,
+) -> dict:
+    """Resolve SageTV's Resume/Restart prompt for an exact-path test start.
+
+    SageTV creates the MiniPlayer before showing this popup, so ``playerActive``
+    alone is not proof that playback was allowed to start.  Keep this handling
+    narrowly scoped to the unambiguous Resume/Restart prompt. Normal callers
+    retain the historical default Resume choice. Deterministic fixture tests
+    may explicitly choose Restart so saved watch positions cannot leak between
+    matrix cases.
+    """
+    deadline = time.monotonic() + max(0.5, min(float(timeout_s), 15.0))
+    last: dict = {}
+    active_without_prompt_since: float | None = None
+    while time.monotonic() < deadline:
+        last = adb.player_state_snapshot()
+        if _is_resume_restart_prompt(last):
+            navigation = None
+            if restart_from_beginning:
+                navigation = adb.sage_command("down")
+            selected = adb.sage_command("select")
+            return {
+                "selected": True,
+                "choice": "restart_from_beginning" if restart_from_beginning else "default_resume",
+                "popupName": str(last.get("popupName") or ""),
+                "navigation": navigation,
+                "command": selected,
+            }
+        if bool(last.get("playerActive")):
+            if active_without_prompt_since is None:
+                active_without_prompt_since = time.monotonic()
+            elif time.monotonic() - active_without_prompt_since >= 1.0:
+                break
+        time.sleep(0.1)
+    return {
+        "selected": False,
+        "reason": "resume_restart_prompt_not_present",
+        "state": _compact_state(last),
+    }
+
+
+def _wait_for_playback(
+    timeout_s: float = 45.0,
+    verify_ms: int = 1500,
+    expect_video: bool = True,
+    expect_audio: bool = True,
+) -> dict:
     timeout_s = max(1.0, min(float(timeout_s), 300.0))
     verify_ms = max(250, min(int(verify_ms), 10000))
     started = time.monotonic()
@@ -252,15 +491,53 @@ def _wait_for_playback(timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
     except Exception as exc:
         baseline_crash_probe = {"unavailable": True, "error": str(exc)}
     last = {}
+    last_health = {}
     while time.monotonic() < deadline:
         first = adb.player_state_snapshot()
         last = first
+        terminal_failure = _startup_terminal_failure(first)
+        if terminal_failure:
+            return {
+                "passed": False,
+                "verify_ms": verify_ms,
+                "failureReason": terminal_failure,
+                "state": _compact_state(first),
+                "baselineCrashProbe": baseline_crash_probe,
+                "longWaitProbes": long_wait_probes,
+            }
+        static_menu_healthy, static_menu_details = _dvd_static_menu_health(first)
+        if static_menu_healthy:
+            return {
+                "passed": True,
+                "verify_ms": verify_ms,
+                "health": static_menu_details,
+                "before": _compact_state(first),
+                "after": _compact_state(first),
+                "baselineCrashProbe": baseline_crash_probe,
+                "longWaitProbes": long_wait_probes,
+            }
         probe_available = bool(first.get("health_probeSupported", False))
         candidate_active = bool(first.get("playerActive")) and int(first.get("state", -1)) == 2
         if probe_available or candidate_active:
             time.sleep(verify_ms / 1000.0)
             second = adb.player_state_snapshot()
-            healthy, details = _playback_health_from_pair(first, second)
+            terminal_failure = _startup_terminal_failure(second)
+            if terminal_failure:
+                return {
+                    "passed": False,
+                    "verify_ms": verify_ms,
+                    "failureReason": terminal_failure,
+                    "state": _compact_state(second),
+                    "baselineCrashProbe": baseline_crash_probe,
+                    "longWaitProbes": long_wait_probes,
+                }
+            healthy, details = _playback_health_from_pair(
+                first,
+                second,
+                expect_video=expect_video,
+                expect_audio=expect_audio,
+            )
+            last_health = details
             last = second
             if healthy:
                 return {
@@ -309,10 +586,104 @@ def _wait_for_playback(timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
     return {
         "passed": False,
         "verify_ms": verify_ms,
+        "failureReason": {
+            "code": "startup_output_timeout",
+            "message": "expected playback output did not become healthy before timeout",
+            "expectVideo": bool(expect_video),
+            "expectAudio": bool(expect_audio),
+            "waitingForVideo": bool(expect_video) and not bool(last_health.get("video_advancing")),
+            "waitingForAudio": bool(expect_audio) and not bool(last_health.get("audio_advancing")),
+            "surfaceInvalid": bool(expect_video) and not bool(last_health.get("surface_ok")),
+            "playerError": last_health.get("no_error") is False,
+        },
+        "health": last_health,
         "state": _compact_state(last),
         "crashDetected": False,
         "baselineCrashProbe": baseline_crash_probe,
         "longWaitProbes": long_wait_probes,
+    }
+
+
+def _is_fullscreen_playback(state: dict) -> bool:
+    """Return true only for SageTV's full playback destination, not its SurfaceView."""
+    if not bool(state.get("playerActive")):
+        return False
+    menu = str(state.get("menuName", "")).strip().lower()
+    if "osd" in menu:
+        return True
+
+    try:
+        width = int(state.get("videoDestWidth", 0) or 0)
+        height = int(state.get("videoDestHeight", 0) or 0)
+        screen_width = int(state.get("videoUiWidth", 0) or 0)
+        screen_height = int(state.get("videoUiHeight", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    if min(width, height, screen_width, screen_height) <= 0:
+        return False
+    embedded = width * 100 < screen_width * 75 and height * 100 < screen_height * 75
+    return not embedded
+
+
+def _promote_preview_to_fullscreen(timeout_s: float = 8.0) -> dict:
+    """Enter the STV playback screen after Watch() has opened its preview player."""
+    before = adb.player_state_snapshot()
+    if not bool(before.get("playerActive")):
+        return {"passed": False, "reason": "player_not_active", "state": _compact_state(before)}
+
+    started = time.monotonic()
+    deadline = started + max(0.5, min(float(timeout_s), 15.0))
+    last = before
+    stable_since = started if _is_fullscreen_playback(before) else None
+
+    # A Vibe-aware server enters MediaPlayer OSD asynchronously after accepting
+    # its private watch-file event. Wait for that transition before sending TV;
+    # otherwise the delayed TV command can become a second toggle and return the
+    # STV to Main Menu. Older/stock servers still receive TV after this grace.
+    passive_deadline = min(deadline, started + 2.0)
+    while time.monotonic() < passive_deadline:
+        last = adb.player_state_snapshot()
+        if _is_fullscreen_playback(last):
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif time.monotonic() - stable_since >= 0.75:
+                return {
+                    "passed": True,
+                    "alreadyFullscreen": True,
+                    "stableMs": int((time.monotonic() - stable_since) * 1000),
+                    "state": _compact_state(last),
+                }
+        else:
+            stable_since = None
+        time.sleep(0.10)
+
+    command = None
+    if time.monotonic() < deadline:
+        command = adb.sage_command("tv")
+    stable_since = None
+    while time.monotonic() < deadline:
+        last = adb.player_state_snapshot()
+        if _is_fullscreen_playback(last):
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif time.monotonic() - stable_since >= 0.75:
+                result = {
+                    "passed": True,
+                    "alreadyFullscreen": False,
+                    "stableMs": int((time.monotonic() - stable_since) * 1000),
+                    "state": _compact_state(last),
+                }
+                if command is not None:
+                    result["command"] = command
+                return result
+        else:
+            stable_since = None
+        time.sleep(0.10)
+    return {
+        "passed": False,
+        "reason": "fullscreen_surface_not_observed",
+        "command": command,
+        "state": _compact_state(last),
     }
 
 
@@ -352,6 +723,188 @@ def artifact(name: str, suffix: str) -> Path:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:80] or "capture"
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return cfg.artifact_dir / f"{stamp}_{safe}{suffix}"
+
+
+def _seek_fixture_metadata(path: Path) -> dict:
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-count_frames",
+            "-show_entries",
+            "format=filename,duration,size,bit_rate:stream=index,codec_name,codec_type,width,height,r_frame_rate,field_order,sample_rate,channels,nb_read_frames",
+            "-of", "json", str(path),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        # A 15-minute 10-Mbit fixture is about 1.1 GiB. Counting every final
+        # video frame is intentionally stronger than a header-only probe and
+        # can exceed one minute while the unified container is compiling.
+        timeout=300,
+    )
+    digest = hashlib.sha256()
+    a53_signature = b"GA94"
+    a53_overlap = b""
+    a53_payload_count = 0
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+            a53_data = a53_overlap + block
+            a53_payload_count += a53_data.count(a53_signature)
+            a53_overlap = a53_data[-(len(a53_signature) - 1):]
+    metadata = json.loads(probe.stdout)
+    metadata["sha256"] = digest.hexdigest()
+    metadata["artifactPath"] = str(path.relative_to(PROJECT_ROOT))
+    metadata["a53Ga94PayloadCount"] = a53_payload_count
+    if a53_payload_count <= 0:
+        raise RuntimeError(f"generated fixture has no ATSC A/53 GA94 caption payloads: {path}")
+    video_streams = [stream for stream in metadata.get("streams", []) if stream.get("codec_type") == "video"]
+    if len(video_streams) != 1:
+        raise RuntimeError(f"generated fixture must have exactly one video stream: {path}")
+    final_video_frames = int(video_streams[0].get("nb_read_frames", 0) or 0)
+    metadata["finalVideoFrameCount"] = final_video_frames
+    if final_video_frames <= 0 or a53_payload_count != final_video_frames:
+        raise RuntimeError(
+            "generated fixture does not contain exactly one A/53 GA94 payload "
+            f"per final video picture: frames={final_video_frames} payloads={a53_payload_count}"
+        )
+    return metadata
+
+
+def _publish_fixture_to_smb(path: Path, smb_url: str, username: str, password: str) -> dict:
+    parsed = urlparse(str(smb_url).strip())
+    components = [unquote(part) for part in parsed.path.split("/") if part]
+    if parsed.scheme.lower() != "smb" or not parsed.hostname or len(components) < 2:
+        raise ValueError("publish_smb_url must include an SMB host, share, directory, and fixture filename")
+    share = components[0]
+    remote_path = "/".join(components[1:])
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", share):
+        raise ValueError("SMB share name contains unsupported characters")
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+\.(?:ts|edl)", remote_path):
+        raise ValueError("SMB destination path contains unsupported characters or is not a .ts/.edl fixture file")
+    if Path(remote_path).name != path.name:
+        raise ValueError("SMB destination filename must match the generated fixture filename")
+
+    command = ["smbclient", f"//{parsed.hostname}/{share}"]
+    auth_file: str | None = None
+    try:
+        if username:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="vibe-smb-auth-", delete=False) as auth:
+                auth.write(f"username = {username}\npassword = {password}\n")
+                auth_file = auth.name
+            Path(auth_file).chmod(0o600)
+            command.extend(["-A", auth_file])
+        else:
+            command.append("-N")
+        command.extend(["-c", f'put "{path}" "{remote_path}"'])
+        completed = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("smbclient is missing from the unified OpenSageTV Vibe build image") from exc
+    finally:
+        if auth_file:
+            Path(auth_file).unlink(missing_ok=True)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "unknown smbclient error").strip()
+        raise RuntimeError(f"SMB fixture publish failed (exit={completed.returncode}): {detail[-2000:]}")
+    return {
+        "published": True,
+        "smbUrl": smb_url,
+        "authentication": "credentials" if username else "anonymous",
+    }
+
+
+def _write_seek_fixture_edl(media_path: Path, duration_s: int) -> Path:
+    edl_path = media_path.with_suffix(".edl")
+    intervals = ((120, 180), (360, 420), (660, 720))
+    rows = [f"{start}.000\t{end}.000\t0\n" for start, end in intervals if duration_s >= end]
+    edl_path.write_text("".join(rows), encoding="utf-8")
+    return edl_path
+
+
+@mcp.tool()
+def generate_seek_fixture(
+    duration_s: int = 900,
+    filename: str = "VibeSeekTest-1080i-MPEG2-AC3-CC.ts",
+    force: bool = False,
+    publish_smb_url: str = "",
+    smb_username: str = "",
+    smb_password: str = "",
+) -> dict:
+    """Create/recreate the deterministic captioned SageTV seek fixture.
+
+    Output is deliberately restricted to the project's artifacts/test-media directory.
+    Video carries real ATSC A/53 CEA-608 CC1 and CEA-708 Service 1 payloads at
+    0.5-second intervals. The returned FFprobe metadata and SHA-256 make the
+    exact test input auditable.
+    """
+    duration_s = int(duration_s)
+    if duration_s < 1 or duration_s > 3600:
+        raise ValueError("duration_s must be between 1 and 3600")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ts", filename):
+        raise ValueError("filename must be a simple .ts basename containing only letters, numbers, dot, underscore, or dash")
+
+    output = SEEK_FIXTURE_DIR / filename
+    generated = True
+    reason = "created" if not force else "recreated"
+    if output.exists() and not force:
+        generated = False
+        reason = "already_exists"
+    else:
+        generator = PROJECT_ROOT / "scripts" / "generate_seek_fixture.sh"
+        if not generator.is_file():
+            raise RuntimeError(f"seek fixture generator is missing: {generator}")
+        SEEK_FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+        completed = subprocess.run(
+            ["bash", str(generator), str(output), str(duration_s)],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=max(180, duration_s * 4),
+        )
+        if completed.returncode != 0:
+            output.unlink(missing_ok=True)
+            detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
+            raise RuntimeError(f"seek fixture generation failed (exit={completed.returncode}): {detail[-4000:]}")
+
+    metadata = _seek_fixture_metadata(output)
+    actual_duration_s = int(float(metadata.get("format", {}).get("duration", duration_s)))
+    edl_path = _write_seek_fixture_edl(output, actual_duration_s)
+    publication = None
+    if publish_smb_url.strip():
+        publication = _publish_fixture_to_smb(output, publish_smb_url, smb_username, smb_password)
+        edl_url = publish_smb_url.rsplit("/", 1)[0] + "/" + edl_path.name
+        publication["commercialMarkers"] = _publish_fixture_to_smb(
+            edl_path, edl_url, smb_username, smb_password
+        )
+    return {
+        "generated": generated,
+        "reason": reason,
+        "publication": publication,
+        "commercialMarkerPath": str(edl_path.relative_to(PROJECT_ROOT)),
+        "commercialMarkers": ((120, 180), (360, 420), (660, 720)),
+        "captions": {
+            "transport": "ATSC_A53_GA94",
+            "services": ("CEA-608 CC1", "CEA-708 Service 1"),
+            "intervalSeconds": 0.5,
+        },
+        "audioVisualSyncPulse": {
+            "intervalSeconds": 1.0,
+            "durationSeconds": 0.12,
+            "audioTracks": ("AC-3 5.1 1000 Hz", "AC-3 stereo 440 Hz"),
+            "visualMarker": "white upper-left box and whole-second label",
+        },
+        "credentialsReturned": False,
+        **metadata,
+    }
+
 
 @mcp.tool()
 def adb_connect() -> dict:
@@ -484,9 +1037,15 @@ def kill_dev_app() -> dict:
     """Force-stop the isolated Dev MiniClient and verify that its process is gone."""
     before = adb.app_status()
     result = adb.force_stop() if before.get("running") else "already stopped"
-    time.sleep(0.25)
+    deadline = time.monotonic() + 15.0
     after = adb.app_status()
-    return {"before": before, "forceStop": result, "after": after, "stopped": not bool(after.get("running"))}
+    while after.get("running") and time.monotonic() < deadline:
+        time.sleep(0.25)
+        after = adb.app_status()
+    force_stop_committed = bool(after.get("forceStopped") and not after.get("foreground"))
+    return {"before": before, "forceStop": result, "after": after,
+            "stopped": not bool(after.get("running")) or force_stop_committed,
+            "terminationPending": bool(after.get("running") and force_stop_committed)}
 
 @mcp.tool()
 def dev_prepare_clean_start(wake: bool = True, graceful_timeout_s: float = 2.0) -> dict:
@@ -520,6 +1079,48 @@ def dev_player_state() -> dict:
     state["trapEvents"] = _parse_trap_recent(state.get("trapRecent"))
     return state
 
+
+@mcp.tool()
+def dev_codec_capabilities() -> dict:
+    """Read video decoder capabilities and process-local init/failure observations from the debug APK."""
+    return adb.codec_capabilities()
+
+
+@mcp.tool()
+def dev_ensure_fullscreen_playback(timeout_s: float = 8.0) -> dict:
+    """Promote an active SageTV preview/subwindow to fullscreen and verify its playback surface."""
+    return _promote_preview_to_fullscreen(timeout_s=timeout_s)
+
+
+@mcp.tool()
+def dev_smb_profile_list() -> dict:
+    """List validated MiniClient profile files through the debug APK's configured SMB profile share."""
+    return adb.smb_profile("list")
+
+
+@mcp.tool()
+def dev_smb_profile_save(name: str, overwrite: bool = False) -> dict:
+    """Save the current preferences as a credential-free profile; overwrite must be explicit."""
+    return adb.smb_profile("save", name=name, overwrite=overwrite)
+
+
+@mcp.tool()
+def dev_smb_profile_load(name: str) -> dict:
+    """Load and validate a remote profile without applying settings or its separately held Client ID."""
+    return adb.smb_profile("load", name=name)
+
+
+@mcp.tool()
+def dev_smb_profile_delete(name: str) -> dict:
+    """Delete a named test profile from the configured SMB share."""
+    return adb.smb_profile("delete", name=name)
+
+
+@mcp.tool()
+def dev_open_smb_profile_settings() -> dict:
+    """Open the production SMB configuration-profile settings UI in the debug APK."""
+    return adb.open_smb_profile_settings()
+
 @mcp.tool()
 def dev_player_events() -> dict:
     """Read the debug APK exact-event playback trap ring, including event-time A/V counters."""
@@ -532,12 +1133,23 @@ def dev_clear_player_events() -> dict:
     """Clear the debug APK exact-event playback trap ring before a focused playback action."""
     return adb.clear_player_event_traps()
 
+
+@mcp.tool()
+def dev_set_datasource_capture(enabled: bool = True) -> dict:
+    """Enable/disable a bounded raw Push-byte capture for the next playback."""
+    return adb.set_datasource_capture(enabled)
+
 @mcp.tool()
 def dev_set_player_config(
     player: str = "",
     streaming: str = "",
     decoding: str = "",
     gsy_engine: str = "",
+    gsy_system_probe: bool | None = None,
+    preferred_audio_language: str = "",
+    preferred_subtitle_language: str = "",
+    preferred_caption_standard: str = "",
+    preferred_caption_service: int = 0,
     fixed_encoding_preference: str = "",
     fixed_encoding_format: str = "",
     fixed_video_bitrate_kbps: int = 0,
@@ -550,16 +1162,45 @@ def dev_set_player_config(
     fixed_audio_channels: str = "",
     fixed_remuxing_preference: str = "",
     fixed_remuxing_format: str = "",
+    smb_mappings: str = "",
+    smb_username: str = "",
+    smb_password: str = "",
+    smb_domain: str = "",
+    smb_clear_auth: bool = False,
+    smb_profile_directory: str = "",
+    smb_profile_username: str = "",
+    smb_profile_password: str = "",
+    smb_profile_domain: str = "",
+    smb_profile_clear_auth: bool = False,
+    keep_session_in_background: bool | None = None,
+    resume_background_playback: bool | None = None,
+    background_session_timeout_seconds: int | None = None,
+    disc_playback_policy: str = "",
+    disc_skip_menus: bool | None = None,
+    disc_skip_previews: bool | None = None,
+    disc_compatibility_fallback: bool | None = None,
+    disc_mpeg2_timestamp_repair: str = "",
 ) -> dict:
     """Set all debug APK playback preferences for the next playback.
 
-    User selections: streaming push/pull/fixed; decoding hardware/software/fallback.
-    Fixed encoding parameters may also be supplied: encoding preference needed/always,
+    User selections: streaming push/pull/fixed/smb_direct/smb_auto; decoding
+    hardware/software/fallback. Preferred BCP-47 audio/subtitle languages and
+    CEA-608/708 service selection apply on the next playback without changing
+    SageTV STV caption Off/On authority. SMB credentials are accepted only by the Dev
+    control path and are never returned by this tool.
+    Disc/DVD policy, menu/preview skipping, and compatibility fallback are also
+    configurable and are reported in every snapshot. Fixed encoding parameters may
+    also be supplied: encoding preference needed/always,
     container matroska/dvd, video bitrate/fps/keyframe/B-frames/resolution, audio
     codec/bitrate/channels, and fixed remuxing preference/format.
     """
     return adb.set_player_config(
         player=player, streaming=streaming, decoding=decoding, gsy_engine=gsy_engine,
+        gsy_system_probe=gsy_system_probe,
+        preferred_audio_language=preferred_audio_language,
+        preferred_subtitle_language=preferred_subtitle_language,
+        preferred_caption_standard=preferred_caption_standard,
+        preferred_caption_service=preferred_caption_service or "",
         fixed_encoding_preference=fixed_encoding_preference,
         fixed_encoding_format=fixed_encoding_format,
         fixed_video_bitrate_kbps=fixed_video_bitrate_kbps or "",
@@ -572,6 +1213,24 @@ def dev_set_player_config(
         fixed_audio_channels=fixed_audio_channels,
         fixed_remuxing_preference=fixed_remuxing_preference,
         fixed_remuxing_format=fixed_remuxing_format,
+        smb_mappings=smb_mappings,
+        smb_username=smb_username,
+        smb_password=smb_password,
+        smb_domain=smb_domain,
+        smb_clear_auth=smb_clear_auth,
+        smb_profile_directory=smb_profile_directory,
+        smb_profile_username=smb_profile_username,
+        smb_profile_password=smb_profile_password,
+        smb_profile_domain=smb_profile_domain,
+        smb_profile_clear_auth=smb_profile_clear_auth,
+        keep_session_in_background=keep_session_in_background,
+        resume_background_playback=resume_background_playback,
+        background_session_timeout_seconds=background_session_timeout_seconds,
+        disc_playback_policy=disc_playback_policy,
+        disc_skip_menus=disc_skip_menus,
+        disc_skip_previews=disc_skip_previews,
+        disc_compatibility_fallback=disc_compatibility_fallback,
+        disc_mpeg2_timestamp_repair=disc_mpeg2_timestamp_repair,
     )
 
 @mcp.tool()
@@ -652,9 +1311,11 @@ def dev_set_player_tuning(
     )
 
 @mcp.tool()
-def dev_connect_server(server_name: str = "", address: str = "", port: int = 31099, save: bool = True) -> dict:
-    """Connect the debug MiniClient to a saved SageTV server by name, a direct address, or the last-connected server when neither is supplied."""
-    return adb.connect_server(server_name=server_name, address=address, port=port, save=save)
+def dev_connect_server(server_name: str = "", address: str = "", port: int = 31099,
+                       save: bool = True, renderer: str = "") -> dict:
+    """Connect to SageTV, optionally selecting the ``opengl`` or ``gdx`` UI renderer."""
+    return adb.connect_server(server_name=server_name, address=address, port=port,
+                              save=save, renderer=renderer)
 
 
 @mcp.tool()
@@ -663,7 +1324,15 @@ def dev_exit_session(stop_app: bool = False) -> dict:
     result = adb.exit_session()
     if stop_app:
         result["force_stop"] = adb.force_stop()
-        result["stopped"] = True
+        deadline = time.monotonic() + 15.0
+        status = adb.app_status()
+        while status.get("running") and time.monotonic() < deadline:
+            time.sleep(0.25)
+            status = adb.app_status()
+        force_stop_committed = bool(status.get("forceStopped") and not status.get("foreground"))
+        result["status"] = status
+        result["stopped"] = not bool(status.get("running")) or force_stop_committed
+        result["terminationPending"] = bool(status.get("running") and force_stop_committed)
     else:
         result["stopped"] = False
     return result
@@ -734,9 +1403,130 @@ def dev_wait_for_ui(
 
 
 @mcp.tool()
-def dev_wait_for_playback_started(timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
+def dev_wait_for_playback_started(
+    timeout_s: float = 45.0,
+    verify_ms: int = 1500,
+    expect_video: bool = True,
+    expect_audio: bool = True,
+) -> dict:
     """Wait for a started recording and verify that actual video/audio output continues advancing, using the existing debug health snapshot when supported."""
-    return _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+    return _wait_for_playback(
+        timeout_s=timeout_s,
+        verify_ms=verify_ms,
+        expect_video=expect_video,
+        expect_audio=expect_audio,
+    )
+
+
+@mcp.tool()
+def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int = 3000) -> dict:
+    """Tune live TV to an exact dotted channel and verify its identity plus advancing A/V.
+
+    This uses the opt-in OpenSageTV Vibe MiniClient protocol extension so an
+    ATSC channel such as ``2.1`` is not rewritten to the legacy ``2-1`` numeric
+    UI form. The server must set
+    ``miniclient/enable_vibe_channel_set_event=true``.
+    """
+    requested = str(channel).strip()
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", requested):
+        raise ValueError("valid dotted channel is required")
+    timeout_s = max(5.0, min(float(timeout_s), 180.0))
+    verify_ms = max(500, min(int(verify_ms), 30000))
+    before = adb.player_state_snapshot()
+    if not bool(before.get("connected")) or not bool(before.get("playerActive")):
+        raise RuntimeError("active live playback is required before setting a channel")
+    before_uri = str(before.get("mediaUri", ""))
+    before_channel = str(before.get("mediaChannel", "")).strip()
+    before_flush_sequence = int(before.get("serverFlushSequence", 0) or 0)
+    before_ack_sequence = int(before.get("vibeChannelAckSequence", 0) or 0)
+
+    if before_channel == requested:
+        playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+        passed = bool(playback.get("passed", False))
+        return {
+            "passed": passed,
+            "reason": "already_active" if passed else "channel_playback_not_healthy",
+            "channel": requested,
+            "confirmedChannel": before_channel,
+            "alreadyActive": True,
+            "mediaChanged": False,
+            "beforeMediaUri": before_uri,
+            "afterMediaUri": before_uri,
+            "request": {"skipped": True, "reason": "requested_channel_already_active"},
+            "playback": playback,
+            "transport": "sagetv_media_state_url",
+            "serverProperty": "miniclient/enable_vibe_channel_set_event=true",
+        }
+
+    request = adb.dev_control("set_live_channel", channel=requested)
+
+    deadline = time.monotonic() + timeout_s
+    changed_state: dict = {}
+    while time.monotonic() < deadline:
+        changed_state = adb.player_state_snapshot()
+        changed_uri = str(changed_state.get("mediaUri", ""))
+        changed_channel = str(changed_state.get("mediaChannel", "")).strip()
+        changed_flush_sequence = int(changed_state.get("serverFlushSequence", 0) or 0)
+        changed_ack_sequence = int(changed_state.get("vibeChannelAckSequence", 0) or 0)
+        session_changed = changed_flush_sequence > before_flush_sequence or (
+            bool(changed_uri) and changed_uri != before_uri
+        )
+        acknowledged_current = changed_channel == requested and changed_ack_sequence > before_ack_sequence
+        if bool(changed_state.get("playerActive")) and (
+                (changed_channel == requested and (session_changed or acknowledged_current)) or
+                (not changed_channel and changed_uri and changed_uri != before_uri)):
+            break
+        time.sleep(0.25)
+    changed_uri = str(changed_state.get("mediaUri", ""))
+    changed_channel = str(changed_state.get("mediaChannel", "")).strip()
+    media_changed = bool(changed_state.get("playerActive")) and bool(changed_uri) and changed_uri != before_uri
+    channel_confirmed = changed_channel == requested
+    flush_changed = int(changed_state.get("serverFlushSequence", 0) or 0) > before_flush_sequence
+    ack_changed = int(changed_state.get("vibeChannelAckSequence", 0) or 0) > before_ack_sequence
+    legacy_transition_confirmed = not changed_channel and media_changed
+    transition_confirmed = media_changed or flush_changed or ack_changed
+    acknowledged_already_active = channel_confirmed and ack_changed and not before_channel
+    if (not channel_confirmed and not legacy_transition_confirmed) or (
+            not transition_confirmed and not acknowledged_already_active):
+        return {
+            "passed": False,
+            "reason": "channel_identity_not_confirmed",
+            "channel": requested,
+            "confirmedChannel": changed_channel,
+            "beforeMediaUri": before_uri,
+            "afterMediaUri": changed_uri,
+            "beforeFlushSequence": before_flush_sequence,
+            "afterFlushSequence": int(changed_state.get("serverFlushSequence", 0) or 0),
+            "beforeAckSequence": before_ack_sequence,
+            "afterAckSequence": int(changed_state.get("vibeChannelAckSequence", 0) or 0),
+            "request": request,
+            "state": _compact_state(changed_state),
+            "serverProperty": "miniclient/enable_vibe_channel_set_event=true",
+        }
+
+    playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+    passed = bool(playback.get("passed", False))
+    return {
+        "passed": passed,
+        "reason": "ok" if passed else "channel_playback_not_healthy",
+        "channel": requested,
+        "confirmedChannel": changed_channel,
+        "alreadyActive": False,
+        "acknowledgedAlreadyActive": acknowledged_already_active,
+        "mediaChanged": media_changed,
+        "flushChanged": flush_changed,
+        "ackChanged": ack_changed,
+        "beforeFlushSequence": before_flush_sequence,
+        "afterFlushSequence": int(changed_state.get("serverFlushSequence", 0) or 0),
+        "beforeAckSequence": before_ack_sequence,
+        "afterAckSequence": int(changed_state.get("vibeChannelAckSequence", 0) or 0),
+        "beforeMediaUri": before_uri,
+        "afterMediaUri": changed_uri,
+        "request": request,
+        "playback": playback,
+        "transport": "miniclient_vibe_channel_set_event",
+        "serverProperty": "miniclient/enable_vibe_channel_set_event=true",
+    }
 
 
 @mcp.tool()
@@ -767,7 +1557,51 @@ def dev_current_media_file() -> dict:
 
 
 @mcp.tool()
-def dev_play_media_file_id(media_file_id: int, timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
+def dev_stv_caption_state() -> dict:
+    """Read SageTV's server-owned CC state for the connected MiniClient UI."""
+    state = adb.player_state_snapshot()
+    if not bool(state.get("connected")):
+        raise RuntimeError("MiniClient must be connected before reading STV captions")
+    server_address = str(state.get("serverAddress", "")).strip()
+    client_id = str(state.get("clientId", "")).strip()
+    sagex = SagexApiClient.discover(server_address)
+    context = sagex.resolve_context(client_id)
+    return {
+        "state": sagex.closed_caption_state(context),
+        "serverAddress": server_address,
+        "clientId": client_id,
+        "uiContext": context,
+    }
+
+
+@mcp.tool()
+def dev_set_stv_caption_state(state: str) -> dict:
+    """Set Off/CC1/CC2 through SageTV's standard server CC handler."""
+    snapshot = adb.player_state_snapshot()
+    if not bool(snapshot.get("connected")):
+        raise RuntimeError("MiniClient must be connected before setting STV captions")
+    server_address = str(snapshot.get("serverAddress", "")).strip()
+    client_id = str(snapshot.get("clientId", "")).strip()
+    sagex = SagexApiClient.discover(server_address)
+    context = sagex.resolve_context(client_id)
+    reply = sagex.set_closed_caption_state(context, state)
+    return {
+        "requestedState": str(state),
+        "state": sagex.closed_caption_state(context),
+        "reply": reply,
+        "serverAddress": server_address,
+        "clientId": client_id,
+        "uiContext": context,
+    }
+
+
+@mcp.tool()
+def dev_play_media_file_id(
+    media_file_id: int,
+    timeout_s: float = 45.0,
+    verify_ms: int = 1500,
+    restart_from_beginning: bool = False,
+) -> dict:
     """Watch one exact SageTV MediaFile ID and verify real A/V output.
 
     Unlike dev_play_video this does not enumerate/search the media library. It is the
@@ -787,7 +1621,29 @@ def dev_play_media_file_id(media_file_id: int, timeout_s: float = 45.0, verify_m
     sagex = SagexApiClient.discover(server_address)
     context = sagex.resolve_context(client_id)
     watch_reply = sagex.watch(context, media_file_id)
+    resume_prompt = _resolve_resume_restart_prompt(
+        timeout_s=min(15.0, max(5.0, timeout_s / 3.0)),
+        restart_from_beginning=restart_from_beginning,
+    )
+    restart_reply = None
+    if restart_from_beginning and not bool(resume_prompt.get("selected")):
+        # Some older STVs immediately apply the saved resume point without an
+        # inspectable Resume/Restart popup.  Do not race that initial server
+        # seek: wait until the MiniPlayer has opened, then issue the explicit
+        # server-owned restart request so both SageTV and Android move to zero.
+        restart_deadline = time.monotonic() + min(15.0, max(5.0, timeout_s / 3.0))
+        while time.monotonic() < restart_deadline:
+            restart_state = adb.player_state_snapshot()
+            if bool(restart_state.get("playerActive")) and int(
+                restart_state.get("serverSeekSequence", 0)
+            ) > 0:
+                restart_reply = sagex.seek(context, 0)
+                break
+            time.sleep(0.1)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+        "passed": False, "reason": "playback_not_healthy"
+    }
     current_id = None
     current_id_error = ""
     try:
@@ -795,7 +1651,7 @@ def dev_play_media_file_id(media_file_id: int, timeout_s: float = 45.0, verify_m
     except Exception as exc:
         current_id_error = str(exc)
     media_verified = current_id is None or int(current_id) == media_file_id
-    passed = bool(playback.get("passed", False)) and media_verified
+    passed = bool(playback.get("passed", False)) and bool(fullscreen.get("passed", False)) and media_verified
     return {
         "passed": passed,
         "reason": "ok" if passed else ("current_media_mismatch" if not media_verified else "playback_not_healthy"),
@@ -805,9 +1661,13 @@ def dev_play_media_file_id(media_file_id: int, timeout_s: float = 45.0, verify_m
         "clientId": client_id,
         "uiContext": context,
         "watchReply": watch_reply,
+        "restartFromBeginning": bool(restart_from_beginning),
+        "resumePrompt": resume_prompt,
+        "restartReply": restart_reply,
         "currentMediaFileId": current_id,
         "currentMediaFileIdError": current_id_error,
         "mediaVerified": media_verified,
+        "fullscreen": fullscreen,
         "playback": playback,
     }
 
@@ -857,6 +1717,9 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
     match = matches[0]
     watch_reply = sagex.watch(context, match.media_file_id)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+        "passed": False, "reason": "playback_not_healthy"
+    }
     current_id = None
     current_id_error = ""
     try:
@@ -864,7 +1727,7 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
     except Exception as exc:
         current_id_error = str(exc)
     media_verified = current_id is None or int(current_id) == int(match.media_file_id)
-    passed = bool(playback.get("passed", False)) and media_verified
+    passed = bool(playback.get("passed", False)) and bool(fullscreen.get("passed", False)) and media_verified
     return {
         "passed": passed,
         "reason": "ok" if passed else ("current_media_mismatch" if not media_verified else "playback_not_healthy"),
@@ -879,6 +1742,79 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
         "currentMediaFileId": current_id,
         "currentMediaFileIdError": current_id_error,
         "mediaVerified": media_verified,
+        "fullscreen": fullscreen,
+        "playback": playback,
+    }
+
+
+@mcp.tool()
+def dev_play_server_path(
+    server_path: str,
+    timeout_s: float = 45.0,
+    verify_ms: int = 1500,
+    restart_from_beginning: bool = False,
+) -> dict:
+    """Play one exact indexed SageTV MediaFile path in this MiniClient UI session.
+
+    This uses the opt-in OpenSageTV Vibe MiniClient protocol extension instead
+    of Sagex/Jetty or STV navigation. The server must set
+    ``miniclient/enable_vibe_watch_file_event=true``. A pre-existing playback
+    session is stopped first so an ignored/unsupported request cannot produce a
+    false pass from media that was already advancing.
+    """
+    requested = str(server_path).strip()
+    if not requested:
+        raise ValueError("server_path is required")
+    if "\x00" in requested or "\r" in requested or "\n" in requested:
+        raise ValueError("server_path must be one line and must not contain NUL")
+    state = adb.player_state_snapshot()
+    if not bool(state.get("connected")):
+        raise RuntimeError("MiniClient must be connected before dev_play_server_path")
+
+    stop_result: dict | None = None
+    stopped_state = state
+    if bool(state.get("playerActive")):
+        stop_result = adb.dev_control("command", command="stop")
+        stop_deadline = time.monotonic() + min(15.0, max(3.0, float(timeout_s) / 3.0))
+        while time.monotonic() < stop_deadline:
+            stopped_state = adb.player_state_snapshot()
+            if not bool(stopped_state.get("playerActive")):
+                break
+            time.sleep(0.2)
+        if bool(stopped_state.get("playerActive")):
+            return {
+                "passed": False,
+                "reason": "existing_playback_did_not_stop",
+                "requestedServerPath": requested,
+                "stopResult": stop_result,
+                "state": _compact_state(stopped_state),
+            }
+
+    request = adb.dev_control(
+        "watch_server_file",
+        server_path=requested,
+        restart_from_beginning="true" if restart_from_beginning else "false",
+    )
+    resume_prompt = _resolve_resume_restart_prompt(
+        timeout_s=min(8.0, timeout_s),
+        restart_from_beginning=bool(restart_from_beginning),
+    )
+    playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
+    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+        "passed": False, "reason": "playback_not_healthy"
+    }
+    passed = bool(playback.get("passed", False)) and bool(fullscreen.get("passed", False))
+    return {
+        "passed": passed,
+        "reason": "ok" if passed else "server_path_playback_not_started",
+        "requestedServerPath": requested,
+        "transport": "miniclient_vibe_watch_file_event",
+        "serverProperty": "miniclient/enable_vibe_watch_file_event=true",
+        "stopResult": stop_result,
+        "request": request,
+        "resumePrompt": resume_prompt,
+        "restartFromBeginning": bool(restart_from_beginning),
+        "fullscreen": fullscreen,
         "playback": playback,
     }
 
@@ -1118,6 +2054,24 @@ def dev_seek_relative(delta_ms: int) -> dict:
 
 
 @mcp.tool()
+def dev_frame_step(amount: int = 1) -> dict:
+    """Step the paused Pull/SMB player by a non-zero signed frame count."""
+    return adb.frame_step(int(amount))
+
+
+@mcp.tool()
+def dev_playback_rate(rate: float) -> dict:
+    """Debug-only command-30 rate request for bounded native/seek-scan testing."""
+    return adb.playback_rate(float(rate))
+
+
+@mcp.tool()
+def dev_media3_fast_switch_file(server_path: str) -> dict:
+    """Debug-only physical gate: replace the active completed Media3 Pull/SMB file without recreating the player."""
+    return adb.media3_fast_switch_file(server_path)
+
+
+@mcp.tool()
 def dev_skip_forward(skip_ms: int) -> dict:
     """Direct Android-player skip forward by the required caller-supplied milliseconds."""
     value = int(skip_ms)
@@ -1139,6 +2093,24 @@ def dev_skip_backward(skip_ms: int) -> dict:
 def dev_comskip(direction: str) -> dict:
     """Run Comskip without Android key injection. The debug APK posts SageTV RIGHT/LEFT internally so the STV can resolve its marker target."""
     return adb.comskip(direction)
+
+
+@mcp.tool()
+def dev_request_competing_audio_focus(mode: str = "transient") -> dict:
+    """Debug-only: request competing transient, duck, or permanent audio focus."""
+    return adb.request_competing_audio_focus(mode)
+
+
+@mcp.tool()
+def dev_abandon_competing_audio_focus() -> dict:
+    """Release the debug-only competing focus owner so transient focus can return."""
+    return adb.abandon_competing_audio_focus()
+
+
+@mcp.tool()
+def dev_set_subtitle_track(index: int) -> dict:
+    """Debug-only: select a present subtitle/caption track, or use -1 for off."""
+    return adb.set_subtitle_track(index)
 
 
 @mcp.tool()
@@ -1496,9 +2468,10 @@ def dev_run_comskip_check(
     target_known = int(expected_target_ms) >= 0
     target_error_ms = landing_ms - int(expected_target_ms) if target_known and landing_ms >= 0 else 0
     target_within_tolerance = (abs(target_error_ms) <= max(0, int(tolerance_ms))) if target_known else None
+    server_seek_observed = bool(result.get("serverSeekObserved", False))
     health_performed = bool(result.get("healthCheckPerformed", False))
     output_healthy = bool(result.get("outputHealthy", False)) if health_performed else bool(result.get("stillPlaying", False))
-    recovered = output_healthy and (target_within_tolerance is not False)
+    recovered = output_healthy and (target_within_tolerance is not False) and (server_seek_observed or not target_known)
     watchdog_expired = not recovered
     result.update({
         "expected_target_ms": int(expected_target_ms),
@@ -1506,6 +2479,8 @@ def dev_run_comskip_check(
         "target_error_ms": target_error_ms,
         "target_tolerance_ms": max(0, int(tolerance_ms)),
         "target_within_tolerance": target_within_tolerance,
+        "server_seek_required": target_known,
+        "server_seek_observed": server_seek_observed,
         "watchdog_ms": effective_watchdog_ms,
         "watchdog_requested_ms": effective_watchdog_ms,
         "watchdog_applied_ms": applied_watchdog_ms,
@@ -1596,6 +2571,113 @@ def dev_seek_time(target_ms: int, tolerance_ms: int = 2000, timeout_s: float = 1
         "measurement": "android_debug_seek_output_counter_recovery",
         "verdict_basis": "video_audio_output_counters_advancing_position_diagnostic_only",
     }
+
+
+@mcp.tool()
+def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
+                         timeout_s: float = 30.0, stable_ms: int = 1200) -> dict:
+    """Seek through SageTV's UI VideoFrame and verify landing plus A/V recovery.
+
+    This is the required positioning path for server-owned Push and DVD
+    sessions.  A local MiniPlayerPlugin seek cannot reposition MiniDVDPlayer's
+    server-side DVD VM or its outgoing byte stream.
+    """
+    target_ms = int(target_ms)
+    if target_ms < 0:
+        raise ValueError("target_ms must be >= 0")
+    tolerance_ms = max(0, min(int(tolerance_ms), 30000))
+    timeout_s = max(1.0, min(float(timeout_s), 180.0))
+    stable_ms = max(250, min(int(stable_ms), 10000))
+
+    before = adb.player_state_snapshot()
+    if not bool(before.get("connected")) or not bool(before.get("playerActive")):
+        raise RuntimeError("MiniClient must have active playback before dev_server_seek_time")
+    server_address = str(before.get("serverAddress", "")).strip()
+    client_id = str(before.get("clientId", "")).strip()
+    if not server_address or not client_id:
+        raise RuntimeError(f"Playback snapshot is missing server/client identity: {_compact_state(before)}")
+
+    # Use the same authenticated MiniClient event channel as playback.  The
+    # test server intentionally does not require Sagex/Jetty, and DVD seeking
+    # must be scoped to this exact UI connection.
+    started = time.monotonic()
+    deadline = started + timeout_s
+    last = before
+    reached_ms = -1
+    replies: list[dict] = []
+    requested_ms = target_ms
+    previous_stc_count = int(before.get("dvdStcCount", -1))
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        replies.append(adb.server_seek_time(requested_ms))
+        anchor_ms = -1
+        # DVD VM sector interpolation can land on a nearby VOBU. Observe the
+        # exact STC anchor emitted for that landing, then issue at most two
+        # bounded correction seeks. This makes a requested comparison scene
+        # deterministic without lying about the media clock or touching the
+        # decoder's cell-local position.
+        while time.monotonic() < deadline:
+            last = adb.player_state_snapshot()
+            try:
+                reached_ms = _snapshot_media_time(last)
+            except RuntimeError:
+                reached_ms = -1
+            stc_count = int(last.get("dvdStcCount", -1))
+            if stc_count > previous_stc_count:
+                previous_stc_count = stc_count
+                anchor_ms = int(last.get("dvdLogicalClockBaseMs", -1))
+                break
+            if reached_ms >= 0 and abs(reached_ms - target_ms) <= tolerance_ms:
+                break
+            time.sleep(0.25)
+        if reached_ms >= 0 and abs(reached_ms - target_ms) <= tolerance_ms:
+            break
+        if anchor_ms < 0 or attempt + 1 >= max_attempts:
+            break
+        error_ms = anchor_ms - target_ms
+        if abs(error_ms) <= tolerance_ms:
+            reached_ms = anchor_ms
+            break
+        corrected_ms = max(0, requested_ms - error_ms)
+        if abs(corrected_ms - requested_ms) < 100:
+            break
+        requested_ms = corrected_ms
+    landed = reached_ms >= 0 and abs(reached_ms - target_ms) <= tolerance_ms
+    remaining_s = max(0.1, deadline - time.monotonic())
+    playback = _wait_for_playback(timeout_s=remaining_s, verify_ms=stable_ms) if landed else {
+        "passed": False, "reason": "seek_landing_timeout", "state": last,
+    }
+    recovered = bool(playback.get("passed", False))
+    return {
+        "passed": landed and recovered,
+        "landed": landed,
+        "recovered": recovered,
+        "target_ms": target_ms,
+        "reached_ms": reached_ms,
+        "tolerance_ms": tolerance_ms,
+        "recoveryMs": int(round((time.monotonic() - started) * 1000.0)),
+        "seekReply": replies[-1] if replies else {},
+        "seekReplies": replies,
+        "seekAttemptCount": len(replies),
+        "finalRequestedMs": requested_ms,
+        "playback": playback,
+        "before": _compact_state(before),
+        "state": _compact_state(last),
+        "measurement": "sagetv_videoframe_event_seek_with_output_recovery",
+        "verdict_basis": "server_seek_landed_and_video_audio_output_recovered",
+    }
+
+
+@mcp.tool()
+def dev_show_active_player_adjustments() -> dict:
+    """Open the debug APK's live Active Player Adjustments screen."""
+    return adb.show_active_player_adjustments()
+
+
+@mcp.tool()
+def dev_set_active_player_overlay(visible: bool = True) -> dict:
+    """Show or hide the bounded 30-second active-player diagnostics overlay."""
+    return adb.set_active_player_overlay(visible)
 
 
 @mcp.tool()

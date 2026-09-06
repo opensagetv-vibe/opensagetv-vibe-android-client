@@ -674,6 +674,7 @@ def start_case(
     server: str,
     port: int,
     text: str,
+    server_path: str,
     text_char_delay_ms: int,
     connect_timeout_s: float,
     ui_stable_ms: int,
@@ -734,11 +735,23 @@ def start_case(
     if not ready.get("passed"):
         raise RuntimeError(f"automationReady not reached: {ready}")
 
-    search = start_recording_via_search(client, text, text_char_delay_ms=text_char_delay_ms)
-    playback = call_dict(client, "dev_wait_for_playback_started", {
-        "timeout_s": playback_timeout_s,
-        "verify_ms": verify_ms,
-    }, timeout=playback_timeout_s + 15.0)
+    if server_path.strip():
+        search = {
+            "skipped": True,
+            "reason": "exact_server_path_requested",
+            "serverPath": server_path,
+        }
+        playback = call_dict(client, "dev_play_server_path", {
+            "server_path": server_path,
+            "timeout_s": playback_timeout_s,
+            "verify_ms": verify_ms,
+        }, timeout=playback_timeout_s + 35.0)
+    else:
+        search = start_recording_via_search(client, text, text_char_delay_ms=text_char_delay_ms)
+        playback = call_dict(client, "dev_wait_for_playback_started", {
+            "timeout_s": playback_timeout_s,
+            "verify_ms": verify_ms,
+        }, timeout=playback_timeout_s + 15.0)
     if not playback.get("passed"):
         raise PlaybackStartupError(playback)
 
@@ -963,7 +976,7 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
     if requested:
         path = Path(requested).expanduser()
     else:
-        artifact_dir = Path(os.environ.get("SAGETV_ARTIFACT_DIR", "/workspace/artifacts/firetv"))
+        artifact_dir = Path(os.environ.get("SAGETV_ARTIFACT_DIR", Path(__file__).resolve().parents[1] / "artifacts" / "firetv"))
         path = artifact_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_player_full_matrix.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
@@ -972,9 +985,10 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the complete SageTV MiniClient player/backend MCP regression matrix")
-    parser.add_argument("--server", default="192.168.10.175")
+    parser.add_argument("--server", default="192.168.10.232")
     parser.add_argument("--port", type=int, default=31099)
-    parser.add_argument("--text", required=True, help="Required SageTV Search text; no default title is ever used")
+    parser.add_argument("--text", default="", help="SageTV Search text; required unless --server-path is supplied")
+    parser.add_argument("--server-path", default="", help="Exact SageTV-server MediaFile path through the Vibe test-control extension")
     parser.add_argument("--text-char-delay-ms", type=int, default=0, help="Text injection pacing for every case: 0 uses MiniClient native key events; >0 enables legacy Android/ADB diagnostic pacing (ms)")
     parser.add_argument("--players", default=",".join(PLAYERS))
     parser.add_argument("--streaming", default=",".join(STREAMING_MODES), help="Comma-separated streaming modes: push,pull,fixed (legacy alias dynamic is accepted)")
@@ -1008,6 +1022,9 @@ def main() -> int:
     parser.add_argument("--stop-on-infra-error", action="store_true", help="Stop instead of continuing to later configurations after an automation/infrastructure error")
     parser.add_argument("--leave-running", action="store_true")
     args = parser.parse_args()
+
+    if not args.text.strip() and not args.server_path.strip():
+        parser.error("one of --text or --server-path is required")
 
     try:
         players = _csv(args.players, PLAYERS, "players")
@@ -1071,7 +1088,7 @@ def main() -> int:
     def start_for_case(case: PlayerCase) -> dict[str, Any]:
         return start_case(
             client, case,
-            server=args.server, port=args.port, text=args.text,
+            server=args.server, port=args.port, text=args.text, server_path=args.server_path,
             text_char_delay_ms=args.text_char_delay_ms,
             connect_timeout_s=args.connect_timeout_s,
             ui_stable_ms=args.ui_stable_ms,
@@ -1278,6 +1295,7 @@ def main() -> int:
             "server": args.server,
             "port": args.port,
             "searchText": args.text,
+            "serverPath": args.server_path,
             "watchdogMs": args.watchdog_ms,
             "watchdogSeconds": args.watchdog_ms / 1000.0,
             "slowRecoveryMs": args.slow_recovery_ms,

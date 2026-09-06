@@ -8,8 +8,8 @@ import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-LOGGER = ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/util/Logger.java"
-ILOGGER = ROOT / "source/dev/core/src/main/java/sagex/miniclient/logging/ILogger.java"
+LOGGER = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/util/Logger.java"
+ILOGGER = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/logging/ILogger.java"
 
 
 class LoggerContractTests(unittest.TestCase):

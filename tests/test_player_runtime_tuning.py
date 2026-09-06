@@ -17,6 +17,14 @@ spec.loader.exec_module(module)
 
 
 class PlayerRuntimeTuningTests(unittest.TestCase):
+    def test_matrix_supports_exact_generated_fixture_path(self):
+        matrix = (SCRIPTS / "mcp_player_tuning_matrix.py").read_text()
+        self.assertIn('p.add_argument("--server-path"', matrix)
+        self.assertIn("server_path=args.server_path", matrix)
+        self.assertIn('"serverPath": args.server_path', matrix)
+        self.assertIn("and not args.server_path", matrix)
+        self.assertIn("exact server path will be replayed", matrix)
+
     def test_grid_expands_cartesian_values(self):
         args = Namespace(
             player="media3", profiles="", ts_search="4,8", seek_policy="closest,next",
@@ -84,10 +92,12 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertNotIn("exo2_seek_policy", mapped)
 
     def test_debug_runtime_tuning_is_wired_into_players_and_snapshot(self):
-        tuning = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/PlayerRuntimeTuning.java").read_text()
-        media3 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text()
-        exo2 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
-        receiver = (ROOT / "source/dev/android-tv/src/debug/java/sagex/miniclient/android/tv/debug/DevTestReceiver.java").read_text()
+        tuning = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/PlayerRuntimeTuning.java").read_text()
+        media3 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text()
+        exo2 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text()
+        tuning_commands = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugTuningCommands.java").read_text()
+        state_provider = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java").read_text()
         self.assertIn("DEFAULT_MEDIA3_PULL_READ_BYTES = 256 * 1024", tuning)
         self.assertIn("DEFAULT_EXO2_PULL_READ_BYTES = 512 * 1024", tuning)
         self.assertIn('DEFAULT_CODEC_MODE = "sync"', tuning)
@@ -95,22 +105,47 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn("applyExo2CodecPreference", tuning)
         self.assertIn("media3CodecModeOverridden", tuning)
         self.assertIn("exo2CodecModeOverridden", tuning)
-        self.assertIn("getMedia3TsSearchMultiplier()", media3)
-        self.assertIn("getExo2TsSearchMultiplier()", exo2)
+        self.assertIn("runtimeConfig.getTsSearchMultiplier()", media3)
+        self.assertIn("runtimeConfig.getTsSearchMultiplier()", exo2)
         self.assertIn("forceEnableMediaCodecAsynchronousQueueing", media3)
         self.assertIn("forceDisableMediaCodecAsynchronousQueueing", exo2)
         self.assertIn('"tuning".equals(op)', receiver)
-        self.assertIn('debugStatusVersion=14', receiver)
+        self.assertIn('DebugTuningCommands.configure(intent)', receiver)
+        self.assertIn('PlayerRuntimeTuning.configure(', tuning_commands)
+        self.assertIn('"op=tuning;" + PlayerRuntimeTuning.compactWire()', tuning_commands)
+        self.assertIn('debugStatusVersion=21', state_provider)
         self.assertIn('PlayerRuntimeTuning.compactWire()', receiver)
+
+    def test_each_player_captures_one_backend_neutral_runtime_config(self):
+        config = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/PlayerRuntimeConfig.java").read_text()
+        media3 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text()
+        exo2 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
+        media3_source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3PullDataSource.java").read_text()
+        exo2_source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2PullDataSource.java").read_text()
+        self.assertIn("public final class PlayerRuntimeConfig", config)
+        self.assertIn("enum Backend { MEDIA3, LEGACY_EXO }", config)
+        self.assertIn("public static PlayerRuntimeConfig capture(Backend backend)", config)
+        self.assertNotIn("void set", config)
+        for player, backend in ((media3, "MEDIA3"), (exo2, "LEGACY_EXO")):
+            capture = f"PlayerRuntimeConfig.capture(PlayerRuntimeConfig.Backend.{backend})"
+            self.assertGreaterEqual(player.count(capture), 2)
+            self.assertIn("runtimeConfig.getPullReadBytes()", player)
+            self.assertIn("runtimeConfig.getSeekPolicy()", player)
+            self.assertIn("runtimeConfig.getSeekRecoveryDelayMs()", player)
+            self.assertNotIn("PlayerRuntimeTuning.getMedia3PullMinBufferMs()", player)
+            self.assertNotIn("PlayerRuntimeTuning.getExo2PullMinBufferMs()", player)
+        for source in (media3_source, exo2_source):
+            self.assertIn("private final int pullReadBytes;", source)
+            self.assertIn("new BufferedPullDataSource(host, pullReadBytes)", source)
 
 
     def test_codec_mode_is_persisted_in_player_settings_with_sync_default(self):
         media3_prefs = (ROOT / "source/dev/android-shared/src/main/res/xml/media3player_prefs.xml").read_text()
         exo2_prefs = (ROOT / "source/dev/android-shared/src/main/res/xml/exoplayer_prefs.xml").read_text()
         arrays = (ROOT / "source/dev/android-shared/src/main/res/values/arrays.xml").read_text()
-        pref_store = (ROOT / "source/dev/core/src/main/java/sagex/miniclient/prefs/PrefStore.java").read_text()
-        media3 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text()
-        exo2 = (ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
+        pref_store = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/prefs/PrefStore.java").read_text()
+        media3 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java").read_text()
+        exo2 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
         self.assertIn('android:key="media3_codec_mode"', media3_prefs)
         self.assertIn('android:key="exo2_codec_mode"', exo2_prefs)
         self.assertIn('android:defaultValue="sync"', media3_prefs)
@@ -142,7 +177,10 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn('"freshPlayerPerCombination": True', matrix)
         self.assertIn('"fullAppRestartPerCombination": args.startup_mode == "isolated"', matrix)
         self.assertIn('def dev_current_media_file()', server)
-        self.assertIn('def dev_play_media_file_id(media_file_id: int', server)
+        self.assertRegex(
+            server,
+            r'def\s+dev_play_media_file_id\(\s*media_file_id:\s*int',
+        )
         self.assertIn('sagex.watch(context, media_file_id)', server)
 
     def test_dev_shell_exposes_tuning_commands(self):

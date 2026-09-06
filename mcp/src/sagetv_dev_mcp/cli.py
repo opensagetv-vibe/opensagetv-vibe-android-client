@@ -40,8 +40,8 @@ def main() -> int:
         print(json.dumps(adb.device_info(), indent=2))
         return 0
 
-    # Every device operation reconnects because docker-compose commands normally use
-    # short-lived containers. The persistent /root/.android volume keeps the ADB RSA key.
+    # Every independently invoked unified-container device command reconnects so
+    # changed ADB/device state cannot leak between operations.
     connect(adb)
 
     if args.command == "install":

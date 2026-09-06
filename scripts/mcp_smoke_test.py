@@ -92,6 +92,24 @@ class MCPProcess:
                 pass
         return prefix + (f"\nMCP server stderr:\n{stderr.strip()}" if stderr.strip() else "")
 
+    def stderr_snapshot(self, max_lines: int = 160) -> str:
+        """Drain currently available MCP stderr without waiting for process exit."""
+        if self.proc.stderr is None:
+            return ""
+        lines: list[str] = []
+        try:
+            while len(lines) < max(1, int(max_lines)):
+                ready, _, _ = select.select([self.proc.stderr], [], [], 0)
+                if not ready:
+                    break
+                line = self.proc.stderr.readline()
+                if not line:
+                    break
+                lines.append(line.rstrip())
+        except Exception:
+            pass
+        return "\n".join(lines).strip()
+
     def close(self) -> None:
         try:
             if self.proc.stdin is not None and not self.proc.stdin.closed:
@@ -126,7 +144,11 @@ def tool_call(client: MCPProcess, name: str, arguments: dict[str, Any] | None = 
     )
     result = require_result(response, f"tool {name}")
     if result.get("isError"):
-        raise RuntimeError(f"tool {name} reported isError=true: {json.dumps(result, indent=2)}")
+        stderr = client.stderr_snapshot()
+        detail = f"\nMCP server stderr:\n{stderr}" if stderr else ""
+        raise RuntimeError(
+            f"tool {name} reported isError=true: {json.dumps(result, indent=2)}{detail}"
+        )
     return result
 
 

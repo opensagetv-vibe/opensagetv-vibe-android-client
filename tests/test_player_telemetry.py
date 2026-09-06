@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SHARED = ROOT / "source/dev/android-shared/src/main/java/sagex/miniclient/android/video"
+SHARED = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video"
 BASE = SHARED / "BaseMediaPlayerImpl.java"
 EXO = SHARED / "exoplayer2/Exo2MediaPlayerImpl.java"
 IJK = SHARED / "ijkplayer/IJKMediaPlayerImpl.java"

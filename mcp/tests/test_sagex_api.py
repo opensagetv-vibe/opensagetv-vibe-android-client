@@ -34,6 +34,57 @@ class SagexApiTests(unittest.TestCase):
             c.watch("444556303031", 123)
         call.assert_called_once_with("Watch", "mediafile:123", context="444556303031")
 
+    def test_watch_accepts_older_sagex_async_task_serialization_failure(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        error = SagexApiError(
+            "Cannot Serialize [Type: sage.Catbert$AsyncTaskID]"
+        )
+        with patch.object(c, "call", side_effect=error):
+            result = c.watch("444556303031", 123)
+        self.assertTrue(result["accepted"])
+        self.assertTrue(result["asynchronous"])
+        self.assertEqual(result["serializationCompatibility"], "Catbert$AsyncTaskID")
+
+    def test_watch_does_not_hide_other_sagex_failures(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        with patch.object(c, "call", side_effect=SagexApiError("authentication failed")):
+            with self.assertRaisesRegex(SagexApiError, "authentication failed"):
+                c.watch("444556303031", 123)
+
+    def test_seek_uses_server_video_frame_context(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        with patch.object(c, "call", return_value={"Result": "OK"}) as call:
+            c.seek("444556303031", 480000)
+        call.assert_called_once_with("Seek", 480000, context="444556303031")
+
+    def test_seek_accepts_older_sagex_async_task_serialization_failure(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        error = SagexApiError(
+            "Cannot Serialize [Type: sage.Catbert$AsyncTaskID]"
+        )
+        with patch.object(c, "call", side_effect=error):
+            result = c.seek("444556303031", 0)
+        self.assertTrue(result["accepted"])
+        self.assertTrue(result["asynchronous"])
+
+    def test_closed_caption_state_uses_standard_sagetv_media_player_api(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        with patch.object(c, "call", return_value={"Result": "CC1"}) as call:
+            self.assertEqual(c.closed_caption_state("444556303031"), "CC1")
+        call.assert_called_once_with(
+            "GetMediaPlayerClosedCaptionState", context="444556303031"
+        )
+
+    def test_set_closed_caption_state_normalizes_off_without_video_property(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        with patch.object(c, "call", return_value={"Result": None}) as call:
+            c.set_closed_caption_state("444556303031", "off")
+        call.assert_called_once_with(
+            "SetMediaPlayerClosedCaptionState",
+            "Captions Off",
+            context="444556303031",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

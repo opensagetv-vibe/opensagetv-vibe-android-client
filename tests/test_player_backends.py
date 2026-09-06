@@ -2,21 +2,42 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import os
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT / "source/dev"
 EXISTING = ROOT / "source/existing"
 FROZEN_BASELINE = ROOT / "source/FROZEN_BASELINE.sha256"
-SHARED = DEV / "android-shared/src/main/java/sagex/miniclient/android"
+SHARED = DEV / "android-shared/src/main/java/opensagetv/vibe/miniclient/android"
 RES = DEV / "android-shared/src/main/res"
 
 
+def unified_dockerfile() -> Path:
+    candidates = []
+    if os.environ.get("OPENSAGETV_VIBE_BUILD_ENV_ROOT"):
+        candidates.append(Path(os.environ["OPENSAGETV_VIBE_BUILD_ENV_ROOT"]) / "Dockerfile")
+    candidates.extend(
+        (
+            ROOT.parent / "opensagetv-vibe-build-env" / "Dockerfile",
+            ROOT.parent / "release-manifest" / "Dockerfile",
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise AssertionError("opensagetv-vibe-build-env/Dockerfile is unavailable")
+
+
 class PlayerBackendRefactorTests(unittest.TestCase):
-    def test_base_player_matches_known_good_baseline(self):
-        rel = "android-shared/src/main/java/sagex/miniclient/android/video/BaseMediaPlayerImpl.java"
-        dev_hash = hashlib.sha256((DEV / rel).read_bytes()).hexdigest()
-        existing_file = EXISTING / rel
+    def test_base_player_matches_baseline_or_reviewed_stock_server_fullscreen_patch(self):
+        rel = "android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/BaseMediaPlayerImpl.java"
+        baseline_rel = "android-shared/src/main/java/sagex/miniclient/android/video/BaseMediaPlayerImpl.java"
+        dev_bytes = (DEV / rel).read_bytes().replace(
+            b"opensagetv.vibe.miniclient", b"sagex.miniclient"
+        )
+        dev_hash = hashlib.sha256(dev_bytes).hexdigest()
+        existing_file = EXISTING / baseline_rel
         if existing_file.exists():
             baseline_hash = hashlib.sha256(existing_file.read_bytes()).hexdigest()
         else:
@@ -27,9 +48,57 @@ class PlayerBackendRefactorTests(unittest.TestCase):
                     continue
                 digest, path = line.split(None, 1)
                 hashes[path.lstrip("*").replace("\\", "/")] = digest.lower()
-            baseline_hash = hashes.get(rel)
+            baseline_hash = hashes.get(baseline_rel)
         self.assertIsNotNone(baseline_hash, rel)
-        self.assertEqual(dev_hash, baseline_hash, rel)
+        # Reviewed exceptions to the frozen v0.5.75 player base are the
+        # datasource-neutral embedded-preview promotion, clearing the old
+        # session's EOS flag after release during a new load, and the reviewed
+        # state-aware delayed promotion fix, and the explicitly authorized
+        # generation-based session controller, plus the capability-negotiated
+        # DVD highlight/metadata adapter. Keep full-file hashes so
+        # unrelated playback changes cannot hide in any exception.
+        reviewed_fullscreen_hash = "d270708006d02379b2ebcbc2ff5390a17d303ab22cf7072c31de9ab43adea3b4"
+        reviewed_push_load_hash = "a4a2cd8ca0ffca84cc9b5dccb8681d5acabbdf3df7a8e3798e464d7d31e18494"
+        reviewed_state_aware_hash = "5697071e39aa4fa5366a8142609539b7fa1745968c597395ea7cb809d6d19b45"
+        reviewed_session_controller_hash = "acfb0c04c5dc3c967a5eaac9b814a5274fbe1534f3fd8fadf1c7067bd5f0a0a8"
+        reviewed_dvd_adapter_hash = "8665d330cf3864e1564a1bcb4e1d5ac5d718816bbf15985c9bd5e86729b6f253"
+        # The current reviewed form combines the generation-based session
+        # controller/fullscreen guard with the bounded DVD navigation adapter.
+        # Keep this as an exact full-file hash so unrelated player changes
+        # still fail this characterization gate.
+        reviewed_session_dvd_adapter_hash = "dca5462451aa78336e10fa4d29b7ac3364e304a14259af0e74021fa3fabfcc7d"
+        # Adds only a defensive copy of the bounded DVD SPU counters for
+        # debug/MCP snapshots; playback behavior remains in the reviewed DVD
+        # adapter above.
+        reviewed_dvd_spu_diagnostics_hash = "63fc269f13e7e5a75f4e55b8e3b39016e9056ffc6c71baf117e6c8b596ebc9dd"
+        # Negotiated Hybrid DVD transport flag plus DVB-subtitle selector
+        # routing; the native DVD SPU path remains unchanged.
+        reviewed_dvd_mim_transport_hash = "5f3222fe3ae48b589793b74c33c93348a743f5c48c869754b1c09d97836dd2e8"
+        # Makes a push: OPENURL authoritative during a Hybrid DVD transition,
+        # preventing a synchronous old-session release from downgrading the
+        # replacement player to a null/Pull datasource.
+        reviewed_dvd_hybrid_push_guard_hash = "a9f89123ce37b9cf0bbe9071f18a6bdd8dc670a1dc6ecaf1870b212e5428529d"
+        # Current reviewed form also carries the stock-server caption fallback
+        # and bounded display-refresh reload routing. Both remain capability
+        # gated and preserve ordinary player transport behavior.
+        reviewed_caption_refresh_hash = "61f477c818b640ac2f4cba547baa5db38717319efe2104314e1bbb2ff97c5afe"
+        # Adds the reviewed per-load caption-state reset hook used by the
+        # extractor-backed legacy-extender subtitle callback bridge.
+        reviewed_legacy_caption_bridge_hash = "f34e82d2118603672a02ef1a5141603d0387f3c21b53ea0aa989706b3f5337f8"
+        self.assertIn(dev_hash, {
+            baseline_hash,
+            reviewed_fullscreen_hash,
+            reviewed_push_load_hash,
+            reviewed_state_aware_hash,
+            reviewed_session_controller_hash,
+            reviewed_dvd_adapter_hash,
+            reviewed_session_dvd_adapter_hash,
+            reviewed_dvd_spu_diagnostics_hash,
+            reviewed_dvd_mim_transport_hash,
+            reviewed_dvd_hybrid_push_guard_hash,
+            reviewed_caption_refresh_hash,
+            reviewed_legacy_caption_bridge_hash,
+        }, rel)
 
     def test_four_backends_have_stable_preference_values(self):
         text = (SHARED / "video/PlayerBackend.java").read_text(encoding="utf-8")
@@ -115,16 +184,24 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("getTrackSupport(rendererIndex, groupIndex, trackIndex)", player)
         self.assertNotIn("getTrackGroups(trackType)", player)
 
-    def test_project_version_is_0569(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.75")
+    def test_project_version_is_current(self):
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.85")
+
+    def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
+        gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
+        gsy = gradle.split('api("io.github.carguo:gsyvideoplayer-exo2:', 1)[1]
+        gsy = gsy.split("// logging", 1)[0]
+        self.assertIn('exclude group: "androidx.media3", module: "media3-cast"', gsy)
+        self.assertIn('exclude group: "androidx.media3", module: "media3-session"', gsy)
 
 
 
-    def test_exo_push_datasources_block_until_data_or_eos(self):
-        core_push = (DEV / "core/src/main/java/sagex/miniclient/net/PushBufferDataSource.java").read_text(encoding="utf-8")
+    def test_player_push_datasources_block_until_data_or_eos(self):
+        core_push = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/PushBufferDataSource.java").read_text(encoding="utf-8")
         self.assertIn("public int readBlocking(long readOffset", core_push)
         self.assertIn("if (len == 0)", core_push)
-        self.assertIn("dataAvailableMonitor.wait(10);", core_push)
+        self.assertIn("dataAvailableMonitor.wait();", core_push)
+        self.assertNotIn("Thread.sleep(50);", core_push)
         self.assertIn("signalDataAvailable();", core_push)
         self.assertIn("return -1;", core_push)
 
@@ -136,6 +213,27 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn("return readBlocking(0, buffer, offset, readLength);", text, rel)
             self.assertNotIn("return read(0, buffer, offset, readLength);", text, rel)
 
+        ijk = (SHARED / "video/ijkplayer/IJKPushMediaSource.java").read_text(encoding="utf-8")
+        self.assertIn("return local.readBlocking(position, bytes, offset, size);", ijk)
+        self.assertNotIn("Thread.sleep(50);", ijk)
+        self.assertIn("sourceMonitor.wait();", ijk)
+        self.assertIn("sourceMonitor.notifyAll();", ijk)
+        self.assertIn("if (size == 0) return 0;", ijk)
+        self.assertNotIn("if (VerboseLogging.DATASOURCE_LOGGING)\n\n        // ijkmediasource", ijk)
+        self.assertIn('if (local == null) throw new IOException("IJK PUSH datasource is released")', ijk)
+
+    def test_new_load_clears_previous_session_eos_after_release(self):
+        base = (SHARED / "video/BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
+        load = base.split("public void load(", 1)[1].split("protected abstract void setupPlayer", 1)[0]
+        # releasePlayer() intentionally marks the old session EOS. Both load paths
+        # must clear that stale flag before SageTV polls the new PUSH session; if it
+        # sees EOS, the server pusher exits before sending its first buffer.
+        self.assertEqual(load.count("releasePlayer();"), 2)
+        self.assertEqual(load.count("releasePlayer();\n                    // releasePlayer() marks"), 1)
+        self.assertEqual(load.count("releasePlayer();\n            // Match the UI-thread load path"), 1)
+        self.assertEqual(load.count("eos = false;"), 3)
+        self.assertLess(load.index("// releasePlayer() marks"), load.index("state = LOADED_STATE;"))
+
     def test_phase_a_exo_seek_is_async_allows_zero_and_completes_on_seek_discontinuity(self):
         for rel, owner in (
             ("video/exoplayer2/Exo2MediaPlayerImpl.java", "Exo2MediaPlayerImpl"),
@@ -144,9 +242,34 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             text = (SHARED / rel).read_text(encoding="utf-8")
             seek_impl = text.split("private void seekToImpl(long timeInMillis)", 1)[1].split("public void seek(long timeInMS)", 1)[0]
             self.assertIn("if (timeInMillis >= 0)", seek_impl, rel)
-            self.assertIn("player.seekTo(timeInMillis);", seek_impl, rel)
+            self.assertRegex(
+                seek_impl,
+                r"PlaybackSeekPolicy\.clamp\(\s*timeInMillis,\s*durationMs,\s*bufferedPositionMs,\s*mediaContext\.isTimeshifted\(\)\)",
+                rel,
+            )
+            self.assertIn("player.seekTo(safePositionMs);", seek_impl, rel)
+            self.assertIn("armPullSeekRecovery(safePositionMs);", seek_impl, rel)
             self.assertNotIn("Thread.sleep", seek_impl, rel)
             self.assertNotIn("while (player.getCurrentPosition() < timeInMillis", seek_impl, rel)
+
+    def test_smb_seek_reprepares_to_flush_stale_decoder_frames(self):
+        for rel, pull_class in (
+            ("video/exoplayer2/Exo2MediaPlayerImpl.java", "Exo2PullDataSource"),
+            ("video/media3/Media3MediaPlayerImpl.java", "Media3PullDataSource"),
+        ):
+            text = (SHARED / rel).read_text(encoding="utf-8")
+            seek_impl = text.split("private void seekToImpl(long timeInMillis)", 1)[1].split(
+                "public void seek(long timeInMS)", 1
+            )[0]
+            self.assertIn(f"dataSource instanceof {pull_class}", seek_impl, rel)
+            self.assertIn("isSmbModeConfigured()", seek_impl, rel)
+            self.assertIn('PlaybackDebugTrap.record("smb_seek_reprepare_before"', seek_impl, rel)
+            self.assertIn("player.setMediaSource(mediaSource, safePositionMs);", seek_impl, rel)
+            self.assertIn("player.prepare();", seek_impl, rel)
+            self.assertIn("player.setPlayWhenReady(resumeWhenReady);", seek_impl, rel)
+
+            self.assertIn("private final PlaybackMediaContext mediaContext", text, rel)
+            self.assertIn("mediaContext.update(majorHint, minorHint, encodingHint, timeshifted, bufferSize);", text, rel)
 
             timeline = text.split("public void onTimelineChanged", 1)[1].split("public void onPositionDiscontinuity", 1)[0]
             self.assertNotIn("seekPending = false", timeline, rel)
@@ -159,34 +282,36 @@ class PlayerBackendRefactorTests(unittest.TestCase):
 
 
     def test_phase_a_pull_resume_latency_uses_larger_reads_and_low_latency_load_control(self):
-        buffered = (DEV / "core/src/main/java/sagex/miniclient/net/BufferedPullDataSource.java").read_text(encoding="utf-8")
+        buffered = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/BufferedPullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("private final int bufferSize;", buffered)
         self.assertIn("public BufferedPullDataSource(String host, int bufferSize)", buffered)
         self.assertIn("this.bufferSize = Math.max(MAX_BUFFER, bufferSize);", buffered)
         self.assertIn("_buffer = new byte[bufferSize];", buffered)
         self.assertIn("return super.read(position, _buffer, 0, bufferSize);", buffered)
 
-        read_buffer_expectations = {
-            "video/exoplayer2/Exo2PullDataSource.java": "PULL_READ_BUFFER_BYTES = 512 * 1024",
-            "video/media3/Media3PullDataSource.java": "PULL_READ_BUFFER_BYTES = 256 * 1024",
-        }
-        for rel, expected_buffer in read_buffer_expectations.items():
+        runtime_tuning = (SHARED / "video/PlayerRuntimeTuning.java").read_text(encoding="utf-8")
+        self.assertIn("DEFAULT_EXO2_PULL_READ_BYTES = 512 * 1024", runtime_tuning)
+        self.assertIn("DEFAULT_MEDIA3_PULL_READ_BYTES = 256 * 1024", runtime_tuning)
+        for rel in (
+            "video/exoplayer2/Exo2PullDataSource.java",
+            "video/media3/Media3PullDataSource.java",
+        ):
             text = (SHARED / rel).read_text(encoding="utf-8")
-            self.assertIn(expected_buffer, text, rel)
-            if "Exo2" in rel:
-                self.assertIn("new BufferedPullDataSource(host, PlayerRuntimeTuning.getExo2PullReadBytes())", text, rel)
-            else:
-                self.assertIn("new BufferedPullDataSource(host, PlayerRuntimeTuning.getMedia3PullReadBytes())", text, rel)
+            self.assertIn("private final int pullReadBytes;", text, rel)
+            self.assertIn("new BufferedPullDataSource(host, pullReadBytes)", text, rel)
 
         media3_pull = (SHARED / "video/media3/Media3PullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("v0.5.32 1 MiB experiment did not", media3_pull)
         self.assertIn("getNetworkReadCount()", media3_pull)
         self.assertIn("getOpenWaitMs()", media3_pull)
+        self.assertIn("hasReachedEndOfInput()", media3_pull)
+        self.assertIn("((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)", media3_pull)
 
         exo2_pull = (SHARED / "video/exoplayer2/Exo2PullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("getNetworkReadCount()", exo2_pull)
         self.assertIn("getOpenWaitMs()", exo2_pull)
         self.assertIn("accumulateAndCloseDataSource()", exo2_pull)
+        self.assertIn("((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)", exo2_pull)
         for text, name in ((media3_pull, "Media3"), (exo2_pull, "Exo2")):
             self.assertIn("returned zero bytes for non-zero read", text, name)
             self.assertIn("closed during non-zero read", text, name)
@@ -198,15 +323,19 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         for rel, load_control_import in expectations.items():
             text = (SHARED / rel).read_text(encoding="utf-8")
             self.assertIn("import " + load_control_import + ";", text, rel)
-            self.assertIn("PULL_MIN_BUFFER_MS = 5000", text, rel)
-            self.assertIn("PULL_MAX_BUFFER_MS = 20000", text, rel)
-            self.assertIn("PULL_BUFFER_FOR_PLAYBACK_MS = 500", text, rel)
-            self.assertIn("PULL_BUFFER_AFTER_REBUFFER_MS = 1000", text, rel)
+            self.assertIn("runtimeConfig.getPullMinBufferMs()", text, rel)
+            self.assertIn("runtimeConfig.getPullMaxBufferMs()", text, rel)
+            self.assertIn("runtimeConfig.getPullPlaybackBufferMs()", text, rel)
+            self.assertIn("runtimeConfig.getPullRebufferMs()", text, rel)
             self.assertIn("new DefaultLoadControl.Builder()", text, rel)
             self.assertIn(".setBufferDurationsMs(", text, rel)
             self.assertIn(".setPrioritizeTimeOverSizeThresholds(true)", text, rel)
             self.assertIn("builder.setLoadControl(pullLoadControl);", text, rel)
             self.assertIn("Pull playback state=", text, rel)
+
+        media3_player = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn("promoteConfirmedPullTailToEos();", media3_player)
+        self.assertIn("pull_confirmed_eof_promoted", media3_player)
 
     def test_phase_a_followup_pull_datasources_return_requested_range_length(self):
         for rel in (
@@ -240,7 +369,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             text = (SHARED / rel).read_text(encoding="utf-8")
             for imported in imports:
                 self.assertIn("import " + imported + ";", text, rel)
-            self.assertIn("PULL_TS_TIMESTAMP_SEARCH_MULTIPLIER = 8", text, rel)
+            self.assertIn("runtimeConfig.getTsSearchMultiplier()", text, rel)
             self.assertIn("setTsExtractorTimestampSearchBytes", text, rel)
             self.assertIn("setConstantBitrateSeekingEnabled(true)", text, rel)
             self.assertIn("new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)", text, rel)
@@ -248,26 +377,48 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn("pull_seek_policy_", text, rel)
             self.assertIn("Pull seek capability: seekable=", text, rel)
             pull_tuning = text.split("if (!pushMode)", 1)[1]
-            self.assertIn("DefaultExtractorsFactory extractorsFactory", pull_tuning, rel)
+            if "exoplayer2" in rel:
+                self.assertIn("ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);", pull_tuning, rel)
+            else:
+                self.assertIn("ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);", pull_tuning, rel)
 
         exo2 = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("SeekParameters.NEXT_SYNC", exo2)
         self.assertIn("SeekParameters.PREVIOUS_SYNC", exo2)
-        self.assertIn("PULL_DIRECTIONAL_SYNC_MIN_DELTA_MS = 2000L", exo2)
-        self.assertIn("PULL_SEEK_RECOVERY_DELAY_MS = 10000L", exo2)
+        self.assertIn("runtimeConfig.getDirectionalSyncMinDeltaMs()", exo2)
+        self.assertIn("runtimeConfig.getSeekRecoveryDelayMs()", exo2)
         self.assertIn("pull_seek_recovery_armed", exo2)
         self.assertIn("pull_seek_reprepare_before", exo2)
         self.assertIn("player.setMediaSource(mediaSource, targetPositionMs);", exo2)
 
         media3 = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
         choose_media3 = media3.split("private SeekParameters choosePullSeekParameters", 1)[1].split("private void armPullSeekRecovery", 1)[0]
-        self.assertIn("PlayerRuntimeTuning.getMedia3SeekPolicy()", choose_media3)
+        self.assertIn("runtimeConfig.getSeekPolicy()", choose_media3)
+        self.assertIn("PlaybackSyncPointPolicy.choose(", choose_media3)
         self.assertIn("SeekParameters.NEXT_SYNC", choose_media3)
         self.assertIn("SeekParameters.PREVIOUS_SYNC", choose_media3)
         self.assertIn("return SeekParameters.CLOSEST_SYNC;", choose_media3)
-        self.assertIn("PULL_SEEK_RECOVERY_REPREPARE_ENABLED = false", media3)
         arm_media3 = media3.split("private void armPullSeekRecovery", 1)[1].split("private void seekToImpl", 1)[0]
-        self.assertIn("if (!PlayerRuntimeTuning.isMedia3SeekRecoveryEnabled()", arm_media3)
+        self.assertIn("if (!runtimeConfig.isSeekRecoveryEnabled()", arm_media3)
+
+    def test_pull_ts_extractors_declare_broadcast_caption_services(self):
+        exo2 = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
+        media3 = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
+
+        for text, rel in ((exo2, "legacy ExoPlayer"), (media3, "Media3")):
+            self.assertIn("FLAG_OVERRIDE_CAPTION_DESCRIPTORS", text, rel)
+            self.assertIn("APPLICATION_CEA608", text, rel)
+            self.assertIn("APPLICATION_CEA708", text, rel)
+            self.assertIn(".setAccessibilityChannel(", text, rel)
+            self.assertIn("preferred_caption_service", text, rel)
+            self.assertIn("preferredCaptionCodec", text, rel)
+
+        self.assertIn("createCaptionAwareExtractorsFactory(boolean pullMode)", exo2)
+        self.assertIn("new DefaultTsPayloadReaderFactory(tsFlags, captionFormats)", exo2)
+        self.assertIn("extractors[i] instanceof TsExtractor", exo2)
+        self.assertIn("setTsSubtitleFormats(captionFormats)", media3)
+        self.assertIn("createCaptionAwareExtractorsFactory(false)", exo2)
+        self.assertIn("createCaptionAwareExtractorsFactory(false)", media3)
 
     def test_phase_a_followup_pull_flush_does_not_reset_player_to_zero(self):
         for rel in (
@@ -290,7 +441,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("GSYPlayerEngine.SYSTEM : GSYPlayerEngine.MEDIA3", auto)
         system_case = gsy.split("case SYSTEM:", 1)[1].split("default:", 1)[0]
         self.assertIn("return new Media3MediaPlayerImpl(context);", system_case)
-        self.assertNotIn("return new GSYSystemMediaPlayerImpl(context);", system_case)
+        self.assertIn("PrefStore.Keys.gsy_system_probe_enabled", system_case)
+        self.assertIn("new GSYSystemMediaPlayerImpl(context,", system_case)
+        self.assertIn("scheduleSystemFallback", gsy)
+        self.assertIn('systemFallbackReason = "android_system_player_error";', gsy)
 
         engine = (SHARED / "video/gsy/GSYPlayerEngine.java").read_text(encoding="utf-8")
         arrays = (RES / "values/arrays.xml").read_text(encoding="utf-8")
@@ -298,22 +452,22 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("Android System MediaPlayer (Media3 fallback)", arrays)
 
         push = (SHARED / "video/gsy/SagePushMediaDataSource.java").read_text(encoding="utf-8")
-        self.assertIn("while (!released)", push)
-        self.assertIn("if (read != 0)", push)
-        self.assertIn("Thread.sleep(10);", push)
-        self.assertIn("return -1;", push)
+        self.assertIn("return ensureOpen().readBlocking(position, buffer, offset, size);", push)
+        self.assertNotIn("Thread.sleep(10);", push)
 
         pull = (SHARED / "video/gsy/SagePullMediaDataSource.java").read_text(encoding="utf-8")
         self.assertIn("if (closed) return;", pull)
         self.assertIn("local = source;", pull)
         self.assertIn("source = null;", pull)
 
-        core_pull = (DEV / "core/src/main/java/sagex/miniclient/net/SimplePullDataSource.java").read_text(encoding="utf-8")
+        core_pull = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/SimplePullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("public synchronized void close()", core_pull)
+        self.assertIn("if (position >= size) return -1;", core_pull)
+        self.assertIn("Math.min((long) len, size - position)", core_pull)
 
     def test_phase_a_followup_gsy_system_waits_for_live_surface(self):
         text = (SHARED / "video/gsy/GSYSystemMediaPlayerImpl.java").read_text(encoding="utf-8")
-        setup = text.split("protected void setupPlayer(final String sageTVurl)", 1)[1].split("private void prepareWhenSurfaceReady()", 1)[0]
+        setup = text.split("protected void setupPlayer(final String sageTVurl)", 1)[1].split("@Override\n    protected void playerFailed()", 1)[0]
         self.assertNotIn("releasePlayer();", setup)
         self.assertIn("prepareWhenSurfaceReady();", setup)
         self.assertIn("SurfaceHolder.Callback", text)
@@ -322,19 +476,23 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("player.prepareAsync();", text)
         self.assertIn("player.setDisplay(null)", text)
         self.assertIn("detachSurfaceCallback();", text)
+        self.assertIn("interface FailureListener", text)
+        self.assertIn("failureListener.onSystemPlayerFailed(this);", text)
 
-    def test_phase_a_ijk_pause_frame_step_is_about_one_30fps_frame(self):
+    def test_ijk_repeated_pause_uses_shared_frame_step_policy(self):
         text = (SHARED / "video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
         pause = text.split("public void pause()", 1)[1].split("public void play()", 1)[0]
-        self.assertIn("Math.round(1000.0 / 30.0)", pause)
+        self.assertIn("frameStep(1)", pause)
+        self.assertIn("PlaybackFrameStepPolicy.FALLBACK_FRAME_RATE", pause)
         self.assertNotIn("player.getCurrentPosition() + 1000", pause)
 
     def test_legacy_ijk_runtime_is_restored_and_separate_from_gsy(self):
         root_gradle = (DEV / "build.gradle").read_text(encoding="utf-8")
         shared_gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
         self.assertIn("gsyVersion = '13.1.0'", root_gradle)
-        for module in ("ijkplayer-java", "ijkplayer-armv7a", "ijkplayer-arm64", "ijkplayer-x86"):
+        for module in ("ijkplayer-java", "ijkplayer-armv7a", "ijkplayer-arm64"):
             self.assertIn(f'api(name: "{module}-${{ijkVersionDev}}", ext: "aar")', shared_gradle)
+        self.assertNotIn('api(name: "ijkplayer-x86-${ijkVersionDev}"', shared_gradle)
         self.assertNotIn('api(name: "ijkplayer-exo-${ijkVersionDev}"', shared_gradle)
         self.assertIn('io.github.carguo:gsyvideoplayer-java:${gsyVersion}', shared_gradle)
         self.assertIn('io.github.carguo:gsyvideoplayer-exo2:${gsyVersion}', shared_gradle)
@@ -342,6 +500,16 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn('exclude group: "io.github.carguo", module: "gsyijkjava"', shared_gradle)
         self.assertIn('exclude group: "com.github.mcxinyu", module: "LibRtmp-Client-for-Android"', shared_gradle)
         self.assertIn('exclude group: "androidx.media3", module: "media3-datasource-rtmp"', shared_gradle)
+
+    def test_tv_native_packaging_uses_complete_paired_arm_abis(self):
+        tv_gradle = (DEV / "android-tv/build.gradle").read_text(encoding="utf-8")
+        shared_gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
+        self.assertIn("abiFilters 'armeabi-v7a', 'arm64-v8a'", tv_gradle)
+        self.assertNotIn("abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'", tv_gradle)
+        self.assertNotIn('natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"', shared_gradle)
+        self.assertNotIn('natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"', shared_gradle)
+        self.assertIn('include "libgdx.so"', shared_gradle)
+        self.assertIn("excludes += ['**/libgdx-freetype.so']", shared_gradle)
 
     def test_ijk_and_gsy_are_independent_implementations(self):
         player = (SHARED / "video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
@@ -387,6 +555,24 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         for key in ("exoplayer_settings", "media3_settings", "ijkplayer_settings", "gsyplayer_settings"):
             self.assertIn(f'android:key="{key}"', prefs)
 
+    def test_fixed_transcoding_offers_mpegts_for_embedded_cea_captions(self):
+        arrays = (RES / "values/arrays.xml").read_text(encoding="utf-8")
+        debug_config = (DEV / "android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugPlayerConfigCommands.java").read_text(encoding="utf-8")
+        config_values = (ROOT / "scripts/mcp_config_values.py").read_text(encoding="utf-8")
+        self.assertIn("MPEG Transport Stream (MPEG-TS)", arrays)
+        self.assertIn("<item>mpegts</item>", arrays)
+        self.assertIn('"mpegts".equals(value)', debug_config)
+        self.assertIn('FIXED_ENCODING_FORMATS = ("matroska", "dvd", "mpegts")', config_values)
+        self.assertIn('"fixed_encoding_format": "mpegts"', config_values)
+        prefs = (SHARED / "prefs/AndroidPrefStore.java").read_text(encoding="utf-8")
+        self.assertIn('FIXED_ENCODING_FORMAT_DEFAULT = "mpegts"', prefs)
+        self.assertIn('FIXED_ENCODING_AUDIO_CODEC_DEFAULT = "aac"', prefs)
+        self.assertIn('FIXED_AUDIO_CODECS = ("aac", "ac3", "mp2")', config_values)
+        self.assertIn('"fixed_audio_codec": "aac"', config_values)
+        caption_test = (ROOT / "scripts/mcp_caption_test.py").read_text(encoding="utf-8")
+        self.assertIn("add_fixed_encoding_args(parser)", caption_test)
+        self.assertIn("**fixed_config", caption_test)
+
     def test_gsy_settings_screen_is_wired_and_has_independent_engine_selection(self):
         settings = (SHARED / "ui/settings/SettingsFragment.java").read_text(encoding="utf-8")
         fragment = (SHARED / "ui/settings/GSYPlayerSettingsFragment.java").read_text(encoding="utf-8")
@@ -412,7 +598,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn('apply plugin: "java"', core_gradle)
         self.assertNotEqual(root_gradle, core_gradle, "Dev root build.gradle was replaced by core/build.gradle")
         wrapper = (DEV / "gradle/wrapper/gradle-wrapper.properties").read_text(encoding="utf-8")
-        docker = (ROOT / "docker/Dockerfile").read_text(encoding="utf-8")
+        docker = unified_dockerfile().read_text(encoding="utf-8")
         self.assertIn("media3Version = '1.11.0'", root_gradle)
         self.assertIn("exoVersion = '2.18.1'", root_gradle)
         self.assertIn("gsyVersion = '13.1.0'", root_gradle)
@@ -452,17 +638,17 @@ class PlayerBackendRefactorTests(unittest.TestCase):
 
     def test_android_tv_uses_shared_r_for_shared_drawables(self):
         files = [
-            DEV / "android-tv/src/main/java/sagex/miniclient/android/phone/ServersAdapter.java",
-            DEV / "android-tv/src/main/java/sagex/miniclient/android/tv/MainFragment.java",
-            DEV / "android-tv/src/main/java/sagex/miniclient/android/tv/ServerItemPresenter.java",
+            DEV / "android-tv/src/main/java/opensagetv/vibe/miniclient/android/phone/ServersAdapter.java",
+            DEV / "android-tv/src/main/java/opensagetv/vibe/miniclient/android/tv/MainFragment.java",
+            DEV / "android-tv/src/main/java/opensagetv/vibe/miniclient/android/tv/ServerItemPresenter.java",
         ]
         text = "\n".join(path.read_text(encoding="utf-8") for path in files)
         for drawable in (
             "iconbutton_background", "ic_add_to_queue_white_60dp",
             "ic_tv_white_60dp", "sage_logo_256",
         ):
-            self.assertIn(f"sagex.miniclient.android.R.drawable.{drawable}", text)
-            self.assertNotIn(f"R.drawable.{drawable}", text.replace(f"sagex.miniclient.android.R.drawable.{drawable}", ""))
+            self.assertIn(f"opensagetv.vibe.miniclient.android.R.drawable.{drawable}", text)
+            self.assertNotIn(f"R.drawable.{drawable}", text.replace(f"opensagetv.vibe.miniclient.android.R.drawable.{drawable}", ""))
 
     def test_media3_settings_are_wired(self):
         settings = (SHARED / "ui/settings/SettingsFragment.java").read_text(encoding="utf-8")
@@ -473,15 +659,23 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertTrue((SHARED / "ui/settings/Media3PlayerSettingsFragment.java").exists())
         self.assertTrue((RES / "xml/media3player_prefs.xml").exists())
 
-    def test_surface_experiment_is_rolled_back_to_known_good_gdx_ordering(self):
+    def test_surface_ordering_keeps_android_caption_overlay_above_sagetv_ui(self):
         exo = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         media3 = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
         gdx = (SHARED / "gdx/MiniClientGDXActivity.java").read_text(encoding="utf-8")
-        self.assertIn("player.setVideoSurface(((SurfaceView) context.getVideoView()).getHolder().getSurface())", exo)
+        # Both Exo generations must bind the SurfaceView owner rather than a
+        # one-time raw Surface. Fire OS replaces the holder Surface across HOME
+        # and embedded/fullscreen transitions.
+        self.assertIn("player.setVideoSurfaceView((SurfaceView) context.getVideoView())", exo)
         self.assertIn("player.setVideoSurfaceView((SurfaceView) context.getVideoView())", media3)
-        self.assertIn("glView.setZOrderOnTop(true)", gdx)
+        self.assertIn("glView.setZOrderMediaOverlay(true)", gdx)
         self.assertIn("PixelFormat.RGBA_8888", gdx)
-        self.assertNotIn("glView.setZOrderMediaOverlay(true)", gdx)
+        self.assertNotIn("glView.setZOrderOnTop(true)", gdx)
+        for player in (exo, media3):
+            self.assertIn("new FrameLayout.LayoutParams(", player)
+            self.assertIn("subView.setElevation(100.0f);", player)
+            self.assertIn("subView.bringToFront();", player)
+            self.assertIn("findViewById(android.R.id.content)", player)
 
     def test_gdx_renderer_uses_four_backend_factory(self):
         text = (SHARED / "gdx/MiniClientGDXRenderer.java").read_text(encoding="utf-8")
@@ -491,12 +685,24 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("new Exo2MediaPlayerImpl(activity)", text)
         self.assertNotIn("new IJKMediaPlayerImpl(activity)", text)
 
-    def test_combined_test_validate_build_install_launch_script_stops_on_failure(self):
-        script = (ROOT / "test_valitdate_build_install_lanuch.sh").read_text(encoding="utf-8")
+    def test_gdx_renderer_does_not_end_a_batch_that_failed_to_begin(self):
+        text = (SHARED / "gdx/MiniClientGDXRenderer.java").read_text(encoding="utf-8")
+        self.assertIn("boolean batchBegun = false;", text)
+        self.assertIn("batchBegun = true;", text)
+        self.assertIn("if (batchBegun)", text)
+        self.assertIn("Unable to finish renderer batch during lifecycle transition", text)
+
+    def test_combined_update_test_validate_build_install_launch_script_is_resumable(self):
+        script = (ROOT / "update.sh").read_text(encoding="utf-8")
         self.assertIn("set -euo pipefail", script)
+        self.assertIn('artifacts/downloads', script)
+        self.assertIn('changed-files-only', script)
+        self.assertIn('release.properties', script)
+        self.assertIn('REQUIRES_BUILD', script)
+        self.assertIn('artifacts/update_runner', script)
         for command in (
             './dev.sh test', './dev.sh validate', './dev.sh build',
-            './dev.sh install', './dev.sh launch',
+            './dev.sh install', './dev.sh launch --client-id "$SCRIPTED_CLIENT_ID"',
         ):
             self.assertIn(command, script)
 

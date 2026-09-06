@@ -1,75 +1,87 @@
-## Client ID debug controls (v0.5.75)
-
-`dev_client_id` reports the configured and active SageTV MiniClient IDs. `dev_set_client_id` persists a plain-text (up to six characters) or colonized six-byte ID; plain text `DEV001` becomes `44:45:56:30:30:31`. Use `./dev.sh client-id` for the host CLI wrapper. The app must complete first-time setup before automated testing on a fresh/cleared install. Automated test wrappers default to `44:45:56:30:30:31` (`DEV001`) unless `--client-id` is supplied; the standalone app still uses the original generated/persisted ID behavior.
-
-## v0.5.70 runtime player tuning
-
-New MCP tools: `dev_set_player_tuning` and `dev_player_tuning`. Runtime tuning is in-memory, resets on process restart, and is visible in `dev_player_state`. Host commands `mcp-player-tune` and `mcp-player-tuning-matrix` can adjust/sweep Media3 or legacy Exo2 TS search, Pull read size, seek policy, load-control thresholds, seek recovery, directional threshold, and codec queueing mode without rebuilding between combinations.
-
-## v0.5.65 issue-only player matrix
-
-`mcp-player-matrix --issues-only` focuses the current known abnormal cases. Passing a previous matrix JSON after `--issues-only` derives the exact abnormal startup/case/check set from that report. v0.5.68 adds `--exclude-players`, `--exclude-gsy-engines`, and `--exclude-case-id` so unchanged backends can be omitted from retesting. Android playback remains v0.5.67 / debugStatusVersion 11.
-
-## v0.5.64 long-wait crash probes
-
-`dev_crash_probe` returns a compact Dev-package process state and crash-buffer fingerprint/signature summary. The full player matrix captures it at 5/15/30-second milestones during long recovery waits and startup playback. A new Dev-specific crash signature, process death, or PID change is treated as a proven player crash and ends the wait early. Full checkpoints are still captured after the result.
-
 # SageTV Fire TV MCP
 
-Python MCP server exposing a deliberately small, guarded Fire TV/ADB and debug-build playback-regression surface to any MCP client. The configured package defaults to `org.opensagetv.miniclient.dev.debug`; package install/stop/uninstall tools refuse the upstream `jvl.sage.miniclient...` namespace.
+This Python MCP server exposes a guarded Fire TV/ADB and debug-playback surface.
+It runs inside the same unified Docker environment as ADB, Android SDK tools,
+and the Android build. Codex is optional; any compatible MCP client can use it.
 
-## Install
+## Safety
+
+- The configured package defaults to `opensagetv.vibe.miniclient.debug`.
+- Package mutation refuses `jvl.sage.miniclient*`.
+- APK installation verifies the application ID with `aapt`/`aapt2`.
+- Debug controls are compiled only in the Android debug source set.
+- After fresh install/Clear Data, complete first-time setup manually before
+  running playback automation.
+- Scripted tests default to `DEV001`; normal app use keeps its persisted ID.
+
+## Run
+
+Configure `config/firetv.toml`, then from the repository root:
 
 ```bash
-cd mcp
-python -m venv .venv
-. .venv/bin/activate
-pip install -e .
-export SAGETV_MCP_CONFIG=../config/firetv.toml
-sagetv-dev-firetv-mcp
+./dev.sh mcp-test
+./dev.sh mcp
 ```
 
-The server uses stdio transport. Codex is optional; `./dev.sh mcp-test` exercises the real MCP protocol and `./dev.sh mcp-seek-test` runs playback checks against the currently playing recording. The current MCP Python SDK v2 is required.
+PowerShell uses the same commands through `.\dev.ps1`. `mcp` uses stdio and
+therefore intentionally waits on an apparently blank terminal.
 
-## Debug playback automation
+To register with Codex CLI when desired:
 
-The debug APK contains `DevTestReceiver` only in the Android `debug` source set. MCP invokes it explicitly over ADB. The receiver does **not** register player listeners or continuous telemetry hooks. Each request reads existing state once and returns immediately.
+```bash
+./scripts/register_mcp.sh
+```
 
-Available high-level tools include:
+## Current capabilities
 
-- `dev_player_state` — current backend/configuration plus player state, SageTV media time, server anchor, buffer left, file read position and video dimensions.
-- `dev_set_player_config` — set backend / streaming / decoding / GSY engine for the next playback.
-- `dev_search` — open native SageTV Search on the currently connected MiniClient.
-- `dev_type_text` — inject text through Android keyboard input and optionally press Next/Enter.
-- `dev_search_text` — open Search, wait for text input, type a query, and optionally press Android keyboard Next/Enter.
-- `dev_send_sequence` — execute one explicit multiline `command` / `sendkey` / `sendtext` / `delay` sequence with no implicit actions.
-- `dev_sage_command` and `dev_sage_command_sequence` — send exact SageTV commands without depending on Android key mappings.
-- `dev_run_seek_check` — verify real post-skip A/V output health with SageTV timeline context.
-- `dev_run_comskip_check` — exercise the configured video left/right arrow mapping and report the timeline where real A/V output recovers.
-- `dev_wait_for_media_position` — poll snapshots until a target timeline is reached.
-- `dev_test_checkpoint` — save snapshot, logcat, media/codec dump, focused window and screenshot.
+- ADB connection, device identity, wake, app status, and guarded package tools.
+- Fire TV remote keys, exact SageTV commands, native text/Search entry, and
+  explicit command sequences.
+- Logcat, screenshot, screen recording, focused-window, codec, Surface, and
+  combined failure capture.
+- One-shot player state/configuration, absolute/relative seek, Comskip,
+  protocol command 28 frame-step, checkpoint, crash-probe, bounded event-ring,
+  and recovery checks. `./dev.sh mcp-frame-step-test --server-path PATH`
+  physically requires paused hardware Pull to advance a rendered frame and
+  verifies that playing and Push requests fail safely.
+- Filterable player/tuning matrices covering Legacy Exo, Media3, IJK, and GSY
+  engines across Push/Pull/Fixed and decoder policies.
+- Client-ID inspection/override tools for deterministic test sessions.
+- Credential-free named profile list/save/load/delete through the same production
+  SMB2/SMB3 repository used by the settings UI. Run
+  `python3 scripts/mcp_smb_profile_test.py` for physical share acceptance.
+- Exact-source Pull/SMB seek A/B timing on the generated fixture through
+  `python3 scripts/mcp_smb_pull_ab_test.py`; it records source read, first
+  observed decoder input, exact first-frame, and sustained A/V recovery times.
+- Debug-only compatible Media3 replacement through
+  `./dev.sh mcp-fast-switch-test --initial-path PATH --switch-path PATH`. The
+  gate verifies exact target selection, datasource ownership, first rendered
+  frame, hardware playback, attempt/success/fallback counters, and process
+  survival for both Pull and SMB Direct.
+- A completed-file lifecycle gate covering HOME/background, activity return,
+  repeated exact-path playback, crash detection, and final process teardown.
+- Restricted generation and optional SMB publication of the canonical
+  `VibeSeekTest-1080i-MPEG2-AC3-CC.ts` fixture plus its prerecorded Comskip
+  `.edl`. The generated MPEG-2 carries one ATSC A/53 GA94 block per picture,
+  with CEA-608 CC1 and CEA-708 Service 1 timestamp cues every 0.5 seconds.
 
-The legacy `get_player_telemetry` / `wait_for_player_event` tools remain disabled because the previous continuous callback instrumentation affected playback startup.
+The generated fixture is used for repeatable completed-file, caption, seek,
+Comskip, Pull/SMB, Push, and Fixed/MIM comparisons. It is not accepted as
+channel-change evidence; growing live-TV transitions use the real HDHomeRun
+channels 2.1 and 5.1.
 
-`./dev.sh mcp-seek-test` assumes one known recording is already playing. v0.5.13 calibrates the server's primary FF/REW response to a 5-second preference quantum by default, then expands the semantic +30/-10/rapid skip tests. It reports the represented command target when a custom interval cannot exactly express a semantic step. Fully unattended "open recording X" navigation is intentionally deferred until a stable recording/menu path is configured.
+Use `./dev.sh help` and MCP tool discovery for exact current arguments. Search
+tests require explicit non-empty recording text; there is no production default
+recording. A known recording must already be available when a command does not
+include navigation.
 
-## Package-install safety
+## Diagnostic rules
 
-`install_dev_apk` verifies the APK application ID with Android SDK `aapt`/`aapt2` before installation. If it cannot prove the APK is the configured development package, it refuses the install. Set `SAGETV_AAPT` if `aapt` is not on `PATH`.
+Continuous player telemetry remains disabled because instrumentation has
+previously changed playback startup. Use one-shot state, bounded existing-event
+traps, logcat, codec/surface dumps, screenshots, and server-correlated evidence.
+Every operation gets its own watchdog; expiry is `WATCHDOG_EXPIRED` with an
+undetermined cause, not an automatic Android/server/FFmpeg failure.
 
-## Why there is no "play recording X" tool yet
-
-The current automation starts from an already-playing known recording. Once a stable recording/menu path is configured, the same MCP layer can automate player matrices end-to-end without guessing UI state.
-
-## v0.5.63 exact-event playback evidence
-
-`dev_player_state` (debug status v9) now separates SageTV's requested seek, Push stream anchor, Android-local player position, and MiniClient-reported SageTV timeline. It also includes the latest exact-event trap summary.
-
-New tools:
-
-- `dev_player_events` — return the bounded debug event ring with event-time video/audio counters.
-- `dev_clear_player_events` — clear the ring before a focused seek/pause/Comskip action.
-
-The event ring is diagnostic evidence. Matrix PASS/FAIL is still based on recovered A/V output, not exact seek landing. `mcp-player-matrix` clears/collects the ring automatically around every media action.
-Codec queueing default is now `sync` in v0.5.74. Use `--codec-mode auto` or the `auto_codec` named profile to compare against the recommended default; explicit MCP tuning temporarily overrides the saved app preference.
-
+Read `../docs/PLAYBACK_DIAGNOSTICS.md` before running or interpreting a player
+experiment.

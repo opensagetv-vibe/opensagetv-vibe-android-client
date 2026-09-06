@@ -8,7 +8,7 @@ try:
 except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib
 
-DEFAULT_DEV_PACKAGE = "org.opensagetv.miniclient.dev.debug"
+DEFAULT_DEV_PACKAGE = "opensagetv.vibe.miniclient.debug"
 
 @dataclass(frozen=True)
 class Config:

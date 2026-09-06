@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "source_project": "opensagetv-vibe-logo",
+  "generator_version": "1.8.0",
+  "assets": [
+    {
+      "path": "source/dev/android-shared/src/main/ic_launcher_v2-playstore.png",
+      "sha256": "457aac8a61e8347f53cc162ccd17762754e0d34fd9d383dd9e1846e561676ca3"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/drawable/sage_logo_256.png",
+      "sha256": "7733ac8560ff5037463f756e193dcdc0fc602c65bcbf07b500d390bfd026d500"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-anydpi-v26/ic_launcher_v2.xml",
+      "sha256": "0869f0ab02777ee61329f2e505d3b534480313d2a6174195f86ff3641f68cf11"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-anydpi-v26/ic_launcher_v2_round.xml",
+      "sha256": "0869f0ab02777ee61329f2e505d3b534480313d2a6174195f86ff3641f68cf11"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-hdpi/ic_launcher_v2.png",
+      "sha256": "f203ee51689b0d562f7d4cdcddc33620ebaed6a97857b6fa0bd5d3ceaa8fd0c7"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-hdpi/ic_launcher_v2_background.png",
+      "sha256": "f106b02ada0172075a320e9b585a6be255a9efac9a45c9d02f68286bf874094a"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-hdpi/ic_launcher_v2_foreground.png",
+      "sha256": "b533551308c07561dc6bfe78e29b5b87f9b733dc0250f94da62775e0c6b43caa"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-hdpi/ic_launcher_v2_round.png",
+      "sha256": "213412be6a59f734a85d7a9685528f3a9d595b69cb681f30f11011effd4d89fb"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-mdpi/ic_launcher_v2.png",
+      "sha256": "1e2eb56f33a71abf88a59eb6617cb85b4a5deefaece344e5dd1f393c81fbf3c3"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-mdpi/ic_launcher_v2_background.png",
+      "sha256": "21f7d87e3941cb544430760b94c8470644f4a13a122fe1e2c5e631607bfc7545"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-mdpi/ic_launcher_v2_foreground.png",
+      "sha256": "bce77f5824aa25f9b78d079f4828690979a46bf6200a5560f9fb40cfd1809374"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-mdpi/ic_launcher_v2_round.png",
+      "sha256": "599d87682b771d55c072f8736902ebc10d3cc0f3f7a5b26ccbbc12af8bda4504"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xhdpi/ic_launcher_v2.png",
+      "sha256": "735b87b0ea21184b8ba846ffc3b56bd6cfae5b05dc5d8b98ec892e583d493823"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xhdpi/ic_launcher_v2_background.png",
+      "sha256": "42e918329eb55ef7535cf92c927514cd3d5301f7c00021f521971b9e606b2e5a"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xhdpi/ic_launcher_v2_foreground.png",
+      "sha256": "82aa30174d60ef3ff520f098dce0d3027ffc1eeefe2fc24cf474c0a5e9bccf70"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xhdpi/ic_launcher_v2_round.png",
+      "sha256": "024263483f5f4bec022bcfc6b448beeb5057d78e4cdbd2b42b4c869d6277bd58"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxhdpi/ic_launcher_v2.png",
+      "sha256": "a6c1dce1dd8ca5cc8f2f795d50a386abf3b79b73a11bc16a58f6a7d5a2cc258d"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxhdpi/ic_launcher_v2_background.png",
+      "sha256": "536338ea14bab08347372925583891bd77573477463976e4392c763bfda33363"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxhdpi/ic_launcher_v2_foreground.png",
+      "sha256": "096d89727cc94d2955ace519424d5aa1e4ddea4c4d2b122711bb2d15320b6b74"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxhdpi/ic_launcher_v2_round.png",
+      "sha256": "41d22aec0265039597e48efd8f0203d6c850ab0441dae1fea9b3e367c1cfbbf1"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxxhdpi/ic_launcher_v2.png",
+      "sha256": "a18170e0db7ea0639045e8b5afbf48ac4653150d3722b01a6bfe1b0ca4c91898"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxxhdpi/ic_launcher_v2_background.png",
+      "sha256": "ab799e0384afb3faad043b400ed5fb04ea4ba6e2d6f9f937d9d3c99d757cd6c4"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxxhdpi/ic_launcher_v2_foreground.png",
+      "sha256": "fa655c6b82aaf74205f0b80be836547b8b84dbd5b1cb9865762d267ef526ffad"
+    },
+    {
+      "path": "source/dev/android-shared/src/main/res/mipmap-xxxhdpi/ic_launcher_v2_round.png",
+      "sha256": "c1766fe3107c0a336131b4b8d4ab9a9cf3eeb61a0ed91ff4507a30c80f15c977"
+    },
+    {
+      "path": "source/dev/android-tv/src/main/res/drawable/banner_v2.png",
+      "sha256": "582c97aef40f5f93ea41defedf31ae65e87d4ef82f11ba2ee82ab655bd5e3720"
+    },
+    {
+      "path": "source/dev/android-tv/store-assets/amazon-fire-tv-app-icon-1280x720.png",
+      "sha256": "50d3fc6d3fd167529013908e975ddc67920ec5ef8f4452ae44dd8b31e1b7e79b"
+    },
+    {
+      "path": "source/dev/android-tv/store-assets/amazon-fire-tv-background-1920x1080.png",
+      "sha256": "ddcba98a946606cdc78b8d9910c890a8019739060e9708a295c1936892a9e990"
+    },
+    {
+      "path": "source/dev/android-tv/store-assets/amazon-tablet-large-icon-512x512.png",
+      "sha256": "d48f1ba456a4e725a14c6afc2090f5875cb26df733e8d85eae513eb0ea8fa87c"
+    },
+    {
+      "path": "source/dev/android-tv/store-assets/amazon-tablet-small-icon-114x114.png",
+      "sha256": "d1082f56f284fd07a92400f989e8068659e096079de82261b79eace994e1503b"
+    }
+  ]
+}
