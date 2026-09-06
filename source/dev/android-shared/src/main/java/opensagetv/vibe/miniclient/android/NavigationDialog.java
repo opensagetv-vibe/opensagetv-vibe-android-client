@@ -51,6 +51,7 @@ public class NavigationDialog extends Dialog
     View navPause = null;
 
     ImageView navSmartRemote;
+    ImageView navPlaybackStats;
     MediaMappingPreferences prefs;
 
     public NavigationDialog(Activity activity)
@@ -83,6 +84,7 @@ public class NavigationDialog extends Dialog
         navOptions = navView.findViewById(R.id.nav_options);
         navPause = navView.findViewById(R.id.nav_media_pause);
         navSmartRemote = (ImageView) navView.findViewById(R.id.nav_remote_mode);
+        navPlaybackStats = (ImageView) navView.findViewById(R.id.nav_playback_stats);
 
         View.OnClickListener buttonClickListener = new View.OnClickListener()
         {
@@ -145,6 +147,22 @@ public class NavigationDialog extends Dialog
                         ActivePlayerAdjustmentsDialog.show(activity);
                     }
                 });
+
+        if (navPlaybackStats != null)
+        {
+            updatePlaybackStatsToggle();
+            navPlaybackStats.setOnClickListener(new View.OnClickListener()
+                {
+                    @Override public void onClick(View v)
+                    {
+                        MediaCmd currentMedia = client == null
+                                || client.getCurrentConnection() == null ? null
+                                : client.getCurrentConnection().getMediaCmd();
+                        dismiss();
+                        ActivePlayerProcessOverlay.setMode(activity, currentMedia, "toggle");
+                    }
+                });
+        }
 
         navView.findViewById(R.id.nav_video_info).setOnClickListener(new View.OnClickListener()
         {
@@ -371,6 +389,17 @@ public class NavigationDialog extends Dialog
         {
             navSmartRemote.setImageResource(R.drawable.ic_open_with_red_24dp);
         }
+    }
+
+    private void updatePlaybackStatsToggle()
+    {
+        if (navPlaybackStats == null) return;
+        boolean visible = ActivePlayerProcessOverlay.isVisible();
+        navPlaybackStats.setImageResource(visible
+                ? R.drawable.ic_equalizer_green_24dp
+                : R.drawable.ic_equalizer_white_24dp);
+        navPlaybackStats.setContentDescription(visible
+                ? "Hide Playback Stats" : "Show Playback Stats");
     }
 
 

@@ -1086,7 +1086,20 @@ class AdbClient:
     def show_active_player_adjustments(self) -> dict[str, Any]:
         return self.dev_control("active_player_adjustments")
 
-    def set_active_player_overlay(self, visible: bool = True) -> dict[str, Any]:
+    def set_active_player_overlay(
+        self,
+        visible: bool = True,
+        mode: str = "",
+    ) -> dict[str, Any]:
+        """Control Playback Stats while preserving the legacy Boolean operation."""
+        normalized = str(mode).strip().lower()
+        if normalized:
+            allowed = {"toggle", "off", "compact", "detailed", "detailed_30s"}
+            if normalized not in allowed:
+                raise ValueError(
+                    "mode must be toggle, off, compact, detailed, or detailed_30s"
+                )
+            return self.dev_control("active_player_overlay", mode=normalized)
         return self.dev_control(
             "active_player_overlay",
             visible="true" if visible else "false",

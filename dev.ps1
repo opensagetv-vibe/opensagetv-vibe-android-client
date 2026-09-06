@@ -38,9 +38,21 @@ if (-not $env:OPENSAGETV_VIBE_BUILD_ENV_ROOT) {
 
 $linuxBuildEnvRoot = Convert-ToWslPath $buildEnvRoot
 $linuxProjectRoot = Convert-ToWslPath $projectRoot
-$arguments = @(
-    '--cd', $linuxProjectRoot,
-    'env', "OPENSAGETV_VIBE_BUILD_ENV_ROOT=$linuxBuildEnvRoot",
+$forwardedEnvironment = @("OPENSAGETV_VIBE_BUILD_ENV_ROOT=$linuxBuildEnvRoot")
+foreach ($name in @(
+    'SAGETV_SAGEX_BASE',
+    'SAGETV_WEB_BASE',
+    'SAGETV_SAGEX_PORTS',
+    'SAGETV_SAGEX_USER',
+    'SAGETV_SAGEX_PASSWORD'
+)) {
+    $value = [Environment]::GetEnvironmentVariable($name)
+    if (-not [String]::IsNullOrEmpty($value)) {
+        $forwardedEnvironment += "${name}=$value"
+    }
+}
+
+$arguments = @('--cd', $linuxProjectRoot, 'env') + $forwardedEnvironment + @(
     'bash', './dev.sh'
 ) + $CommandArguments
 

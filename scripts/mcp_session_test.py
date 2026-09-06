@@ -294,15 +294,22 @@ def main() -> int:
                 if not result.get("passed"):
                     raise RuntimeError(f"Comskip {direction} playback health failed")
 
-        def restart_exact(label: str) -> dict:
-            if not args.server_path.strip():
-                raise RuntimeError(f"{label} requires --server-path")
-            restarted = call_dict(client, "dev_play_server_path", {
-                "server_path": args.server_path,
-                "timeout_s": args.playback_timeout_s,
-                "verify_ms": args.verify_ms,
-                "restart_from_beginning": args.restart_from_beginning,
-            }, timeout=args.playback_timeout_s + 35.0)
+        def restart_source(label: str) -> dict:
+            if args.server_path:
+                restarted = call_dict(client, "dev_play_server_path", {
+                    "server_path": args.server_path,
+                    "timeout_s": args.playback_timeout_s,
+                    "verify_ms": args.verify_ms,
+                    "restart_from_beginning": args.restart_from_beginning,
+                }, timeout=args.playback_timeout_s + 35.0)
+            elif args.video_name:
+                restarted = call_dict(client, "dev_play_video", {
+                    "video_name": args.video_name,
+                    "timeout_s": args.playback_timeout_s,
+                    "verify_ms": args.verify_ms,
+                }, timeout=args.playback_timeout_s + 35.0)
+            else:
+                raise RuntimeError(f"{label} has no configured playback source")
             print(f"{label}: " + json.dumps(restarted, indent=2, sort_keys=True))
             if not restarted.get("passed"):
                 raise RuntimeError(f"{label} did not recover A/V: {restarted.get('reason')}")
@@ -314,15 +321,15 @@ def main() -> int:
             return restarted
 
         for iteration in range(1, args.run_repeated_start + 1):
-            print(f"STEP: repeated exact-path start {iteration}/{args.run_repeated_start}")
-            restart_exact(f"REPEATED_START_{iteration}")
+            print(f"STEP: repeated source start {iteration}/{args.run_repeated_start}")
+            restart_source(f"REPEATED_START_{iteration}")
 
         if args.run_stop_restart:
-            print("STEP: SageTV stop and exact-path restart")
+            print("STEP: SageTV stop and source restart")
             stopped = call_dict(client, "dev_sage_command", {"command": "stop"}, timeout=30.0)
             print("STOP: " + json.dumps(stopped, indent=2, sort_keys=True))
             time.sleep(1.0)
-            restart_exact("STOP_RESTART")
+            restart_source("STOP_RESTART")
 
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         print("CRASH CHECK: " + json.dumps(crash, indent=2, sort_keys=True))

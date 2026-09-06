@@ -18,6 +18,7 @@ import androidx.media3.extractor.TrackOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +65,8 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
         private final Extractor delegate;
         private final LegacyExtenderCaptionBridge bridge;
         private final Mpeg2PictureTimestampCompleter mpeg2Observer;
+        private final List<ObservingTrackOutput> captionTracks =
+                new ArrayList<ObservingTrackOutput>();
 
         ObservingExtractor(Extractor delegate, LegacyExtenderCaptionBridge bridge,
                 Mpeg2PictureTimestampCompleter mpeg2Observer)
@@ -80,12 +83,18 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
         @Override
         public void init(final ExtractorOutput output)
         {
+            captionTracks.clear();
             delegate.init(new ExtractorOutput()
             {
                 @Override public TrackOutput track(int id, int type)
                 {
                     TrackOutput track = output.track(id, type);
-                    if (type == C.TRACK_TYPE_TEXT) return new ObservingTrackOutput(track, bridge);
+                    if (type == C.TRACK_TYPE_TEXT)
+                    {
+                        ObservingTrackOutput observing = new ObservingTrackOutput(track, bridge);
+                        captionTracks.add(observing);
+                        return observing;
+                    }
                     if (type == C.TRACK_TYPE_VIDEO) return new ObservingVideoTrackOutput(track, mpeg2Observer);
                     return track;
                 }
@@ -97,6 +106,11 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
         @Override
         public void seek(long position, long timeUs)
         {
+            // TrackOutput may hold an incomplete pre-seek sample. Appending
+            // post-seek bytes to it reorders/corrupts CEA control and text
+            // pairs even though the enclosing extractor was reset.
+            for (ObservingTrackOutput track : captionTracks)
+                track.resetPending();
             bridge.flush();
             delegate.seek(position, timeUs);
         }
@@ -224,6 +238,11 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
             pending.reset();
             if (offset > 0 && end < all.length)
                 pending.write(all, end, all.length - end);
+        }
+
+        void resetPending()
+        {
+            pending.reset();
         }
     }
 }

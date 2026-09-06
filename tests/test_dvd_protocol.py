@@ -32,6 +32,7 @@ ACTIVE_ADJUSTMENTS = ROOT / "source/dev/android-shared/src/main/java/opensagetv/
 SESSION_OVERRIDES = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/ActivePlayerSessionOverrides.java"
 TEXT_SUBTITLE_PRESENTATION = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/TextSubtitlePresentation.java"
 ACTIVE_PROCESS_OVERLAY = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ActivePlayerProcessOverlay.java"
+ACTIVE_STATS_SNAPSHOT = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ActivePlayerStatsSnapshot.java"
 
 
 class DvdProtocolTests(unittest.TestCase):
@@ -66,26 +67,94 @@ class DvdProtocolTests(unittest.TestCase):
             self.assertIn("setFractionalTextSize", player)
             self.assertIn("setUserDefaultStyle", player)
 
-    def test_compact_player_overlay_is_bounded_and_lifecycle_safe(self):
+    def test_playback_stats_overlay_is_bounded_opt_in_and_lifecycle_safe(self):
         overlay = ACTIVE_PROCESS_OVERLAY.read_text(encoding="utf-8")
         dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
         debug_state = DEBUG_STATE.read_text(encoding="utf-8")
+        lifecycle = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/UIActivityLifeCycleHandler.java").read_text(encoding="utf-8")
         self.assertIn("DISPLAY_MS = 30_000L", overlay)
         self.assertIn("WeakReference<Activity>", overlay)
         self.assertIn("MAIN.removeCallbacks", overlay)
         self.assertIn("removeView", overlay)
-        self.assertIn("Compact diagnostics overlay (30 seconds)", dialog)
+        self.assertIn("Playback Stats overlay", dialog)
+        self.assertIn("☑ Playback Stats enabled", dialog)
+        self.assertIn("☐ Playback Stats disabled", dialog)
+        self.assertIn("final boolean wasVisible", dialog)
+        self.assertIn("Show compact until turned off", dialog)
+        self.assertIn("Show detailed until turned off", dialog)
+        self.assertIn("Show detailed for 30 seconds", dialog)
+        self.assertIn("Export redacted detailed snapshot", dialog)
         self.assertIn("activePlayerProcessOverlayVisible", debug_state)
+        self.assertGreaterEqual(lifecycle.count("ActivePlayerProcessOverlay.hide();"), 2)
+
+    def test_playback_stats_are_mode_aware_redacted_and_have_live_health_bars(self):
+        overlay = ACTIVE_PROCESS_OVERLAY.read_text(encoding="utf-8")
+        snapshot = ACTIVE_STATS_SNAPSHOT.read_text(encoding="utf-8")
+        for label in ("Media network activity", "Buffer health", "CPU usage"):
+            self.assertIn(label, overlay)
+        self.assertNotIn("CONNECTION_GRAPH_REFERENCE_KBPS", overlay)
+        self.assertIn("resizeToContent(body)", overlay)
+        self.assertIn("details.getPaint().measureText(line)", overlay)
+        self.assertIn("if (desired <= widestContentPx) return", overlay)
+        self.assertIn('"  |  peak "', overlay)
+        for section in (
+            "SMB cache", "Shadow", "Server", "DVD cadence", "Captions",
+        ):
+            self.assertIn(section, snapshot)
+        self.assertIn("if (smb)", snapshot)
+        self.assertIn("else if (push || dvd)", snapshot)
+        self.assertIn("if (dvd)", snapshot)
+        self.assertIn("No media path, server address, credentials, or client ID", snapshot)
+        self.assertIn("redactForExport(detailedText(activityKbps))", snapshot)
+        self.assertIn('"<smb-path>"', snapshot)
+        self.assertIn('"<unc-path>"', snapshot)
+        self.assertIn('"<media-path>"', snapshot)
+        self.assertIn('"<server>"', snapshot)
+        self.assertNotIn("getLastOpenUrlForDebug", snapshot)
+        self.assertNotIn("getSageOriginalPath", snapshot)
+        self.assertNotIn("getSmbMappedPath", snapshot)
+        for irrelevant_example_field in (
+            "Video ID / sCPN", "Viewport / Frames", "Current / Optimal Res",
+            "Volume / Normalized", "Mystery Text", "Date",
+        ):
+            self.assertNotIn(irrelevant_example_field, snapshot)
+            self.assertNotIn(irrelevant_example_field, overlay)
 
     def test_compact_player_overlay_has_deterministic_mcp_control(self):
         overlay = ACTIVE_PROCESS_OVERLAY.read_text(encoding="utf-8")
         receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
         adb = (ROOT / "mcp/src/sagetv_dev_mcp/adb.py").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
+        snapshot = ACTIVE_STATS_SNAPSHOT.read_text(encoding="utf-8")
         self.assertIn("setVisible(Activity activity, MediaCmd media, boolean visible)", overlay)
         self.assertIn('"active_player_overlay".equals(op)', receiver)
         self.assertIn("def set_active_player_overlay(", adb)
         self.assertIn("def dev_set_active_player_overlay(", server)
+        self.assertIn('"toggle".equals(mode)', overlay)
+        self.assertIn('"detailed_30s".equals(mode)', overlay)
+        self.assertIn('intent.getStringExtra("mode")', (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugSessionCommands.java").read_text(encoding="utf-8"))
+        self.assertIn('{"toggle", "off", "compact", "detailed", "detailed_30s"}', adb)
+        navigation = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/NavigationDialog.java").read_text(encoding="utf-8")
+        notouch = (ROOT / "source/dev/android-tv/src/main/res/layout-notouch/navigation.xml").read_text(encoding="utf-8")
+        self.assertIn("nav_playback_stats", navigation)
+        self.assertIn('setMode(activity, currentMedia, "toggle")', navigation)
+        self.assertIn('@+id/nav_playback_stats', notouch)
+        self.assertIn('@drawable/ic_equalizer_white_24dp', notouch)
+        self.assertIn('new FileReader("/proc/stat")', overlay)
+        self.assertIn("android.os.Process.getElapsedCpuTime()", overlay)
+        self.assertIn("Runtime.getRuntime().availableProcessors()", overlay)
+        self.assertIn("snapshot.appCpuPercent = Math.min(snapshot.appCpuPercent", overlay)
+        self.assertIn("cpu.updateCpu", overlay)
+        self.assertIn("setSecondaryProgress", overlay)
+        self.assertIn('"Vibe " + ActivePlayerStatsSnapshot.percent', overlay)
+        self.assertIn('"Other " + ActivePlayerStatsSnapshot.percent', overlay)
+        self.assertIn("new ForegroundColorSpan(color)", overlay)
+        self.assertNotIn('line(text, "CPU  device "', snapshot)
+        self.assertNotIn('line(text, "Buffer  "', snapshot)
+        self.assertNotIn('line(text, "Measured media activity', snapshot)
+        self.assertNotIn('"Link capacity (Android estimate)"', overlay)
+        self.assertIn("details = text(10.5f, Typeface.NORMAL, Color.WHITE)", overlay)
+        self.assertNotIn("details.setTypeface(Typeface.MONOSPACE)", overlay)
 
     def test_hdmi_settle_is_bounded_and_only_schedules_server_owned_dvd_reload(self):
         dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
@@ -98,6 +167,12 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("currentMedia.requestControlledPlayerReload()", controller)
         self.assertNotIn("currentMedia.getPlaya().pause()", controller)
         self.assertIn("setRefreshSettleMs", overrides)
+
+    def test_display_refresh_application_is_marshaled_to_android_main_thread(self):
+        controller = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/DisplayRefreshController.java").read_text(encoding="utf-8")
+        self.assertIn("Looper.myLooper() != Looper.getMainLooper()", controller)
+        self.assertIn('"application_scheduled_on_main"', controller)
+        self.assertIn("OFF.equals(policy) ? null : player", controller)
 
     def test_hybrid_openurl_authoritatively_creates_a_push_datasource(self):
         base = BASE.read_text(encoding="utf-8")
@@ -727,10 +802,28 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertNotIn("shouldDefer", observer)
         self.assertIn("repeatFirstField", completer)
         self.assertIn("displayFieldCount", completer)
-        self.assertIn("picture.pictureType == PICTURE_TYPE_I || picture.authoredTimestamp", completer)
+        self.assertIn("picture.pictureType == PICTURE_TYPE_I", completer)
+        self.assertIn("picture.authoredTimestamp", completer)
         self.assertIn("telecineCadenceSeen", completer)
         self.assertIn("MAX_REPAIR_DELTA_US", completer)
         self.assertIn("disc_mpeg2_timestamp_repair", MEDIA3.read_text(encoding="utf-8"))
+
+    def test_dvd_newcell_resets_scanner_and_sample_byte_coordinates_together(self):
+        extractor = DVD_PS.read_text(encoding="utf-8")
+        observer = extractor.split(
+            "private static final class ObservingVideoTrackOutput", 1
+        )[1].split("private static final class StillFrameRepeater", 1)[0]
+        begin_sequence = observer.split("void beginSequence()", 1)[1].split(
+            "boolean isSinglePictureSequence()", 1
+        )[0]
+        self.assertIn("totalBytesForwarded = 0L", begin_sequence)
+        self.assertIn("timestampCompleter.reset()", begin_sequence)
+        self.assertLess(
+            begin_sequence.index("totalBytesForwarded = 0L"),
+            begin_sequence.index("timestampCompleter.reset();"),
+        )
+        self.assertIn("describeVideoTimestampNear", extractor)
+        self.assertIn("timestampDecisionName", extractor)
 
     def test_static_dvd_menu_defers_reprepare_until_replacement_mpeg_arrives(self):
         media3 = MEDIA3.read_text(encoding="utf-8")

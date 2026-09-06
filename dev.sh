@@ -25,7 +25,18 @@ ensure_dev_container() {
 
 dev_exec() {
   ensure_dev_container
+  # Forward only the explicitly supported Sagex commissioning settings. They
+  # are intentionally not baked into the development image or persisted in
+  # the project; stock servers commonly protect their Web/Sagex plugin.
+  local sagex_env=()
+  local sagex_name
+  for sagex_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD; do
+    if [[ -n "${!sagex_name:-}" ]]; then
+      sagex_env+=("$sagex_name=${!sagex_name}")
+    fi
+  done
   docker exec -i -w "$CONTAINER_WORKSPACE" "$UNIFIED_CONTAINER" env \
+      "${sagex_env[@]}" \
       JAVA_HOME=/opt/java/jdk17 \
       JDK_HOME=/opt/java/jdk17 \
       GRADLE_USER_HOME=/work/.gradle/android \

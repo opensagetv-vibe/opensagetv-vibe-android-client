@@ -16,6 +16,78 @@ Current physical commissioning environment:
   `.edl` intervals at 120-180, 360-420, and 660-720 seconds
 - commissioned live channels: 2.1 and 5.1 only
 
+## Feature intent and test-only controls
+
+The tables below use these intent labels. A feature being used during physical
+commissioning does not by itself make that feature test-only.
+
+| Label | Meaning |
+|---|---|
+| **Normal feature** | User-facing playback, settings, compatibility, or recovery behavior intended for ordinary builds and daily use. |
+| **Diagnostic** | Optional troubleshooting information or an administrator query. It may be useful in normal builds, but playback never depends on it. |
+| **TEST ONLY** | Deterministic automation or fault-injection control. It is disabled by default, restricted to the Dev/debug workflow, or both. Users do not need it for normal SageTV operation. |
+| **REGRESSION TEST MEDIA** | Generated media, captions, Comskip markers, or authored discs used to reproduce the same test conditions. These are test inputs, not application features, and are never applied to real recordings or live TV. |
+
+The following items are specifically **TEST ONLY** or **REGRESSION TEST MEDIA**:
+
+| Item | Classification | Production boundary |
+|---|---|---|
+| Exact server-file commissioning event | **TEST ONLY** | Opens a known file deterministically for automation. Normal users select recordings through the STV; the event is disabled by default in Vibe Core. |
+| Exact dotted-channel event and positive acknowledgment | **TEST ONLY** | Restricts repeatable live testing to an explicitly requested channel. Normal users tune through the STV; the event is disabled by default. |
+| Exact server-owned DVD seek event | **TEST ONLY** | Creates a reproducible DVD seek without replacing ordinary STV timeline, chapter, or remote commands. |
+| Android Dev MCP commands, debug broadcast receiver, health probes, screenshots, and automated assertions | **TEST ONLY** | Present for commissioning the Dev/debug APK. They are not playback requirements and must not be exposed as production remote-control interfaces. |
+| MCP `codec_capabilities` snapshot and test-state counters | **TEST ONLY** | On-demand evidence for the selected decoder and current test. No background probe or server protocol dependency is added. |
+| Deliberate missing/old-MIM, decoder-failure, network-failure, and malformed-input injection | **TEST ONLY** | Exercises bounded fallback and error handling. It is never enabled during ordinary playback. |
+| `VibeSeekTest-1080i-MPEG2-AC3-CC.ts`, its generated `.edl`, timestamp captions, and synthetic live source | **REGRESSION TEST MEDIA** | Deterministic A/V, caption, seek, and Comskip evidence. The generator never modifies a real recording or real ATSC caption stream. |
+| Generated authored-DVD test disc and its timestamp subtitles/chapters/menus | **REGRESSION TEST MEDIA** | Exercises DVD presentation and navigation. It is separate from users' DVD media. |
+
+The active-player statistics overlay and MIM `--mim-status` query are
+**Diagnostic**, not test-only. Push, Pull, SMB Direct, Fixed/MIM playback,
+native and Hybrid DVD playback, caption handling, safe seek, Home recovery,
+decoder selection, and their user settings are **Normal features**, even when
+the fixtures and MCP controls above are used to validate them.
+
+## What does not work with an unmodified SageTV server
+
+The Vibe client remains usable with stock SageTV. Native DVD playback is not a
+Vibe-Core-only feature: stock Core already contains `MiniDVDPlayer` and its
+server-side DVD VM. Vibe advertises the original extender-style
+`INPUT_DEVICES=IR,KEYBOARD,TV` response (not `MOUSE`), so stock Core selects
+that original path. On September 6, 2026, unmodified server
+`192.168.10.175` physically passed menu-less Aladdin playback and the authored
+Scooby root-menu/navigation path with Media3 hardware MPEG-2 decode, AC-3,
+CLUT/SPU/highlight commands, pause/play, and zero dropped video frames. The
+authenticated Web/Sagex plugin was used only to invoke the ordinary STV
+`Watch` operation; no Vibe protocol event, patched `Sage.jar`, or MIM was used.
+
+The following optional Vibe features are unavailable on stock Core:
+
+| Feature unavailable on stock Core | Required component | Safe stock behavior |
+|---|---|---|
+| Exact server-file commissioning event (**TEST ONLY**) | Vibe `Sage.jar` | Select the item in the STV, or use the standard Web/Sagex `Watch` command. Normal playback is unaffected. |
+| Exact dotted-channel commissioning event and positive acknowledgment (**TEST ONLY**) | Vibe `Sage.jar` | Tune through the STV or standard Sage commands. |
+| Per-client Native/Hybrid/MIM-main-feature DVD transport negotiation | Vibe `Sage.jar`; MIM for transformed media | Stock Core uses its original native `MiniDVDPlayer` MPEG-PS push path. |
+| Client-requested DVD Skip Menus and Skip Previews | Vibe `Sage.jar` | Stock Core follows authored DVD navigation. The user can select the main feature normally. |
+| Explicit Hybrid-to-Native DVD fallback reason and MIM-failure marker | Vibe `Sage.jar` and MIM | Select Native DVD. Stock native playback does not need this fallback. |
+| Debug/MCP exact server-owned DVD seek event (**TEST ONLY**) | Vibe `Sage.jar` | Normal STV DVD chapter/timeline/navigation commands remain server-owned; only the private deterministic test event is missing. |
+| `MEDIA_STATE_URL` completed/growing URL metadata | Vibe `Sage.jar` | The client retains normal MiniPlayer behavior and uses the older available hints; diagnostics are less explicit. |
+| Native playback-rate negotiation through `VIBE_PLAYBACK_RATE` | Vibe `Sage.jar` | Historical SageTV FF/REW/skip commands remain available; the Vibe native-rate extension is not advertised. |
+
+The following depend on FFmpeg/MIM rather than `Sage.jar` and therefore do not
+work when MIM is absent:
+
+| Feature unavailable without MIM | Safe stock behavior |
+|---|---|
+| Modern Ubuntu FFmpeg option/codec translation | Stock Fixed transcoding works only if the server's bundled FFmpeg accepts the historical request. Push, Pull, SMB Direct, and native DVD remain available. |
+| Intel VAAPI/QSV, AMD VAAPI, or NVIDIA NVENC policy and verified fallback | Use client hardware decode with Push/Pull/native DVD, or whatever transcoder the stock server already supports. |
+| Machine-readable active transcoder/backend status (**Diagnostic**) | Playback can still run, but Vibe cannot prove which server encoder is active. |
+| Fixed-output CEA-608/708 retention through transcoding | Use non-transcoded Push/Pull/SMB playback for the standard legacy caption callback path. |
+| Hybrid DVD or MIM main-feature transform | Use stock native DVD playback. Interactive DVD menus cannot be preserved by a simple transcoded main-title stream. |
+
+These are limitations rather than connection gates. A missing extension must be
+ignored or fail with a bounded explanation; it must never break normal stock
+Push, Pull, native DVD, STV, or remote-control behavior.
+
 ## Historical extender / desktop behavior audit
 
 This audit uses the released SageTV Core, Windows player contracts, Java
@@ -32,7 +104,7 @@ remain inference even when the server contains explicit extender workarounds.
 | Buffering and adaptive Push | Proven wire behavior: detailed Push adds channel, stream and target bandwidth plus server mux time; `MiniPlayer` uses returned free space/play state and contains explicit low-bandwidth/transcode decisions. | Decode the complete detailed reply and expose server/client/datasource rates and wait time through MCP. Do not invent Android-side server rate control. | Implemented and physically observed. |
 | Seek/skip near live edge | Proven desktop behavior: `VideoFrame` keeps skip/FF behind the live edge using encoder-delay-aware margins and prevents unsafe completed-file EOF seeks. | Shared `PlaybackSeekPolicy`, exact requested/clamped telemetry, serialized seek recovery. | Implemented and physically tested across Pull, Push, SMB and Fixed. |
 | Frame stepping | Proven command/property contract (`FRAME_STEP`, media command 28); backend mechanics are platform-specific. | Advertise only for a player/streaming combination that can apply a bounded paused step. | Implemented behind capability policy; physical release gate remains separate where applicable. |
-| Captions/subtitles | Proven protocol: legacy hardware extenders advertised `GFX_SUBTITLES`, returned raw decoder-extracted caption packets through callback type 225, and let SageTV select/render CC1/CC2/DTVCC. Stock `MiniPlayer.setClosedCaptioningState()` returns `false` because it does not need to publish state to that callback producer. | Media3, legacy Exo, and GSY extractor delegates now tap raw TS CEA samples, convert them to the proven eight-byte SageTV records, and send event 225. Local text rendering is suppressed only after callback packets are active. IJK advertises `FALSE` and retains explicit client fallback. | Implemented and host-tested; physical stock-server event-225/STV rendering gate is active. |
+| Captions/subtitles | Proven protocol: legacy hardware extenders advertised `GFX_SUBTITLES`, returned raw decoder-extracted caption packets through callback type 225, and let SageTV select/render CC1/CC2/DTVCC. Stock `MiniPlayer.setClosedCaptioningState()` returns `false` because it does not need to publish state to that callback producer. | Media3, legacy Exo, and GSY extractor delegates now tap raw TS CEA samples, convert them to the proven eight-byte SageTV records, and send event 225. Local text rendering is suppressed only after callback packets are active. IJK advertises `FALSE` and retains explicit client fallback. Extractor fragments are cleared on seeks, duplicate parallel-track samples are suppressed, and MPEG-2 caption packets are delivered in PTS rather than decode order. | PASS on stock `.175`: Media3 and legacy Exo hardware Pull each pass Off/CC1/CC2/Off/CC1 and FF/REW/FF2/REW2 with ordered lower-screen captions within the two-second fixture timing gate. |
 | Aspect and interlace | Proven capabilities: server queries supported/source/advanced aspect and deinterlace-control properties; Windows provides Source/Stretch/Zoom and explicit deinterlace choices. | Keep Source/Stretch/Zoom under STV control. Observe H.262 sequence/picture headers and report progressive/interlaced/telecine/field-picture state, but explicitly report that Android exposes no selectable desktop deinterlacer. | Implemented; 1080i Media3/legacy-Exo Pull and native DVD physically report interlaced sequence/frame state with hardware MTK MPEG-2. Deinterlace quality remains hardware-specific. |
 | Standby/reconnect | Proven protocol: server announces `RECONNECT_SUPPORTED`; Core has a forced-media-reconnect branch. Extender firmware recovery timing is unknown. | Generation-owned connection/session state, selectable Home behavior, bounded resume, optional timeout disconnect, and old behavior opt-out. | Implemented and physically tested on API 25; API 26+ background limit gate remains external. |
 | Remote input | Proven protocol: `INPUT_DEVICES` differentiates IR/keyboard/mouse/touch/TV and server events own STV actions. | Advertise TV without falsely implying mouse/desktop extender identity; switch arrow semantics only while the server DVD VM is in a menu. | Implemented and authored-menu tested. |
@@ -78,9 +150,9 @@ inference until matched to protocol/server source or a focused physical test.
 | Intel QSV / AMD VAAPI / NVIDIA NVENC selection and fallback | No | No | Yes | Intel VAAPI is commissioned. Intel QSV is reproducibly unstable on this host; AMD/NVIDIA remain SKIPPED without hardware. |
 | Fixed-output CEA-608/708 retention | Not established | No | Yes | PASS with MIM 0.4.7 `-a53cc 1`, software MPEG-2 decode, Intel VAAPI H.264 encode, and the safe 512 KiB/500 ms warm-probe policy. |
 | SageTV STV caption-state authority | Yes on extractor-backed players | Optional | No | Standard `GFX_SUBTITLES` + event 225 works with stock SageTV. `VIDEO_CC_STATE` remains an optional compatibility extension; IJK uses explicit client fallback. |
-| Exact server-file automation event | No | Yes | No | Opt-in test control; normal UI playback does not require it. |
-| Exact dotted-channel automation event and positive channel acknowledgment | No | Yes | No | Opt-in test control; normal STV tuning does not require it. |
-| MIM active-backend status query | No | No | Yes | `ffmpeg --mim-status` returns machine-readable job status. |
+| Exact server-file automation event (**TEST ONLY**) | No | Yes | No | Opt-in test control; normal UI playback does not require it. |
+| Exact dotted-channel automation event and positive channel acknowledgment (**TEST ONLY**) | No | Yes | No | Opt-in test control; normal STV tuning does not require it. |
+| MIM active-backend status query (**Diagnostic**) | No | No | Yes | `ffmpeg --mim-status` returns machine-readable job status. |
 
 The Vibe-only exact-file/channel events are commissioning controls. They are
 disabled unless the server administrator enables the corresponding properties;
@@ -104,10 +176,10 @@ when SageTV starts its FFmpeg transcoder.
 | Fixed-stream request parameters (`FIXED_PUSH_MEDIA_FORMAT`) | Yes | No | No for protocol | Stock protocol. A stock server can use its own compatible transcoder; Ubuntu 26 FFmpeg compatibility and GPU selection require MIM. |
 | Modern Ubuntu 26 FFmpeg option/codec translation | No | No | Yes | Implemented and unit/integration tested. |
 | Intel/AMD/NVIDIA server GPU backend selection and deterministic fallback | No | No | Yes | Intel VAAPI commissioned; deliberate device failure selected reported software fallback. AMD/NVIDIA remain SKIPPED. |
-| Machine-readable active transcoder/backend query | No | No | Yes | Implemented as `ffmpeg --mim-status`; matrix rejects stale jobs and silent fallback. |
+| Machine-readable active transcoder/backend query (**Diagnostic**) | No | No | Yes | Implemented as `ffmpeg --mim-status`; matrix rejects stale jobs and silent fallback. |
 | Normal STV file selection and channel tuning | Yes | No | No | Standard behavior. |
-| Direct exact server-file automation | No | Yes | No | Implemented as a disabled-by-default private commissioning event. |
-| Exact dotted-channel automation with positive acknowledgment | No | Yes | No | Implemented as a disabled-by-default private commissioning event. |
+| Direct exact server-file automation (**TEST ONLY**) | No | Yes | No | Implemented as a disabled-by-default private commissioning event. |
+| Exact dotted-channel automation with positive acknowledgment (**TEST ONLY**) | No | Yes | No | Implemented as a disabled-by-default private commissioning event. |
 | Detailed Push buffer/bandwidth telemetry | Yes | No | No | Restored from the standard detailed Push reply and exposed in the Dev MCP state. |
 | STV-controlled captions in Push/Pull | Yes on Media3/legacy Exo/GSY | Optional | No | The standard extender path returns encoded CEA data with event 225 for SageTV/STV rendering. `VIDEO_CC_STATE` is retained for compatibility. IJK cannot provide raw samples and uses explicit `Off`/`CC1`/`CC2` fallback. |
 | Caption retention through Fixed transcoding | No | No | Yes | PASS for the tested MPEG-2/A53 to H.264/VAAPI path using software decode plus VAAPI encode. |
@@ -117,7 +189,7 @@ when SageTV starts its FFmpeg transcoder.
 | Seamless/fast file switching | Potentially | No | No | NOT IMPLEMENTED. Do not infer from normal load/reload success. |
 | Frame-step command | Yes for random-access Pull/SMB | No | No | Implemented for paused Media3 and legacy Exo with bounded one-frame seek; physical MPEG-2 Pull gates pass. Push/Fixed and unsupported engines do not advertise it. |
 | Preferred language and full CEA-608/708 service selection | Yes | No | Fixed retention only | Implemented client-side for Media3 and legacy Exo2. Explicit CEA-608 CC1 and CEA-708 Service 1 physically pass hardware Pull while the STV retains caption On/Off authority. |
-| Native remote DVD with authored menus | No | Yes | No | PASS with Media3/hardware on all 51 populated Unraid DVD structures; one empty structure fails safely. |
+| Native remote DVD with authored menus | Yes | No | No | Stock Core's original `MiniDVDPlayer` path physically passes menu-less and authored-menu DVDs on `.175`; Vibe Core adds policy/automation controls, not the native decoder requirement. |
 | DISC Hybrid / MIM main feature | No | Yes | Yes | Opt-in authored-fixture title/control and explicit MIM-main-feature gates pass. `Auto`/allowed fallback restores Native on absent/old/failed MIM; explicit unavailable/no-fallback fails closed. MIM remains disabled by default pending its separate promotion decision. |
 | New client with preserved pre-DISC Core | Standard modes yes | Optional DISC limitation | Fixed only | Pull, SMB Direct, Fixed/MIM, Native DISC and Hybrid-to-Native pass. Old Core cannot query the per-client DISC policy, so Android reports the limitation and retains Native. |
 | Missing MIM/FFmpeg in explicit Fixed | No automatic explicit-mode substitution | No | Missing | Startup is rejected without an active Android player; SageTV stays healthy and the next ordinary hardware Pull passes. |
@@ -140,7 +212,7 @@ must record the stored value so results are reproducible.
 | `smb_direct/mappings` | Multiple `SageTV prefix => smb://server/share/root/` lines | Longest-prefix path mapping, including Windows paths and practical UNC conversion. | Client-side. Credentials are separate and redacted. |
 | `smb_direct/read_ahead_kb` | 32 through 8192 (commissioned: 1024) | Sequential SMB read-ahead; random extractor probes remain bounded to 64 KiB minimum. | Client-side. |
 | `decoding_method` | `hardware`, `software`, `hardware_preferred` | Selects Android video decoders; fallback is allowed only for `hardware_preferred`. | Fully client-side. It does not select the server GPU. |
-| MCP `codec_capabilities` snapshot | On-demand decoder inventory and selected-decoder evidence | Reports platform hardware/software classification, MIME/profile/dimension/features, queueing mode, and current player health without background instrumentation. | Debug builds only; no server or wire-protocol change. |
+| MCP `codec_capabilities` snapshot (**TEST ONLY**) | On-demand decoder inventory and selected-decoder evidence | Reports platform hardware/software classification, MIME/profile/dimension/features, queueing mode, and current player health without background instrumentation. | Debug builds only; no server or wire-protocol change. |
 | `preferred_audio_language` / `preferred_subtitle_language` | empty/auto or a BCP-47 language tag | Applies language preference through the selected Exo track selector; missing-language tracks remain safe fallbacks. | Fully client-side. |
 | `preferred_caption_standard` / `preferred_caption_service` | `auto`, `cea608` CC1-CC4, or `cea708` Service 1-63 | Resolves the preferred broadcast-caption track only after SageTV/STV enables captions. | Fully client-side; it is not a second caption enable gate. |
 | `legacy_server_caption_mode` | `stv`, `off`, `cc1`, `cc2` | Fallback available in Audio and Caption settings and the MiniClient long-press CC submenu. Negotiated event-225 rendering or received `VIDEO_CC_STATE` wins. | `stv` works on stock SageTV with Media3/legacy Exo/GSY; explicit modes remain for IJK or failed negotiation. |

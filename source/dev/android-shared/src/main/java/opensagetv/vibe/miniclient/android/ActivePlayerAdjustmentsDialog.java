@@ -68,8 +68,7 @@ public final class ActivePlayerAdjustmentsDialog
                 audioOutputStatus(player(media)),
                 "Restart decoder at this position",
                 "Reset current-session overrides",
-                "Compact diagnostics overlay (30 seconds): "
-                        + (ActivePlayerProcessOverlay.isVisible() ? "On" : "Off"),
+                "Playback Stats overlay (" + ActivePlayerProcessOverlay.visibleMode() + ")",
                 "Live playback diagnostics"
         };
         new AlertDialog.Builder(activity)
@@ -127,12 +126,7 @@ public final class ActivePlayerAdjustmentsDialog
                                 AppUtil.message("Current-session player overrides cleared");
                                 showMain();
                                 break;
-                            case 17:
-                                ActivePlayerProcessOverlay.toggle(activity, media);
-                                AppUtil.message(ActivePlayerProcessOverlay.isVisible()
-                                        ? "Compact diagnostics overlay enabled for 30 seconds"
-                                        : "Compact diagnostics overlay disabled");
-                                break;
+                            case 17: choosePlaybackStats(media); break;
                             case 18: showDiagnostics(media); break;
                             default: break;
                         }
@@ -140,6 +134,62 @@ public final class ActivePlayerAdjustmentsDialog
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private void choosePlaybackStats(final MediaCmd media)
+    {
+        final boolean wasVisible = ActivePlayerProcessOverlay.isVisible();
+        final String[] labels = {
+                wasVisible ? "☑ Playback Stats enabled" : "☐ Playback Stats disabled",
+                "Show compact until turned off",
+                "Show detailed until turned off",
+                "Show detailed for 30 seconds",
+                "Hide Playback Stats",
+                "Export redacted detailed snapshot"
+        };
+        choose("Playback Stats", labels, new ValueSetter()
+        {
+            @Override public void set(String index)
+            {
+                switch (Integer.parseInt(index))
+                {
+                    case 0:
+                        if (wasVisible)
+                        {
+                            ActivePlayerProcessOverlay.hide();
+                            AppUtil.message("Playback Stats disabled");
+                        }
+                        else
+                        {
+                            ActivePlayerProcessOverlay.showPersistent(activity, media, true);
+                            AppUtil.message("Detailed Playback Stats enabled");
+                        }
+                        break;
+                    case 1:
+                        ActivePlayerProcessOverlay.showPersistent(activity, media, false);
+                        AppUtil.message("Compact Playback Stats enabled");
+                        break;
+                    case 2:
+                        ActivePlayerProcessOverlay.showPersistent(activity, media, true);
+                        AppUtil.message("Detailed Playback Stats enabled");
+                        break;
+                    case 3:
+                        ActivePlayerProcessOverlay.showForThirtySeconds(activity, media, true);
+                        AppUtil.message("Detailed Playback Stats enabled for 30 seconds");
+                        break;
+                    case 4:
+                        ActivePlayerProcessOverlay.hide();
+                        AppUtil.message("Playback Stats disabled");
+                        break;
+                    case 5:
+                        String result = ActivePlayerProcessOverlay.exportCurrent(activity);
+                        AppUtil.message(result.startsWith("ERROR:")
+                                ? result : "Playback Stats exported: " + result);
+                        break;
+                    default: break;
+                }
+            }
+        });
     }
 
     private String status(MediaCmd media)

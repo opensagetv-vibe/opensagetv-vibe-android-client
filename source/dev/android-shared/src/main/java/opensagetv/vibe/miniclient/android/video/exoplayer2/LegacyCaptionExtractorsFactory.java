@@ -19,6 +19,7 @@ import com.google.android.exoplayer2.util.ParsableByteArray;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -57,21 +58,36 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
         final Extractor delegate;
         final LegacyExtenderCaptionBridge bridge;
         final Mpeg2PictureTimestampCompleter mpeg2Observer;
+        final List<ObservingTrackOutput> captionTracks =
+                new ArrayList<ObservingTrackOutput>();
         ObservingExtractor(Extractor delegate, LegacyExtenderCaptionBridge bridge,
                 Mpeg2PictureTimestampCompleter mpeg2Observer)
         { this.delegate = delegate; this.bridge = bridge; this.mpeg2Observer = mpeg2Observer; }
         @Override public boolean sniff(ExtractorInput input) throws IOException { return delegate.sniff(input); }
         @Override public int read(ExtractorInput input, PositionHolder holder) throws IOException { return delegate.read(input, holder); }
         @Override public void release() { delegate.release(); }
-        @Override public void seek(long position, long timeUs) { bridge.flush(); delegate.seek(position, timeUs); }
+        @Override public void seek(long position, long timeUs)
+        {
+            // Never splice a partial sample retained before seek onto the
+            // first CEA sample emitted at the new extractor position.
+            for (ObservingTrackOutput track : captionTracks) track.resetPending();
+            bridge.flush();
+            delegate.seek(position, timeUs);
+        }
         @Override public void init(final ExtractorOutput output)
         {
+            captionTracks.clear();
             delegate.init(new ExtractorOutput()
             {
                 @Override public TrackOutput track(int id, int type)
                 {
                     TrackOutput track = output.track(id, type);
-                    if (type == C.TRACK_TYPE_TEXT) return new ObservingTrackOutput(track, bridge);
+                    if (type == C.TRACK_TYPE_TEXT)
+                    {
+                        ObservingTrackOutput observing = new ObservingTrackOutput(track, bridge);
+                        captionTracks.add(observing);
+                        return observing;
+                    }
                     if (type == C.TRACK_TYPE_VIDEO) return new ObservingVideoTrackOutput(track, mpeg2Observer);
                     return track;
                 }
@@ -175,5 +191,6 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
             pending.reset();
             if (offset > 0 && end < all.length) pending.write(all, end, all.length - end);
         }
+        void resetPending() { pending.reset(); }
     }
 }

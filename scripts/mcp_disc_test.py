@@ -143,6 +143,9 @@ def main() -> int:
     parser.add_argument("--server-port", type=int, default=31099)
     parser.add_argument("--server-path", action="append", default=[],
                         help="Exact indexed DVD directory; repeat for multiple discs")
+    parser.add_argument("--media-name", action="append", default=[],
+                        help=("Stock-server-compatible Sagex/STV MediaFile name; repeat for "
+                              "multiple discs. This avoids the optional Vibe exact-path event."))
     parser.add_argument("--expect-startup-failure-path", action="append", default=[],
                         help="Exact invalid/empty DVD path that must fail safely; repeat as needed")
     parser.add_argument("--paths-file", default="",
@@ -211,6 +214,7 @@ def main() -> int:
         value.strip() for value in args.expect_startup_failure_path if value.strip()
     }
     paths = [value.strip() for value in args.server_path if value.strip()]
+    media_names = [value.strip() for value in args.media_name if value.strip()]
     paths.extend(value for value in expected_failures if value not in paths)
     if args.paths_file:
         paths_file = Path(args.paths_file)
@@ -220,8 +224,11 @@ def main() -> int:
             value = line.strip()
             if value and not value.startswith("#"):
                 paths.append(value)
-    require(bool(paths), "at least one --server-path or --paths-file entry is required")
-    require(not args.leave_playing or len(paths) == 1,
+    targets = [("path", value) for value in paths]
+    targets.extend(("name", value) for value in media_names)
+    require(bool(targets),
+            "at least one --server-path, --paths-file, or --media-name entry is required")
+    require(not args.leave_playing or len(targets) == 1,
             "--leave-playing is valid only for a single disc")
     args.timeout_s = max(15.0, min(float(args.timeout_s), 180.0))
     args.verify_ms = max(500, min(int(args.verify_ms), 10_000))
@@ -229,7 +236,10 @@ def main() -> int:
     require(args.start_ms >= -1, "--start-ms must be -1 (disabled) or non-negative")
     args.seek_tolerance_ms = max(0, min(int(args.seek_tolerance_ms), 30_000))
     args.seek_timeout_s = max(1.0, min(float(args.seek_timeout_s), 180.0))
-    args.cadence_observe_s = max(0.0, min(float(args.cadence_observe_s), 180.0))
+    # Long-duration cadence faults on physical TV devices may appear only after
+    # several minutes. Keep the run bounded, but do not silently turn an
+    # explicitly requested ten-minute commissioning gate into three minutes.
+    args.cadence_observe_s = max(0.0, min(float(args.cadence_observe_s), 900.0))
     args.min_realtime_ratio = max(0.0, min(float(args.min_realtime_ratio), 1.25))
     args.command_delay_s = max(0.0, min(float(args.command_delay_s), 30.0))
     require(args.cadence_observe_s == 0.0 or args.skip_menus,
@@ -279,9 +289,17 @@ def main() -> int:
         })
         wait_automation_ready(client, timeout_s=60.0)
 
-        for index, server_path in enumerate(paths, 1):
-            label = safe_label(server_path)
-            result: dict = {"index": index, "serverPath": server_path, "label": label}
+        for index, (target_kind, target_value) in enumerate(targets, 1):
+            label = safe_label(target_value)
+            result: dict = {
+                "index": index,
+                "launchMethod": "vibe_exact_path" if target_kind == "path" else "stock_sagex_watch",
+                "label": label,
+            }
+            if target_kind == "path":
+                result["serverPath"] = target_value
+            else:
+                result["mediaName"] = target_value
             try:
                 baseline = call_dict(client, "dev_crash_probe", timeout=30.0)
                 if args.capture_datasource:
@@ -291,13 +309,21 @@ def main() -> int:
                     require(bool(capture.get("enabled")),
                             f"DVD datasource capture did not enable: {capture}")
                     result["datasourceCapture"] = capture
-                started = call_dict(client, "dev_play_server_path", {
-                    "server_path": server_path,
-                    "timeout_s": args.timeout_s,
-                    "verify_ms": args.verify_ms,
-                    "restart_from_beginning": True,
-                }, timeout=args.timeout_s + 45.0)
-                if server_path in expected_failures:
+                if target_kind == "path":
+                    started = call_dict(client, "dev_play_server_path", {
+                        "server_path": target_value,
+                        "timeout_s": args.timeout_s,
+                        "verify_ms": args.verify_ms,
+                        "restart_from_beginning": True,
+                    }, timeout=args.timeout_s + 45.0)
+                else:
+                    started = call_dict(client, "dev_play_video", {
+                        "video_name": target_value,
+                        "timeout_s": args.timeout_s,
+                        "verify_ms": args.verify_ms,
+                    }, timeout=args.timeout_s + 45.0)
+                result["startup"] = started
+                if target_kind == "path" and target_value in expected_failures:
                     require(not bool(started.get("passed")),
                             f"Invalid DVD unexpectedly started: {started}")
                     state = call_dict(client, "dev_player_state", timeout=30.0)
@@ -316,7 +342,7 @@ def main() -> int:
                         "state": compact_state(state),
                     })
                     results.append(result)
-                    print(f"PASS expected-safe-failure [{index}/{len(paths)}]: {server_path}")
+                    print(f"PASS expected-safe-failure [{index}/{len(targets)}]: {target_value}")
                     continue
                 require(bool(started.get("passed")), f"DVD startup failed: {started}")
                 if args.start_ms >= 0:
@@ -350,7 +376,7 @@ def main() -> int:
                         "recoveryMs": positioned.get("recoveryMs"),
                         "measurement": positioned.get("measurement"),
                     }
-                    print(f"PASS: positioned {server_path} at {reached_ms} ms "
+                    print(f"PASS: positioned {target_value} at {reached_ms} ms "
                           f"(target {args.start_ms} ms)")
                 if args.settle_s:
                     time.sleep(args.settle_s)
@@ -513,10 +539,10 @@ def main() -> int:
                     "stoppedState": compact_state(stopped),
                     "screenshot": shot,
                 })
-                print(f"PASS [{index}/{len(paths)}]: {server_path}")
+                print(f"PASS [{index}/{len(targets)}]: {target_value}")
             except Exception as exc:
                 result.update({"passed": False, "error": str(exc)})
-                print(f"FAIL [{index}/{len(paths)}]: {server_path}: {exc}", file=sys.stderr)
+                print(f"FAIL [{index}/{len(targets)}]: {target_value}: {exc}", file=sys.stderr)
                 try:
                     result["diagnostics"] = call_dict(
                         client, "collect_playback_diagnostics",
@@ -537,7 +563,7 @@ def main() -> int:
             results.append(result)
 
         evidence = {
-            "passed": len(results) == len(paths) and all(item["passed"] for item in results),
+            "passed": len(results) == len(targets) and all(item["passed"] for item in results),
             "serverAddress": args.server_address,
             "player": args.player,
             "decoding": args.decoding,
@@ -555,7 +581,7 @@ def main() -> int:
             "expectedSubtitleSelector": args.expect_subtitle_selector,
             "expectedMediaTimeMinMs": args.expect_media_time_min_ms,
             "expectedMediaTimeMaxMs": args.expect_media_time_max_ms,
-            "requested": len(paths),
+            "requested": len(targets),
             "completed": len(results),
             "results": results,
         }

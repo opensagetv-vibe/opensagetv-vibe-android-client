@@ -265,6 +265,7 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     public void onPause(Activity activity)
     {
         activityResumed = false;
+        ActivePlayerProcessOverlay.hide();
         cancelKeyboardTask();
         dismissPlaybackDialogs();
         audioFocusController.abandon();
@@ -553,6 +554,7 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     public void onDestroy()
     {
         log.debug("Closing MiniClient Connection");
+        ActivePlayerProcessOverlay.hide();
         cancelPendingBackgroundResume();
         cancelKeyboardTask();
         dismissPlaybackDialogs();

@@ -319,7 +319,7 @@
                 <GridLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:columnCount="5"
+                    android:columnCount="6"
                     android:rowCount="1">
 
                     <ImageView
@@ -363,6 +363,15 @@
                         android:contentDescription="Active Player Adjustments"
                         android:src="@drawable/ic_settings_white_24dp"
                         android:tag="active_player_adjustments"/>
+
+                    <ImageView
+                        android:id="@+id/nav_playback_stats"
+                        style="@style/NavIconButton"
+                        android:layout_column="5"
+                        android:layout_row="0"
+                        android:contentDescription="Show Playback Stats"
+                        android:src="@drawable/ic_equalizer_white_24dp"
+                        android:tag="playback_stats"/>
 
                 </GridLayout>
 

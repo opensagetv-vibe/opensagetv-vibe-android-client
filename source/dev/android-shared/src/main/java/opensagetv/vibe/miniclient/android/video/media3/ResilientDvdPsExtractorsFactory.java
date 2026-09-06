@@ -90,6 +90,10 @@ final class ResilientDvdPsExtractorsFactory implements ExtractorsFactory
     long getLatestAudioRawPts90Khz() { return timestampState.getLatestAudioRawPts90Khz(); }
     long getLatestAudioOffsetPts90Khz() { return timestampState.getLatestAudioOffsetPts90Khz(); }
     long getLatestAudioPesUs() { return timestampState.getLatestAudioPesUs(); }
+    String describeVideoTimestampNear(long outputTimeUs)
+    {
+        return timestampState.describeVideoTimestampNear(outputTimeUs);
+    }
     double getMpeg2ReportedFrameRateHz() { return timestampState.getMpeg2ReportedFrameRateHz(); }
     double getMpeg2SequenceFrameRateHz() { return timestampState.getMpeg2SequenceFrameRateHz(); }
     double getMpeg2EffectiveFieldDurationUs()

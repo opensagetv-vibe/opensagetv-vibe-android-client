@@ -15,7 +15,7 @@
         <GridLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:columnCount="14"
+        android:columnCount="15"
         android:rowCount="8">
 
 
@@ -239,9 +239,18 @@
             android:tag="active_player_adjustments"/>
 
         <ImageView
-            android:id="@+id/nav_remote_mode"
+            android:id="@+id/nav_playback_stats"
             style="@style/NavIconButton"
             android:layout_column="13"
+            android:layout_row="7"
+            android:contentDescription="Show Playback Stats"
+            android:src="@drawable/ic_equalizer_white_24dp"
+            android:tag="playback_stats"/>
+
+        <ImageView
+            android:id="@+id/nav_remote_mode"
+            style="@style/NavIconButton"
+            android:layout_column="14"
             android:layout_row="7"
             android:src="@drawable/ic_open_with_white_24dp"
             android:tag="toggle_smart_remote"/>

@@ -258,6 +258,24 @@ Android debug track selector and fails unless the SageTV STV's caption state
 selects and renders a real cue. Use `--authority debug` only for isolated
 decoder diagnostics.
 
+Long-press the remote's navigation key during playback and select the bar-chart
+icon to toggle detailed Playback Stats directly, or open **Active Player
+Adjustments > Playback Stats overlay** for compact or detailed live
+troubleshooting. The overlay supports persistent and bounded 30-second views
+plus a redacted export. The first submenu row shows a checked/unchecked icon
+and toggles the detailed view directly. MCP can perform the same operation with
+`dev_set_active_player_overlay(mode="toggle")`; deterministic `off`, `compact`,
+`detailed`, and `detailed_30s` modes are also available, while the older `visible`
+Boolean remains compatible. It always shows only available common playback data and
+adds Pull, SMB Direct, Push/Fixed, caption, error/recovery, or DVD rows only for
+the active mode. Its three live bars show actual media-byte activity, buffered
+playback time, and CPU. The CPU bar uses a fixed 0-100% scale with the Vibe
+process and the remainder of total device usage in separate colors; the `Vibe`
+and `Other` label values use those matching colors and `Total` remains neutral.
+The values are shown once above the bar. Duplicate text rows and the unhelpful estimated
+link-capacity bar are omitted. Sampling starts with the visible overlay and is
+cancelled when it is hidden or the playback Activity leaves the foreground.
+
 Exercise an explicit service without bypassing STV authority:
 
 ```powershell

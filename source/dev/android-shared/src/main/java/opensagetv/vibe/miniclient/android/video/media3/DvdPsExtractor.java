@@ -98,6 +98,8 @@ final class DvdPsExtractor implements Extractor
     static final class TimestampState
     {
         private static final long MAX_CONTINUOUS_AV_DELTA_US = 30_000_000L;
+        private static final int VIDEO_TIMESTAMP_TRACE_SIZE = 512;
+        private static final long VIDEO_TIMESTAMP_MATCH_TOLERANCE_US = 2_000L;
         private volatile long ptsOffset90Khz;
         private volatile long cellGeneration;
         private volatile long latestVideoSampleUs = C.TIME_UNSET;
@@ -126,6 +128,20 @@ final class DvdPsExtractor implements Extractor
         private boolean pendingInputEpochBase;
         private long flushPlaybackAnchorUs = C.TIME_UNSET;
         private final ArrayDeque<PtsBoundary> pendingPtsBoundaries = new ArrayDeque<>();
+        // Fixed primitive arrays avoid allocating one object per decoded DVD picture. The trace
+        // covers over 17 seconds at 29.97 fps, comfortably exceeding the normal decoder buffer,
+        // so a frame-release warning can identify the exact extractor timestamp decision.
+        private final long[] videoTraceOutputUs = new long[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final long[] videoTraceSuppliedUs = new long[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final long[] videoTraceCandidateUs = new long[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final long[] videoTraceGopGeneration = new long[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final int[] videoTraceTemporalReference = new int[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final byte[] videoTracePictureType = new byte[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final byte[] videoTraceDisplayFields = new byte[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final byte[] videoTraceFlags = new byte[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private final byte[] videoTraceDecision = new byte[VIDEO_TIMESTAMP_TRACE_SIZE];
+        private int videoTraceIndex;
+        private int videoTraceCount;
 
         void noteMpeg2Cadence(Mpeg2PictureTimestampCompleter completer)
         {
@@ -371,6 +387,91 @@ final class DvdPsExtractor implements Extractor
             latestVideoSampleUs = timeUs;
             if (corrected)
                 videoCorrectionCount++;
+        }
+
+        synchronized void noteVideoTimestampDecision(long outputTimeUs, long suppliedTimeUs,
+                long candidateTimeUs, int decision, boolean corrected,
+                @Nullable Mpeg2PictureTimestampCompleter.PictureTiming timing)
+        {
+            noteVideoSample(outputTimeUs, corrected);
+            int index = videoTraceIndex;
+            videoTraceOutputUs[index] = outputTimeUs;
+            videoTraceSuppliedUs[index] = suppliedTimeUs;
+            videoTraceCandidateUs[index] = candidateTimeUs;
+            videoTraceDecision[index] = (byte) decision;
+            if (timing == null)
+            {
+                videoTraceGopGeneration[index] = -1L;
+                videoTraceTemporalReference[index] = -1;
+                videoTracePictureType[index] = 0;
+                videoTraceDisplayFields[index] = 0;
+                videoTraceFlags[index] = (byte) (corrected ? 0x02 : 0x00);
+            }
+            else
+            {
+                videoTraceGopGeneration[index] = timing.getGopGeneration();
+                videoTraceTemporalReference[index] = timing.getTemporalReference();
+                videoTracePictureType[index] = (byte) timing.getPictureType();
+                videoTraceDisplayFields[index] = (byte) timing.getDisplayFieldCount();
+                videoTraceFlags[index] = (byte) ((timing.hasAuthoredTimestamp() ? 0x01 : 0x00)
+                        | (corrected ? 0x02 : 0x00));
+            }
+            videoTraceIndex = (index + 1) % VIDEO_TIMESTAMP_TRACE_SIZE;
+            if (videoTraceCount < VIDEO_TIMESTAMP_TRACE_SIZE)
+                videoTraceCount++;
+        }
+
+        synchronized String describeVideoTimestampNear(long outputTimeUs)
+        {
+            int bestIndex = -1;
+            long bestDistanceUs = Long.MAX_VALUE;
+            for (int offset = 0; offset < videoTraceCount; offset++)
+            {
+                int index = (videoTraceIndex - 1 - offset + VIDEO_TIMESTAMP_TRACE_SIZE)
+                        % VIDEO_TIMESTAMP_TRACE_SIZE;
+                long candidate = videoTraceOutputUs[index];
+                long distanceUs = candidate >= outputTimeUs
+                        ? candidate - outputTimeUs : outputTimeUs - candidate;
+                if (distanceUs < bestDistanceUs)
+                {
+                    bestDistanceUs = distanceUs;
+                    bestIndex = index;
+                    if (distanceUs == 0L)
+                        break;
+                }
+            }
+            if (bestIndex < 0 || bestDistanceUs > VIDEO_TIMESTAMP_MATCH_TOLERANCE_US)
+                return "unmatched";
+            long suppliedUs = videoTraceSuppliedUs[bestIndex];
+            long candidateUs = videoTraceCandidateUs[bestIndex];
+            int pictureType = videoTracePictureType[bestIndex] & 0xFF;
+            byte flags = videoTraceFlags[bestIndex];
+            return "outUs=" + videoTraceOutputUs[bestIndex]
+                    + ",suppliedUs=" + suppliedUs
+                    + ",repairDeltaUs=" + (videoTraceOutputUs[bestIndex] - suppliedUs)
+                    + ",candidateUs=" + candidateUs
+                    + ",candidateDeltaUs=" + (candidateUs == Mpeg2PictureTimestampCompleter.TIME_UNSET
+                            ? "unset" : Long.toString(candidateUs - suppliedUs))
+                    + ",decision=" + Mpeg2PictureTimestampCompleter.timestampDecisionName(
+                            videoTraceDecision[bestIndex] & 0xFF)
+                    + ",gop=" + videoTraceGopGeneration[bestIndex]
+                    + ",temporalRef=" + videoTraceTemporalReference[bestIndex]
+                    + ",type=" + pictureTypeName(pictureType)
+                    + ",fields=" + (videoTraceDisplayFields[bestIndex] & 0xFF)
+                    + ",authored=" + ((flags & 0x01) != 0)
+                    + ",corrected=" + ((flags & 0x02) != 0)
+                    + ",matchDistanceUs=" + bestDistanceUs;
+        }
+
+        private static String pictureTypeName(int pictureType)
+        {
+            switch (pictureType)
+            {
+                case 1: return "I";
+                case 2: return "P";
+                case 3: return "B";
+                default: return "unknown";
+            }
         }
 
         void noteAudioSample(long timeUs)
@@ -740,19 +841,30 @@ final class DvdPsExtractor implements Extractor
             sequenceSampleCount++;
             if (!repairMpeg2PictureTimestamps)
             {
-                timestampState.noteVideoSample(timeUs, false);
+                timestampState.noteVideoTimestampDecision(timeUs, timeUs,
+                        Mpeg2PictureTimestampCompleter.TIME_UNSET,
+                        Mpeg2PictureTimestampCompleter.DECISION_NO_TIMING,
+                        false, timing);
                 delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData);
                 return;
             }
             long outputTimeUs = timestampCompleter.completeTimestamp(timing, timeUs);
             boolean corrected = timestampCompleter.wasLastTimestampCorrected();
-            timestampState.noteVideoSample(outputTimeUs, corrected);
+            timestampState.noteVideoTimestampDecision(outputTimeUs, timeUs,
+                    timestampCompleter.getLastCandidateTimestampUs(),
+                    timestampCompleter.getLastTimestampDecision(), corrected, timing);
             delegate.sampleMetadata(outputTimeUs, flags, size, offset, cryptoData);
         }
 
         void beginSequence()
         {
             sequenceSampleCount = 0;
+            // timestampCompleter.reset() restarts its elementary-stream byte positions at zero.
+            // Keep the sample-range counter in the same coordinate space. Leaving this cumulative
+            // made every picture lookup return no_timing after the first DVD NEWCELL, silently
+            // disabling telecine timestamp repair and causing progressively visible 91-108 ms
+            // presentation gaps on MediaTek hardware decoders.
+            totalBytesForwarded = 0L;
             pendingSampleData.reset();
             lastSampleData = null;
             lastSampleFlags = 0;

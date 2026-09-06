@@ -625,7 +625,8 @@ def _is_fullscreen_playback(state: dict) -> bool:
     return not embedded
 
 
-def _promote_preview_to_fullscreen(timeout_s: float = 8.0) -> dict:
+def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
+                                   ui_context: str = "") -> dict:
     """Enter the STV playback screen after Watch() has opened its preview player."""
     before = adb.player_state_snapshot()
     if not bool(before.get("playerActive")):
@@ -637,9 +638,10 @@ def _promote_preview_to_fullscreen(timeout_s: float = 8.0) -> dict:
     stable_since = started if _is_fullscreen_playback(before) else None
 
     # A Vibe-aware server enters MediaPlayer OSD asynchronously after accepting
-    # its private watch-file event. Wait for that transition before sending TV;
-    # otherwise the delayed TV command can become a second toggle and return the
-    # STV to Main Menu. Older/stock servers still receive TV after this grace.
+    # its private watch-file event. Wait for that transition first. Stock-era
+    # STVs can leave Web/Sagex Watch in their embedded preview; request the
+    # protocol's idempotent Full Screen On event rather than TV. TV is not a
+    # fullscreen command and can change content on older STVs.
     passive_deadline = min(deadline, started + 2.0)
     while time.monotonic() < passive_deadline:
         last = adb.player_state_snapshot()
@@ -657,10 +659,24 @@ def _promote_preview_to_fullscreen(timeout_s: float = 8.0) -> dict:
             stable_since = None
         time.sleep(0.10)
 
-    command = None
+    commands = []
+    web_remote_sent = False
+    if server_api is not None and str(ui_context or "").strip():
+        try:
+            commands.append(server_api.remote_command(ui_context, "Full Screen"))
+            web_remote_sent = True
+        except Exception as exc:
+            commands.append({
+                "ok": False,
+                "transport": "sage_web_remote",
+                "command": "Full Screen",
+                "error": str(exc),
+            })
     if time.monotonic() < deadline:
-        command = adb.sage_command("tv")
+        if not web_remote_sent:
+            commands.append(adb.sage_command("full_screen_on"))
     stable_since = None
+    toggle_sent = False
     while time.monotonic() < deadline:
         last = adb.player_state_snapshot()
         if _is_fullscreen_playback(last):
@@ -673,16 +689,23 @@ def _promote_preview_to_fullscreen(timeout_s: float = 8.0) -> dict:
                     "stableMs": int((time.monotonic() - stable_since) * 1000),
                     "state": _compact_state(last),
                 }
-                if command is not None:
-                    result["command"] = command
+                if commands:
+                    result["commands"] = commands
                 return result
         else:
             stable_since = None
+        # Very old STVs may not bind Full Screen On but do bind the historical
+        # Full Screen toggle. Use it once only after the idempotent event had a
+        # bounded chance to apply.
+        if (not web_remote_sent and not toggle_sent
+                and time.monotonic() - started >= 6.0):
+            commands.append(adb.sage_command("full_screen"))
+            toggle_sent = True
         time.sleep(0.10)
     return {
         "passed": False,
         "reason": "fullscreen_surface_not_observed",
-        "command": command,
+        "commands": commands,
         "state": _compact_state(last),
     }
 
@@ -1641,7 +1664,9 @@ def dev_play_media_file_id(
                 break
             time.sleep(0.1)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
-    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+    fullscreen = _promote_preview_to_fullscreen(
+        server_api=sagex, ui_context=context
+    ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
     current_id = None
@@ -1717,7 +1742,9 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
     match = matches[0]
     watch_reply = sagex.watch(context, match.media_file_id)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
-    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+    fullscreen = _promote_preview_to_fullscreen(
+        server_api=sagex, ui_context=context
+    ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
     current_id = None
@@ -2675,9 +2702,13 @@ def dev_show_active_player_adjustments() -> dict:
 
 
 @mcp.tool()
-def dev_set_active_player_overlay(visible: bool = True) -> dict:
-    """Show or hide the bounded 30-second active-player diagnostics overlay."""
-    return adb.set_active_player_overlay(visible)
+def dev_set_active_player_overlay(visible: bool = True, mode: str = "") -> dict:
+    """Control Playback Stats. Use mode=toggle/off/compact/detailed/detailed_30s.
+
+    Omitting mode preserves the legacy visible Boolean behavior, where visible=true
+    shows the bounded 30-second detailed panel and visible=false hides it.
+    """
+    return adb.set_active_player_overlay(visible=visible, mode=mode)
 
 
 @mcp.tool()

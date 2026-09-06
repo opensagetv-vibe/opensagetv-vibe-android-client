@@ -10,9 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class VibeMigrationTests(unittest.TestCase):
     def test_repository_identity_files_exist(self):
-        self.assertEqual("0.5.85", (ROOT / "VERSION").read_text().strip())
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
         release = (ROOT / "release.properties").read_text(encoding="utf-8")
-        self.assertIn("VERSION=0.5.85", release)
+        self.assertIn(f"VERSION={version}", release)
         self.assertIn("REQUIRES_BUILD=true", release)
         self.assertTrue((ROOT / "MIGRATION_TO_OPENSAGETV_VIBE.md").is_file())
         self.assertTrue((ROOT / "docs" / "BASELINE_VALIDATION.md").is_file())

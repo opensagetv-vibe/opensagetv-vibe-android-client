@@ -17,6 +17,12 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
+No unfinished item remains that can be completed solely with the commissioned
+non-Pro Fire TV, current legal fixtures, local servers, and unified build
+environment. Completed caption and long-duration DVD evidence is recorded in
+`CHANGELOG.md` and `HANDOFF.md`; it is intentionally not retained here as a
+checked task.
+
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw
 caption event-225 data, audio and interlace capabilities are reported without

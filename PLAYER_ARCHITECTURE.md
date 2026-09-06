@@ -122,6 +122,15 @@ control-session contract.
 
 ## Current behavior constraints
 
+The user-visible Playback Stats panel is an on-demand observer above the player
+contract. It takes one main-thread snapshot per second only while attached,
+uses `PlaybackHealthSource` and `PlaybackDataSourceTelemetry` where available,
+and conditionally formats transport-specific rows. It never installs a
+background listener and never includes media paths, server addresses,
+credentials, or client IDs. Media3/legacy Exo expose their active renderer
+counters; IJK/GSY retain a smaller truthful view when those counters are not
+available.
+
 - Legacy Exo remains the default.
 - Media3/Legacy Exo use custom MPEG-TS Pull extractor/load-control behavior.
 - IJK retains device/codec-specific MPEG-2 compatibility handling.

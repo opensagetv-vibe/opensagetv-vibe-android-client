@@ -42,7 +42,23 @@ public final class DisplayRefreshController
 
     public static Result apply(Activity activity, MiniPlayerPlugin player, String policy)
     {
-        Result state = inspect(activity, player);
+        if (Looper.myLooper() != Looper.getMainLooper())
+        {
+            MAIN.post(new Runnable()
+            {
+                @Override public void run()
+                {
+                    if (!activity.isFinishing())
+                        apply(activity, player, policy);
+                }
+            });
+            return new Result(false, "application_scheduled_on_main", -1f, -1f,
+                    0, new Display.Mode[0], false);
+        }
+        // Restoring the display does not need media metadata. In particular,
+        // releasePlayer() may originate on SageTV's GFX worker, so never query
+        // a Media3/ExoPlayer instance as part of the OFF path.
+        Result state = inspect(activity, OFF.equals(policy) ? null : player);
         if (Build.VERSION.SDK_INT < 23)
             return state.with(false, "display_mode_api_unavailable");
         WindowManager.LayoutParams attrs = activity.getWindow().getAttributes();

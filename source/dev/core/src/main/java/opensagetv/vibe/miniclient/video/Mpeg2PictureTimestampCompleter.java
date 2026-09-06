@@ -14,6 +14,17 @@ import java.util.ArrayDeque;
 public final class Mpeg2PictureTimestampCompleter
 {
     public static final long TIME_UNSET = Long.MIN_VALUE;
+    public static final int DECISION_NO_TIMING = 0;
+    public static final int DECISION_SUPPLIED_TIME_UNSET = 1;
+    public static final int DECISION_FRAME_RATE_UNKNOWN = 2;
+    public static final int DECISION_I_PICTURE = 3;
+    public static final int DECISION_AUTHORED_TIMESTAMP = 4;
+    public static final int DECISION_GOP_UNAVAILABLE = 5;
+    public static final int DECISION_TELECINE_NOT_SEEN = 6;
+    public static final int DECISION_CANDIDATE_UNRESOLVED = 7;
+    public static final int DECISION_DELTA_ALREADY_PLAUSIBLE = 8;
+    public static final int DECISION_DELTA_OUT_OF_RANGE = 9;
+    public static final int DECISION_CORRECTED = 10;
 
     private static final int PICTURE_START_CODE = 0x00000100;
     private static final int SEQUENCE_HEADER_CODE = 0x000001B3;
@@ -48,6 +59,8 @@ public final class Mpeg2PictureTimestampCompleter
     private double frameRateHz;
     private double frameDurationUs;
     private boolean lastTimestampCorrected;
+    private int lastTimestampDecision = DECISION_NO_TIMING;
+    private long lastCandidateTimestampUs = TIME_UNSET;
     private boolean sequenceExtensionSeen;
     private long pictureCodingExtensionCount;
     private long progressiveFrameCount;
@@ -88,6 +101,8 @@ public final class Mpeg2PictureTimestampCompleter
         pendingTimestampAuthored = false;
         telecineCadenceSeen = false;
         lastTimestampCorrected = false;
+        lastTimestampDecision = DECISION_NO_TIMING;
+        lastCandidateTimestampUs = TIME_UNSET;
         sequenceExtensionSeen = false;
         pictureCodingExtensionCount = 0L;
         progressiveFrameCount = 0L;
@@ -110,6 +125,28 @@ public final class Mpeg2PictureTimestampCompleter
     public boolean wasLastTimestampCorrected()
     {
         return lastTimestampCorrected;
+    }
+
+    public int getLastTimestampDecision() { return lastTimestampDecision; }
+    public long getLastCandidateTimestampUs() { return lastCandidateTimestampUs; }
+
+    public static String timestampDecisionName(int decision)
+    {
+        switch (decision)
+        {
+            case DECISION_SUPPLIED_TIME_UNSET: return "supplied_time_unset";
+            case DECISION_FRAME_RATE_UNKNOWN: return "frame_rate_unknown";
+            case DECISION_I_PICTURE: return "i_picture";
+            case DECISION_AUTHORED_TIMESTAMP: return "authored_timestamp";
+            case DECISION_GOP_UNAVAILABLE: return "gop_unavailable";
+            case DECISION_TELECINE_NOT_SEEN: return "telecine_not_seen";
+            case DECISION_CANDIDATE_UNRESOLVED: return "candidate_unresolved";
+            case DECISION_DELTA_ALREADY_PLAUSIBLE: return "delta_already_plausible";
+            case DECISION_DELTA_OUT_OF_RANGE: return "delta_out_of_range";
+            case DECISION_CORRECTED: return "corrected";
+            case DECISION_NO_TIMING:
+            default: return "no_timing";
+        }
     }
 
     public double getReportedFrameRateHz()
@@ -196,11 +233,19 @@ public final class Mpeg2PictureTimestampCompleter
     public static final class PictureTiming
     {
         private final PictureHeader header;
+        private final int displayFieldCount;
 
-        private PictureTiming(PictureHeader header)
+        private PictureTiming(PictureHeader header, int displayFieldCount)
         {
             this.header = header;
+            this.displayFieldCount = displayFieldCount;
         }
+
+        public long getGopGeneration() { return header.gopGeneration; }
+        public int getTemporalReference() { return header.temporalReference; }
+        public int getPictureType() { return header.pictureType; }
+        public boolean hasAuthoredTimestamp() { return header.authoredTimestamp; }
+        public int getDisplayFieldCount() { return displayFieldCount; }
     }
 
     /**
@@ -213,35 +258,76 @@ public final class Mpeg2PictureTimestampCompleter
         if (picture == null)
             return null;
         GopTiming gop = gopTiming(picture.gopGeneration, true);
-        gop.noteDuration(picture.temporalReference, picture.displayFieldCount(progressiveSequence));
+        int displayFieldCount = picture.displayFieldCount(progressiveSequence);
+        gop.noteDuration(picture.temporalReference, displayFieldCount);
         if (picture.pictureType == PICTURE_TYPE_I && suppliedTimeUs != TIME_UNSET)
             gop.anchor(picture.temporalReference, suppliedTimeUs);
-        return new PictureTiming(picture);
+        return new PictureTiming(picture, displayFieldCount);
     }
 
     /** Resolves an observed sample against its GOP display-time anchor. */
     public long completeTimestamp(PictureTiming timing, long suppliedTimeUs)
     {
         lastTimestampCorrected = false;
-        if (timing == null || suppliedTimeUs == TIME_UNSET || frameDurationUs <= 0.0)
+        lastCandidateTimestampUs = TIME_UNSET;
+        if (timing == null)
+        {
+            lastTimestampDecision = DECISION_NO_TIMING;
             return suppliedTimeUs;
+        }
+        if (suppliedTimeUs == TIME_UNSET)
+        {
+            lastTimestampDecision = DECISION_SUPPLIED_TIME_UNSET;
+            return suppliedTimeUs;
+        }
+        if (frameDurationUs <= 0.0)
+        {
+            lastTimestampDecision = DECISION_FRAME_RATE_UNKNOWN;
+            return suppliedTimeUs;
+        }
         PictureHeader picture = timing.header;
-        if (picture.pictureType == PICTURE_TYPE_I || picture.authoredTimestamp)
+        if (picture.pictureType == PICTURE_TYPE_I)
+        {
+            lastTimestampDecision = DECISION_I_PICTURE;
             return suppliedTimeUs;
+        }
+        if (picture.authoredTimestamp)
+        {
+            lastTimestampDecision = DECISION_AUTHORED_TIMESTAMP;
+            return suppliedTimeUs;
+        }
         GopTiming gop = gopTiming(picture.gopGeneration, false);
         if (gop == null)
+        {
+            lastTimestampDecision = DECISION_GOP_UNAVAILABLE;
             return suppliedTimeUs;
+        }
         if (!telecineCadenceSeen)
+        {
+            lastTimestampDecision = DECISION_TELECINE_NOT_SEEN;
             return suppliedTimeUs;
+        }
         long displayTimeUs = gop.resolve(picture.temporalReference, fieldDurationUs());
         if (displayTimeUs == TIME_UNSET)
+        {
+            lastTimestampDecision = DECISION_CANDIDATE_UNRESOLVED;
             return suppliedTimeUs;
+        }
+        lastCandidateTimestampUs = displayTimeUs;
         long deltaUs = displayTimeUs - suppliedTimeUs;
         long minimumRepairDeltaUs = Math.max(1L, Math.round(frameDurationUs * 0.25));
-        if (Math.abs(deltaUs) < minimumRepairDeltaUs
-                || Math.abs(deltaUs) > MAX_REPAIR_DELTA_US)
+        if (Math.abs(deltaUs) < minimumRepairDeltaUs)
+        {
+            lastTimestampDecision = DECISION_DELTA_ALREADY_PLAUSIBLE;
             return suppliedTimeUs;
+        }
+        if (Math.abs(deltaUs) > MAX_REPAIR_DELTA_US)
+        {
+            lastTimestampDecision = DECISION_DELTA_OUT_OF_RANGE;
+            return suppliedTimeUs;
+        }
         lastTimestampCorrected = true;
+        lastTimestampDecision = DECISION_CORRECTED;
         return displayTimeUs;
     }
 

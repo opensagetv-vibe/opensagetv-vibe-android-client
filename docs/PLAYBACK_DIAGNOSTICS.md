@@ -39,8 +39,44 @@ Before changing code after a failure, capture:
 - SageTV server request, transfer, mux, and transcoder evidence;
 - process/crash status and exact timestamps.
 
+The on-screen **Playback Stats** panel is the preferred first look during a
+physical reproduction. Use compact mode while watching for a symptom and
+detailed mode to correlate it with decoder, datasource, synchronization, and
+transport counters. The three bars show measured media activity, buffered
+playback time, and CPU. The CPU bar uses a fixed 0-100% scale with Vibe and the
+remainder of device CPU in separate colors. The `Vibe` and `Other` label values
+use those same colors, with a neutral `Total`. Values appear once above each bar;
+duplicate detail rows and the invariant estimated link-capacity bar are omitted.
+Detail rows use the same 10.5sp normal typeface as the graph labels.
+Export produces a bounded redacted snapshot with no media path, server address,
+credential, or client ID. CPU sampling starts
+and stops with the overlay. Preserve the normal MCP/server evidence as well
+when a root-cause claim depends
+on another process.
+
+The long-press navigation panel's bar-chart icon, the submenu's checked/unchecked
+row, and MCP use the same overlay controller. The icon is white while disabled
+and green while enabled. Use
+`dev_set_active_player_overlay(mode="toggle")` for an interactive toggle, or select
+`off`, `compact`, `detailed`, or `detailed_30s` when a test needs deterministic state.
+The legacy MCP `visible` Boolean remains supported for existing automation.
+
+The panel is a troubleshooting view, not a copy of YouTube's consumer-facing
+"Stats for nerds" display. It deliberately excludes video/session IDs,
+viewport-versus-optimal-resolution labels, normalized volume, generic color
+labels, mystery text, wall-clock date/time, and other fields that do not help
+isolate a SageTV transport, buffering, decoder, cadence, seek, caption, or A/V
+sync fault.
+
 If one of these sources is unavailable, record it as unavailable rather than
 inferring a cause from another layer.
+
+For legacy event-225 captions, advancing protocol counters alone are not a
+post-seek pass. Inspect the captured frame: CEA-608 lines must remain in
+timestamp order, occupy the normal authored/STV lower-screen rows, and stay
+within two seconds of the generated fixture's burned-in PTS. Malformed or
+top-screen text with advancing counters indicates packet ordering or retained
+decoder state and must fail the physical caption gate.
 
 ## Ownership model
 

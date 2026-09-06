@@ -259,6 +259,25 @@ exit 2
         self.assertEqual(control.call_args_list[1].kwargs["value"], "DEV001")
         self.assertEqual(control.call_args_list[1].kwargs["generate"], "false")
 
+    def test_playback_stats_overlay_supports_modes_and_legacy_boolean(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", side_effect=[
+            {"ok": True, "requestedMode": "toggle"},
+            {"ok": True, "requestedVisible": False},
+        ]) as control:
+            toggled = c.set_active_player_overlay(mode="toggle")
+            hidden = c.set_active_player_overlay(visible=False)
+        self.assertEqual(toggled["requestedMode"], "toggle")
+        self.assertFalse(hidden["requestedVisible"])
+        self.assertEqual(control.call_args_list[0].args[0], "active_player_overlay")
+        self.assertEqual(control.call_args_list[0].kwargs, {"mode": "toggle"})
+        self.assertEqual(control.call_args_list[1].kwargs, {"visible": "false"})
+
+    def test_playback_stats_overlay_rejects_unknown_mode(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with self.assertRaisesRegex(ValueError, "mode must be"):
+            c.set_active_player_overlay(mode="forever")
+
     def test_parse_debug_broadcast_snapshot(self):
         text = 'Broadcasting: Intent { act=opensagetv.vibe.miniclient.DEBUG_CONTROL }\nBroadcast completed: result=1, data="ok=true;op=snapshot;connected=true;player=media3;state=2;mediaTimeMs=123456"\n'
         result = parse_broadcast_result(text)

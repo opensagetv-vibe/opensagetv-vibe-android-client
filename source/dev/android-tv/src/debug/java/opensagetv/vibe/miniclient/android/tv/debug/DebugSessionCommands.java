@@ -151,16 +151,29 @@ final class DebugSessionCommands
         final MiniClient client = requireConnectedClient(context);
         if (client.getCurrentConnection() == null)
             throw new IllegalStateException("no active connection");
+        final String requestedMode = clean(intent.getStringExtra("mode")).toLowerCase(
+                java.util.Locale.US);
+        final boolean explicitMode = !requestedMode.isEmpty();
+        if (explicitMode && !"toggle".equals(requestedMode) && !"off".equals(requestedMode)
+                && !"compact".equals(requestedMode) && !"detailed".equals(requestedMode)
+                && !"detailed_30s".equals(requestedMode))
+            throw new IllegalArgumentException("mode must be toggle, off, compact, detailed, or detailed_30s");
         final boolean visible = parseBoolean(intent.getStringExtra("visible"), true);
         activity.runOnUiThread(new Runnable()
         {
             @Override public void run()
             {
-                ActivePlayerProcessOverlay.setVisible(activity,
-                        client.getCurrentConnection().getMediaCmd(), visible);
+                if (explicitMode)
+                    ActivePlayerProcessOverlay.setMode(activity,
+                            client.getCurrentConnection().getMediaCmd(), requestedMode);
+                else
+                    ActivePlayerProcessOverlay.setVisible(activity,
+                            client.getCurrentConnection().getMediaCmd(), visible);
             }
         });
-        return "op=active_player_overlay;requestedVisible=" + visible;
+        return explicitMode
+                ? "op=active_player_overlay;requestedMode=" + requestedMode
+                : "op=active_player_overlay;requestedVisible=" + visible;
     }
 
     static String watchServerFile(Context context, Intent intent)

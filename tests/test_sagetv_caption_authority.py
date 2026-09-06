@@ -43,6 +43,7 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             extractor = (ROOT / relative_path).read_text(encoding="utf-8")
             self.assertIn("SAMPLE_DATA_PART_MAIN", extractor)
             self.assertIn("bridge.onCeaSample", extractor)
+            self.assertIn("track.resetPending()", extractor)
 
         for relative_path in (
             "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java",
@@ -52,6 +53,8 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             self.assertIn("LegacyCaptionExtractorsFactory", player)
             self.assertIn("isSubtitleCallbackEnabled", player)
             self.assertIn("isForwardingCurrentStream", player)
+            self.assertIn("scheduleLegacyCaptionDrain(currentPositionMs * 1000L)", player)
+            self.assertIn("getBackgroundService().execute", player)
 
         debug_state = (
             ROOT

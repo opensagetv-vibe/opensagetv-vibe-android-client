@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import base64
+import html
 import json
 import os
+import re
 from typing import Any, Iterable
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -71,10 +73,19 @@ class SagexApiClient:
                 return client
             except Exception as exc:
                 errors.append(f"{base}: {exc}")
+        # Many otherwise stock SageTV installations have Nielm's historical
+        # Web Interface but not the separate Sagex Remote API. Its WatchNow
+        # command still executes the ordinary SageTV/STV Watch operation and
+        # is therefore the right commissioning fallback for an unmodified
+        # server. Playback remains on the MiniClient wire protocol.
+        try:
+            return SageWebApiClient.discover(host, user, password)
+        except Exception as exc:
+            errors.append(f"SageTV Web Interface: {exc}")
         raise SagexApiError(
-            "Unable to discover Sagex Remote API on connected SageTV server. "
-            "Set SAGETV_SAGEX_BASE if the web/API service uses a custom URL. Tried: "
-            + " | ".join(errors)
+            "Unable to discover Sagex Remote API or SageTV Web Interface on "
+            "connected SageTV server. Set SAGETV_SAGEX_BASE or "
+            "SAGETV_WEB_BASE for custom URLs. Tried: " + " | ".join(errors)
         )
 
     def _request(self, params: dict[str, Any]) -> Any:
@@ -216,6 +227,20 @@ class SagexApiClient:
                 }
             raise
 
+    def remote_command(self, context: str, command: str) -> Any:
+        """Send a normal STV command through the context-aware Web Remote."""
+        explicit = os.environ.get("SAGETV_WEB_BASE", "").strip()
+        if explicit:
+            web_base = explicit.rstrip("/")
+            if web_base.endswith("/Home"):
+                web_base = web_base[:-5]
+        else:
+            parsed = urlparse(self.base_url)
+            web_base = f"{parsed.scheme}://{parsed.netloc}/sage"
+        return SageWebApiClient(
+            web_base, self.username, self.password, self.timeout_s
+        ).remote_command(context, command)
+
     def seek(self, context: str, target_ms: int) -> Any:
         """Ask SageTV's VideoFrame to seek the active UI session.
 
@@ -269,3 +294,161 @@ class SagexApiClient:
             if isinstance(node, str) and node.isdigit():
                 return int(node)
         return None
+
+
+class SageWebApiClient:
+    """Compatibility adapter for Nielm's stock-era SageTV Web Interface 4.x."""
+
+    def __init__(self, base_url: str, username: str = "", password: str = "",
+                 timeout_s: float = 4.0):
+        self.base_url = base_url.rstrip("/")
+        self.username = username
+        self.password = password
+        self.timeout_s = max(0.5, float(timeout_s))
+
+    @classmethod
+    def candidate_bases(cls, host: str) -> list[str]:
+        explicit = os.environ.get("SAGETV_WEB_BASE", "").strip()
+        if explicit:
+            base = explicit.rstrip("/")
+            if base.endswith("/Home"):
+                base = base[:-5]
+            return [base]
+        ports_text = os.environ.get("SAGETV_SAGEX_PORTS", "").strip()
+        ports = []
+        for part in ports_text.split(",") if ports_text else DEFAULT_PORTS:
+            try:
+                port = int(part)
+            except (TypeError, ValueError):
+                continue
+            suffix = "" if port == 80 else f":{port}"
+            ports.append(f"http://{host}{suffix}/sage")
+        return ports
+
+    @classmethod
+    def discover(cls, host: str, username: str = "", password: str = "") -> "SageWebApiClient":
+        errors = []
+        for base in cls.candidate_bases(host):
+            client = cls(base, username, password)
+            try:
+                body = client._request("Home")
+                if "SageTV Web Interface" not in body and "Sage Webserver" not in body:
+                    raise SagexApiError("response is not the SageTV Web Interface")
+                return client
+            except Exception as exc:
+                errors.append(f"{base}: {exc}")
+        raise SagexApiError(" | ".join(errors))
+
+    def _request(self, path: str, params: dict[str, Any] | None = None) -> str:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        if params:
+            url += "?" + urlencode({k: str(v) for k, v in params.items() if v is not None})
+        request = Request(url, headers={"Accept": "text/html,application/xhtml+xml"})
+        if self.username:
+            token = base64.b64encode(
+                f"{self.username}:{self.password}".encode("utf-8")
+            ).decode("ascii")
+            request.add_header("Authorization", f"Basic {token}")
+        try:
+            with urlopen(request, timeout=self.timeout_s) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            raise SagexApiError(str(exc)) from exc
+
+    def ui_context_names(self) -> list[str]:
+        body = self._request("Home")
+        contexts = []
+        for value in re.findall(r"ExtenderDetails\?context=([A-Za-z0-9_.:-]+)", body):
+            if value not in contexts:
+                contexts.append(value)
+        return contexts
+
+    def resolve_context(self, client_id: str) -> str:
+        contexts = self.ui_context_names()
+        normalized = "".join(ch for ch in client_id.lower() if ch.isalnum())
+        exact = [c for c in contexts
+                 if "".join(ch for ch in c.lower() if ch.isalnum()) == normalized]
+        if len(exact) == 1:
+            return exact[0]
+        suffix = [c for c in contexts
+                  if "".join(ch for ch in c.lower() if ch.isalnum()).endswith(normalized)]
+        if len(suffix) == 1:
+            return suffix[0]
+        raise SagexApiError(
+            f"Unable to uniquely resolve MiniClient UI context for {client_id}; contexts={contexts}"
+        )
+
+    @staticmethod
+    def _plain_text(value: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html.unescape(value))).strip()
+
+    def find_media(self, video_name: str, max_items: int = 5000,
+                   page_size: int = 250) -> tuple[list[MediaMatch], str]:
+        del max_items, page_size
+        wanted = video_name.strip()
+        if not wanted:
+            raise ValueError("video_name is required")
+        body = self._request("Search", {
+            "SearchString": wanted,
+            "searchType": "MediaFiles",
+            "DVD": "on",
+            "Video": "on",
+            "Music": "on",
+            "Picture": "on",
+            "pagelen": 500,
+        })
+        ids = []
+        for raw_id in re.findall(r"DetailedInfo\?MediaFileId=(\d+)", body):
+            media_id = int(raw_id)
+            if media_id not in ids:
+                ids.append(media_id)
+        matches = []
+        for media_id in ids:
+            detail = self._request("DetailedInfo", {"MediaFileId": media_id})
+            found = re.search(
+                r"<title>\s*Detailed Information for\s+(.*?)\s*</title>",
+                detail, re.IGNORECASE | re.DOTALL,
+            )
+            title = self._plain_text(found.group(1)) if found else str(media_id)
+            matches.append(MediaMatch(media_id, title))
+        wanted_fold = wanted.casefold()
+        exact = [m for m in matches if m.title.strip().casefold() == wanted_fold]
+        if exact:
+            return exact, "exact_web"
+        return [m for m in matches if wanted_fold in m.title.casefold()], "contains_web"
+
+    def watch(self, context: str, media_file_id: int) -> Any:
+        self._request("MediaFileCommand", {
+            "command": "WatchNow",
+            "context": context,
+            "MediaFileId": int(media_file_id),
+            "returnto": "Home",
+        })
+        return {"accepted": True, "transport": "sage_web_watch_now"}
+
+    def remote_command(self, context: str, command: str) -> Any:
+        if not str(context or "").strip():
+            raise ValueError("context is required")
+        if not str(command or "").strip():
+            raise ValueError("command is required")
+        self._request("SageCommand", {
+            "RetImage": "yes",
+            "command": str(command).strip(),
+            "context": str(context).strip(),
+        })
+        return {
+            "accepted": True,
+            "transport": "sage_web_remote",
+            "command": str(command).strip(),
+            "context": str(context).strip(),
+        }
+
+    def seek(self, context: str, target_ms: int) -> Any:
+        raise SagexApiError(
+            "Exact server seek is unavailable through the stock SageTV Web Interface"
+        )
+
+    def current_media_file_id(self, context: str) -> int | None:
+        body = self._request("Home", {"xml": "currplaying", "context": context})
+        found = re.search(r"MediaFileId[=\"']+(\d+)", body, re.IGNORECASE)
+        return int(found.group(1)) if found else None

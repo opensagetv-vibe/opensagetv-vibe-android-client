@@ -2,6 +2,94 @@
 
 ## Unreleased
 
+- Removed the obsolete hard-coded v0.5.85 migration-test assertion. Repository
+  identity validation now requires a semantic `VERSION` and verifies that
+  `release.properties` contains that exact value, preventing later version
+  updates from leaving the release gate stale.
+
+- Classified compatibility-matrix items as normal runtime features,
+  diagnostics, Dev/debug test controls, or regression test media. Exact file,
+  channel, and DVD-seek automation; MCP health/assertion controls; fault
+  injection; and deterministic media are now explicitly marked test-only.
+  The document also clarifies that the player statistics overlay and MIM status
+  query are optional diagnostics, while the playback modes and recovery
+  behavior they validate remain normal user features.
+
+- Corrected legacy-extender CEA caption corruption and misplaced/top-screen
+  rows after random-access seeks. The extractor taps now discard any partial
+  pre-seek text sample, and the callback bridge orders MPEG-2 B-picture caption
+  packets by presentation timestamp instead of decode order. It also suppresses
+  interleaved duplicate copies from the parallel CEA-608/708 extractor outputs
+  with a bounded exact history. Media3 and legacy Exo hardware Pull both passed
+  the stock-SageTV Off/CC1/CC2/Off/CC1 cycle plus FF/REW/FF2/REW2 recovery on
+  AFTMM/API-25 `.25`. Final screenshots show complete three-line roll-up text
+  in the normal lower caption region with approximately 1.1-1.3 seconds of
+  offset from the fixture's burned-in PTS, inside the two-second physical gate:
+  `artifacts/firetv/20260906-181311_caption-media3-pull-legacy-callback.png`
+  and
+  `artifacts/firetv/20260906-181613_caption-exoplayer-pull-legacy-callback.png`.
+  Exact installed APK SHA-256 is
+  `c44cacb8e9e8f6c784842e15a1b6d79cd1d819a417f37cfc387950a999a2b3ec`.
+
+- Closed the reopened long-duration native-DVD cadence investigation on the
+  commissioned AFTMM/API-25 `.25`. The physical harness no longer silently
+  truncates an explicitly requested ten-minute cadence run to three minutes;
+  it remains safely bounded at 15 minutes. Aladdin was positioned at the same
+  8:00 motion scene and ran for 601.349 seconds with 601.096 seconds of media
+  progress (0.99958x), hardware `OMX.MTK.VIDEO.DECODER.MPEG2`, 28,837 video
+  outputs, zero dropped frames, two isolated skips, zero new long release gaps
+  or non-positive intervals, and 131 ms final A/V sample delta. The persistent
+  detailed overlay showed about 7.9 seconds buffered and 7.7% Vibe CPU at the
+  final frame. Evidence is
+  `artifacts/firetv/dvd-aladdin-10m-true-long-cadence-20260906.json`,
+  `artifacts/firetv/20260906-dvd-aladdin-10m-sample-2m.png`, and
+  `artifacts/firetv/20260906-183728_screen.png`. The exact final clean APK also
+  passed a separate 20-second 8:00 startup/cadence/STOP smoke in
+  `artifacts/firetv/dvd-aladdin-final-clean-apk-smoke-20260906.json`.
+
+- Added a universal, mode-aware Playback Stats overlay to the long-press Active
+  Player Adjustments menu. Compact and detailed persistent modes, a bounded
+  30-second mode, explicit hide, and a redacted export are available. The
+  overlay samples only while visible and removes itself when the playback
+  Activity pauses or is destroyed. Common player, codec, actual decoder,
+  resolution, frame/output, audio, timeline, display-refresh, synchronization,
+  buffering, and recovery fields are joined only by applicable Pull, SMB
+  Direct, Push/Fixed, caption, or DVD diagnostics. Live bars show measured media
+  activity, mode-scaled buffer health, and fixed-scale CPU; unavailable inputs
+  are omitted.
+  The display deliberately excludes YouTube-specific video/session IDs,
+  viewport/optimal-resolution labels, normalized volume, generic color labels,
+  mystery text, and wall-clock date/time. On AFTMM/API-25 `.25`, the real
+  long-press submenu enabled the persistent detailed view over both hardware
+  Media3 Pull and native DVD. Pull showed only datasource diagnostics; DVD
+  showed only Push/cadence/stream/A/V diagnostics. HOME removed the view and
+  its sampler with the Activity. Focused overlay/protocol checks pass 71/71,
+  and the clean 60-task APK build passes. The panel measures its longest visible
+  troubleshooting line and stays only slightly wider than that content; the
+  bars follow the same width. Measured media activity uses its own rolling peak,
+  buffer health retains a mode-scaled time target, and CPU separates Vibe from
+  the remainder of total device usage on a fixed 0-100% scale. Duplicate buffer,
+  measured-activity, and CPU detail rows and the invariant estimated
+  link-capacity bar are omitted. Detail rows use the same 10.5sp normal typeface
+  as the graph labels. A checked/unchecked first row in Playback Stats
+  submenu provides a direct persistent-detailed on/off toggle. A dedicated
+  bar-chart icon now sits beside the long-press gear and CC controls, toggles
+  the detailed panel directly, and changes from white to green while active.
+  MCP supports the same `toggle`, `off`, `compact`, `detailed`, and
+  `detailed_30s` modes without breaking the legacy Boolean operation. The
+  overlay also interval-samples total Android-device CPU and Vibe-process CPU
+  only while visible. The final three-bar layout and MCP modes were physically
+  verified on `.25`; `Vibe` and `Other` CPU label values use the same blue and
+  orange as their bar segments, while `Total` remains neutral. Evidence is
+  `artifacts/firetv/20260906-154036_playback-stats-cpu-color-font-final-20260906_screen.png`
+  and exact APK SHA-256 is
+  `8141957fb0a4d318ba9158616d390244c3d990431da34b2e6efbc71246841cda`.
+
+- Fixed a Media3 release crash caused when display-refresh inspection queried
+  ExoPlayer from SageTV's GFX worker. Refresh application is now marshaled to
+  Android's main thread and display restore no longer reads player metadata.
+  The clean hardware DVD start/seek/play/stop regression passes on `.25`.
+
 - Prepared the independently migrated Android client for its first public Vibe
   source/APK release. The GitHub repository is a true fork of
   `OpenSageTV/sagetv-miniclient`, the active implementation is isolated under

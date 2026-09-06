@@ -1,5 +1,104 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Stock-server caption seek/placement correction (2026-09-06)
+
+The standard legacy-extender callback path is now robust across MPEG-2 seeks.
+The apparent STV placement problem was corrupted CEA-608 decoder state: MPEG-2
+B-picture caption packets were reaching SageTV in decode order, and parallel
+CEA-608/708 extractor callbacks could repeat non-adjacent packets. The bridge
+now keeps a bounded exact duplicate history and sorts pending callbacks by PTS.
+Both Media3 and legacy Exo extractor wrappers also discard incomplete caption
+samples at every extractor seek, while the player-level reset clears read-ahead
+and resets the stock SageTV decoder before new packets are delivered.
+
+Physical AFTMM/API-25 `.25` validation against unmodified server `.175` passed
+the STV Off/CC1/CC2/Off/CC1 sequence and FF/REW/FF2/REW2 for both hardware Pull
+backends. The final Media3 evidence is
+`artifacts/firetv/20260906-181311_caption-media3-pull-legacy-callback.png`; the
+legacy Exo evidence is
+`artifacts/firetv/20260906-181613_caption-exoplayer-pull-legacy-callback.png`.
+Both show ordered roll-up captions in the normal lower-screen region after all
+seeks, and their latest displayed caption is within two seconds of the burned
+fixture PTS. Installed APK SHA-256:
+`c44cacb8e9e8f6c784842e15a1b6d79cd1d819a417f37cfc387950a999a2b3ec`.
+
+## Long-duration native DVD cadence closure (2026-09-06)
+
+The reopened non-Pro Fire TV DVD cadence task is complete. The disc harness
+previously capped every cadence observation at 180 seconds even when 600 was
+requested; the bounded maximum is now 900 seconds and has regression coverage.
+The exact installed APK played Aladdin from the same 8:00 motion scene for a
+true 601.349-second observation. Media advanced 601.096 seconds (0.99958x),
+hardware MPEG-2 rendered 28,837 frames with zero drops, only two isolated
+skips, and no new long release gap or non-positive release interval. Audio had
+zero drops and the final A/V sample delta was 131 ms. The final detailed overlay
+reported approximately 7.9 seconds buffered, 7.7% Vibe CPU, and no transient
+EOS. This does not reproduce a client buffer, CPU, decoder, or timestamp-drift
+failure and therefore closes the current bounded task without another playback
+tuning change.
+
+Machine evidence:
+`artifacts/firetv/dvd-aladdin-10m-true-long-cadence-20260906.json`.
+Visual evidence:
+`artifacts/firetv/20260906-dvd-aladdin-10m-sample-2m.png` and
+`artifacts/firetv/20260906-183728_screen.png`. After the final clean build and
+install, a separate 20-second startup/cadence/STOP smoke also passed in
+`artifacts/firetv/dvd-aladdin-final-clean-apk-smoke-20260906.json`.
+
+## Playback Stats and reopened DVD cadence investigation (2026-09-06)
+
+The long-press Active Player Adjustments menu now owns a universal, mode-aware
+Playback Stats panel. Compact/detailed persistent modes, a bounded 30-second
+mode, hide, and redacted export are available. Sampling runs once per second
+only while the panel is attached and is cancelled when the playback Activity
+pauses or is destroyed. Common decoder, video/audio, timing, frame, display,
+buffer, synchronization, and recovery evidence is joined only by the current
+Pull, SMB Direct, Push/Fixed, caption, or DVD section. The three live bars show
+measured media-byte activity, mode-scaled buffered playback time, and fixed-scale
+device/Vibe CPU. Each value is shown only above its bar; the duplicate text rows
+and invariant estimated link-capacity bar were removed. Consumer-only fields
+from the visual reference are deliberately excluded. The long-press navigation
+overlay also has a direct bar-chart toggle
+beside the gear and CC controls. It is white when disabled and green when
+active. MCP's `dev_set_active_player_overlay` supports `toggle`, `off`,
+`compact`, `detailed`, and `detailed_30s`, while retaining the prior Boolean
+contract. The CPU bar separates Vibe from the remainder of total device usage
+on a 0-100% scale and does not poll either value after the panel closes.
+
+The final simplified three-bar layout is physically verified in
+`artifacts/firetv/20260906-154036_playback-stats-cpu-color-font-final-20260906_screen.png`.
+It shows media activity, buffer health, and a 0-100% stacked CPU bar only. All
+detail text uses the graph-label font and size; the sample color-matches blue
+`Vibe 20.3%`, orange `Other 17.6%`, and neutral `Total 37.9%` to the bar. The
+exact installed APK SHA-256 is
+`8141957fb0a4d318ba9158616d390244c3d990431da34b2e6efbc71246841cda`.
+
+The same build fixes a real Media3 release crash in which display-refresh
+inspection called `getVideoFormat()` from SageTV's GFX worker. Display-mode
+application is now marshaled to Android's main thread and the OFF/restore path
+never queries player metadata. A clean hardware Media3 DVD start, seek, play,
+and stop cycle passes in
+`artifacts/firetv/dvd-aladdin-refresh-thread-fix-smoke-20260906.json`.
+
+The actual submenu was exercised on AFTMM/API-25 `.25`. Hardware Media3 Pull
+and native Aladdin DVD views were both readable over active video and contained
+only their applicable transport rows. HOME removed the overlay and sampler.
+Evidence is retained in
+`artifacts/firetv/20260906-134458_screenshot_screen.png` and
+`artifacts/firetv/20260906-135003_screenshot_screen.png`. The DVD snapshot at
+about 8:00 showed a six-second decoder buffer, no renderer drops, five
+cumulative release gaps, active timestamp correction, and a sampled +252 ms
+A/V delta. Long-duration DVD cadence degradation reported after extended
+playback is therefore reopened as the active investigation; short healthy
+windows do not close it.
+
+The direct icon and corrected grid were physically verified in
+`artifacts/firetv/20260906-playback-stats-nav-icon-fixed.png`; its active green
+state is in `artifacts/firetv/20260906-playback-stats-nav-icon-green.png`.
+MCP toggled the snapshot state false and then true. Earlier CPU sampling
+evidence remains in `artifacts/firetv/20260906-playback-stats-cpu.png`; the
+final evidence and installed hash are recorded above.
+
 ## GitHub publication preparation (2026-09-05)
 
 The public repository is a true fork of

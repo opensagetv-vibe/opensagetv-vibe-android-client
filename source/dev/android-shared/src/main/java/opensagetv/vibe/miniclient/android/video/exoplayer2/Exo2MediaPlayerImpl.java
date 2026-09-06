@@ -87,6 +87,8 @@ import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import android.support.v4.media.session.MediaSessionCompat;
 
 /**
@@ -112,14 +114,62 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         connection.postSubtitleInfo(pts45Khz, duration45Khz, data, flags);
                 }
             });
+    private final AtomicLong legacyCaptionDrainClockUs = new AtomicLong(-1L);
+    private final AtomicBoolean legacyCaptionDrainScheduled = new AtomicBoolean(false);
     private final Mpeg2PictureTimestampCompleter mpeg2InterlaceObserver =
             new Mpeg2PictureTimestampCompleter();
 
     @Override
     protected void onPlaybackLoadStarted()
     {
-        legacyCaptionBridge.flush();
+        resetLegacyCaptionsForDiscontinuity();
         mpeg2InterlaceObserver.reset();
+    }
+
+    private void resetLegacyCaptionsForDiscontinuity()
+    {
+        legacyCaptionDrainClockUs.set(-1L);
+        legacyCaptionBridge.clearPending();
+        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                legacyCaptionBridge.postFlush();
+            }
+        });
+    }
+
+    private void scheduleLegacyCaptionDrain(long playbackTimeUs)
+    {
+        legacyCaptionDrainClockUs.set(playbackTimeUs);
+        if (!legacyCaptionDrainScheduled.compareAndSet(false, true))
+            return;
+        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                long drainedClockUs = -1L;
+                try
+                {
+                    do
+                    {
+                        drainedClockUs = legacyCaptionDrainClockUs.get();
+                        if (drainedClockUs >= 0L)
+                            legacyCaptionBridge.drainTo(drainedClockUs);
+                    }
+                    while (drainedClockUs != legacyCaptionDrainClockUs.get());
+                }
+                finally
+                {
+                    legacyCaptionDrainScheduled.set(false);
+                    long newestClockUs = legacyCaptionDrainClockUs.get();
+                    if (newestClockUs >= 0L && newestClockUs != drainedClockUs)
+                        scheduleLegacyCaptionDrain(newestClockUs);
+                }
+            }
+        });
     }
 
     @Override
@@ -866,6 +916,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         {
             playbackPositionLock.lock();
 
+            // The extractor may be tens of seconds ahead of rendered video.
+            // Never carry that pre-seek caption queue across a clock jump.
+            resetLegacyCaptionsForDiscontinuity();
+
 
             //currentPlaybackPosition = 0; //Set this to zero during seek.  Lock will hopefully keep it at zero unti we are completed
 
@@ -1084,6 +1138,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     public synchronized void flush()
     {
         log.logDebug("Flush called");
+        resetLegacyCaptionsForDiscontinuity();
 
         // Pull-mode seeking is owned by Exo's seek/DataSource reopen path.  SageTV may
         // still issue FLUSH around a seek, but replacing the MediaSource here resets
@@ -1581,7 +1636,9 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
                 {
-                    Exo2MediaPlayerImpl.this.setPlaybackPosition(listenerPlayer.getCurrentPosition());
+                    long currentPositionMs = listenerPlayer.getCurrentPosition();
+                    Exo2MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
+                    scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
                     progressHandler.postDelayed(sessionProgress[0], 500);
                 }
                 else if (isCurrentPlaybackSession(listenerSession))
