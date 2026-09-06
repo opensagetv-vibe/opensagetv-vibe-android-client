@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <ListPreference
+        android:defaultValue="auto"
+        android:dialogTitle="@string/disc_playback_policy_title"
+        android:entries="@array/entries_disc_playback_policy"
+        android:entryValues="@array/entryvalues_disc_playback_policy"
+        android:key="disc_playback_policy"
+        android:title="@string/disc_playback_policy_title" />
+
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="disc_skip_menus"
+        android:summary="@string/disc_skip_menus_summary"
+        android:title="@string/disc_skip_menus_title" />
+
+    <CheckBoxPreference
+        android:defaultValue="false"
+        android:key="disc_skip_previews"
+        android:summary="@string/disc_skip_previews_summary"
+        android:title="@string/disc_skip_previews_title" />
+
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="disc_compatibility_fallback"
+        android:summary="@string/disc_compatibility_fallback_summary"
+        android:title="@string/disc_compatibility_fallback_title" />
+
+    <ListPreference
+        android:defaultValue="auto"
+        android:dialogTitle="@string/disc_mpeg2_timestamp_repair_title"
+        android:entries="@array/entries_disc_mpeg2_timestamp_repair"
+        android:entryValues="@array/entryvalues_disc_mpeg2_timestamp_repair"
+        android:key="disc_mpeg2_timestamp_repair"
+        android:summary="@string/disc_mpeg2_timestamp_repair_summary"
+        android:title="@string/disc_mpeg2_timestamp_repair_title" />
+
+</PreferenceScreen>

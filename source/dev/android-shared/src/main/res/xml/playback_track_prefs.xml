@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <EditTextPreference
+        android:defaultValue=""
+        android:key="preferred_audio_language"
+        android:dialogTitle="@string/preferred_audio_language_title"
+        android:summary="@string/preferred_language_summary"
+        android:title="@string/preferred_audio_language_title" />
+    <EditTextPreference
+        android:defaultValue=""
+        android:key="preferred_subtitle_language"
+        android:dialogTitle="@string/preferred_subtitle_language_title"
+        android:summary="@string/preferred_language_summary"
+        android:title="@string/preferred_subtitle_language_title" />
+    <ListPreference
+        android:defaultValue="auto"
+        android:dialogTitle="@string/preferred_caption_standard_title"
+        android:entries="@array/entries_caption_standard"
+        android:entryValues="@array/entryvalues_caption_standard"
+        android:key="preferred_caption_standard"
+        android:summary="%s"
+        android:title="@string/preferred_caption_standard_title" />
+    <EditTextPreference
+        android:defaultValue="1"
+        android:dialogTitle="@string/preferred_caption_service_title"
+        android:inputType="number"
+        android:key="preferred_caption_service"
+        android:summary="%s"
+        android:title="@string/preferred_caption_service_title" />
+    <ListPreference
+        android:defaultValue="stv"
+        android:dialogTitle="@string/legacy_server_caption_mode_title"
+        android:entries="@array/entries_legacy_server_caption_mode"
+        android:entryValues="@array/entryvalues_legacy_server_caption_mode"
+        android:key="legacy_server_caption_mode"
+        android:summary="@string/legacy_server_caption_mode_summary"
+        android:title="@string/legacy_server_caption_mode_title" />
+    <Preference
+        android:enabled="false"
+        android:selectable="false"
+        android:summary="@string/caption_authority_summary"
+        android:title="@string/caption_authority_title" />
+</PreferenceScreen>

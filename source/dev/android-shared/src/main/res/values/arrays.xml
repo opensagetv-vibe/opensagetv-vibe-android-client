@@ -18,12 +18,16 @@
         <item>Push</item>
         <item>Pull</item>
         <item>Fixed</item>
+        <item>SMB Direct</item>
+        <item>SMB Direct (Auto fallback)</item>
     </string-array>
 
     <string-array name="entryvalues_list_streaming_mode_preference">
         <item>dynamic</item>
         <item>pull</item>
         <item>fixed</item>
+        <item>smb_direct</item>
+        <item>smb_auto</item>
     </string-array>
 
     <string-array name="entries_list_auto_connect_delay_preference">
@@ -88,10 +92,12 @@
     <string-array name="entries_list_transcoding_formats_preference">
         <item>Matroska (MKV)</item>
         <item>DVD (MPEG-PS)</item>
+        <item>MPEG Transport Stream (MPEG-TS)</item>
     </string-array>
     <string-array name="entryvalues_list_transcoding_formats_preference">
         <item>matroska</item>
         <item>dvd</item>
+        <item>mpegts</item>
     </string-array>
     <string-array name="entries_list_video_bitrate_preference">
         <item>1000 kbps</item>
@@ -144,10 +150,12 @@
         <item>1080</item>
     </string-array>
     <string-array name="entries_list_audio_codec_preference">
+        <item>AAC</item>
         <item>AC3</item>
         <item>MP2</item>
     </string-array>
     <string-array name="entryvalues_list_audio_codec_preference">
+        <item>aac</item>
         <item>ac3</item>
         <item>mp2</item>
     </string-array>
@@ -285,6 +293,71 @@
         <item>sync</item>
         <item>auto</item>
         <item>async</item>
+    </string-array>
+
+    <string-array name="entries_caption_standard">
+        <item>Automatic</item>
+        <item>CEA-608 (CC1-CC4)</item>
+        <item>CEA-708 (Service 1-63)</item>
+    </string-array>
+    <string-array name="entryvalues_caption_standard">
+        <item>auto</item>
+        <item>cea608</item>
+        <item>cea708</item>
+    </string-array>
+
+    <string-array name="entries_legacy_server_caption_mode">
+        <item>SageTV STV</item>
+        <item>Off</item>
+        <item>CC1</item>
+        <item>CC2</item>
+    </string-array>
+    <string-array name="entryvalues_legacy_server_caption_mode">
+        <item>stv</item>
+        <item>off</item>
+        <item>cc1</item>
+        <item>cc2</item>
+    </string-array>
+
+    <string-array name="entries_background_session_timeout">
+        <item>No automatic timeout</item>
+        <item>1 minute</item>
+        <item>5 minutes</item>
+        <item>15 minutes</item>
+        <item>30 minutes</item>
+        <item>1 hour</item>
+    </string-array>
+    <string-array name="entryvalues_background_session_timeout">
+        <item>0</item>
+        <item>60</item>
+        <item>300</item>
+        <item>900</item>
+        <item>1800</item>
+        <item>3600</item>
+    </string-array>
+
+    <string-array name="entries_disc_playback_policy">
+        <item>Automatic (recommended)</item>
+        <item>Native SageTV DVD</item>
+        <item>Hybrid menus with FFmpeg/MIM feature playback</item>
+        <item>FFmpeg/MIM main feature</item>
+    </string-array>
+    <string-array name="entryvalues_disc_playback_policy">
+        <item>auto</item>
+        <item>native</item>
+        <item>hybrid</item>
+        <item>mim_main_feature</item>
+    </string-array>
+
+    <string-array name="entries_disc_mpeg2_timestamp_repair">
+        <item>Automatic for MediaTek/NVIDIA hardware (recommended)</item>
+        <item>Always repair missing MPEG-2 timestamps</item>
+        <item>Preserve Media3 timestamps</item>
+    </string-array>
+    <string-array name="entryvalues_disc_mpeg2_timestamp_repair">
+        <item>auto</item>
+        <item>on</item>
+        <item>off</item>
     </string-array>
 
 </resources>

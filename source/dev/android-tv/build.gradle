@@ -19,7 +19,7 @@ else
 }
 
 android {
-    namespace "sagex.miniclient.android.tv"
+    namespace "opensagetv.vibe.miniclient.android.tv"
     compileSdkVersion androidCompileSdkVersion
     buildToolsVersion androidBuildToolsVersion
 
@@ -30,14 +30,18 @@ android {
 
     defaultConfig {
 
-        applicationId "org.opensagetv.miniclient.dev"
+        applicationId "opensagetv.vibe.miniclient"
         minSdkVersion androidMinSdkVersion
         targetSdkVersion androidTargetSdkVersion
         // versionCode API (2 digits), SCREEN (2 digits), VERSION (3 digits)
         versionCode computeVersionCode()
         versionName "${appVersionName}"
         ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            // The TV client is released for ARM devices. The legacy IJK 0.8.8
+            // dependency has no x86_64 artifact, so packaging x86/x86_64 made
+            // the native backend set incomplete. Keep the paired ARM ABIs;
+            // both contain the same required native libraries.
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
     }
 
@@ -110,7 +114,7 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
-            resValue "string", "app_name", 'SageTV MiniClient Dev'
+            resValue "string", "app_name", 'OpenSageTV Vibe'
         }
         debug
         {
@@ -122,7 +126,7 @@ android {
             //Identify the application as debug, and allow it to be installed along side production
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-DEV-DEBUG"
-            resValue "string", "app_name", 'SageTV MiniClient Dev Debug'
+            resValue "string", "app_name", 'OpenSageTV Vibe'
         }
     }
 }

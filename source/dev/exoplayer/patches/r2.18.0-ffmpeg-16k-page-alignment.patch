@@ -1,0 +1,13 @@
+diff --git a/extensions/ffmpeg/src/main/jni/CMakeLists.txt b/extensions/ffmpeg/src/main/jni/CMakeLists.txt
+index 398907f..0cc39d8 100644
+--- a/extensions/ffmpeg/src/main/jni/CMakeLists.txt
++++ b/extensions/ffmpeg/src/main/jni/CMakeLists.txt
+@@ -47,3 +47,8 @@ target_link_libraries(ffmpegJNI
+                       PRIVATE avcodec
+                       PRIVATE avutil
+                       PRIVATE ${android_log_lib})
++
++# Android devices using a 16 KB page size require every packaged 64-bit ELF
++# LOAD segment to be compatible with that page size. The option is harmless
++# for the retained 32-bit ARM build and keeps one reproducible link recipe.
++target_link_options(ffmpegJNI PRIVATE "-Wl,-z,max-page-size=16384")

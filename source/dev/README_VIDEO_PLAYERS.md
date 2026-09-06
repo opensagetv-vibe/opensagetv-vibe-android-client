@@ -11,7 +11,7 @@ Before we get into that, let's talk about the PUSH and PULL protocols in SageTV.
 ## SageTV Video Protocols
 
 ### PULL
-A `Pull` protocol (or `Datasource`) is a socket based streaming protocol, proprietary to SageTV.  In short it has a few simple commands, `OPEN`, `SIZE`, `READ`, and `CLOSE`.  It's not hard to implement, and the [SimplePullDataSource.java](core/src/main/java/sagex/miniclient/net/SimplePullDataSource.java) is a complete implementation for that protocol.  In many ways, this protocol feels like a File or URL type of data source in that the primary `READ` function is responsible for reading chunks of the stream.
+A `Pull` protocol (or `Datasource`) is a socket based streaming protocol, proprietary to SageTV.  In short it has a few simple commands, `OPEN`, `SIZE`, `READ`, and `CLOSE`.  It's not hard to implement, and the [SimplePullDataSource.java](core/src/main/java/opensagetv/vibe/miniclient/net/SimplePullDataSource.java) is a complete implementation for that protocol.  In many ways, this protocol feels like a File or URL type of data source in that the primary `READ` function is responsible for reading chunks of the stream.
 
 ### PUSH
 A `PUSH` protocol (or `Datasource`) is another socket based streaming protocol, proprietary to SageTV, that is a lot more complex to implement, and, as the name suggests, the stream chunks are simply pushed to you, and you need to feed that data into a player.  SageTV will use its socket connections that are created when a client connects and it will PUSH data to the client, and the client needs to buffer that data.  When a user seeks to a new location, sagetv will send a command telling the client to `FLUSH`, meaning, discard your content in the player and wait for new content to arrive.  So the player never really knows about seeking.
@@ -22,7 +22,7 @@ First off, SageTV has been around a long time, way before HTTPLS was a thing, an
 
 SageTV also had to deal with the fact that not all streams are seekable and instead of forcing a player to implement the complex logic of how to seek in non-seekable streams, all this logic could be done on the server, and the `PUSH` protocol could be used in these players and they never need to manage how to seek.  From an implementation point of view, a Player that supports `PUSH` is a simple player.  It really only has to manage pause, play, stop, and flushing its media buffer.  SageTV manages seeking, whether it's a live stream or not.  Using the PUSH protocol is one of the reasons why SageTV can seek faster than any other media client that exists today.
 
-The MiniClient also has a complete implementation for the [PushBufferDataSource](core/src/main/java/sagex/miniclient/net/PushBufferDataSource.java) that manages buffering the data, reading it, and flushing it.
+The MiniClient also has a complete implementation for the [PushBufferDataSource](core/src/main/java/opensagetv/vibe/miniclient/net/PushBufferDataSource.java) that manages buffering the data, reading it, and flushing it.
 
 ## Add a Video Player
 

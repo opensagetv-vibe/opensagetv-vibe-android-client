@@ -9,7 +9,9 @@ fi
 
 FFmpegExtVersion="2.18.0"
 ExoPlayerVersion="r${FFmpegExtVersion}"
-FFmpegVersion="release/4.2"
+# The distributed libffmpegJNI.so identifies this exact FFmpeg revision.
+# Pin it instead of rebuilding whatever release/4.2 happens to reference.
+FFmpegVersion="839f98ff6719cf2db0cbd88cd787a1b19b9cbf47"
 
 #I think we should check these and maybe
 #export ANDROID_SDK_ROOT=/home/jvl711/Documents/sdk/
@@ -21,11 +23,13 @@ ROOT_PATH="$(pwd)"
 BUILD_PATH="${ROOT_PATH}/build"
 HOST_PLATFORM="linux-x86_64"
 EXOPLAYER_ROOT="${BUILD_PATH}/ExoPlayer"
-NDK_PATH="${BUILD_PATH}/android-ndk-r21"
-export ANDROID_NDK_HOME="${BUILD_PATH}/android-ndk-r21"
+NDK_PATH="${ANDROID_NDK_HOME:-${BUILD_PATH}/android-ndk-r21}"
+export ANDROID_NDK_HOME="${NDK_PATH}"
 FFMPEG_PATH="${BUILD_PATH}/FFmpeg"
 FFMPEG_EXT_PATH="${EXOPLAYER_ROOT}/extensions/ffmpeg/src/main"
 FFMPEG_EXT_OUTPUT_PATH="${EXOPLAYER_ROOT}/extensions/ffmpeg/buildout/outputs/aar"
+EXOPLAYER_PATCH="${ROOT_PATH}/patches/r2.18.0-ffmpeg-16k-page-alignment.patch"
+EXOPLAYER_NDK_PATCH="${ROOT_PATH}/patches/r2.18.0-ffmpeg-unified-ndk.patch"
 
 echo "ROOT_PATH: $ROOT_PATH" 
 echo "BUILD_PATH: $ROOT_PATH"  
@@ -55,14 +59,25 @@ if [ $1 = "exoplayer" ] || [ $1 = "all" ]; then
 	if [ -d $EXOPLAYER_ROOT  ]; then
 		echo "ExoPlayer already exist..."
 		cd $EXOPLAYER_ROOT
-		git pull 
-		git reset --hard
-		git checkout $ExoPlayerVersion
+		git checkout --detach $ExoPlayerVersion
 	else
 		echo "ExoPlayer does not exist. Cloning library from GitHub"
 		git clone https://github.com/google/ExoPlayer.git
 		cd $EXOPLAYER_ROOT
 		git checkout $ExoPlayerVersion
+	fi
+
+	if git apply --reverse --check "$EXOPLAYER_PATCH" >/dev/null 2>&1; then
+		echo "ExoPlayer 16 KB page-alignment patch already applied"
+	else
+		git apply --check "$EXOPLAYER_PATCH"
+		git apply "$EXOPLAYER_PATCH"
+	fi
+	if git apply --reverse --check "$EXOPLAYER_NDK_PATCH" >/dev/null 2>&1; then
+		echo "ExoPlayer unified-NDK patch already applied"
+	else
+		git apply --check "$EXOPLAYER_NDK_PATCH"
+		git apply "$EXOPLAYER_NDK_PATCH"
 	fi
 
 	cd 	$BUILD_PATH
@@ -78,22 +93,26 @@ if [ $1 = "ffmpeg" ] || [ $1 = "all" ]; then
 	if [ -d $FFMPEG_PATH ]; then
 		echo "FFmpeg already exist..."
 		cd $FFMPEG_PATH 
-		git pull
-		git reset --hard
-		git checkout $FFmpegVersion
+		git fetch origin "$FFmpegVersion"
+		git checkout --detach $FFmpegVersion
 	else
 		echo "FFmpeg does not exist. Cloning library from GitHub"
 		git clone https://github.com/FFmpeg/FFmpeg.git
 		cd $FFMPEG_PATH
-		git checkout $FFmpegVersion
+		git checkout --detach $FFmpegVersion
 
 	fi	
+
+	if [ "$(git rev-parse HEAD)" != "$FFmpegVersion" ]; then
+		echo "ERROR: FFmpeg checkout does not match the pinned binary revision" >&2
+		exit 1
+	fi
 
 	cd 	$BUILD_PATH
 
 	echo "Adding symbolic link to FFmpeg source code in ExoPlayer project"
 	cd "${FFMPEG_EXT_PATH}/jni"
-	ln -s "$FFMPEG_PATH" ffmpeg
+	ln -sfn "$FFMPEG_PATH" ffmpeg
 
 	cd 	$BUILD_PATH
 
@@ -143,7 +162,10 @@ if [ $1 = "buildexoplayer" ] || [ $1 = "all" ]; then
 	
 	echo "Building Exoplayer..."
 	cd "$EXOPLAYER_ROOT"
-	./gradlew assemble
+	# Build only the decoder extension. A repository-wide ExoPlayer assemble
+	# also builds unrelated demos and extensions and may download toolchains that
+	# are not part of the SageTV artifact.
+	./gradlew :extension-ffmpeg:assembleRelease
 
 	cd 	$BUILD_PATH	
 
@@ -162,5 +184,3 @@ if [ $1 = "deploy" ] || [ $1 = "all" ]; then
 fi
 
 #--------------------------------------------------------------------------------------------------------------------------#
-
-

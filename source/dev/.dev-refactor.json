@@ -4,13 +4,13 @@
   "changed_files": [],
   "client_id_mode": "generated_persisted_with_cli_override",
   "default_streaming_mode": "dynamic",
-  "dev_application_id_base": "org.opensagetv.miniclient.dev",
-  "expected_debug_application_id": "org.opensagetv.miniclient.dev.debug",
+  "dev_application_id_base": "opensagetv.vibe.miniclient",
+  "expected_debug_application_id": "opensagetv.vibe.miniclient.debug",
   "firebase_removed_from_active_code": true,
   "remaining_active_firebase_references": [],
   "schema": 2,
   "timestamp_utc": "2026-08-26T04:20:21.182986+00:00",
   "upstream_head": null,
-  "visible_name_debug": "SageTV MiniClient Dev Debug",
-  "visible_name_release": "SageTV MiniClient Dev"
+  "visible_name_debug": "OpenSageTV Vibe",
+  "visible_name_release": "OpenSageTV Vibe"
 }

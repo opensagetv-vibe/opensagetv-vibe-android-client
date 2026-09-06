@@ -315,7 +315,7 @@
                 <GridLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:columnCount="4"
+                    android:columnCount="5"
                     android:rowCount="1">
 
                     <ImageView
@@ -343,13 +343,22 @@
                         android:tag="video_info"/>
 
                     <ImageView
-                        android:visibility="visible"
                         android:id="@+id/nav_closed_captions"
                         style="@style/NavIconButton"
                         android:layout_column="3"
                         android:layout_row="0"
+                        android:contentDescription="@string/caption_control_title"
                         android:src="@drawable/ic_closed_caption_white_24dp"
                         android:tag="closed_captions"/>
+
+                    <ImageView
+                        android:id="@+id/nav_active_player_adjustments"
+                        style="@style/NavIconButton"
+                        android:layout_column="4"
+                        android:layout_row="0"
+                        android:contentDescription="Active Player Adjustments"
+                        android:src="@drawable/ic_settings_white_24dp"
+                        android:tag="active_player_adjustments"/>
 
                 </GridLayout>
 

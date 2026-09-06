@@ -43,6 +43,16 @@
             android:summary="Change how the application reports to SageTV which containers and codecs it supports. This can be helpful if a specific device does not handle a specific codec or container well"
             android:key="container_codec_settings"/>
 
+        <Preference
+            android:key="playback_track_settings"
+            android:summary="Preferred languages and CEA-608/708 service; SageTV controls caption Off/On"
+            android:title="Audio and Caption Track Settings" />
+
+        <Preference
+            android:key="disc_playback_settings"
+            android:summary="DVD menus, main-feature and preview policy, playback path, and compatibility fallback"
+            android:title="Disc and DVD Playback Settings" />
+
         <Preference android:title="ExoPlayer Legacy Settings and Information"
             android:summary="Settings for the frozen ExoPlayer compatibility backend"
             android:key="exoplayer_settings"/>
@@ -58,6 +68,10 @@
         <Preference android:title="GSYVideoPlayer Settings"
             android:summary="Advanced settings for the GSYVideoPlayer IJK-kernel backend"
             android:key="gsyplayer_settings"/>
+        <Preference
+            android:key="smb_settings"
+            android:title="SMB Direct Settings"
+            android:summary="Playback mappings, credentials, read-ahead, and shared configuration profiles" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="Mappings" android:key="Mapping Settings">
@@ -110,11 +124,10 @@
             android:summary="@string/exit_on_standby_summary"
             android:title="@string/exit_on_standby_title" />
 
-        <CheckBoxPreference
-            android:defaultValue="true"
-            android:key="app_destroy_on_pause"
-            android:summary="@string/terminate_onpause_summary"
-            android:title="@string/terminate_onpause_title" />
+        <Preference
+            android:key="background_session_settings"
+            android:summary="@string/background_session_settings_summary"
+            android:title="@string/background_session_settings_title" />
 
         <CheckBoxPreference
             android:defaultValue="true"
@@ -180,16 +193,14 @@
 
     <PreferenceCategory android:title="@string/logging_preferences">
         <CheckBoxPreference
-            android:enabled="false"
             android:defaultValue="false"
             android:key="use_log_to_sdcard"
             android:summary="@string/summary_use_log_to_sdcard_acceleration_preference"
             android:title="@string/title_use_log_to_sdcard_preference"/>
 
         <Preference
-            android:enabled="false"
             android:key="share_log"
-            android:summary="Share log using another application on Android"
+            android:summary="Share the newest app-private log using another application"
             android:title="Share Log"/>
 
         <ListPreference

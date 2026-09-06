@@ -7,11 +7,11 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
-    tools:context="sagex.miniclient.android.ui.settings.Media3PlayerSettingsActivity">
+    tools:context="opensagetv.vibe.miniclient.android.ui.settings.Media3PlayerSettingsActivity">
 
     <fragment
         android:id="@+id/media3_settings_fragment"
-        class="sagex.miniclient.android.ui.settings.Media3PlayerSettingsFragment"
+        class="opensagetv.vibe.miniclient.android.ui.settings.Media3PlayerSettingsFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 </RelativeLayout>

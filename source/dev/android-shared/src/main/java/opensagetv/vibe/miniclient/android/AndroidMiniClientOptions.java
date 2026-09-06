@@ -1,0 +1,426 @@
+package opensagetv.vibe.miniclient.android;
+
+import static opensagetv.vibe.miniclient.media.Container.*;
+
+import android.app.Application;
+import android.content.Context;
+import android.preference.PreferenceManager;
+
+import com.google.android.exoplayer2.ext.ffmpeg.FfmpegLibrary;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
+
+import opensagetv.vibe.miniclient.IBus;
+import opensagetv.vibe.miniclient.MiniClientConnection;
+import opensagetv.vibe.miniclient.MiniClientOptions;
+import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
+import opensagetv.vibe.miniclient.android.video.PlayerBackend;
+import opensagetv.vibe.miniclient.android.video.DeviceAudioCapabilityProfile;
+//import opensagetv.vibe.miniclient.prefs.ConnectionPrefStore;
+import opensagetv.vibe.miniclient.media.AudioCodec;
+import opensagetv.vibe.miniclient.media.Container;
+import opensagetv.vibe.miniclient.util.AspectModeManager;
+import opensagetv.vibe.miniclient.prefs.PrefStore;
+import opensagetv.vibe.miniclient.media.VideoCodec;
+
+/**
+ * Created by seans on 08/11/15.
+ */
+public class AndroidMiniClientOptions implements MiniClientOptions {
+    private static final Logger log = LoggerFactory.getLogger(AndroidMiniClientOptions.class);
+
+    private final AndroidPrefStore prefs;
+    private final File configDir;
+    private final File cacheDir;
+    private final IBus bus;
+    private boolean isTV=false;
+    private boolean isTOUCH=false;
+    private boolean advancedAspects=false;
+    private Context context;
+
+    AndroidMiniClientOptions(Application ctx)
+    {
+        this.prefs=new AndroidPrefStore(PreferenceManager.getDefaultSharedPreferences(ctx));
+        this.configDir = ctx.getFilesDir();
+        this.cacheDir = ctx.getCacheDir();
+        this.bus = new VibeEventBus();
+        this.isTV = ctx.getResources().getBoolean(R.bool.istv);
+        this.isTOUCH = !isTV;
+        this.advancedAspects=true;
+        this.context = ctx;
+    }
+
+    @Override
+    public AndroidPrefStore getPrefs() {
+        return prefs;
+    }
+
+    @Override
+    public File getConfigDir() {
+        return configDir;
+    }
+
+    @Override
+    public File getCacheDir() {
+        return cacheDir;
+    }
+
+    @Override
+    public IBus getBus() {
+        return bus;
+    }
+
+    @Override
+    public void prepareCodecs(List<String> videoCodecs, List<String> audioCodecs, List<String> pushFormats, List<String> pullFormats)
+    {
+
+        Set<String> acodecs = new TreeSet<>();
+        Set<String> vcodecs = new TreeSet<>();
+
+        pushFormats.clear();
+        List<Container> supPushContainers = this.getSupportedPushContainers();
+
+        for(int i = 0; i < supPushContainers.size(); i++)
+        {
+            for(int j = 0; j < supPushContainers.get(i).getSageTVNames().length; j++)
+            {
+                pushFormats.add(supPushContainers.get(i).getSageTVNames()[j]);
+            }
+        }
+
+        pullFormats.clear();
+        List<Container> supPullContainers = this.getSupportedPullContainers();
+
+        for(int i = 0; i < supPullContainers.size(); i++)
+        {
+            for(int j = 0; j < supPullContainers.get(i).getSageTVNames().length; j++)
+            {
+                pullFormats.add(supPullContainers.get(i).getSageTVNames()[j]);
+            }
+        }
+
+        videoCodecs.clear();
+        List<VideoCodec> supVideoCodecs = this.getSupportedVideoCodecs();
+
+        for(int i = 0; i < supVideoCodecs.size(); i++)
+        {
+            for(int j = 0; j < supVideoCodecs.get(i).sageTVNames().length; j++)
+            {
+                videoCodecs.add(supVideoCodecs.get(i).sageTVNames()[j]);
+            }
+        }
+
+        audioCodecs.clear();
+        List<AudioCodec> supAudioCodecs = this.getSupportedAudioCodecs();
+
+        for(int i = 0; i < supAudioCodecs.size(); i++)
+        {
+            for(int j = 0; j < supAudioCodecs.get(i).getSageTVNames().length; j++)
+            {
+                audioCodecs.add(supAudioCodecs.get(i).getSageTVNames()[j]);
+            }
+        }
+
+    }
+
+    private List<Container> getSupportedPushContainers()
+    {
+        List<Container> supportedContainers = new ArrayList<Container>();
+        Container [] allContainers = new Container[]{MPEG1PS, MPEG2PS, MPEG2TS};
+
+        for(int i = 0; i < allContainers.length; i++)
+        {
+            if(prefs.getContainerSupport(allContainers[i].getName()).equalsIgnoreCase("enabled"))
+            {
+                log.debug("Push Container being added because it is set as enabled: " + allContainers[i].getName());
+                supportedContainers.add(allContainers[i]);
+            }
+            else if(prefs.getContainerSupport(allContainers[i].getName()).equalsIgnoreCase("automatic"))
+            {
+                if(getPlayerBackend().usesPlatformCodecCapabilities())
+                {
+                    if(isSupportedExoPlayerContainer(allContainers[i]))
+                    {
+                        log.debug("Push Container being added because it is set as automatic and is ExoPlayer supported: " + allContainers[i].getName());
+                        supportedContainers.add(allContainers[i]);
+                    }
+                }
+                else
+                {
+                    log.debug("Push Container being added because it is set as automatic and player is IJKPlayer: " + allContainers[i].getName());
+                    //IJK Player.  Adding all for now
+                    supportedContainers.add(allContainers[i]);
+                }
+            }
+            else
+            {
+                log.debug("Pull Container being NOT added because it is set as disabled: " + allContainers[i].getName());
+            }
+        }
+        return supportedContainers;
+    }
+
+    private List<Container> getSupportedPullContainers()
+    {
+        List<Container> supportedContainers = new ArrayList<Container>();
+        Container [] allContainers = Container.values();
+
+        for(int i = 0; i < allContainers.length; i++)
+        {
+            if (allContainers[i] == MPEG1PS || allContainers[i] == MPEG2TS || allContainers[i] == MPEG2PS)
+            {
+                //These codecs are not support for pull at this time.  They are push only formats.
+            }
+            else
+            {
+                if (prefs.getContainerSupport(allContainers[i].getName()).equalsIgnoreCase("enabled")) {
+                    log.debug("Pull Container being added because it is set as enabled: " + allContainers[i].getName());
+                    supportedContainers.add(allContainers[i]);
+                } else if (prefs.getContainerSupport(allContainers[i].getName()).equalsIgnoreCase("automatic")) {
+                    if (getPlayerBackend().usesPlatformCodecCapabilities()) {
+                        if (isSupportedExoPlayerContainer(allContainers[i])) {
+                            log.debug("Pull Container being added because it is set as automatic and is ExoPlayer supported: " + allContainers[i].getName());
+                            supportedContainers.add(allContainers[i]);
+                        }
+                    } else {
+                        log.debug("Pull Container being added because it is set as automatic and player is IJKPlayer: " + allContainers[i].getName());
+                        //IJK Player.  Adding all for now
+                        supportedContainers.add(allContainers[i]);
+                    }
+                } else {
+                    log.debug("Pull Container being NOT added because it is set as disabled: " + allContainers[i].getName());
+                }
+            }
+        }
+
+        return supportedContainers;
+    }
+
+    private List<AudioCodec> getSupportedAudioCodecs()
+    {
+        List<AudioCodec> supportedCodecs = new ArrayList<AudioCodec>();
+        AudioCodec[] allCodecs = AudioCodec.values();
+
+        PlayerBackend backend = getPlayerBackend();
+        DeviceAudioCapabilityProfile deviceAudio = DeviceAudioCapabilityProfile.current(context);
+
+        for(int i = 0; i < allCodecs.length; i++)
+        {
+            if(prefs.getAudioCodecSupport(allCodecs[i].getName()).equalsIgnoreCase("enabled"))
+            {
+                log.debug("Audio codec marked enabled: " + allCodecs[i].getName());
+                supportedCodecs.add(allCodecs[i]);
+            }
+            else if(prefs.getAudioCodecSupport(allCodecs[i].getName()).equalsIgnoreCase("automatic"))
+            {
+                if(backend.usesPlatformCodecCapabilities())
+                {
+                    boolean supported = false;
+
+                    //If ffmpeg is available an enabled than check that first
+                    if(backend.usesLegacyExoFfmpeg()
+                            && FfmpegLibrary.isAvailable()
+                            && !getPrefs().getString(PrefStore.Keys.exoplayer_ffmpeg_extension_setting, "1").equalsIgnoreCase("0"))
+                    {
+                        if(FfmpegLibrary.supportsFormat(allCodecs[i].getAndroidMimeType()))
+                        {
+                            log.debug("Audio codec added because it is supported by FFmpeg ext: " + allCodecs[i].getName());
+                            supportedCodecs.add(allCodecs[i]);
+                            supported = true;
+                        }
+                    }
+
+                    if(!supported)
+                    {
+                        if (deviceAudio.canPlay(allCodecs[i]))
+                        {
+                            log.debug("Audio codec playable by platform decoder or active encoded sink: "
+                                    + allCodecs[i].getName());
+                            supportedCodecs.add(allCodecs[i]);
+                            supported = true;
+                        }
+                    }
+
+                    if(!supported)
+                    {
+                        log.debug("Audio codec set to automatic and is not supported: " + allCodecs[i].getName());
+                    }
+
+                }
+                else
+                {
+                    log.debug("Audio codec added because it was set to auto and player is IJKPlayer: " + allCodecs[i].getName());
+                    supportedCodecs.add(allCodecs[i]);
+                }
+            }
+            else
+            {
+                log.debug("Audio codec NOT SUPPORTED: " + allCodecs[i].getName());
+            }
+        }
+
+        return supportedCodecs;
+    }
+
+    private List<VideoCodec> getSupportedVideoCodecs()
+    {
+        List<VideoCodec> supportedCodecs = new ArrayList<VideoCodec>();
+        VideoCodec[] allCodecs = VideoCodec.values();
+
+        List<String> platformCodecsMimeType = new ArrayList<>();
+        PlayerBackend backend = getPlayerBackend();
+
+        // Get the Android platform decoder MIME types used by legacy ExoPlayer and Media3.
+        for (int i = 0; i < android.media.MediaCodecList.getCodecCount(); i++)
+        {
+            android.media.MediaCodecInfo info = android.media.MediaCodecList.getCodecInfoAt(i);
+
+            if (!info.isEncoder())
+            {
+                platformCodecsMimeType.addAll(getVideoCodecs(info));
+            }
+        }
+
+        for(int i = 0; i < allCodecs.length; i++)
+        {
+            if(prefs.getVideoCodecSupport(allCodecs[i].getName()).equalsIgnoreCase("enabled"))
+            {
+                log.debug("Video codec marked enabled: " + allCodecs[i].getName());
+
+                supportedCodecs.add(allCodecs[i]);
+            }
+            else if(prefs.getVideoCodecSupport(allCodecs[i].getName()).equalsIgnoreCase("automatic"))
+            {
+                if(backend.usesPlatformCodecCapabilities())
+                {
+                    // Determine whether the selected Exo-style backend can use a platform decoder.
+                    for(int j = 0; j < platformCodecsMimeType.size(); j++)
+                    {
+                        if(allCodecs[i].hasAndroidMimeType(platformCodecsMimeType.get(j)))
+                        {
+                            log.debug("Video codec marked automatic, and is supported: " + allCodecs[i]);
+
+                            supportedCodecs.add(allCodecs[i]);
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    log.debug("Video codec marked automatic, and player is IJKPlayer: " + allCodecs[i]);
+
+                    //This is most likely IJKPlayer.  We assume everything is supported
+                    supportedCodecs.add(allCodecs[i]);
+                }
+            }
+            else
+            {
+                //Marked as disabled
+                log.debug("Video codec marked disabled: " + allCodecs[i]);
+            }
+        }
+
+        return supportedCodecs;
+    }
+
+
+    @Override
+    public boolean isTouchUI()
+    {
+        return isTOUCH;
+    }
+
+    @Override
+    public boolean isTVUI()
+    {
+        return isTV;
+    }
+
+    @Override
+    public boolean isDesktopUI()
+    {
+        return false;
+    }
+
+    @Override
+    public boolean isUsingAdvancedAspectModes()
+    {
+        return advancedAspects;
+    }
+
+    @Override
+    public String getAdvancedApectModes()
+    {
+        return AspectModeManager.ASPECT_MODES;
+    }
+
+    @Override
+    public String getDefaultAdvancedAspectMode()
+    {
+        return AspectModeManager.DEFAULT_ASPECT_MODE;
+    }
+
+    private Set<String> getVideoCodecs(android.media.MediaCodecInfo info)
+    {
+        if (info == null || info.getSupportedTypes() == null || info.getSupportedTypes().length == 0)
+            return Collections.emptySet();
+
+        Set<String> list = new TreeSet<>();
+        for (String s : info.getSupportedTypes())
+        {
+            if (s.startsWith("video/"))
+            {
+                list.add(s.trim());
+            }
+        }
+        return list;
+    }
+
+    private PlayerBackend getPlayerBackend()
+    {
+        return PlayerBackend.fromPreference(
+                getPrefs().getString(PrefStore.Keys.default_player, PlayerBackend.DEFAULT_PREFERENCE));
+    }
+
+    private boolean isSupportedExoPlayerContainer(Container container)
+    {
+        switch(container)
+        {
+            case MATROSKA:
+                return true;
+            case MP4:
+                return true;
+            case MP3:
+                return true;
+            case OGG:
+                return true;
+            case WAV:
+                return true;
+            case MPEG1PS:
+                return true;
+            case MPEG2PS:
+                return true;
+            case MPEG2TS:
+                return true;
+            case FLASHVIDEO:
+                return true;
+            case AAC:
+                return true;
+            default:
+                return false;
+
+        }
+
+
+    }
+
+}

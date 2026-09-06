@@ -21,9 +21,13 @@ allprojects {
 
     version = '1.0'
 
+    dependencyLocking {
+        lockAllConfigurations()
+    }
+
     ext {
 
-        appVersionCode = 2101102
+        appVersionCode = 2101108
         appVersionName = "1.14.0"
 
 
@@ -33,12 +37,13 @@ allprojects {
         // NOTE: using regular exoplayer for core stuff
         exoVersion = '2.18.1' // frozen working legacy baseline; Media3 is the modernization path
         media3Version = '1.11.0'
+        smbjVersion = '0.13.0'
         gsyVersion = '13.1.0'
         ijkVersionDev = '0.8.8-SNAPSHOT' // original SageTV IJK runtime; intentionally separate from GSY
         androidBuildToolsVersion = "36.0.0"
         androidMinSdkVersion = 23
         androidCompileSdkVersion = 36
-        androidTargetSdkVersion = 30
+        androidTargetSdkVersion = 36
         // tell every project where to find the local project maven files
         mavenInProject = file('../mavenlocal').absoluteFile.toURI()
         defJavaVesionNum = 1.8
@@ -70,4 +75,3 @@ allprojects {
         }
     }
 }
-

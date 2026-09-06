@@ -24,10 +24,9 @@ dependencies {
     implementation "org.nanohttpd:nanohttpd:2.2.0"
 
     // circular buffer
-    implementation 'org.ostermiller:utils:1.07.00'
 
-    testImplementation 'junit:junit:4.12'
-    testImplementation 'org.mockito:mockito-all:1.10.19'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.11.0'
     //implementation "com.google.android.exoplayer:exoplayer-core:${exoVersion}"
 
 

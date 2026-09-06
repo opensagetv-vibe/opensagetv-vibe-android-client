@@ -9,7 +9,7 @@
         </layout>
     </appender>
 
-    <logger name="sagex.miniclient" level="debug" additivity="false">
+    <logger name="opensagetv.vibe.miniclient" level="debug" additivity="false">
         <appender-ref ref="STDOUT" />
     </logger>
 

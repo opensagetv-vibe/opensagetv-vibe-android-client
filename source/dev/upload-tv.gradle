@@ -9,7 +9,7 @@ repositories {
 
 ext {
     appName = "SageTVMiniclient"
-    versionText = new File('core/src/main/java/sagex/miniclient/Version.java').text
+    versionText = new File('core/src/main/java/opensagetv/vibe/miniclient/Version.java').text
     baseVersion = (versionText =~ /VERSION = "([^"]+)"/)[0][1]
 }
 

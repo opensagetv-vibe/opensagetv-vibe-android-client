@@ -2,7 +2,7 @@ apply plugin: 'com.android.library'
 
 
 android {
-    namespace "sagex.miniclient.android"
+    namespace "opensagetv.vibe.miniclient.android"
     buildToolsVersion androidBuildToolsVersion
     compileSdkVersion androidCompileSdkVersion
     ndkVersion = "21.0.6113669"
@@ -27,6 +27,14 @@ android {
         }
 
         //instrumentTest.setRoot('tests')
+    }
+    packaging {
+        jniLibs {
+            // Historical extraction left this unused ARM32-only GDX helper in
+            // some working trees. Exclude it at the package boundary as well
+            // as from new extraction so clean and incremental builds match.
+            excludes += ['**/libgdx-freetype.so']
+        }
     }
     lintOptions {
         abortOnError false
@@ -53,7 +61,55 @@ configurations {
     natives
 }
 
+// Removing GSY's unused Cast/Session surface must not silently downgrade the
+// rest of the already-tested AndroidX/Kotlin graph. These are the selected
+// non-Cast versions from the physical v0.5.83 baseline. Keep the list explicit
+// so future family upgrades remain deliberate and independently testable.
+def retainedNonCastVersions = [
+    "androidx.activity:activity": "1.8.2",
+    "androidx.annotation:annotation": "1.9.1",
+    "androidx.annotation:annotation-experimental": "1.4.1",
+    "androidx.annotation:annotation-jvm": "1.9.1",
+    "androidx.appcompat:appcompat": "1.6.1",
+    "androidx.appcompat:appcompat-resources": "1.6.1",
+    "androidx.collection:collection": "1.5.0",
+    "androidx.core:core": "1.16.0",
+    "androidx.core:core-ktx": "1.16.0",
+    "androidx.emoji2:emoji2": "1.4.0",
+    "androidx.emoji2:emoji2-views-helper": "1.4.0",
+    "androidx.lifecycle:lifecycle-common": "2.9.4",
+    "androidx.lifecycle:lifecycle-common-jvm": "2.9.4",
+    "androidx.lifecycle:lifecycle-livedata": "2.9.4",
+    "androidx.lifecycle:lifecycle-livedata-core": "2.9.4",
+    "androidx.lifecycle:lifecycle-livedata-core-ktx": "2.9.4",
+    "androidx.lifecycle:lifecycle-process": "2.9.4",
+    "androidx.lifecycle:lifecycle-runtime": "2.9.4",
+    "androidx.lifecycle:lifecycle-runtime-android": "2.9.4",
+    "androidx.lifecycle:lifecycle-service": "2.9.4",
+    "androidx.lifecycle:lifecycle-viewmodel": "2.9.4",
+    "androidx.lifecycle:lifecycle-viewmodel-android": "2.9.4",
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate": "2.9.4",
+    "androidx.media:media": "1.7.0",
+    "androidx.profileinstaller:profileinstaller": "1.4.0",
+    "androidx.savedstate:savedstate": "1.3.2",
+    "androidx.tracing:tracing": "1.2.0",
+    "androidx.transition:transition": "1.6.0",
+    "org.jetbrains.kotlin:kotlin-stdlib-common": "2.2.0",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android": "1.9.0",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-bom": "1.9.0",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core": "1.9.0",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": "1.9.0",
+]
+
 dependencies {
+
+    constraints {
+        retainedNonCastVersions.each { coordinate, version ->
+            implementation("${coordinate}:${version}") {
+                because("preserve the physically-tested non-Cast runtime graph")
+            }
+        }
+    }
 
     api project(":core")
 
@@ -73,8 +129,6 @@ dependencies {
     api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
-    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
-    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
 
     // Legacy ExoPlayer baseline. Use normal module metadata under Gradle 8 so
     // the published dependency graph participates in version alignment.  Do not
@@ -105,6 +159,18 @@ dependencies {
     api "androidx.media3:media3-exoplayer-smoothstreaming:${media3Version}"
     api "androidx.media3:media3-ui:${media3Version}"
 
+    // SMB Direct reads ordinary SageTV Pull media through SMB2/SMB3 while a
+    // shadow MediaServer session retains SageTV playback ownership. SMBJ is
+    // Apache-2.0, Android-aware, and deliberately isolated to this Android
+    // module so Core protocol/path-mapping tests remain platform-independent.
+    implementation("com.hierynomus:smbj:${smbjVersion}") {
+        // The app's current Logback Android binding implements the SLF4J 1.7
+        // API. SMBJ uses only the classic Logger calls, so retain the compatible
+        // 1.7 API selected by the existing graph instead of introducing two
+        // incompatible SLF4J generations into one APK.
+        exclude group: "org.slf4j", module: "slf4j-api"
+    }
+
 
     // Legacy SageTV IJK backend: preserve the original 0.8.8 Java/JNI runtime.
     // Do not replace these AARs with GSY IJK; the two runtimes share the same
@@ -112,7 +178,6 @@ dependencies {
     api(name: "ijkplayer-java-${ijkVersionDev}", ext: "aar")
     api(name: "ijkplayer-armv7a-${ijkVersionDev}", ext: "aar")
     api(name: "ijkplayer-arm64-${ijkVersionDev}", ext: "aar")
-    api(name: "ijkplayer-x86-${ijkVersionDev}", ext: "aar")
 
     // GSYVideoPlayer framework + Media3/Exo manager support.  Explicitly exclude
     // GSY's modern IJK Java bridge so it cannot replace/collide with legacy IJK.
@@ -121,6 +186,19 @@ dependencies {
     }
     api("io.github.carguo:gsyvideoplayer-exo2:${gsyVersion}") {
         exclude group: "io.github.carguo", module: "gsyijkjava"
+        // GSY publishes Media3 Cast support as an unconditional dependency,
+        // but this MiniClient neither constructs CastPlayer nor exposes a Cast
+        // session.  Keeping it merged adds Google Cast/DataTransport and an
+        // exported validation activity to every APK without providing a SageTV
+        // playback feature.  The GSY Exo2 bytecode has no Cast API references,
+        // so exclude only this optional surface and retain its ordinary Media3
+        // player dependencies.
+        exclude group: "androidx.media3", module: "media3-cast"
+        // GSY also publishes Media3 Session unconditionally. SageTV owns the
+        // playback session over the MiniPlayer protocol and this backend does
+        // not reference MediaSession APIs, so retaining it only merges media
+        // browsing/validation components into the APK.
+        exclude group: "androidx.media3", module: "media3-session"
         // SageTV does not use RTMP. GSY 13.1.0 declares the legacy mcxinyu
         // RTMP client as a compile dependency; excluding it avoids an obsolete
         // Sonatype/JitPack certificate dependency and keeps this backend lean.
@@ -140,7 +218,6 @@ dependencies {
     api 'com.github.rahatarmanahmed:circularprogressview:2.4.0'
 
     // simple event bus
-    api 'com.squareup:otto:1.3.8'
 
     implementation 'org.jetbrains:annotations:16.0.2'
 
@@ -156,13 +233,14 @@ task copyAndroidNatives() {
         if (jar.name.endsWith("natives-armeabi-v7a.jar")) outputDir = file("libs/armeabi-v7a")
         if (jar.name.endsWith("natives-armeabi.jar")) outputDir = file("libs/armeabi")
         if (jar.name.endsWith("natives-arm64-v8a.jar")) outputDir = file("libs/arm64-v8a")
-        if (jar.name.endsWith("natives-x86.jar")) outputDir = file("libs/x86")
-        if (jar.name.endsWith("natives-x86_64.jar")) outputDir = file("libs/x86_64")
         if (outputDir != null) {
             copy {
                 from zipTree(jar)
                 into outputDir
-                include "*.so"
+                // The client does not use GDX FreeType. Excluding it keeps the
+                // ARM32 and ARM64 native sets identical; the upstream GDX
+                // ARM64 native archive does not publish this unused library.
+                include "libgdx.so"
             }
         }
     }

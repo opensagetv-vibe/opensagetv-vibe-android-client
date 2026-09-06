@@ -3,11 +3,11 @@
     <application>
         <!-- Dev/debug APK only. Exposes a narrow ADB/MCP control surface for regression testing. -->
         <receiver
-            android:name="sagex.miniclient.android.tv.debug.DevTestReceiver"
+            android:name="opensagetv.vibe.miniclient.android.tv.debug.DevTestReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="org.opensagetv.miniclient.dev.DEBUG_CONTROL" />
+                <action android:name="opensagetv.vibe.miniclient.DEBUG_CONTROL" />
             </intent-filter>
         </receiver>
     </application>
