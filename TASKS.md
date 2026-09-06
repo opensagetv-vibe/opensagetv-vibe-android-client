@@ -49,23 +49,21 @@ The commissioned foundation above is complete. New features must retain the
 established player, lifecycle, caption, fullscreen, compatibility, and teardown
 gates. External-device-only checks block release sign-off, not unrelated work.
 
-## 3. Current GitHub source and APK release track
+## 3. GitHub source and APK release track
 
 Amazon Appstore and Google Play publication are not part of the current release
 scope. The current deliverable is reviewable source plus an installable APK on
 GitHub.
 
-Local release preparation is complete: durable documentation, stable machine
+The v0.5.85 GitHub source/APK release is complete: durable documentation, stable machine
 metadata, dependency/license notices, manifests, deterministic APK/source
 bundles, and the changed-files handoff workflow are verified. An untouched
 v0.5.75 Windows worktree applied v0.5.85, normalized only proven CRLF-equivalent
 text, removed obsolete files, passed all test/validation/build gates, installed
 the Dev APK, and launched it on `.25` from the same root workflow.
-
-- [ ] Add the approved GitHub remotes and release tags only after local build,
-  physical-device, and cross-project release gates pass.
-- [ ] Publish only the source and APK release artifacts when explicitly
-  authorized; preparing these artifacts does not authorize an external upload.
+The repository is a true fork of `OpenSageTV/sagetv-miniclient`, `main` is the
+Vibe default branch, and the development-signed APK, verified source archive,
+manifest, and checksums are published under tag `v0.5.85`.
 
 ## 4. Requires hardware, fixtures, credentials, or user decisions
 - [ ] Replace the temporary API 36 predictive-Back opt-out with callback

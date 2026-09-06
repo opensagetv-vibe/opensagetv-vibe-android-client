@@ -14,6 +14,13 @@
   JUnit, all validation checks, a clean 60-task debug APK build, and strict APK
   inspection. The exact committed-artifact hash is recorded after the final
   clean-tree rebuild.
+- Published the true OpenSageTV MiniClient fork with `main` as its Vibe default
+  branch and retained upstream history on `master`. Tag `v0.5.85` provides the
+  development-signed APK, verified 1,353-file source archive, release manifest,
+  and checksums. Exact APK SHA-256 is
+  `b143d8201496bd12039ebf5a452e591dfc2ec3684f5464e35dc93014abcbcd65`;
+  source archive SHA-256 is
+  `311a88e1089ad18cc096f3317cdfa540c4ae307a0007009baf2e1d5fc546b0be`.
 - Removed obsolete Android manifest `package` attributes now that AGP uses the
   explicit Gradle `namespace` declarations. This removes misleading AGP
   warnings without changing the application ID or Java namespace.

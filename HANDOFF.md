@@ -22,6 +22,13 @@ test username/password. Commissioning values remain in ignored
 `config/firetv.toml` and must be supplied explicitly. The protected original
 `C:\TMP_SAGETV_DOCKER\SageTV-MiniClient-Dev` remains untouched.
 
+Release `v0.5.85` is published at
+`https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.85`.
+The exact APK SHA-256 is
+`b143d8201496bd12039ebf5a452e591dfc2ec3684f5464e35dc93014abcbcd65`;
+the verified source archive SHA-256 is
+`311a88e1089ad18cc096f3317cdfa540c4ae307a0007009baf2e1d5fc546b0be`.
+
 ## Current physical DVD baseline (2026-09-05)
 
 Android now has a physically commissioned implementation of the standard
