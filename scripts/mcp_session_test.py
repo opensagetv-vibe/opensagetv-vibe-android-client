@@ -37,6 +37,22 @@ from mcp_config_values import (
 )
 
 
+AUTOMATION_ROOT_MENUS = {"main menu", "dynamic menu by nielm"}
+
+
+def is_automation_root(state: dict) -> bool:
+    """Accept the stock root and SageMC's historical dynamic-menu root."""
+    if bool(state.get("automationReady")):
+        return True
+    return (
+        bool(state.get("connected"))
+        and not bool(state.get("playerActive"))
+        and not bool(state.get("hasTextInput"))
+        and not str(state.get("popupName") or "").strip()
+        and str(state.get("menuName") or "").strip().lower() in AUTOMATION_ROOT_MENUS
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Automate a complete SageTV MiniClient Dev test session")
     server = parser.add_mutually_exclusive_group()
@@ -159,7 +175,7 @@ def main() -> int:
         if not app_status.get("running"):
             raise RuntimeError(f"Dev app is not running after direct SageTV connect: {app_status}")
         print("PASS: Dev app running after direct connect: " + json.dumps(app_status, sort_keys=True))
-        if not connected_ready.get("state", {}).get("automationReady", False):
+        if not is_automation_root(connected_ready.get("state", {})):
             stale = connected_ready.get("state", {})
             print("INFO: normalizing stale SageTV UI with direct HOME command: "
                   f"uiState={stale.get('uiState')} menu={stale.get('menuName')} "
@@ -167,13 +183,14 @@ def main() -> int:
             call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
         ready = call_dict(client, "dev_wait_for_ui", {
             "connected": True,
-            "automation_ready": True,
+            "player_active": False,
+            "menu_present": True,
             "stable_ms": args.ui_stable_ms,
             "timeout_s": args.connect_timeout_s,
         }, timeout=args.connect_timeout_s + 10.0)
-        if not ready.get("passed"):
-            raise RuntimeError(f"Android debug app did not report automationReady within timeout: {ready}")
-        print("PASS: SageTV connection ready; Android debug automationReady=true")
+        if not ready.get("passed") or not is_automation_root(ready.get("state", {})):
+            raise RuntimeError(f"Android debug app did not report a supported automation root within timeout: {ready}")
+        print("PASS: SageTV connection ready at a supported automation root")
         print(json.dumps(ready.get("state", {}), indent=2, sort_keys=True))
 
         if args.server_path.strip():

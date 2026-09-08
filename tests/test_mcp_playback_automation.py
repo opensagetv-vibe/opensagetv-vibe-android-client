@@ -345,6 +345,8 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
         script = (ROOT / "scripts/mcp_session_test.py").read_text(encoding="utf-8")
         devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        self.assertIn('AUTOMATION_ROOT_MENUS = {"main menu", "dynamic menu by nielm"}', script)
+        self.assertIn("def is_automation_root(state: dict)", script)
         self.assertIn('"connect".equals(op)', receiver)
         self.assertIn('"exit".equals(op)', receiver)
         self.assertIn('"watch_server_file".equals(op)', receiver)

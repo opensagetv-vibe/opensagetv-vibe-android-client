@@ -1,5 +1,17 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Post-release SageMC automation compatibility
+
+The MCP session runner now accepts either stock `Main Menu` or SageMC's
+historical `Dynamic Menu by nielm` as an idle automation root, while retaining
+the connected/no-player/no-popup/no-text-input safety checks. The focused
+33-test playback-automation suite passes, and the runner completed exact-file
+Media3 Pull playback through SageMC on non-Pro Fire TV `.25` against isolated
+server `.232`. Visual evidence is
+`artifacts/firetv/20260908-085858_collect_screen.png` with matching trace and
+system diagnostics. This is test-harness compatibility only; it does not alter
+the APK or playback implementation.
+
 ## GitHub v0.5.88 release (2026-09-08)
 
 Growing-file seek is corrected and physically gated on the commissioned
