@@ -16,6 +16,15 @@ Current physical commissioning environment:
   `.edl` intervals at 120-180, 360-420, and 660-720 seconds
 - commissioned live channels: 2.1 and 5.1 only
 
+The final September 7 recovery pass used only the commissioned non-Pro client.
+All four selectable backends passed Vibe-server transitions
+2.1 -> 5.1 -> 2.1 with hardware video. Stock Core cannot acknowledge the
+disabled-by-default Vibe channel-selection test event, so its compatibility
+gate uses the normal Live TV command and verifies SageTV's current channel;
+Media3 and legacy Exo both produced advancing hardware A/V. This distinction
+keeps ordinary stock playback separate from Vibe-only deterministic test
+control.
+
 ## Feature intent and test-only controls
 
 The tables below use these intent labels. A feature being used during physical
@@ -36,6 +45,7 @@ The following items are specifically **TEST ONLY** or **REGRESSION TEST MEDIA**:
 | Exact dotted-channel event and positive acknowledgment | **TEST ONLY** | Restricts repeatable live testing to an explicitly requested channel. Normal users tune through the STV; the event is disabled by default. |
 | Exact server-owned DVD seek event | **TEST ONLY** | Creates a reproducible DVD seek without replacing ordinary STV timeline, chapter, or remote commands. |
 | Android Dev MCP commands, debug broadcast receiver, health probes, screenshots, and automated assertions | **TEST ONLY** | Present for commissioning the Dev/debug APK. They are not playback requirements and must not be exposed as production remote-control interfaces. |
+| MCP watched/resume reset | **TEST ONLY** | Clears one explicitly identified MediaFile's complete SageTV Watched record to recreate a never-watched startup. It requires a second call with `confirm=true` because it changes server watch history. |
 | MCP `codec_capabilities` snapshot and test-state counters | **TEST ONLY** | On-demand evidence for the selected decoder and current test. No background probe or server protocol dependency is added. |
 | Deliberate missing/old-MIM, decoder-failure, network-failure, and malformed-input injection | **TEST ONLY** | Exercises bounded fallback and error handling. It is never enabled during ordinary playback. |
 | `VibeSeekTest-1080i-MPEG2-AC3-CC.ts`, its generated `.edl`, timestamp captions, and synthetic live source | **REGRESSION TEST MEDIA** | Deterministic A/V, caption, seek, and Comskip evidence. The generator never modifies a real recording or real ATSC caption stream. |
@@ -87,6 +97,25 @@ work when MIM is absent:
 These are limitations rather than connection gates. A missing extension must be
 ignored or fail with a bounded explanation; it must never break normal stock
 Push, Pull, native DVD, STV, or remote-control behavior.
+
+### SageMC startup progress display
+
+SageMC 169 can briefly draw a completed-file progress marker at the file end
+when a never-watched recording is opened, then correct it to zero as playback
+starts. A synchronized physical capture on stock server `.175` showed
+`1:22:00` against a `1:02:00` airing before returning to `0:00:00`. Android's
+bounded startup trace returned exactly `0` for every `GETMEDIATIME` reply; no
+EOS, end seek, or duration-sized value was sent. The same APK does not show the
+flash with the stock SageTV7 STV. This is therefore a cosmetic SageMC OSD
+initialization race, not player seeking or failed resume behavior. The optional
+**Wait for playback before first OSD** client setting suppresses that one stale
+presentation without changing the reported clock: it releases when playback
+actually presents its first video frame or after a hard five-second failure
+timeout. It is enforced at the render boundary, re-arms after every successful
+MiniPlayer load when an STV retains the same playback OSD, and has no ongoing
+per-frame cost. Tests can recreate a genuinely untouched item
+with MCP `dev_reset_media_watch_state(media_file_id, confirm=true)`, which uses
+standard `ClearWatched` through Sagex or Nielm's stock Web Interface.
 
 ## Historical extender / desktop behavior audit
 

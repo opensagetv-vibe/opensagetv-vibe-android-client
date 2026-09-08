@@ -1,5 +1,306 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Final playback-recovery regression (2026-09-07)
+
+The remaining executable playback gates are complete on the commissioned
+AFTMM/API-25 Fire TV (`DEV001`). The Fire TV Pro retains its independent
+`DEV002` client ID and was not used by the final automation.
+
+STOP followed by PLAY now exercises the actual SageTV retained-session
+contract. Media3, legacy Exo, IJK, and guarded GSY/System pass Pull, Push, and
+Fixed with hardware MPEG-2 output. Media3 and legacy Exo also pass SMB Direct;
+their SMB/shadow sessions remain open across STOP and close only on terminal
+FREE/DEINIT. IJK avoids its native 0.8.8 `stop()`/`prepareAsync()` crash path by
+pausing and retaining the loaded decoder/source until DEINIT. IJK and
+GSY/System perform resume-time Surface work on the Android UI thread and reject
+stale callbacks. The physical runner clears old logcat before each session so
+an earlier tombstone cannot fail a healthy rerun.
+
+Media3 distinct-file switching passed over Pull and SMB Direct from the
+generated caption fixture to `MeetthePress-65149351-0.ts`, retained
+`OMX.MTK.VIDEO.DECODER.MPEG2`, and recorded zero fallback. Full replacement for
+legacy Exo, IJK, and guarded GSY/System passed across Pull, Push, and Fixed.
+All four player selections passed real Vibe-server tuner transitions limited
+to 2.1 -> 5.1 -> 2.1. An unmodified stock server cannot acknowledge the
+test-only Vibe channel event, so `mcp-live-test --current-channel-only` now
+proves ordinary Live TV independently; Media3 and legacy Exo both passed with
+advancing A/V. The normal startup timeout covered the bounded legacy SIZE
+growth probe and HDD wake delay without an unbounded wait.
+
+Caption regression passed without an Android enable gate. On stock `.175`,
+Media3 and legacy Exo each passed SageTV/STV Off -> CC1 -> CC2 -> Off -> CC1
+while event 225 continued and the local duplicate overlay stayed detached. On
+Vibe `.232`, both passed continuous event-225 delivery from the generated A/53
+fixture. Automated STV-state cycling is intentionally a stock-server evidence
+path here because `.232` has no configured Web/Sagex endpoint; the underlying
+Vibe callback gate itself passed.
+
+Final local results: 489 project/static tests, 70 MCP/workflow tests, Core
+Gradle tests, project validation, strict debug APK inspection, and a clean
+60-task build all pass. APK:
+`artifacts/firetv/OpenSageTV-Vibe-Android-Client-debug.apk`; SHA-256:
+`8953aaef148c45fb035b5bad048daf062152f0ac0cb9deaebcaebcffd4e6a006`.
+
+## Unified local commissioning environment (2026-09-07)
+
+`config/firetv.toml` is now the only local commissioning/regression settings
+file. It is ignored and excluded from packages. Its schema-2 form supports
+multiple named/aliased Android clients and SageTV servers; each server keeps
+its Web/Sagex details and flat `smb_*` fields in the same table, so changing
+`active_server` cannot accidentally retain another server's SMB credentials or
+mapping. A selected device may supply its own automated client ID. The old
+root `device` format is still accepted.
+
+All physical Python runners derive the default SageTV address and MiniClient
+port from the selected server. The session, SMB A/B, fast-switch, and playback-
+rate workflows also consume that server's SMB mapping/credentials. Sagex and
+the stock Web Interface match credentials by the server address. Use
+`SAGETV_TEST_DEVICE_ALIAS` or `SAGETV_TEST_SERVER_ALIAS` for a one-shell
+selection override. `dev.cmd config-check --summary` prints only a redacted
+view.
+
+New contributors run `commission_test_environment.cmd` or
+`./commission_test_environment.sh`. The first invocation creates the ignored
+file from the sanitized example and exits for editing. Subsequent runs validate
+the configuration and unified toolchain, create/reuse canonical regression
+fixtures, and run test/validate/build; install/launch is opt-in. It never
+publishes or overwrites remote SMB media automatically. Durable instructions
+are `docs/TEST_ENVIRONMENT.md` and `docs/COMMISSIONING.md`. Acceptance passed
+487 project tests, 70 MCP/workflow tests, Core Gradle tests, both shell syntax
+checks, PowerShell parsing, and the real bounded
+`commission_test_environment.cmd -SkipFixtures -SkipBuild` preflight on the
+selected AFTMM/API-25 device. The completed TOML/commissioning item has been
+removed from `TASKS.md`.
+
+## STOP/restart and SageMC startup OSD diagnosis (2026-09-07)
+
+SageTV STOP is not terminal: stock Core may later issue SEEK/PLAY against the
+same loaded MiniPlayer without sending another OPENURL. Android previously
+ended the playback session generation at STOP, so the later PLAY was rejected
+as stale and produced a black stall. STOP now advances only the operation
+token; FREE/DEINIT remains the terminal session boundary. Physical `.25`
+testing against stock `.175` confirmed STOP, restart at zero, prepare from
+idle, and a new first frame.
+
+A second captured symptom was only cosmetic. On a never-watched recording,
+SageMC 169 briefly displayed `1:22:00` at the end of a `1:02:00` airing before
+correcting to zero. Twelve bounded startup trace replies from Android were all
+exactly zero, with no EOS or end seek, while the server opened its OSD during
+its initial zero-duration window. The stock SageTV7 STV did not reproduce it.
+The opt-in **Wait for playback before first OSD** setting now coalesces the
+first playback-OSD presentation until the active backend reports its first
+presented video frame, with a hard five-second failure release. The guard is
+enforced at both `flipBuffer()` and the actual
+OpenGL/libGDX render boundary so an already-pending render request cannot expose
+the stale frame. A successful MiniPlayer load also re-arms the guard when
+SageMC keeps `MC MediaPlayer OSD` active across a file switch and therefore
+does not emit a second menu-entry transition. It does not change the player
+clock, seek target, protocol
+reply, or STV state, and it has no per-frame player query after the bounded
+startup window. The earlier clock-based release remained too early and menu-
+entry-only arming missed consecutive files when SageMC retained the same OSD.
+Physical `.25` testing against stock `.175` confirmed the load-triggered first-
+frame release removes the visible end-to-zero jump. Evidence is also preserved
+under `artifacts/firetv/20260907-234226_sage-mc-start-osd-first-frame_*`. MCP now provides
+`dev_reset_media_watch_state`: its unconfirmed call is read-only and returns a
+warning; `confirm=true` clears the complete Watched/resume row for one explicit
+MediaFile through Sagex or Nielm's stock Web Interface. Evidence is
+`artifacts/firetv/20260907-zero-start-watch.mp4`,
+`artifacts/firetv/20260907-zero-start-watch-flash.png`, and
+`artifacts/firetv/20260907-210419_player_playback-trace.jsonl`.
+
+The associated backend-parity audit covers all selectable player paths.
+Media3 and legacy ExoPlayer use their rendered-first-frame callbacks; IJK and
+GSY/System use their native video-rendering-start callbacks; the GSY adapter
+delegates the resulting state. The audit also corrected GSY forwarding for
+explicit growing-file metadata and the complete extended player contract.
+These code/host gates cover every backend, while the physical confirmation
+above is specifically Media3/Pull/hardware on `.25`; the broader player/mode
+matrix remains active in `TASKS.md`.
+
+## SageMC Guide texture lifetime and channel-logo optimization (2026-09-07)
+
+Stock server `.175` with SageMC exposed two related OpenGL defects on the
+commissioned AFTMM/API-25 `.25`. Guide background textures were sometimes
+black because `ImageCache.unloadImage()` nulled a shared holder on the protocol
+thread before the GL thread executed its queued draw. Image disposal is now
+owned by each renderer; OpenGL and libGDX enqueue it after earlier draws, and
+OpenGL deletes its texture on the owning GL context.
+
+SageMC's channel-logo files are commonly 1024x768 despite being displayed as
+small Guide thumbnails. Full decode/upload consumed about 3 MiB per logo and
+the 64 MiB logical cache repeatedly churned while paging. OpenGL now recognizes
+only the stable `ChannelLogos` resource-cache path, samples those bitmaps to a
+maximum 256-pixel edge, and retains the original logical dimensions for SageTV
+source rectangles. Other artwork remains unchanged. The default logical image
+cache is now 128 MiB; persisted user choices remain authoritative.
+
+The exact physical build (`45b8898a8c2d47a341dde01c46853315c935f9da23f67d5e5e880b3a833012dd`)
+is installed on `.25`. The initial and three-page SageMC Guide checks show the
+correct blue background, sharp logos, and correct selection cells. No texture
+render exception, fatal error, slow image decode, or slow texture upload was
+logged. `dumpsys meminfo` reported GL memory near 39 MiB after the change,
+versus about 115 MiB in the reproduced pre-optimization state. Evidence is
+`artifacts/firetv/vibe-guide-opt-first.png`,
+`artifacts/firetv/vibe-guide-opt-nav.png`, and
+`artifacts/firetv/vibe-guide-opt-paged.png`.
+
+## Persistent trace and stock full-file switching (2026-09-07)
+
+A stock `.175` SageMC file switch was captured with SageTV's generic
+`sage.PlaybackException`. The server log supplies the decisive cause: after
+closing the prior MiniPlayer it waited for a new player socket, could not open a
+connection to `.25`, requested a media reconnect, and timed out in
+`MiniPlayer.load()`. Android previously waited for TCP EOF after replying to
+DEINIT. It now breaks that read loop after the reply and immediately registers
+a fresh media socket. A repeated switch later found that Exo media-session
+release could itself block the media-command thread before that reply was
+written: Media3 and legacy Exo now deactivate/release `MediaSessionCompat` on
+Android's main thread, after the protocol path is free to answer DEINIT. The
+same capture also proved why stock resume began at zero. Both Exo
+implementations called `seekTo()` before attaching the new
+MediaSource, so source attachment discarded the old-timeline seek. In addition,
+stock SageTV provides no explicit active-file metadata and the compatibility
+fallback marked every `.ts` as growing. Publishing unknown length for a
+completed transport stream prevented the extractor from seeking even after the
+source-attachment order was corrected. The queued position is now supplied to
+`setMediaSource(source, position)` atomically, and all four Pull bridges verify
+the legacy-only active-file guess with one bounded 750 ms SIZE-growth probe.
+Explicit Vibe metadata remains authoritative.
+
+The debug APK now writes a bounded app-private `playback-trace.jsonl` on a
+low-priority worker. One 2 MiB current file and three rotations retain exact
+events through player teardown; URI credentials/secrets are redacted. Every
+record includes wall/monotonic timing, connection/reconnect and playback
+generation, positions/duration/buffering, state, surface, and decoder counters.
+Seek and OPENURL records include useful sanitized detail. Player-diag and MCP
+diagnostic bundles export all rotations; MCP can query status, persistently
+enable/disable new records without deleting evidence, or clear only the trace
+files. Analysis sorts asynchronous records by event time while retaining an
+out-of-order count and checking actual sequence loss.
+
+Physical AFTMM/API-25 `.25` results against unmodified `.175` are complete:
+
+- Meet the Press: requested/resumed at 1,274,317 ms; first physical read was
+  byte 828,250,732 and hardware MPEG-2 A/V advanced.
+- Direct switch to `VibeSeekTest-1080i-MPEG2-AC3-CC`: DEINIT received a reply,
+  Android recycled the media socket, reconnect succeeded, and replacement
+  OPENURL arrived 48 ms after DEINIT. It resumed at 543,079 ms and rendered its
+  first frame 2.18 seconds after the server seek with no traced error.
+- A stock live recording changed SIZE from 1,349,612 to 1,419,964 during the
+  750 ms probe, remained open-ended, and continued hardware video/audio. The
+  runner's channel-identity failure is expected because `.175` lacks the
+  Vibe-only debug channel-event acknowledgement, not because playback failed.
+- Six consecutive stock SageMC full switches on `.25` crossed Media3 hardware
+  MPEG-2 sessions without an exception. Every DEINIT was followed immediately
+  by `media_socket_recycle_after_deinit`, `.175` accepted every replacement
+  socket/OPENURL, and the server recorded zero `PlaybackException` and zero
+  `Did not find a player socket` timeout.
+
+Evidence is in
+`artifacts/firetv/20260907-154249_stock-resume-growth-fixed_*`,
+`artifacts/firetv/20260907-154648_stock-file-switch-fixed_*`, and
+`artifacts/firetv/20260907-154909_live-tv-failure_*`, and
+`artifacts/firetv/20260907-185555_stock175-user-switch-test-followup_*`. The
+installed APK SHA-256 for the repeated-switch fix is
+`75e6c3119cb45ff3535f217be0b5f41ff251dfcc2ac1ec3e8f759c6f88383022`.
+
+## Growing live-TV boundary and recovery fix (2026-09-07)
+
+The Fire TV Pro live-TV rewind was reproduced and traced to Media3 1.11's
+`StuckPlayingNotEndingDetector`. The active recording had been exposed as a
+finite resource using its size at `OPEN`; after the decoder reached that stale
+timeline end and remained there for 60 seconds, Media3 raised
+`ERROR_CODE_TIMEOUT`. The generic retry then called `seekTo()` on the errored
+player and `prepare()`, which restarted the recording at zero. No SageTV seek,
+flush, client reconnect, datasource error, or server restart preceded it.
+
+Both Media3 and legacy-Exo Pull adapters now return unknown length for a
+growing recording and perform a bounded SIZE/growth check only at the actual
+read edge. Pull/SMB error recovery reattaches the media source at the position
+captured by the error callback; PUSH/FIXED position remains server-owned.
+Media3 player retention is explicitly rejected while the current item is
+growing so a program-boundary `OPENURL` receives a clean player/datasource.
+
+The native IJK and GSY/System bridges received the equivalent growing-source
+contract, with a bounded ten-second edge wait for tuner write gaps. Their
+state-changing callbacks are now session-generation guarded. Physical testing
+also found and fixed IJK's null media-clock dereference after release: a queued
+DVD/SPU clock probe could otherwise crash the whole MiniClient while a live
+program player was being replaced.
+
+Physical AFTKRT/API-30 `.29` results against test server `.232`:
+
+- Media3 Pull/hardware: six alternating 2.1/5.1 changes, PASS.
+- Legacy Exo Pull/hardware: four alternating changes, PASS.
+- IJK Pull: four alternating lifecycle changes, PASS with no crash. Its old
+  runtime disables MPEG-2 MediaCodec on this model, so this is not recorded as
+  an IJK hardware-decoder pass.
+- GSY Auto (Media3), GSY legacy Exo, and GSY System: two alternating changes
+  each, PASS; System was intentionally run last.
+
+A separate Media3 Pull/hardware run against unmodified server `.175` remained
+healthy for roughly two minutes, beyond the old 60-second failure point. Its
+duration stayed unknown/dynamic, media position and reads advanced, the active
+decoder was `OMX.MTK.VIDEO.DECODER.MPEG2`, and retry/read-error counts remained
+zero. `.175` accepted but did not act on the Vibe debug channel event, so the
+runner's final `channel_identity_not_confirmed` label is an automation/control
+limitation, not a playback failure. Evidence is retained in
+`artifacts/firetv/20260907-132101_pro-stock-live-growing-120s-post-fix_*`.
+The installed APK SHA-256 is
+`3ba4eb5f07be6481784d742fca306fbc62d1b2dd3aca582065e5f6d5f9454598`.
+The same APK was finally installed on the normal AFTMM/API-25 `.25` target and
+passed a two-change Media3 Pull/hardware 2.1/5.1 smoke; `config/firetv.toml` is
+restored to `.25` for subsequent work.
+
+## Fire OS service-lifecycle playback fix (2026-09-07)
+
+The latest Fire TV Pro failure was reproduced before changing code. SageTV
+displayed `sage.PlaybackException`, while Android logcat showed the actual
+failure: `RejectedExecutionException` from
+`Media3MediaPlayerImpl.resetLegacyCaptionsForDiscontinuity()` during
+`BaseMediaPlayerImpl.load()`. `MiniclientService.onDestroy()` had terminated the
+Application-owned `MiniClient.backgroundService`, even though Fire OS retained
+the Application and foreground Activity. Every later `OPENURL` in that process
+therefore failed before video could start. This was a client lifecycle defect,
+not a `.175`/`.232` server failure and not a cost of sampling Playback Stats
+CPU.
+
+`MiniclientService` no longer shuts down the singleton client. Explicit
+Application teardown retains ownership of `MiniClient.shutdown()`, and both
+Media3 and legacy Exo defensively ignore executor rejection for optional legacy
+caption flush/drain work during final teardown. Static lifecycle coverage
+locks both rules.
+
+The rebuilt APK passed full tests, validation, build, and APK inspection. It
+then passed real hardware Media3 Pull playback on AFTKRT/API-30 `.29`; the user
+confirmed playback and requested that all further testing return to non-Pro
+`.25`. On AFTMM/API-25 `.25`, the same APK passed hardware MPEG-2 Pull against
+Vibe server `.232` and an independently invoked stock-server `.175` Watch of
+Meet the Press. The `.175` result reported advancing video/audio,
+`OMX.MTK.VIDEO.DECODER.MPEG2`, a valid 1920x1080 surface, zero Pull read errors,
+and no `RejectedExecutionException`, `PlaybackException`, or fatal exception.
+Primary evidence is
+`artifacts/firetv/20260907-002425_pro-video-exception-before-repro_logcat.txt`,
+`artifacts/firetv/20260907-004801_pro-post-fix-second-open_screen.png`, and
+`artifacts/firetv/20260907-005950_nonpro-stock-post-fix_logcat.txt`.
+
+## Fire OS total-CPU compatibility (2026-09-06)
+
+The Playback Stats CPU sampler no longer depends exclusively on aggregate
+`/proc/stat`, which newer Fire OS application sandboxes may hide. It first uses
+the original aggregate tick source and otherwise derives the same 0-100%
+device-capacity value from `/proc/uptime` cumulative idle time and the available
+CPU count. If Fire OS hides that file too, it uses cached read-only
+`/sys/devices/system/cpu/cpu*/cpuidle/state*/time` counters. A source identifier
+prevents a runtime source change from comparing different units. No permission,
+shell helper, persistent process, or sampling outside the visible overlay was
+added. The `/proc/uptime` fallback physically reported Vibe, Other, and Total
+CPU on AFTMM/API-25. AFTKRT/API-30 denies both proc sources and physically
+passed through the sysfs fallback; evidence is
+`artifacts/firetv/vibe-pro-cpu-sysfs.png` (Vibe 1.4%, Other 44.5%, Total 45.9%
+for the captured interval).
+
 ## Stock-server caption seek/placement correction (2026-09-06)
 
 The standard legacy-extender callback path is now robust across MPEG-2 seeks.

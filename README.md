@@ -37,8 +37,9 @@ resources.
 - `Settings > Playback Settings > Audio and Caption Track Settings` optionally
   selects preferred BCP-47 audio/subtitle languages and a CEA-608 channel or
   CEA-708 service. These preferences select among tracks only after the STV
-  enables captions on a patched server. The same page also stores the legacy
-  server fallback used by the long-press overlay.
+  enables captions; the standard event-225 path works with an unmodified
+  SageTV server. The same page also stores the legacy server fallback used by
+  the long-press overlay.
 
 Completing a task includes updating task tracking immediately: remove the
 finished item from `TASKS.md`, synchronize the parent workspace `task.md` when
@@ -99,6 +100,12 @@ client-id              inspect or explicitly manage the test client identity
 mcp-test              exercise the MCP protocol
 mcp-player-matrix     run device-backed playback cases
 ```
+
+For a new machine or AI handoff, run `commission_test_environment.cmd` on
+Windows or `./commission_test_environment.sh` on Linux/WSL. The first run
+creates the ignored local TOML; after it is edited, the same command validates
+Docker/ADB, creates or reuses every canonical test fixture, runs all local
+gates, and builds the APK. See `docs/COMMISSIONING.md`.
 
 `bundle` uses the checksum-pinned bundletool in the unified image. It produces
 a debug AAB, a package-installable debug `.apks` set, and a clearly named
@@ -195,10 +202,13 @@ The MCP server and ADB tools run in the same unified container. Configure
 command. Read `mcp/README.md` for tool usage and
 `docs/PLAYBACK_DIAGNOSTICS.md` before diagnosing playback.
 
-Physical-test scripts require the local SageTV/SMB addresses and credentials
-to be supplied through command options or ignored local configuration. The
-checked-in examples intentionally contain only documentation addresses and no
-commissioning credentials.
+Physical-test scripts use the one ignored `config/firetv.toml` for named and
+aliased Android clients, SageTV servers/Web credentials, per-server SMB
+shares/mappings, fixtures, HDMI capture, identities, safety policy, and test
+defaults. Run `dev.cmd config-check` before commissioning. Command-line and
+supported environment overrides still win. The checked-in complete example
+contains only documentation addresses and blank credentials; see
+`docs/TEST_ENVIRONMENT.md`.
 
 Physical tests must record the APK hash, device/API, server build, backend,
 streaming mode, decoder, media state, visible A/V result, and correlated
@@ -372,6 +382,10 @@ OpenSageTV-Vibe-Android-Client-debug.apk
 - `docs/PLAYBACK_DIAGNOSTICS.md` — evidence and experiment standard.
 - `docs/CONNECTION_PROTOCOL_LIFECYCLE.md` — characterized connection,
   command-order, reconnect, and teardown contract for safe class splitting.
+- `docs/TEST_ENVIRONMENT.md` — single local TOML schema, client/server aliases,
+  per-server SMB, validation, overrides, and release-secret boundary.
+- `docs/COMMISSIONING.md` — one-command environment, fixture, validation, and
+  optional guarded-install workflow for humans and AI tools.
 - `docs/BASELINE_VALIDATION.md` — migration/copy equivalence evidence.
 - `mcp/README.md` — MCP setup, safety, and current commands.
 
