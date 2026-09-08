@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Hardened exact-file commissioning when an alternate STV retains a stopped
+  MiniPlayer session. The MCP helper now accepts that session only when both
+  playback-health signals prove it quiescent, dismisses SageMC's retained
+  `StopPopup` through the neutral HOME command, and reports the retained-player
+  and dismissal evidence instead of mistaking old video for a new playback
+  pass. Focused automation tests cover the new fail-closed paths.
+
 - Taught the shared physical MCP UI-root guard to recognize SageMC's historical
   `Dynamic Menu by nielm` screen as a valid idle automation root. The guard
   still requires an active server connection, no player, no popup, and no text

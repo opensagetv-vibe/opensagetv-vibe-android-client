@@ -17,9 +17,16 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-There are no unfinished tasks that can be executed with the currently
-commissioned environment. The v0.5.88 source/APK release passed its local and
-standalone GitHub `source-contracts` validation gates.
+- [ ] Complete the SageMC interoperability matrix on the commissioned non-Pro
+  Fire TV and isolated `.232` server. Captions, full-screen exact-file
+  playback, Live TV, root navigation, and native DVD root/submenu rendering
+  pass. Repeated exact-file playback after SageMC's retained `StopPopup`, DVD
+  Return, and resume-after-pause remain active physical gates.
+- [ ] After those gates pass, update durable results and manifests, run the
+  complete suite, and publish the post-v0.5.88 automation update.
+
+The v0.5.88 source/APK release passed its local and standalone GitHub
+`source-contracts` validation gates.
 
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw

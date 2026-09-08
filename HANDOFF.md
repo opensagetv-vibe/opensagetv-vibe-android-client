@@ -1,5 +1,22 @@
 # OpenSageTV Vibe Android Client handoff
 
+## SageMC retained-player interoperability (2026-09-08)
+
+SageMC leaves a stopped MiniPlayer loaded behind `StopPopup`. The debug-only
+exact-file helper now treats that player as stopped only when
+`health_isPlaying=false` and `health_playWhenReady=false`, then sends the
+neutral HOME command and waits for the popup to close before issuing the next
+watch request. It reports `retainedStoppedPlayer` and `stopPopupDismissal`, and
+fails closed if the old backend remains active or the popup remains open. The
+focused 33-test MCP playback-automation suite and Python compilation pass.
+
+The resulting physical run proved that the popup no longer consumes the next
+request. It also exposed a separate server behavior: a redundant watch request
+for the same stopped MediaFile returns success without restarting playback.
+That correction belongs to the opt-in Vibe Core commissioning event and is
+being physically gated on isolated server `.232`; stock `.175` remains
+untouched.
+
 ## Post-release SageMC automation compatibility (2026-09-08)
 
 The shared physical MCP root guard now accepts either stock `Main Menu` or SageMC's

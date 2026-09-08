@@ -1857,6 +1857,8 @@ def dev_play_server_path(
 
     stop_result: dict | None = None
     stopped_state = state
+    retained_stopped_player = False
+    stop_popup_dismissal: dict | None = None
     if bool(state.get("playerActive")):
         stop_result = adb.dev_control("command", command="stop")
         stop_deadline = time.monotonic() + min(15.0, max(3.0, float(timeout_s) / 3.0))
@@ -1864,8 +1866,18 @@ def dev_play_server_path(
             stopped_state = adb.player_state_snapshot()
             if not bool(stopped_state.get("playerActive")):
                 break
+            # SageMC intentionally leaves a stopped MiniPlayer session loaded
+            # behind StopPopup.  It is safe to send the next exact watch event
+            # only after both backend signals prove that retained player is
+            # quiescent; accepting playerActive by itself would allow the old
+            # video to produce a false playback pass on servers that ignore the
+            # Vibe watch-file extension.
+            if (stopped_state.get("health_isPlaying") is False
+                    and stopped_state.get("health_playWhenReady") is False):
+                retained_stopped_player = True
+                break
             time.sleep(0.2)
-        if bool(stopped_state.get("playerActive")):
+        if bool(stopped_state.get("playerActive")) and not retained_stopped_player:
             return {
                 "passed": False,
                 "reason": "existing_playback_did_not_stop",
@@ -1873,6 +1885,26 @@ def dev_play_server_path(
                 "stopResult": stop_result,
                 "state": _compact_state(stopped_state),
             }
+        if retained_stopped_player and str(stopped_state.get("popupName") or "").strip():
+            # SageMC's StopPopup consumes a following watch-file event. HOME is
+            # the neutral, non-destructive way to close that stopped-playback
+            # UI before requesting a replacement MediaFile.
+            stop_popup_dismissal = adb.dev_control("command", command="home")
+            dismiss_deadline = time.monotonic() + min(8.0, max(3.0, float(timeout_s) / 4.0))
+            while time.monotonic() < dismiss_deadline:
+                stopped_state = adb.player_state_snapshot()
+                if not str(stopped_state.get("popupName") or "").strip():
+                    break
+                time.sleep(0.2)
+            if str(stopped_state.get("popupName") or "").strip():
+                return {
+                    "passed": False,
+                    "reason": "existing_playback_stop_popup_did_not_close",
+                    "requestedServerPath": requested,
+                    "stopResult": stop_result,
+                    "stopPopupDismissal": stop_popup_dismissal,
+                    "state": _compact_state(stopped_state),
+                }
 
     request = adb.dev_control(
         "watch_server_file",
@@ -1895,6 +1927,8 @@ def dev_play_server_path(
         "transport": "miniclient_vibe_watch_file_event",
         "serverProperty": "miniclient/enable_vibe_watch_file_event=true",
         "stopResult": stop_result,
+        "retainedStoppedPlayer": retained_stopped_player,
+        "stopPopupDismissal": stop_popup_dismissal,
         "request": request,
         "resumePrompt": resume_prompt,
         "restartFromBeginning": bool(restart_from_beginning),
