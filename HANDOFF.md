@@ -1,5 +1,12 @@
 # OpenSageTV Vibe Android Client handoff
 
+## GitHub v0.5.87 release (2026-09-07)
+
+The final source tree, deterministic source archive, development-signed APK,
+release manifest, and SHA-256 checksums are published from the `main` branch
+under tag `v0.5.87`. This is a GitHub source/APK release; Amazon Appstore and
+Google Play submission remain explicitly deferred in `TASKS.md`.
+
 ## Final playback-recovery regression (2026-09-07)
 
 The remaining executable playback gates are complete on the commissioned

@@ -17,8 +17,9 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-- [ ] Finish the release records and manifest, rerun the final validation,
-  create logical commits, and publish the updated source/APK to GitHub.
+There are no unfinished tasks that can be executed with the currently
+commissioned environment. The v0.5.87 source/APK release passed its final
+validation and publication gates.
 
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw
@@ -58,10 +59,10 @@ Amazon Appstore and Google Play publication are not part of the current release
 scope. The current deliverable is reviewable source plus an installable APK on
 GitHub.
 
-The v0.5.85 GitHub source/APK release is complete: durable documentation, stable machine
+The v0.5.87 GitHub source/APK release is complete: durable documentation, stable machine
 metadata, dependency/license notices, manifests, deterministic APK/source
 bundles, and the changed-files handoff workflow are verified. An untouched
-v0.5.75 Windows worktree applied v0.5.85, normalized only proven CRLF-equivalent
+v0.5.75 Windows worktree applied the original v0.5.85 release, normalized only proven CRLF-equivalent
 text, removed obsolete files, passed all test/validation/build gates, installed
 the Dev APK, and launched it on `.25` from the same root workflow.
 The repository is a true fork of `OpenSageTV/sagetv-miniclient`, `main` is the
