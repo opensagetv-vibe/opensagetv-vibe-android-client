@@ -124,6 +124,9 @@ public interface UIRenderer<Image extends Texture> {
 
     void onMenuHint(MenuHint hint);
 
+    /** Called after a new MiniPlayer item has been loaded. */
+    default void onPlaybackLoadStarted() { }
+
     /**
      * Returns true if the first frame has been rendered.
      *

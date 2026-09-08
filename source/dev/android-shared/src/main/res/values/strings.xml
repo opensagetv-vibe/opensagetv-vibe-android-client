@@ -178,6 +178,8 @@
     <string name="key_repeat_delay_ms_title">Key Repeat Delay (ms)</string>
     <string name="exit_on_standby_summary">Exits SageTV when the SageTV screensaver kicks in.  This is generally a good thing to do to save memory on the Android Device.</string>
     <string name="exit_on_standby_title">Exit App when on Stand By</string>
+    <string name="wait_for_playback_before_first_osd_title">Wait for playback before first OSD</string>
+    <string name="wait_for_playback_before_first_osd_summary">Wait to present the first media-player OSD until playback starts, with a bounded safety timeout. This only changes presentation and never changes playback time.</string>
     <string name="title_use_httpls_preference">Use HTTPLS Streaming</string>
     <string name="summary_use_httpls_preference">Will use HTTPLS streaming for all media.  This is a debug/experimental property.  Should not be enbled for normal use.</string>
 

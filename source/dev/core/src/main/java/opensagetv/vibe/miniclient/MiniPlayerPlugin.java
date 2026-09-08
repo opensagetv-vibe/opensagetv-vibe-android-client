@@ -62,6 +62,13 @@ public interface MiniPlayerPlugin extends Runnable
     void setPushMode(boolean b);
 
     /**
+     * Identifies whether the active/growing-file hints came from the Vibe URL
+     * metadata extension. Stock SageTV servers do not provide those hints, so
+     * clients must verify the historical extension-based active-file guess.
+     */
+    default void setServerMediaMetadataExplicit(boolean explicit) { }
+
+    /**
      * Should check pushMode to determine if PUSH or PULL is being used
      */
     void load(byte majorTypeHint, byte minorTypeHint, String encodingHint, String urlString, String hostname, boolean timeshifted, long bufferSize);
@@ -104,6 +111,9 @@ public interface MiniPlayerPlugin extends Runnable
     {
         return 1.0f;
     }
+
+    /** True after this playback generation has presented its first video frame. */
+    default boolean hasRenderedFirstVideoFrame() { return false; }
 
     /** Whether this active backend can apply a presentation-only subtitle offset. */
     default boolean supportsSubtitleOffset() { return false; }

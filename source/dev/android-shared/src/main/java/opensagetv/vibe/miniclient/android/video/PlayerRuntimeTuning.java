@@ -9,7 +9,13 @@ package opensagetv.vibe.miniclient.android.video;
  */
 public final class PlayerRuntimeTuning
 {
-    public static final int DEFAULT_TS_SEARCH_MULTIPLIER = 8;
+    // Some ATSC/PVR transport streams have PCR gaps larger than 1 MiB. The
+    // previous 8x window (902,400 bytes) could miss every PCR around the first
+    // binary-search estimate. ExoPlayer would then start roughly two minutes
+    // before the requested resume point and make the hardware decoder discard
+    // thousands of late frames. 16x was verified against a sparse-PCR SageTV
+    // recording and still keeps each extractor search buffer below 2 MiB.
+    public static final int DEFAULT_TS_SEARCH_MULTIPLIER = 16;
     public static final int DEFAULT_MEDIA3_PULL_READ_BYTES = 256 * 1024;
     public static final int DEFAULT_EXO2_PULL_READ_BYTES = 512 * 1024;
     public static final int DEFAULT_PULL_MIN_BUFFER_MS = 5000;

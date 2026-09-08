@@ -216,6 +216,7 @@ public class DesktopClientRenderer implements UIRenderer<BufferedImageTexture>,M
     @Override
     public void unloadImage(int handle, ImageHolder bi) {
         log.debug("unloadImage()");
+        if (bi != null) bi.dispose();
     }
 
     @Override

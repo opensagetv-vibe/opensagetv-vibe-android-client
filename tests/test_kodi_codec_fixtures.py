@@ -71,7 +71,7 @@ class KodiCodecFixtureTests(unittest.TestCase):
 
     def test_physical_matrix_is_hardware_strict_and_non_pro_only(self):
         text = PHYSICAL_MATRIX.read_text(encoding="utf-8")
-        self.assertIn("192.168.10.25:5555", text)
+        self.assertIn('configured_device_serial("non_pro")', text)
         self.assertIn('"decoding": "hardware"', text)
         self.assertIn('state.get("health_videoDecoderKind") == "hardware"', text)
         self.assertIn("SKIPPED_UNSUPPORTED_HARDWARE", text)

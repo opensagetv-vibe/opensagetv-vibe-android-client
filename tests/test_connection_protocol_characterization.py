@@ -19,6 +19,9 @@ GFX_TRANSFORM = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient
 GFX_IMAGE = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/GfxImageCacheCommands.java"
 GFX_IMAGE_RECOVERY = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/GfxImageAllocationRecovery.java"
 IMAGE_CACHE = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/ImageCache.java"
+OPENGL_RENDERER = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/opengl/OpenGLRenderer.java"
+OPENGL_TEXTURE = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/opengl/OpenGLTexture.java"
+GDX_RENDERER = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/gdx/MiniClientGDXRenderer.java"
 MEDIA = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java"
 MEDIA3 = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java"
 EXO2 = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java"
@@ -54,6 +57,9 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         cls.gfx_image = GFX_IMAGE.read_text(encoding="utf-8")
         cls.gfx_image_recovery = GFX_IMAGE_RECOVERY.read_text(encoding="utf-8")
         cls.image_cache = IMAGE_CACHE.read_text(encoding="utf-8")
+        cls.opengl_renderer = OPENGL_RENDERER.read_text(encoding="utf-8")
+        cls.opengl_texture = OPENGL_TEXTURE.read_text(encoding="utf-8")
+        cls.gdx_renderer = GDX_RENDERER.read_text(encoding="utf-8")
         cls.media = MEDIA.read_text(encoding="utf-8")
         cls.media3 = MEDIA3.read_text(encoding="utf-8")
         cls.exo2 = EXO2.read_text(encoding="utf-8")
@@ -125,6 +131,25 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         self.assertIn("long requestedBytes = imageBytes(width, height)", self.image_cache)
         self.assertIn("closeQuietly(oldInput)", self.protocol_streams)
         self.assertIn("closeQuietly(oldOutput)", self.protocol_streams)
+
+    def test_texture_unload_is_renderer_owned_and_deferred_behind_queued_draws(self):
+        unload = self.image_cache[
+            self.image_cache.index("public void unloadImage(int handle)") :
+            self.image_cache.index("public java.io.File getCachedImageFile", self.image_cache.index("public void unloadImage(int handle)"))
+        ]
+        self.assertNotIn("bi.dispose()", unload)
+        self.assertIn("client.getUIRenderer().unloadImage(handle, bi)", unload)
+
+        for renderer in (self.opengl_renderer, self.gdx_renderer):
+            unload_start = renderer.index("public void unloadImage(")
+            renderer_unload = renderer[unload_start:unload_start + 1600]
+            assert_in_order(self, renderer_unload, "invokeLater(new Runnable()", "public void run()", "bi.dispose()")
+
+            invoke_start = renderer.index("public void invokeLater(Runnable runnable)")
+            invoke_end = renderer.index("@Override", invoke_start + 1)
+            invoke = renderer[invoke_start:invoke_end]
+            self.assertIn("synchronized (renderQueue)", invoke)
+            self.assertIn("frameQueue.add(runnable)", invoke)
 
     def test_resume_repaint_uses_ordered_event_router(self):
         repaint = self.connection[
@@ -283,6 +308,22 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         self.assertIn("lastImageResourceID", self.gfx_image)
         self.assertIn("postOfflineCacheChange", self.gfx_image)
         self.assertNotIn("new Thread", self.gfx)
+
+    def test_large_channel_logos_keep_logical_coordinates_with_smaller_gl_textures(self):
+        self.assertIn("CHANNEL_LOGO_MAX_TEXTURE_EDGE = 256", self.opengl_renderer)
+        self.assertIn("isChannelLogoCacheFile(file)", self.opengl_renderer)
+        self.assertIn("options.inSampleSize = sampleSize", self.opengl_renderer)
+        self.assertIn(
+            "new ImageHolder<>(t, sourceWidth, sourceHeight)",
+            self.opengl_renderer,
+        )
+        self.assertIn("private final int logicalWidth", self.opengl_texture)
+        self.assertIn("(float) sx / (float) logicalWidth", self.opengl_texture)
+        self.assertIn("(float) sy / (float) logicalHeight", self.opengl_texture)
+        self.assertIn(
+            "getLong(PrefStore.Keys.image_cache_size_mb, 128)",
+            self.image_cache,
+        )
 
     def test_document_records_migration_boundaries(self):
         for term in (

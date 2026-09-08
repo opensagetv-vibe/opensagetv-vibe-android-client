@@ -239,15 +239,19 @@ public final class ActivePlayerProcessOverlay
     {
         private long priorTotalTicks = -1L;
         private long priorBusyTicks = -1L;
+        private long priorDeviceSource = -1L;
         private long priorAppCpuMs = -1L;
         private long priorWallMs = -1L;
+        private File[] cpuIdleTimeFiles;
+        private int cpuIdleCpuCount;
 
         void sample(ActivePlayerStatsSnapshot snapshot)
         {
             long[] device = readDeviceCpuTicks();
             long appCpuMs = android.os.Process.getElapsedCpuTime();
             long wallMs = SystemClock.elapsedRealtime();
-            if (device != null && priorTotalTicks >= 0 && device[0] > priorTotalTicks)
+            if (device != null && priorTotalTicks >= 0
+                    && device[2] == priorDeviceSource && device[0] > priorTotalTicks)
             {
                 long totalDelta = device[0] - priorTotalTicks;
                 long busyDelta = Math.max(0L, device[1] - priorBusyTicks);
@@ -273,12 +277,21 @@ public final class ActivePlayerProcessOverlay
             {
                 priorTotalTicks = device[0];
                 priorBusyTicks = device[1];
+                priorDeviceSource = device[2];
             }
             priorAppCpuMs = appCpuMs;
             priorWallMs = wallMs;
         }
 
         private long[] readDeviceCpuTicks()
+        {
+            long[] procStat = readProcStatCpuTicks();
+            if (procStat != null) return procStat;
+            long[] procUptime = readProcUptimeCpuTicks();
+            return procUptime != null ? procUptime : readSysfsCpuIdleTicks();
+        }
+
+        private long[] readProcStatCpuTicks()
         {
             try
             {
@@ -296,7 +309,7 @@ public final class ActivePlayerProcessOverlay
                         total += value;
                         if (i == 4 || i == 5) idle += value;
                     }
-                    return new long[] { total, Math.max(0L, total - idle) };
+                    return new long[] { total, Math.max(0L, total - idle), 1L };
                 }
                 finally
                 {
@@ -306,6 +319,151 @@ public final class ActivePlayerProcessOverlay
             catch (Throwable ignored)
             {
                 return null;
+            }
+        }
+
+        /**
+         * Android 8 and newer may hide aggregate /proc/stat from an application
+         * even though /proc/uptime remains readable. Its second value is cumulative
+         * idle time across all CPUs, so uptime * online CPUs provides an equivalent
+         * aggregate-capacity denominator without a permission or background service.
+         */
+        private long[] readProcUptimeCpuTicks()
+        {
+            try
+            {
+                BufferedReader reader = new BufferedReader(new FileReader("/proc/uptime"));
+                try
+                {
+                    String line = reader.readLine();
+                    if (line == null) return null;
+                    String[] values = line.trim().split("\\s+");
+                    if (values.length < 2) return null;
+                    long uptimeMs = Math.max(0L,
+                            Math.round(Double.parseDouble(values[0]) * 1000d));
+                    long idleMs = Math.max(0L,
+                            Math.round(Double.parseDouble(values[1]) * 1000d));
+                    int availableCpus = Math.max(1,
+                            Runtime.getRuntime().availableProcessors());
+                    long totalMs = uptimeMs > Long.MAX_VALUE / availableCpus
+                            ? Long.MAX_VALUE : uptimeMs * availableCpus;
+                    idleMs = Math.min(totalMs, idleMs);
+                    return new long[] {
+                            totalMs, Math.max(0L, totalMs - idleMs), 2L
+                    };
+                }
+                finally
+                {
+                    reader.close();
+                }
+            }
+            catch (Throwable ignored)
+            {
+                return null;
+            }
+        }
+
+        /**
+         * Some Fire OS builds hide both aggregate proc files while leaving the
+         * kernel's read-only cpuidle counters visible. Sum every idle-state time
+         * for every online CPU and compare it with elapsed real time multiplied by
+         * that CPU count. Counter paths are discovered once per visible overlay.
+         */
+        private long[] readSysfsCpuIdleTicks()
+        {
+            try
+            {
+                if (cpuIdleTimeFiles == null) discoverCpuIdleTimeFiles();
+                if (cpuIdleTimeFiles == null || cpuIdleTimeFiles.length == 0
+                        || cpuIdleCpuCount <= 0) return null;
+                long idleUs = 0L;
+                for (File timeFile : cpuIdleTimeFiles)
+                {
+                    BufferedReader reader = new BufferedReader(new FileReader(timeFile));
+                    try
+                    {
+                        String value = reader.readLine();
+                        if (value == null) return null;
+                        long stateUs = Long.parseLong(value.trim());
+                        if (stateUs < 0L || Long.MAX_VALUE - idleUs < stateUs) return null;
+                        idleUs += stateUs;
+                    }
+                    finally
+                    {
+                        reader.close();
+                    }
+                }
+                long elapsedMs = SystemClock.elapsedRealtime();
+                long totalMs = elapsedMs > Long.MAX_VALUE / cpuIdleCpuCount
+                        ? Long.MAX_VALUE : elapsedMs * cpuIdleCpuCount;
+                long idleMs = Math.min(totalMs, idleUs / 1000L);
+                return new long[] {
+                        totalMs, Math.max(0L, totalMs - idleMs), 3L
+                };
+            }
+            catch (Throwable ignored)
+            {
+                return null;
+            }
+        }
+
+        private void discoverCpuIdleTimeFiles()
+        {
+            File cpuRoot = new File("/sys/devices/system/cpu");
+            File[] cpuDirs = cpuRoot.listFiles();
+            if (cpuDirs == null) return;
+            java.util.ArrayList<File> times = new java.util.ArrayList<File>();
+            int cpus = 0;
+            for (File cpuDir : cpuDirs)
+            {
+                if (!isCpuDirectory(cpuDir)) continue;
+                File online = new File(cpuDir, "online");
+                if (online.isFile() && !readOne(online).equals("1")) continue;
+                File[] states = new File(cpuDir, "cpuidle").listFiles();
+                if (states == null) continue;
+                int before = times.size();
+                for (File state : states)
+                {
+                    File time = new File(state, "time");
+                    if (time.isFile()) times.add(time);
+                }
+                if (times.size() > before) cpus++;
+            }
+            if (cpus > 0 && !times.isEmpty())
+            {
+                cpuIdleCpuCount = cpus;
+                cpuIdleTimeFiles = times.toArray(new File[times.size()]);
+            }
+        }
+
+        private boolean isCpuDirectory(File file)
+        {
+            if (file == null || !file.isDirectory()) return false;
+            String name = file.getName();
+            if (!name.startsWith("cpu") || name.length() <= 3) return false;
+            for (int i = 3; i < name.length(); i++)
+                if (!Character.isDigit(name.charAt(i))) return false;
+            return true;
+        }
+
+        private String readOne(File file)
+        {
+            try
+            {
+                BufferedReader reader = new BufferedReader(new FileReader(file));
+                try
+                {
+                    String value = reader.readLine();
+                    return value == null ? "" : value.trim();
+                }
+                finally
+                {
+                    reader.close();
+                }
+            }
+            catch (Throwable ignored)
+            {
+                return "";
             }
         }
     }

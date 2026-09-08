@@ -7,6 +7,9 @@ import android.graphics.Point;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Display;
 import android.view.WindowManager;
 
@@ -20,6 +23,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -28,6 +32,7 @@ import opensagetv.vibe.miniclient.MenuHint;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
+import opensagetv.vibe.miniclient.PlaybackStartupFrameGuard;
 import opensagetv.vibe.miniclient.android.R;
 import opensagetv.vibe.miniclient.android.AppUtil;
 import opensagetv.vibe.miniclient.android.opengl.shapes.FillRectangle;
@@ -62,6 +67,9 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     private static final int DEF_WIDTH=1280;
     private static final int DEF_HEIGHT=720;
+    private static final int CHANNEL_LOGO_MAX_TEXTURE_EDGE = 256;
+    private static final long SLOW_IMAGE_DECODE_MS = 40L;
+    private static final long SLOW_TEXTURE_UPLOAD_MS = 40L;
 
     private final AndroidUIController activity;
     private final MiniClient client;
@@ -79,6 +87,8 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     long frame = 0;
     boolean firstFrame = true;
     private final RendererReadinessGate readiness = new RendererReadinessGate();
+    private final PlaybackStartupFrameGuard playbackStartupFrameGuard = new PlaybackStartupFrameGuard();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     boolean inFrame=false;
 
     boolean disableRenderQueue = false;
@@ -119,6 +129,28 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     LineRectangle lineRectShape = new LineRectangle();
     Line lineShape = new Line();
     private OpenGLSurfaceView glView;
+    private final Runnable delayedPlaybackOsdRender = new Runnable() {
+        @Override public void run() {
+            long nowMs = SystemClock.uptimeMillis();
+            boolean playbackStarted = hasPlaybackStarted();
+            if (playbackStartupFrameGuard.releaseIfReady(nowMs, playbackStarted) && glView != null) {
+                log.debug("Presenting first playback OSD after playback started");
+                glView.requestRender();
+            } else {
+                long recheckMs = playbackStartupFrameGuard.deferFrame(nowMs, playbackStarted);
+                if (recheckMs > 0L)
+                    mainHandler.postDelayed(this, recheckMs);
+            }
+        }
+    };
+
+    private boolean hasPlaybackStarted() {
+        try {
+            return player != null && player.hasRenderedFirstVideoFrame();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
 
     public OpenGLRenderer(AndroidUIController parent, MiniClient client) {
         this.activity = parent;
@@ -273,6 +305,19 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     }
 
     public void render() {
+        // requestRender() is asynchronous. A request from the preceding STV
+        // frame can still be pending after flipBuffer() decides to defer the
+        // first playback OSD, so enforce the guard at the actual presentation
+        // boundary as well as at the request boundary.
+        long playbackOsdHoldMs = playbackStartupFrameGuard.isArmed()
+                ? playbackStartupFrameGuard.deferFrame(
+                        SystemClock.uptimeMillis(), hasPlaybackStarted())
+                : 0L;
+        if (playbackOsdHoldMs > 0L) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+            mainHandler.postDelayed(delayedPlaybackOsdRender, playbackOsdHoldMs);
+            return;
+        }
         synchronized (renderQueue) {
             int size = renderQueue.size();
             if (size == 0) return;
@@ -326,6 +371,8 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public void GFXCMD_DEINIT() {
+        mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+        playbackStartupFrameGuard.reset();
         readiness.cancel();
         activity.removeVideoFrame();
         activity.finish();
@@ -467,12 +514,23 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     }
 
     @Override
-    public void unloadImage(int handle, ImageHolder<OpenGLTexture> bi) {
-        if (bi != null && bi.get() != null) {
-            log.debug("Unloading Image: {}", bi);
-            bi.get().delete();
-            bi.dispose();
-        }
+    public void unloadImage(final int handle, final ImageHolder<OpenGLTexture> bi) {
+        if (bi == null || bi.get() == null) return;
+
+        // UNLOADIMAGE is decoded on the protocol thread while texture draws
+        // execute later on GLThread. Queue disposal behind any earlier draw so
+        // SageMC's short-lived guide textures cannot be nulled before they are
+        // rendered, and perform glDeleteTextures on the owning GL context.
+        invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                OpenGLTexture texture = bi.get();
+                if (texture == null) return;
+                log.debug("Unloading Image {}: {}", handle, bi);
+                texture.delete();
+                bi.dispose();
+            }
+        });
     }
 
     @Override
@@ -526,7 +584,18 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
         try {
             FileInputStream fis = new FileInputStream(file);
             try {
-                return readImage(fis);
+                if (isChannelLogoCacheFile(file)) {
+                    BitmapFactory.Options bounds = new BitmapFactory.Options();
+                    bounds.inJustDecodeBounds = true;
+                    BitmapFactory.decodeStream(fis, null, bounds);
+                    fis.close();
+                    fis = new FileInputStream(file);
+                    if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                        int sampleSize = channelLogoSampleSize(bounds.outWidth, bounds.outHeight);
+                        return readImage(fis, bounds.outWidth, bounds.outHeight, sampleSize, true);
+                    }
+                }
+                return readImage(fis, -1, -1, 1, false);
             } finally {
                 fis.close();
             }
@@ -539,6 +608,12 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public ImageHolder<OpenGLTexture> readImage(InputStream fis) throws Exception {
+        return readImage(fis, -1, -1, 1, false);
+    }
+
+    private ImageHolder<OpenGLTexture> readImage(InputStream fis, int logicalWidth,
+                                                  int logicalHeight, int sampleSize,
+                                                  boolean channelLogo) throws Exception {
         long st = System.currentTimeMillis();
 
         BitmapFactory.Options options = new BitmapFactory.Options();
@@ -557,22 +632,54 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
         options.inDensity = 32;
         options.inTargetDensity = 32;
         options.inPurgeable = true;
+        options.inSampleSize = sampleSize;
         final Bitmap bitmap = BitmapFactory.decodeStream(fis, null, options);
+
+        if (bitmap == null) {
+            throw new IOException("BitmapFactory could not decode image");
+        }
+
+        final int sourceWidth = logicalWidth > 0 ? logicalWidth : bitmap.getWidth();
+        final int sourceHeight = logicalHeight > 0 ? logicalHeight : bitmap.getHeight();
 
 
         long time = System.currentTimeMillis() - st;
         totalTextureTime += time;
         longestTextureTime = Math.max(time, longestTextureTime);
+        if (time >= SLOW_IMAGE_DECODE_MS) {
+            log.warn("Slow image decode: {}ms logical={}x{} bitmap={}x{} channelLogo={}",
+                    time, sourceWidth, sourceHeight, bitmap.getWidth(), bitmap.getHeight(), channelLogo);
+        }
 
-        final OpenGLTexture t = new OpenGLTexture(bitmap.getWidth(), bitmap.getHeight());
+        final OpenGLTexture t = new OpenGLTexture(sourceWidth, sourceHeight);
 
         invokeLater(new Runnable() {
             @Override
             public void run() {
+                long uploadStart = System.currentTimeMillis();
                 t.set(bitmap, "");
+                long uploadMs = System.currentTimeMillis() - uploadStart;
+                if (uploadMs >= SLOW_TEXTURE_UPLOAD_MS) {
+                    log.warn("Slow texture upload: {}ms logical={}x{} bitmap={}x{} channelLogo={}",
+                            uploadMs, sourceWidth, sourceHeight, t.width, t.height, channelLogo);
+                }
             }
         });
-        return new ImageHolder<>(t, t.width, t.height);
+        return new ImageHolder<>(t, sourceWidth, sourceHeight);
+    }
+
+    private static boolean isChannelLogoCacheFile(File file) {
+        return file != null
+                && file.getName().toLowerCase(Locale.US).contains("channellogos");
+    }
+
+    private static int channelLogoSampleSize(int width, int height) {
+        int sampleSize = 1;
+        while (width / sampleSize > CHANNEL_LOGO_MAX_TEXTURE_EDGE
+                || height / sampleSize > CHANNEL_LOGO_MAX_TEXTURE_EDGE) {
+            sampleSize *= 2;
+        }
+        return sampleSize;
     }
 
     @Override
@@ -597,8 +704,18 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
             frameQueue.clear();
         }
 
-        // request a render frame
-        glView.requestRender();
+        long playbackOsdHoldMs = playbackStartupFrameGuard.isArmed()
+                ? playbackStartupFrameGuard.deferFrame(
+                        SystemClock.uptimeMillis(), hasPlaybackStarted())
+                : 0L;
+        if (playbackOsdHoldMs > 0L) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+            mainHandler.postDelayed(delayedPlaybackOsdRender, playbackOsdHoldMs);
+            log.debug("Waiting up to {} ms to present first playback OSD", playbackOsdHoldMs);
+        } else {
+            // request a render frame
+            glView.requestRender();
+        }
 
         if (logFrameTime) {
             log.debug("FRAME: " + (frame) + "; Time: " + (System.currentTimeMillis() - frameTime) + "ms");
@@ -691,7 +808,9 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public void invokeLater(Runnable runnable) {
-        frameQueue.add(runnable);
+        synchronized (renderQueue) {
+            frameQueue.add(runnable);
+        }
     }
 
     @Override
@@ -789,11 +908,31 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public void onMenuHint(MenuHint hint) {
+        boolean compatibilityEnabled = client.properties().getBoolean(
+                PrefStore.Keys.wait_for_playback_before_first_osd, false);
+        boolean releaseDeferredFrame = playbackStartupFrameGuard.onMenuHint(
+                hint, compatibilityEnabled, SystemClock.uptimeMillis());
+        boolean playbackOsd = compatibilityEnabled
+                && PlaybackStartupFrameGuard.isPlaybackOsd(hint);
+        if (!playbackOsd || releaseDeferredFrame) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+        }
+        if (releaseDeferredFrame && glView != null) {
+            glView.requestRender();
+        }
         activity.showHideKeyboard(hint.hasTextInput);
         if (client.properties().getBoolean(PrefStore.Keys.exit_on_standby, true) && hint.isScreenSaver()) {
             log.warn("Exiting SageTV because of Screen Saver being activated.");
             activity.finish();
         }
+    }
+
+    @Override
+    public void onPlaybackLoadStarted() {
+        playbackStartupFrameGuard.onPlaybackLoad(
+                client.properties().getBoolean(
+                        PrefStore.Keys.wait_for_playback_before_first_osd, false),
+                SystemClock.uptimeMillis());
     }
 
     @Override

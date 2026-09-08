@@ -165,7 +165,9 @@ public class WebUIRenderer implements UIRenderer<WebTexture> {
 
     @Override
     public void unloadImage(int handle, ImageHolder<WebTexture> bi) {
+        if (bi == null) return;
         sendString("unload_image " + bi.getHandle());
+        bi.dispose();
     }
 
     @Override

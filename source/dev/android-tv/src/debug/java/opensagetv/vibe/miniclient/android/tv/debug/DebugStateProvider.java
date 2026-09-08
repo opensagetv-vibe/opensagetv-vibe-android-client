@@ -579,7 +579,9 @@ final class DebugStateProvider
                 + ";discCompatibilityFallback="
                 + prefs.getBoolean(PrefStore.Keys.disc_compatibility_fallback, true)
                 + ";discMpeg2TimestampRepair="
-                + safe(prefs.getString(PrefStore.Keys.disc_mpeg2_timestamp_repair, "auto"));
+                + safe(prefs.getString(PrefStore.Keys.disc_mpeg2_timestamp_repair, "auto"))
+                + ";waitForPlaybackBeforeFirstOsd="
+                + prefs.getBoolean(PrefStore.Keys.wait_for_playback_before_first_osd, false);
     }
 
     private static MiniClient requireClient(Context context)

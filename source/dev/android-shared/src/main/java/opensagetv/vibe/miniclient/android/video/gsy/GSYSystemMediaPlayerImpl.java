@@ -15,6 +15,7 @@ import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.media.SubtitleTrack;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
+import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 
 /**
  * SageTV adapter for GSY's Android/System player choice.
@@ -33,6 +34,10 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     private long preSeekPos = -1;
     private boolean prepareStarted = false;
     private boolean failureReported = false;
+    private boolean potentiallyGrowing;
+    private boolean serverMediaMetadataExplicit;
+    private boolean stoppedForResume;
+    private volatile boolean firstVideoFrameRendered;
     private SurfaceHolder.Callback surfaceCallback;
 
     public GSYSystemMediaPlayerImpl(AndroidUIController activity)
@@ -44,6 +49,27 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     {
         super(activity, true, true);
         this.failureListener = failureListener;
+    }
+
+    @Override
+    public boolean hasRenderedFirstVideoFrame()
+    {
+        return firstVideoFrameRendered;
+    }
+
+    @Override
+    public void load(byte majorHint, byte minorHint, String encodingHint, String urlString,
+                     String hostname, boolean timeshifted, long bufferSize)
+    {
+        potentiallyGrowing = timeshifted || bufferSize > 0;
+        super.load(majorHint, minorHint, encodingHint, urlString, hostname,
+                timeshifted, bufferSize);
+    }
+
+    @Override
+    public void setServerMediaMetadataExplicit(boolean explicit)
+    {
+        serverMediaMetadataExplicit = explicit;
     }
 
     @Override
@@ -62,16 +88,36 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
         preSeekPos = -1;
         prepareStarted = false;
         failureReported = false;
+        stoppedForResume = false;
+        firstVideoFrameRendered = false;
         try
         {
             player = new MediaPlayer();
+            final PlaybackSessionController.Token listenerSession = currentPlaybackSession();
+            final MediaPlayer listenerPlayer = player;
 
             player.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener()
             {
                 @Override
                 public void onVideoSizeChanged(MediaPlayer mp, int width, int height)
                 {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     setVideoSize(width, height, 1, 1);
+                }
+            });
+            player.setOnInfoListener(new MediaPlayer.OnInfoListener()
+            {
+                @Override
+                public boolean onInfo(MediaPlayer mp, int what, int extra)
+                {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                        return false;
+                    if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START)
+                    {
+                        firstVideoFrameRendered = true;
+                        PlaybackDebugTrap.record("first_video_frame", GSYSystemMediaPlayerImpl.this);
+                    }
+                    return false;
                 }
             });
             player.setOnErrorListener(new MediaPlayer.OnErrorListener()
@@ -79,6 +125,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                 @Override
                 public boolean onError(MediaPlayer mp, int what, int extra)
                 {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return true;
                     PlaybackDebugTrap.record("player_error_" + what + "_" + extra, GSYSystemMediaPlayerImpl.this);
                     log.error("GSY/System MediaPlayer error: {}, {}", what, extra);
                     playerFailed();
@@ -90,6 +137,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                 @Override
                 public void onCompletion(MediaPlayer mp)
                 {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("playback_complete", GSYSystemMediaPlayerImpl.this);
                     state = EOS_STATE;
                     eos = true;
@@ -100,6 +148,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                 @Override
                 public void onSeekComplete(MediaPlayer mp)
                 {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("seek_complete", GSYSystemMediaPlayerImpl.this);
                     seekPending = false;
                 }
@@ -109,6 +158,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                 @Override
                 public void onPrepared(MediaPlayer mp)
                 {
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("player_prepared", GSYSystemMediaPlayerImpl.this);
                     playerReady = true;
                     state = PLAY_STATE;
@@ -137,7 +187,8 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
             else
             {
                 SagePullMediaDataSource source = new SagePullMediaDataSource(
-                        MiniclientApplication.get().getClient().getConnectedServerInfo().address);
+                        MiniclientApplication.get().getClient().getConnectedServerInfo().address,
+                        potentiallyGrowing, serverMediaMetadataExplicit);
                 source.open(sageTVurl);
                 dataSource = source;
                 player.setDataSource(source);
@@ -278,7 +329,14 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     {
         if (player != null)
         {
-            try { player.stop(); } catch (Throwable ignored) { }
+            try
+            {
+                player.stop();
+                stoppedForResume = true;
+                playerReady = false;
+                prepareStarted = false;
+            }
+            catch (Throwable ignored) { }
         }
         super.stop();
     }
@@ -298,8 +356,45 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     @Override
     public void play()
     {
+        boolean prepareAfterStop = stoppedForResume;
         super.play();
-        if (player != null && playerReady)
+        if (player == null) return;
+
+        if (prepareAfterStop)
+        {
+            final MediaPlayer playerToResume = player;
+            final PlaybackSessionController.Token resumeSession = currentPlaybackSession();
+            context.runOnUiThread(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    if (!isCurrentPlaybackSession(resumeSession)
+                            || player != playerToResume || !stoppedForResume)
+                    {
+                        PlaybackDebugTrap.record("play_prepare_from_stopped_stale",
+                                GSYSystemMediaPlayerImpl.this);
+                        return;
+                    }
+                    try
+                    {
+                        context.setupVideoFrame();
+                        detachSurfaceCallback();
+                        prepareStarted = false;
+                        stoppedForResume = false;
+                        PlaybackDebugTrap.record("play_prepare_from_stopped",
+                                GSYSystemMediaPlayerImpl.this);
+                        prepareWhenSurfaceReady();
+                    }
+                    catch (Throwable t)
+                    {
+                        log.error("System player could not resume after server STOP", t);
+                        playerFailed();
+                    }
+                }
+            });
+        }
+        else if (playerReady)
         {
             PlaybackDebugTrap.record("backend_play_invoke", GSYSystemMediaPlayerImpl.this);
             try { player.start(); } catch (Throwable ignored) { }
@@ -380,6 +475,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     @Override
     protected void releasePlayer()
     {
+        stoppedForResume = false;
         detachSurfaceCallback();
         prepareStarted = false;
         if (player != null)

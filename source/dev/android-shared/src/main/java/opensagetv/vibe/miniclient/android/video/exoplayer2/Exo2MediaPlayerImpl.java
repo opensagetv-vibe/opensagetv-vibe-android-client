@@ -89,6 +89,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.RejectedExecutionException;
 import android.support.v4.media.session.MediaSessionCompat;
 
 /**
@@ -122,6 +123,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     protected void onPlaybackLoadStarted()
     {
+        firstVideoFrameRendered = false;
         resetLegacyCaptionsForDiscontinuity();
         mpeg2InterlaceObserver.reset();
     }
@@ -130,14 +132,21 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     {
         legacyCaptionDrainClockUs.set(-1L);
         legacyCaptionBridge.clearPending();
-        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        try
         {
-            @Override
-            public void run()
+            MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
             {
-                legacyCaptionBridge.postFlush();
-            }
-        });
+                @Override
+                public void run()
+                {
+                    legacyCaptionBridge.postFlush();
+                }
+            });
+        }
+        catch (RejectedExecutionException ex)
+        {
+            log.logWarning("Skipping legacy-caption flush during client teardown");
+        }
     }
 
     private void scheduleLegacyCaptionDrain(long playbackTimeUs)
@@ -145,31 +154,39 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         legacyCaptionDrainClockUs.set(playbackTimeUs);
         if (!legacyCaptionDrainScheduled.compareAndSet(false, true))
             return;
-        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        try
         {
-            @Override
-            public void run()
+            MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
             {
-                long drainedClockUs = -1L;
-                try
+                @Override
+                public void run()
                 {
-                    do
+                    long drainedClockUs = -1L;
+                    try
                     {
-                        drainedClockUs = legacyCaptionDrainClockUs.get();
-                        if (drainedClockUs >= 0L)
-                            legacyCaptionBridge.drainTo(drainedClockUs);
+                        do
+                        {
+                            drainedClockUs = legacyCaptionDrainClockUs.get();
+                            if (drainedClockUs >= 0L)
+                                legacyCaptionBridge.drainTo(drainedClockUs);
+                        }
+                        while (drainedClockUs != legacyCaptionDrainClockUs.get());
                     }
-                    while (drainedClockUs != legacyCaptionDrainClockUs.get());
+                    finally
+                    {
+                        legacyCaptionDrainScheduled.set(false);
+                        long newestClockUs = legacyCaptionDrainClockUs.get();
+                        if (newestClockUs >= 0L && newestClockUs != drainedClockUs)
+                            scheduleLegacyCaptionDrain(newestClockUs);
+                    }
                 }
-                finally
-                {
-                    legacyCaptionDrainScheduled.set(false);
-                    long newestClockUs = legacyCaptionDrainClockUs.get();
-                    if (newestClockUs >= 0L && newestClockUs != drainedClockUs)
-                        scheduleLegacyCaptionDrain(newestClockUs);
-                }
-            }
-        });
+            });
+        }
+        catch (RejectedExecutionException ex)
+        {
+            legacyCaptionDrainScheduled.set(false);
+            log.logWarning("Skipping legacy-caption drain during client teardown");
+        }
     }
 
     @Override
@@ -306,6 +323,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
     private boolean errorState = false;
     private int retryCount = 0;
+    private volatile boolean firstVideoFrameRendered;
 
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
@@ -386,6 +404,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     }
 
     @Override
+    public boolean hasRenderedFirstVideoFrame()
+    {
+        return firstVideoFrameRendered;
+    }
+
+    @Override
     public void load(byte majorHint, byte minorHint, String encodingHint, String urlString,
                      String hostname, boolean timeshifted, long bufferSize)
     {
@@ -398,6 +422,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         subtitleOverlayAttached = false;
         mediaContext.update(majorHint, minorHint, encodingHint, timeshifted, bufferSize);
         super.load(majorHint, minorHint, encodingHint, urlString, hostname, timeshifted, bufferSize);
+    }
+
+    @Override
+    public void setServerMediaMetadataExplicit(boolean explicit)
+    {
+        mediaContext.setMetadataExplicit(explicit);
     }
 
     public long getPlaybackPosition()
@@ -477,6 +507,18 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             return;
         }
         log.logDebug("Start was called");
+        if (player.getPlaybackState() == Player.STATE_IDLE)
+        {
+            // Legacy ExoPlayer has the same reusable stopped-item contract as
+            // Media3: setPlayWhenReady alone is a no-op after stop(). Rebind
+            // the SurfaceView and prepare at SageTV's already-applied seek.
+            context.setupVideoFrame();
+            player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+            PlaybackDebugTrap.record("play_prepare_from_idle", this);
+            player.prepare();
+        }
+        if (mediaSession != null)
+            mediaSession.setActive(true);
         player.setPlayWhenReady(true);
     }
 
@@ -487,13 +529,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         cancelPullSeekRecovery();
         final ExoPlayer playerToRelease = player;
         final MediaSessionCompat sessionToRelease = mediaSession;
-        if(sessionToRelease != null)
-        {
-            log.logDebug("Releaseing Android Media Session");
-            sessionToRelease.setActive(false);
-            sessionToRelease.release();
-        }
-
+        // Keep MediaSession teardown on Android's main thread. Calling into
+        // MediaSessionCompat synchronously from SageTV's media-command thread
+        // can race the STOP runnable and prevent a stock server from receiving
+        // DEINIT before its replacement-player timeout expires.
         // Detach and release the datasource before another setup can replace
         // these fields. The previous implementation dereferenced mutable fields
         // later on the UI thread and could release a newly opened SMB session.
@@ -505,6 +544,19 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             @Override
             public void run()
             {
+                if (sessionToRelease != null)
+                {
+                    try
+                    {
+                        log.logDebug("Releasing Android Media Session");
+                        sessionToRelease.setActive(false);
+                        sessionToRelease.release();
+                    }
+                    catch (Exception ex)
+                    {
+                        log.logError("Error releasing Android Media Session", ex);
+                    }
+                }
                 if (playerToRelease != null)
                 {
                     try
@@ -578,7 +630,6 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     {
         playbackRateController.reset();
         final ExoPlayer playerToStop = player;
-        final DataSource dataSourceToRelease = dataSource;
         final MediaSessionCompat sessionToStop = mediaSession;
         context.runOnUiThread(new Runnable()
         {
@@ -590,10 +641,6 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 {
                     playerToStop.stop();
                 }
-                if (dataSourceToRelease instanceof Exo2PullDataSource
-                        && ((Exo2PullDataSource) dataSourceToRelease).isSmbModeConfigured())
-                    ((Exo2PullDataSource) dataSourceToRelease).releaseSession();
-
                 if(sessionToStop != null)
                 {
                     sessionToStop.setActive(false);
@@ -872,7 +919,11 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         boolean smbDirectSeek = !pushMode
                                 && dataSource instanceof Exo2PullDataSource
                                 && ((Exo2PullDataSource) dataSource).isSmbModeConfigured();
-                        PlaybackDebugTrap.record("backend_seek_invoke", Exo2MediaPlayerImpl.this);
+                        PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
+                                Exo2MediaPlayerImpl.this,
+                                "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
+                                        + ";durationMs=" + durationMs
+                                        + ";bufferedMs=" + bufferedPositionMs);
                         if (smbDirectSeek)
                         {
                             // On the tested Fire TV MPEG-2 decoder, seekTo() updates
@@ -1237,7 +1288,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         ? SmbDirectConfig.from(prefs) : null;
                 dataSource = new Exo2PullDataSource(
                         context.getClient().getConnectedServerInfo().address,
-                        mediaContext.isTimeshifted(), smbConfig, runtimeConfig.getPullReadBytes());
+                        mediaContext.isTimeshifted(), mediaContext.isMetadataExplicit(),
+                        smbConfig, runtimeConfig.getPullReadBytes());
             }
             else
             {
@@ -1343,9 +1395,22 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
                     errorState = true;
                     retryCount++;
-
-                    player.seekTo(player.getCurrentPosition() + 100);
-                    player.prepare();
+                    long recoveryPositionMs = Math.max(0L, player.getCurrentPosition());
+                    boolean resumePlayback = player.getPlayWhenReady();
+                    if (!pushMode && mediaSource != null)
+                    {
+                        player.setMediaSource(mediaSource, recoveryPositionMs);
+                        player.prepare();
+                        player.setPlayWhenReady(resumePlayback);
+                        PlaybackDebugTrap.record("player_error_recovery_position_preserved",
+                                Exo2MediaPlayerImpl.this);
+                    }
+                    else
+                    {
+                        // PUSH/FIXED seeks remain owned by the SageTV server.
+                        player.seekTo(recoveryPositionMs + 100L);
+                        player.prepare();
+                    }
                 }
                 else
                 {
@@ -1467,6 +1532,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             public void onRenderedFirstFrame()
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                firstVideoFrameRendered = true;
                 cancelPullSeekRecovery();
                 PlaybackDebugTrap.record("first_video_frame", Exo2MediaPlayerImpl.this);
             }
@@ -1581,17 +1647,23 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
 
             boolean haveStartPosition = (playbackStartPosition >= 0);
-
+            long requestedStartPosition = playbackStartPosition;
+            log.logDebug("ExoLogging - Preparing playback");
             if (haveStartPosition)
             {
-                player.seekTo(playbackStartPosition);
-                log.logDebug("ExoLogging - Have start position");
-                log.logDebug("ExoLogging - Start Position: " + playbackStartPosition);
+                // Bind the queued resume seek to the new MediaSource timeline. A
+                // standalone seekTo() before setMediaSource() is reset when the new
+                // source is attached and caused resumed recordings to begin at zero.
+                player.setMediaSource(mediaSource, requestedStartPosition);
+                playbackStartPosition = -1;
+                PlaybackDebugTrap.recordDetailed("initial_seek_attached_to_source", this,
+                        "appliedMs=" + requestedStartPosition);
+                log.logDebug("ExoLogging - Start Position: " + requestedStartPosition);
             }
-
-            log.logDebug("ExoLogging - Preparing playback");
-            //player.prepare(mediaSource, !haveStartPosition, false);
-            player.setMediaSource(mediaSource, !haveStartPosition);
+            else
+            {
+                player.setMediaSource(mediaSource, true);
+            }
             player.prepare();
 
         }

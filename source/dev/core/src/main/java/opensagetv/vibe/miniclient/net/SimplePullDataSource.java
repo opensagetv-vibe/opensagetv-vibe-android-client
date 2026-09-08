@@ -124,23 +124,34 @@ public class SimplePullDataSource implements ISageTVDataSource, GrowingDataSourc
     @Override
     public synchronized void close() {
         log.debug("Close()");
+        // MediaServer READ replies and command replies share this socket. During
+        // player teardown, ExoPlayer can still have a loader blocked in a READ
+        // while SageTV's media-command thread is processing DEINIT. Waiting for
+        // the CLOSE reply here lets the loader consume that reply (or leaves us
+        // behind an unfinished READ), blocking DEINIT long enough for a stock
+        // server to time out its replacement MiniPlayer socket. Send CLOSE as a
+        // courtesy, but close immediately; EOF is also a valid MediaServer
+        // session boundary and closing the socket unblocks the outstanding read.
+        Socket server = remoteServer;
+        OutputStream writer = remoteWriter;
+        opened = false;
+        remoteServer = null;
+        remoteReader = null;
+        remoteWriter = null;
         try {
-            if (remoteServer != null) {
+            if (server != null) {
                 try {
-                    sendStringCommandWithReply("CLOSE");
+                    if (writer != null) {
+                        writer.write("CLOSE\r\n".getBytes());
+                        writer.flush();
+                    }
                 } catch (Throwable t) {
                 }
-                remoteServer.close();
-
+                server.close();
             }
         } catch (IOException e) {
             //e.printStackTrace();
         }
-        remoteServer = null;
-        remoteReader = null;
-        remoteWriter = null;
-
-        opened = false;
 
         if (dataCollector != null) {
             dataCollector.close();
@@ -261,12 +272,16 @@ public class SimplePullDataSource implements ISageTVDataSource, GrowingDataSourc
     public long getNetworkLastReadPosition() { return networkLastReadPosition.get(); }
 
     int readBuffer(byte[] buffer, int offset, int len) throws IOException {
+        // Keep a stable reference so a concurrent close produces the expected
+        // socket/EOF IOException instead of a misleading NullPointerException.
+        DataInputStream reader = remoteReader;
+        if (reader == null) throw new IOException("Pull datasource closed during read");
         int total = 0;
         int read = 0;
         while (total < len) {
             if (VerboseLogging.DATASOURCE_LOGGING && log.isDebugEnabled())
                 log.debug("read packet: total: {}, len: {}, delta: {}", total, len, (len - total));
-            read = remoteReader.read(buffer, offset + total, len - total);
+            read = reader.read(buffer, offset + total, len - total);
             if (read == -1) {
                 if (total == 0) {
                     log.warn("End of File reached for {}", uri);

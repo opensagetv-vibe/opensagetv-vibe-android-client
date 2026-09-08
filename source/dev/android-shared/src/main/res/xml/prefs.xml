@@ -119,6 +119,12 @@
             android:title="@string/use_native_resolution_title"/>
 
         <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="wait_for_playback_before_first_osd"
+            android:summary="@string/wait_for_playback_before_first_osd_summary"
+            android:title="@string/wait_for_playback_before_first_osd_title" />
+
+        <CheckBoxPreference
             android:defaultValue="true"
             android:key="exit_on_standby"
             android:summary="@string/exit_on_standby_summary"
@@ -150,7 +156,7 @@
             android:title="@string/use_tv_ui_on_tablet_title"/>
 
         <ListPreference
-            android:defaultValue="64"
+            android:defaultValue="128"
             android:dialogTitle="@string/dialog_title_list_mem_cache_preference"
             android:entries="@array/entries_list_mem_cache_preference"
             android:entryValues="@array/entryvalues_list_mem_cache_preference"

@@ -89,6 +89,7 @@ import java.io.IOException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.CRC32;
@@ -134,6 +135,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void onPlaybackLoadStarted()
     {
+        firstVideoFrameRendered = false;
         resetLegacyCaptionsForDiscontinuity();
         mpeg2InterlaceObserver.reset();
     }
@@ -142,14 +144,23 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     {
         legacyCaptionDrainClockUs.set(-1L);
         legacyCaptionBridge.clearPending();
-        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        try
         {
-            @Override
-            public void run()
+            MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
             {
-                legacyCaptionBridge.postFlush();
-            }
-        });
+                @Override
+                public void run()
+                {
+                    legacyCaptionBridge.postFlush();
+                }
+            });
+        }
+        catch (RejectedExecutionException ex)
+        {
+            // Caption reset is optional session cleanup. It must never reject
+            // the SageTV OPENURL that is starting the next video.
+            log.logWarning("Skipping legacy-caption flush during client teardown");
+        }
     }
 
     private void scheduleLegacyCaptionDrain(long playbackTimeUs)
@@ -157,31 +168,39 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         legacyCaptionDrainClockUs.set(playbackTimeUs);
         if (!legacyCaptionDrainScheduled.compareAndSet(false, true))
             return;
-        MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
+        try
         {
-            @Override
-            public void run()
+            MiniclientApplication.get().getClient().getBackgroundService().execute(new Runnable()
             {
-                long drainedClockUs = -1L;
-                try
+                @Override
+                public void run()
                 {
-                    do
+                    long drainedClockUs = -1L;
+                    try
                     {
-                        drainedClockUs = legacyCaptionDrainClockUs.get();
-                        if (drainedClockUs >= 0L)
-                            legacyCaptionBridge.drainTo(drainedClockUs);
+                        do
+                        {
+                            drainedClockUs = legacyCaptionDrainClockUs.get();
+                            if (drainedClockUs >= 0L)
+                                legacyCaptionBridge.drainTo(drainedClockUs);
+                        }
+                        while (drainedClockUs != legacyCaptionDrainClockUs.get());
                     }
-                    while (drainedClockUs != legacyCaptionDrainClockUs.get());
+                    finally
+                    {
+                        legacyCaptionDrainScheduled.set(false);
+                        long newestClockUs = legacyCaptionDrainClockUs.get();
+                        if (newestClockUs >= 0L && newestClockUs != drainedClockUs)
+                            scheduleLegacyCaptionDrain(newestClockUs);
+                    }
                 }
-                finally
-                {
-                    legacyCaptionDrainScheduled.set(false);
-                    long newestClockUs = legacyCaptionDrainClockUs.get();
-                    if (newestClockUs >= 0L && newestClockUs != drainedClockUs)
-                        scheduleLegacyCaptionDrain(newestClockUs);
-                }
-            }
-        });
+            });
+        }
+        catch (RejectedExecutionException ex)
+        {
+            legacyCaptionDrainScheduled.set(false);
+            log.logWarning("Skipping legacy-caption drain during client teardown");
+        }
     }
 
     private ExtractorsFactory createCaptionAwareExtractorsFactory(boolean pullMode)
@@ -247,6 +266,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     private boolean errorState = false;
     private int retryCount = 0;
+    private volatile boolean firstVideoFrameRendered;
 
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
@@ -380,6 +400,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     }
 
     @Override
+    public boolean hasRenderedFirstVideoFrame()
+    {
+        return firstVideoFrameRendered;
+    }
+
+    @Override
     public void load(byte majorHint, byte minorHint, String encodingHint, String urlString,
                      String hostname, boolean timeshifted, long bufferSize)
     {
@@ -441,6 +467,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         super.load(majorHint, minorHint, encodingHint, urlString, hostname, timeshifted, bufferSize);
     }
 
+    @Override
+    public void setServerMediaMetadataExplicit(boolean explicit)
+    {
+        mediaContext.setMetadataExplicit(explicit);
+    }
+
     /**
      * The renderer calls this before replacing its backend instance. Media3 is
      * retained only for ordinary completed-file Pull playback. Media3 itself
@@ -451,6 +483,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     public boolean canRetainForNextUrl(String urlString)
     {
         if (player == null || !playerReady || pushMode || dvdPushMode || httpls)
+            return false;
+        // Live/growing recordings require a clean player and datasource
+        // boundary when SageTV advances to the next program file. Retaining
+        // this instance can allow an old finite timeline or late END callback
+        // to leak into the replacement session.
+        if (mediaContext.isTimeshifted() || mediaContext.getBufferSize() > 0)
             return false;
         if (urlString == null || urlString.length() == 0)
             return false;
@@ -821,6 +859,21 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             return;
         }
         log.logDebug("Start was called");
+        if (player.getPlaybackState() == Player.STATE_IDLE)
+        {
+            // SageTV can issue STOP -> SEEK -> PLAY while retaining the same
+            // MiniPlayer instance (notably while recovering a stock-server
+            // session). ExoPlayer.stop() leaves the item reusable but requires
+            // prepare() before PLAY can render again. Restore the SurfaceView
+            // removed by BaseMediaPlayerImpl.stop() and prepare at the seek
+            // position already selected by SageTV.
+            context.setupVideoFrame();
+            player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+            PlaybackDebugTrap.record("play_prepare_from_idle", this);
+            player.prepare();
+        }
+        if (mediaSession != null)
+            mediaSession.setActive(true);
         player.setPlayWhenReady(true);
     }
 
@@ -834,13 +887,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         cancelPullSeekRecovery();
         final ExoPlayer playerToRelease = player;
         final MediaSessionCompat sessionToRelease = mediaSession;
-        if(sessionToRelease != null)
-        {
-            log.logDebug("Releaseing Android Media Session");
-            sessionToRelease.setActive(false);
-            sessionToRelease.release();
-        }
-
+        // MediaSessionCompat is owned by Android's main thread. In particular,
+        // do not release it synchronously from SageTV's media-command thread:
+        // STOP may already have queued a session update on main, and the two
+        // Binder paths can block one another long enough that the stock server
+        // never receives its DEINIT reply or replacement media socket.
         Media3MediaPlayerImpl.super.releasePlayer();
         mediaSession = null;
 
@@ -849,6 +900,19 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             @Override
             public void run()
             {
+                if (sessionToRelease != null)
+                {
+                    try
+                    {
+                        log.logDebug("Releasing Android Media Session");
+                        sessionToRelease.setActive(false);
+                        sessionToRelease.release();
+                    }
+                    catch (Exception ex)
+                    {
+                        log.logError("Error releasing Android Media Session", ex);
+                    }
+                }
                 if (playerToRelease != null)
                 {
                     try
@@ -935,7 +999,6 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     {
         playbackRateController.reset();
         final ExoPlayer playerToStop = player;
-        final DataSource dataSourceToRelease = dataSource;
         final MediaSessionCompat sessionToStop = mediaSession;
         context.runOnUiThread(new Runnable()
         {
@@ -947,10 +1010,6 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 {
                     playerToStop.stop();
                 }
-                if (dataSourceToRelease instanceof Media3PullDataSource
-                        && ((Media3PullDataSource) dataSourceToRelease).isSmbModeConfigured())
-                    ((Media3PullDataSource) dataSourceToRelease).releaseSession();
-
                 if(sessionToStop != null)
                 {
                     sessionToStop.setActive(false);
@@ -1231,7 +1290,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         boolean smbDirectSeek = !pushMode
                                 && dataSource instanceof Media3PullDataSource
                                 && ((Media3PullDataSource) dataSource).isSmbModeConfigured();
-                        PlaybackDebugTrap.record("backend_seek_invoke", Media3MediaPlayerImpl.this);
+                        PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
+                                Media3MediaPlayerImpl.this,
+                                "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
+                                        + ";durationMs=" + durationMs
+                                        + ";bufferedMs=" + bufferedPositionMs);
                         if (smbDirectSeek)
                         {
                             boolean resumeWhenReady = player.getPlayWhenReady();
@@ -1723,7 +1786,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         ? SmbDirectConfig.from(prefs) : null;
                 dataSource = new Media3PullDataSource(
                         context.getClient().getConnectedServerInfo().address,
-                        mediaContext.isTimeshifted(), smbConfig, runtimeConfig.getPullReadBytes());
+                        mediaContext.isTimeshifted(), mediaContext.isMetadataExplicit(),
+                        smbConfig, runtimeConfig.getPullReadBytes());
             }
             else
             {
@@ -1938,9 +2002,26 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
                     errorState = true;
                     retryCount++;
-
-                    player.seekTo(player.getCurrentPosition() + 100);
-                    player.prepare();
+                    long recoveryPositionMs = Math.max(0L, player.getCurrentPosition());
+                    boolean resumePlayback = player.getPlayWhenReady();
+                    if (!pushMode && mediaSource != null)
+                    {
+                        // Reattach the Pull/SMB source at the position captured
+                        // by the error callback. Calling seekTo() on an errored
+                        // player followed by prepare() allowed Media3 to restart
+                        // growing live TV at zero after a stale-end timeout.
+                        player.setMediaSource(mediaSource, recoveryPositionMs);
+                        player.prepare();
+                        player.setPlayWhenReady(resumePlayback);
+                        PlaybackDebugTrap.record("player_error_recovery_position_preserved",
+                                Media3MediaPlayerImpl.this);
+                    }
+                    else
+                    {
+                        // PUSH/FIXED transport position remains server-owned.
+                        player.seekTo(recoveryPositionMs + 100L);
+                        player.prepare();
+                    }
                 }
                 else
                 {
@@ -2082,6 +2163,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onRenderedFirstFrame()
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                firstVideoFrameRendered = true;
                 cancelPullSeekRecovery();
                 PlaybackDebugTrap.record("first_video_frame", Media3MediaPlayerImpl.this);
                 if (fastSwitchAwaitingFirstFrame)
@@ -2259,17 +2341,24 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
 
             boolean haveStartPosition = (playbackStartPosition >= 0);
-
+            long requestedStartPosition = playbackStartPosition;
+            log.logDebug("Media3Logging - Preparing playback");
             if (haveStartPosition)
             {
-                player.seekTo(playbackStartPosition);
-                log.logDebug("Media3Logging - Have start position");
-                log.logDebug("Media3Logging - Start Position: " + playbackStartPosition);
+                // A seek issued between OPENURL and player construction belongs to the
+                // new MediaItem. Calling seekTo() before setMediaSource() addresses the
+                // old/empty timeline and is discarded when the source is attached,
+                // which made stock-server resume always start at zero.
+                player.setMediaSource(mediaSource, requestedStartPosition);
+                playbackStartPosition = -1;
+                PlaybackDebugTrap.recordDetailed("initial_seek_attached_to_source", this,
+                        "appliedMs=" + requestedStartPosition);
+                log.logDebug("Media3Logging - Start Position: " + requestedStartPosition);
             }
-
-            log.logDebug("Media3Logging - Preparing playback");
-            //player.prepare(mediaSource, !haveStartPosition, false);
-            player.setMediaSource(mediaSource, !haveStartPosition);
+            else
+            {
+                player.setMediaSource(mediaSource, true);
+            }
             player.prepare();
 
         }

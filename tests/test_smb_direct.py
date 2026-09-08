@@ -37,6 +37,21 @@ class SmbDirectArchitectureTests(unittest.TestCase):
             self.assertIn("isSmbModeConfigured", source)
             self.assertIn("getShadowReadBytes", source)
 
+    def test_server_stop_retains_smb_session_until_player_release(self):
+        for relative in (
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/"
+            "android/video/media3/Media3MediaPlayerImpl.java",
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/"
+            "android/video/exoplayer2/Exo2MediaPlayerImpl.java",
+        ):
+            source = self.read(relative)
+            stop = source[source.index("public void stop()"):
+                          source.index("public void pause()", source.index("public void stop()"))]
+            release = source[source.index("protected void releaseDataSource()"):
+                             source.index("/**", source.index("protected void releaseDataSource()"))]
+            self.assertNotIn("releaseSession()", stop, relative)
+            self.assertIn("releaseSession()", release, relative)
+
     def test_credential_fields_are_separate_and_not_returned(self):
         mapper = self.read("source/dev/core/src/main/java/opensagetv/vibe/miniclient/net/SmbPathMapper.java")
         config = self.read("source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugPlayerConfigCommands.java")

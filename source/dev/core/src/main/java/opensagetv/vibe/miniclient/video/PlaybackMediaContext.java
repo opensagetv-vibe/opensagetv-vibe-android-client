@@ -8,6 +8,7 @@ public final class PlaybackMediaContext
     private String encodingHint = "";
     private boolean timeshifted;
     private long bufferSize;
+    private boolean metadataExplicit;
 
     public void update(byte majorTypeHint, byte minorTypeHint, String encodingHint,
                        boolean timeshifted, long bufferSize)
@@ -42,5 +43,15 @@ public final class PlaybackMediaContext
     public long getBufferSize()
     {
         return bufferSize;
+    }
+
+    public void setMetadataExplicit(boolean metadataExplicit)
+    {
+        this.metadataExplicit = metadataExplicit;
+    }
+
+    public boolean isMetadataExplicit()
+    {
+        return metadataExplicit;
     }
 }

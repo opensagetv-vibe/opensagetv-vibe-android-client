@@ -354,6 +354,9 @@ public interface PrefStore
         String client_id = "clientid";
         String use_opengl_ui = "use_opengl_ui";
 
+        /** Wait for playback before presenting the first media-player OSD frame. */
+        String wait_for_playback_before_first_osd = "wait_for_playback_before_first_osd";
+
         String exit_on_standby = "exit_on_standby";
 
         /**

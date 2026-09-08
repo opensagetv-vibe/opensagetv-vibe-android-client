@@ -23,6 +23,8 @@ public class OpenGLTexture implements Texture {
 
     public int width;
     public int height;
+    private final int logicalWidth;
+    private final int logicalHeight;
 
     int texture[] = null;
 
@@ -49,6 +51,8 @@ public class OpenGLTexture implements Texture {
     public OpenGLTexture(int width, int height) {
         this.width = width;
         this.height = height;
+        this.logicalWidth = width;
+        this.logicalHeight = height;
     }
 
     public int texture() {
@@ -176,17 +180,22 @@ public class OpenGLTexture implements Texture {
         GLES20.glEnableVertexAttribArray(OpenGLUtils.textureShader.a_myVertex);
 
 //  // top left
-        uvData[0] = (float) sx / (float) width;
-        uvData[1] = (float) sy / (float) height;
+        // SageTV's source rectangle is expressed in the image's logical
+        // dimensions. The uploaded bitmap may be a smaller thumbnail for a
+        // very large channel-logo source; using the logical dimensions here
+        // preserves the exact crop/scale contract while avoiding a full-size
+        // GPU texture for an image that the Guide only renders as a thumbnail.
+        uvData[0] = (float) sx / (float) logicalWidth;
+        uvData[1] = (float) sy / (float) logicalHeight;
 //  // bottom left
-        uvData[2] = (float) sx / (float) width;
-        uvData[3] = (float) (sy + sh) / (float) height;
+        uvData[2] = (float) sx / (float) logicalWidth;
+        uvData[3] = (float) (sy + sh) / (float) logicalHeight;
 //  // bottom right
-        uvData[4] = (float) (sx + sw) / (float) width;
-        uvData[5] = (float) (sy + sh) / (float) height;
+        uvData[4] = (float) (sx + sw) / (float) logicalWidth;
+        uvData[5] = (float) (sy + sh) / (float) logicalHeight;
 //  // top right
-        uvData[6] = (float) (sx + sw) / (float) width;
-        uvData[7] = (float) sy / (float) height;
+        uvData[6] = (float) (sx + sw) / (float) logicalWidth;
+        uvData[7] = (float) sy / (float) logicalHeight;
 
         // Again, a FloatBuffer will be used to pass the values
         uvDataBuff.put(uvData);

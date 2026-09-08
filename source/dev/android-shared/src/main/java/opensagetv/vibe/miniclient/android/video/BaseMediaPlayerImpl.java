@@ -79,6 +79,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     // Keep this client-side so it also works with an unmodified SageTV server.
     private final PlaybackSessionController playbackSessions = new PlaybackSessionController();
     protected volatile PlaybackSessionController.Token lastPlaybackOperation;
+    /**
+     * Non-null while a replacement player is being released and configured.
+     *
+     * <p>{@link #releasePlayer()} normally exposes EOS. During OPENURL that
+     * release belongs to the previous player, however, and must not leak into
+     * the new session. A concurrent GETMEDIATIME would otherwise serialize
+     * {@code -1}; stock SageTV treats {@code 0xFFFFFFFF} as EOS and briefly
+     * paints the timeline at the end before the first frame resets it to zero.</p>
+     */
+    private volatile PlaybackSessionController.Token loadTransitionToken;
     private boolean fullscreenPromotionSent;
     // Give the STV/Core time to perform its normal asynchronous transition.
     // TV is a toggle; an eager fallback can undo that transition and leave
@@ -182,6 +192,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void free()
     {
+        loadTransitionToken = null;
         playbackSessions.endSession(PlaybackSessionController.Operation.FREE);
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
@@ -201,6 +212,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     public void load(byte majorHint, byte minorHint, String encodingHint, final String urlString, String hostname, boolean timeshifted, long buffersize)
     {
         final PlaybackSessionController.Token loadSession = playbackSessions.beginSession();
+        loadTransitionToken = loadSession;
         onPlaybackLoadStarted();
         lastPlaybackOperation = loadSession;
         fullscreenPromotionSent = false;
@@ -253,18 +265,24 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                         log.debug("Ignoring stale queued load for {}", finalUrl);
                         return;
                     }
-                    releasePlayer();
-                    // releasePlayer() marks the previous session EOS.  This is the
-                    // beginning of a new load, so do not expose that stale EOS to
-                    // SageTV while the new PUSH datasource waits for its first bytes.
-                    eos = false;
-                    state = LOADED_STATE;
-                    context.setupVideoFrame();
-                    setupPlayer(finalUrl);
-
-                    if (dataSource == null && !httpls)
+                    try
                     {
-                        throw new RuntimeException("setupPlayer must create a datasource");
+                        releasePlayer();
+                        // releasePlayer() belongs to the previous session. The
+                        // transition token prevents it from publishing stale EOS.
+                        eos = false;
+                        state = LOADED_STATE;
+                        context.setupVideoFrame();
+                        setupPlayer(finalUrl);
+
+                        if (dataSource == null && !httpls)
+                        {
+                            throw new RuntimeException("setupPlayer must create a datasource");
+                        }
+                    }
+                    finally
+                    {
+                        finishLoadTransition(loadSession);
                     }
                 }
             });
@@ -277,17 +295,24 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 log.debug("Ignoring stale direct load for {}", finalUrl);
                 return;
             }
-            releasePlayer();
-            // Match the UI-thread load path: release belongs to the old session,
-            // while the new session must start in LOADED rather than EOS state.
-            eos = false;
-            state = LOADED_STATE;
-            log.debug("JVL - Creating player on thread ->", Thread.currentThread().getName());
-            setupPlayer(finalUrl);
-
-            if (dataSource == null && !httpls)
+            try
             {
-                throw new RuntimeException("setupPlayer must create a datasource");
+                releasePlayer();
+                // Match the UI-thread load path: release belongs to the old session,
+                // while the new session must start in LOADED rather than EOS state.
+                eos = false;
+                state = LOADED_STATE;
+                log.debug("JVL - Creating player on thread ->", Thread.currentThread().getName());
+                setupPlayer(finalUrl);
+
+                if (dataSource == null && !httpls)
+                {
+                    throw new RuntimeException("setupPlayer must create a datasource");
+                }
+            }
+            finally
+            {
+                finishLoadTransition(loadSession);
             }
         }
 
@@ -339,6 +364,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public long getMediaTimeMillis(long lastServerTime)
     {
+        // OPENURL owns a new logical playback session before its UI-thread
+        // player replacement completes. Never expose the old player's EOS
+        // sentinel during that interval.
+        if (loadTransitionToken != null)
+            return 0;
+
         if (lastMediaTime == -1) lastMediaTime = lastServerTime;
 
         if (!playerReady || player == null)
@@ -414,7 +445,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void stop()
     {
-        playbackSessions.endSession(PlaybackSessionController.Operation.STOP);
+        loadTransitionToken = null;
+        // SageTV STOP is not necessarily terminal. Stock servers legitimately
+        // retain the loaded MiniPlayer and later issue SEEK/PLAY without a new
+        // OPENURL (for example Stop followed by Restart). Keep the generation
+        // active so that the backend's queued PLAY is not rejected as stale.
+        // MEDIACMD_DEINIT -> free() remains the true session boundary.
+        beginPlaybackOperation(PlaybackSessionController.Operation.STOP);
         state = STOPPED_STATE;
         context.removeVideoFrame();
     }
@@ -671,10 +708,21 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         videoInfo.reset();
         releaseDataSource();
         dataSource = null;
-        state = EOS_STATE;
-        eos = true;
+        if (loadTransitionToken == null)
+        {
+            state = EOS_STATE;
+            eos = true;
+        }
         uiAspectChanged = true;
         context.removeVideoFrame();
+    }
+
+    private void finishLoadTransition(PlaybackSessionController.Token loadSession)
+    {
+        // A newer queued OPENURL owns its own token. Do not let completion of
+        // an older runnable clear the newer transition guard.
+        if (loadTransitionToken == loadSession)
+            loadTransitionToken = null;
     }
 
     protected void applySavedRefreshRateIfPossible()

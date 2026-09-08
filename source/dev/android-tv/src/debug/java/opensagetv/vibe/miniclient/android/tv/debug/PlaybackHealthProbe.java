@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
+import opensagetv.vibe.miniclient.ConnectionLifecycleDiagnostics;
 import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlaybackHealthSource;
@@ -106,6 +107,12 @@ final class PlaybackHealthProbe
             return out;
         }
         out.backendClass = effective.getClass().getName();
+        out.connectionGeneration = ConnectionLifecycleDiagnostics.latestGeneration();
+        out.connectionReconnectCount = ConnectionLifecycleDiagnostics.latestReconnectCount();
+        Object playbackSessions = readField(effective, "playbackSessions");
+        Object playbackSessionToken = invokeOptional(playbackSessions, "currentSessionToken");
+        out.playbackSessionGeneration = invokeLongOptional(
+                playbackSessionToken, "getSessionGeneration", -1L);
         Object dataSource;
         Object backendPlayer;
         if (effective instanceof PlaybackHealthSource)
@@ -584,6 +591,9 @@ final class PlaybackHealthProbe
         boolean flushed;
         boolean errorState;
         int retryCount = -1;
+        long connectionGeneration = -1;
+        long connectionReconnectCount = -1;
+        long playbackSessionGeneration = -1;
 
         int playbackState = -1;
         boolean playWhenReady;

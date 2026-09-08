@@ -168,13 +168,18 @@ public class ImageCache
 
                 log.logDebug("Unloaded " + handle + " with size: " + bi.getWidth() + "x" +  bi.getHeight() + " (" + Utils.toMB(Math.max(0, bytes)) + "mb); Cache " + Utils.toMB(imageCacheSize) + "mb/" + Utils.toMB(imageCacheLimit)+ "mb)");
             }
-            bi.dispose();
         } else {
             if (VerboseLogging.DETAILED_IMAGE_CACHE) {
                 log.logDebug("Unloaded: " + handle + ", but was not in the cache" );
             }
         }
         clearImageAccess(handle);
+        // The renderer owns final disposal. Some renderers execute drawing on a
+        // dedicated graphics thread, so disposing the shared holder here can
+        // invalidate a draw that was already queued before this UNLOADIMAGE.
+        // Keeping draw and disposal in the renderer's command queue preserves
+        // the protocol order and also lets GL resources be released on the
+        // thread that owns their context.
         client.getUIRenderer().unloadImage(handle, bi);
     }
 
@@ -348,7 +353,12 @@ public class ImageCache
 
     public void reloadSettings()
     {
-        imageCacheLimit = client.properties().getLong(PrefStore.Keys.image_cache_size_mb, 64)*1024*1024;
+        // Modern SageMC channel logos are commonly 1024x768 even though the
+        // Guide renders them as thumbnails. A 64 MiB logical cache churns as
+        // soon as a few guide pages are visited, forcing repeated disk decode
+        // and GPU upload. 128 MiB retains the working Guide set on current TV
+        // devices; an explicit user value continues to win.
+        imageCacheLimit = client.properties().getLong(PrefStore.Keys.image_cache_size_mb, 128)*1024*1024;
         offlineImageCacheLimit = client.properties().getLong(PrefStore.Keys.disk_image_cache_size_mb, 512) * 1024*1024;
 
         if (client.properties().getBoolean(PrefStore.Keys.cache_images_on_disk, true))

@@ -33,11 +33,13 @@ public class MiniclientService extends Service {
     public void onDestroy() {
         super.onDestroy();
         log.debug("Stopping MiniClient Service");
-        try {
-            MiniclientApplication.get(this).getClient().shutdown();
-        } catch (Throwable t) {
-            log.warn("Failed to shutdown MiniClient service", t);
-        }
+        // A started background service is not the owner of the Application
+        // singleton. Newer Fire OS releases may destroy this service while the
+        // process and its foreground Activity remain alive. Shutting down the
+        // MiniClient here permanently terminates its executors; a later
+        // OPENURL in the still-running Activity then fails before playback can
+        // start. Process death already reclaims these resources, while explicit
+        // application teardown remains responsible for MiniClient.shutdown().
     }
 
     @Nullable

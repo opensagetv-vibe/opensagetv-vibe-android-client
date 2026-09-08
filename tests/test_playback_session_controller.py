@@ -29,6 +29,8 @@ class PlaybackSessionControllerTests(unittest.TestCase):
         self.assertIn("Ignoring stale queued load", source)
         self.assertIn("PlaybackSessionController.Operation.STOP", source)
         self.assertIn("PlaybackSessionController.Operation.FREE", source)
+        self.assertIn("beginPlaybackOperation(PlaybackSessionController.Operation.STOP)", source)
+        self.assertNotIn("endSession(PlaybackSessionController.Operation.STOP)", source)
         self.assertIn("PlaybackSessionController.Operation.INACTIVE_FILE", source)
         self.assertIn("PlaybackSessionController.Operation.SURFACE_REPLACEMENT", source)
         self.assertIn("Ignoring stale surface update", source)

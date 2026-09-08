@@ -85,6 +85,15 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # Adds the reviewed per-load caption-state reset hook used by the
         # extractor-backed legacy-extender subtitle callback bridge.
         reviewed_legacy_caption_bridge_hash = "f34e82d2118603672a02ef1a5141603d0387f3c21b53ea0aa989706b3f5337f8"
+        # Prevents the previous player's transient EOS state from leaking
+        # through GETMEDIATIME while OPENURL replaces the player on Android's
+        # UI thread. Stock SageTV otherwise paints the startup timeline at its
+        # end before the first frame resets the clock to zero.
+        reviewed_load_transition_time_guard_hash = "e43f76c591d802b31eab760018e8c5985596ce67f52e990aa695b7ab2e1fe712"
+        # Preserves the loaded playback generation across SageTV's nonterminal
+        # STOP so a later SEEK/PLAY restart reaches the retained backend.
+        # DEINIT/FREE remains the stale-callback invalidation boundary.
+        reviewed_stock_stop_restart_hash = "a24f1d8c24b921de8d98962d7a018fbf235b6533405a5b9aab356cf004232bd7"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -98,6 +107,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_dvd_hybrid_push_guard_hash,
             reviewed_caption_refresh_hash,
             reviewed_legacy_caption_bridge_hash,
+            reviewed_load_transition_time_guard_hash,
+            reviewed_stock_stop_restart_hash,
         }, rel)
 
     def test_four_backends_have_stable_preference_values(self):
@@ -185,7 +196,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.86")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.87")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -225,14 +236,23 @@ class PlayerBackendRefactorTests(unittest.TestCase):
     def test_new_load_clears_previous_session_eos_after_release(self):
         base = (SHARED / "video/BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
         load = base.split("public void load(", 1)[1].split("protected abstract void setupPlayer", 1)[0]
-        # releasePlayer() intentionally marks the old session EOS. Both load paths
-        # must clear that stale flag before SageTV polls the new PUSH session; if it
-        # sees EOS, the server pusher exits before sending its first buffer.
+        release = base.split("protected void releasePlayer()", 1)[1].split(
+            "protected void applySavedRefreshRateIfPossible", 1
+        )[0]
+        media_time = base.split("public long getMediaTimeMillis(long lastServerTime)", 1)[1].split(
+            "public int getState()", 1
+        )[0]
+        # releasePlayer() intentionally marks a genuinely ended session EOS.
+        # During both load paths, however, the old player is released after the
+        # new OPENURL session exists. The owning transition token must suppress
+        # that stale EOS and make concurrent GETMEDIATIME return zero.
         self.assertEqual(load.count("releasePlayer();"), 2)
-        self.assertEqual(load.count("releasePlayer();\n                    // releasePlayer() marks"), 1)
-        self.assertEqual(load.count("releasePlayer();\n            // Match the UI-thread load path"), 1)
+        self.assertEqual(load.count("loadTransitionToken = loadSession;"), 1)
+        self.assertEqual(load.count("finishLoadTransition(loadSession);"), 2)
         self.assertEqual(load.count("eos = false;"), 3)
-        self.assertLess(load.index("// releasePlayer() marks"), load.index("state = LOADED_STATE;"))
+        self.assertIn("if (loadTransitionToken != null)\n            return 0;", media_time)
+        self.assertIn("if (loadTransitionToken == null)", release)
+        self.assertIn("if (loadTransitionToken == loadSession)", base)
 
     def test_phase_a_exo_seek_is_async_allows_zero_and_completes_on_seek_discontinuity(self):
         for rel, owner in (
@@ -439,6 +459,23 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         auto = gsy.split("if (resolved == GSYPlayerEngine.AUTO)", 1)[1].split("switch (resolved)", 1)[0]
         self.assertIn("resolved = GSYPlayerEngine.MEDIA3;", auto)
         self.assertNotIn("GSYPlayerEngine.SYSTEM : GSYPlayerEngine.MEDIA3", auto)
+
+    def test_gsy_adapter_forwards_extended_player_contract(self):
+        gsy = (SHARED / "video/gsy/GSYMediaPlayerImpl.java").read_text(encoding="utf-8")
+        for method in (
+            "setServerMediaMetadataExplicit", "hasRenderedFirstVideoFrame",
+            "supportsSubtitleOffset", "setSubtitleOffsetMillis",
+            "supportsTextSubtitlePresentation", "setTextSubtitlePresentation",
+            "supportsAudioOffset", "setAudioOffsetMillis", "getContentFrameRateHz",
+            "getAudioTrackIds", "getAudioTrackLabels", "getSelectedAudioTrack",
+            "getAudioOutputSummary", "supportsAudioPassthroughControl",
+            "setAudioPassthroughEnabled", "setPreferredSubtitleTrack",
+            "getBufferedPlaybackAheadMillis", "dvdNewCell", "dvdSetClut",
+            "dvdSetSpuControl", "isDvdMenuNavigationActive", "dvdSetStc",
+            "dvdSetFormat", "dvdSetStream",
+        ):
+            with self.subTest(method=method):
+                self.assertIn(f"{method}(", gsy)
         system_case = gsy.split("case SYSTEM:", 1)[1].split("default:", 1)[0]
         self.assertIn("return new Media3MediaPlayerImpl(context);", system_case)
         self.assertIn("PrefStore.Keys.gsy_system_probe_enabled", system_case)

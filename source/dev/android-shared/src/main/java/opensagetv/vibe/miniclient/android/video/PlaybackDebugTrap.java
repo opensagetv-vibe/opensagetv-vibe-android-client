@@ -17,6 +17,7 @@ public final class PlaybackDebugTrap
     private static final String TRAP_CLASS = "opensagetv.vibe.miniclient.android.tv.debug.PlaybackEventTraps";
     private static volatile boolean lookupComplete;
     private static volatile Method recordMethod;
+    private static volatile Method recordDetailedMethod;
 
     private PlaybackDebugTrap()
     {
@@ -37,6 +38,25 @@ public final class PlaybackDebugTrap
         }
     }
 
+    public static void recordDetailed(String event, MiniPlayerPlugin player, String detail)
+    {
+        resolveRecordMethod();
+        Method method = recordDetailedMethod;
+        if (method == null)
+        {
+            record(event, player);
+            return;
+        }
+        try
+        {
+            method.invoke(null, event, player, detail);
+        }
+        catch (Throwable ignored)
+        {
+            // Diagnostics must never alter normal playback behavior.
+        }
+    }
+
     private static Method resolveRecordMethod()
     {
         if (lookupComplete)
@@ -49,10 +69,13 @@ public final class PlaybackDebugTrap
             {
                 Class<?> trapClass = Class.forName(TRAP_CLASS);
                 recordMethod = trapClass.getMethod("record", String.class, MiniPlayerPlugin.class);
+                recordDetailedMethod = trapClass.getMethod("recordDetailed",
+                        String.class, MiniPlayerPlugin.class, String.class);
             }
             catch (Throwable ignored)
             {
                 recordMethod = null;
+                recordDetailedMethod = null;
             }
             lookupComplete = true;
             return recordMethod;

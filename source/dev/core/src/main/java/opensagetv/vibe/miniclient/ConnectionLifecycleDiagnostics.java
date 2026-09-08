@@ -36,6 +36,19 @@ public final class ConnectionLifecycleDiagnostics
         return trace == null ? "connectionTraceAvailable=false" : trace.compactWire();
     }
 
+    /** Small typed fields used by the debug APK's persistent playback trace. */
+    public static long latestGeneration()
+    {
+        Trace trace = latest;
+        return trace == null ? -1L : trace.generation;
+    }
+
+    public static long latestReconnectCount()
+    {
+        Trace trace = latest;
+        return trace == null ? -1L : trace.reconnectCount.get();
+    }
+
     static final class Trace
     {
         private final long generation;

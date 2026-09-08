@@ -56,10 +56,7 @@ class ConnectionLifecycleDiagnosticsTests(unittest.TestCase):
         self.assertIn('"connectionGeneration"', script)
         self.assertIn("wait_closed_trace", script)
         self.assertIn('"HOME"', script)
-        self.assertIn(
-            'default="/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"',
-            script,
-        )
+        self.assertIn('default=default_fixture("seek_server_path"', script)
         self.assertIn("mcp-connection-order-test)", dev)
 
 

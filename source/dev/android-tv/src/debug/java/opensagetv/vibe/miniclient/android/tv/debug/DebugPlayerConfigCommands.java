@@ -73,6 +73,8 @@ final class DebugPlayerConfigCommands
                 intent.getStringExtra("disc_compatibility_fallback"));
         String discMpeg2TimestampRepair = clean(
                 intent.getStringExtra("disc_mpeg2_timestamp_repair"));
+        String waitForPlaybackBeforeFirstOsd = clean(
+                intent.getStringExtra("wait_for_playback_before_first_osd"));
         boolean clearSmbProfileAuth = parseBoolean(
                 clean(intent.getStringExtra("smb_profile_clear_auth")), false);
 
@@ -111,6 +113,9 @@ final class DebugPlayerConfigCommands
                         + discMpeg2TimestampRepair);
             prefs.setString(PrefStore.Keys.disc_mpeg2_timestamp_repair, value);
         }
+        if (!waitForPlaybackBeforeFirstOsd.isEmpty())
+            prefs.setBoolean(PrefStore.Keys.wait_for_playback_before_first_osd,
+                    parseBoolean(waitForPlaybackBeforeFirstOsd, false));
 
         if (!player.isEmpty())
         {

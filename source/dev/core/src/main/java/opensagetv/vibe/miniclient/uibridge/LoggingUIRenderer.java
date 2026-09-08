@@ -256,6 +256,12 @@ public class LoggingUIRenderer<Image extends Texture> implements UIRenderer<Imag
     }
 
     @Override
+    public void onPlaybackLoadStarted() {
+        log("onPlaybackLoadStarted");
+        delegate.onPlaybackLoadStarted();
+    }
+
+    @Override
     public boolean isFirstFrameRendered() {
         return delegate.isFirstFrameRendered();
     }

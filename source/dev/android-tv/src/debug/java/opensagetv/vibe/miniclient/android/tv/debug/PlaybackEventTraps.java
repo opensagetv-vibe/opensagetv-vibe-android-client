@@ -27,15 +27,29 @@ public final class PlaybackEventTraps
 
     public static void record(String event, MiniPlayerPlugin player)
     {
+        recordDetailed(event, player, "");
+    }
+
+    public static void recordDetailed(String event, MiniPlayerPlugin player, String detail)
+    {
         Event trapped = newEvent(event);
+        trapped.detail = safeDetail(detail);
         fillSnapshot(trapped, PlaybackHealthProbe.capture(player));
         addEvent(trapped);
+        PersistentPlaybackTrace.append(toJsonLine(trapped));
     }
 
     /** Record the protocol-event timestamp immediately, then capture counters on the UI thread. */
     public static void recordAsync(String event, final MiniPlayerPlugin player)
     {
+        recordAsyncDetailed(event, player, "");
+    }
+
+    public static void recordAsyncDetailed(String event, final MiniPlayerPlugin player,
+                                           String detail)
+    {
         final Event trapped = newEvent(event);
+        trapped.detail = safeDetail(detail);
         addEvent(trapped);
         new Handler(Looper.getMainLooper()).post(new Runnable()
         {
@@ -47,6 +61,7 @@ public final class PlaybackEventTraps
                 {
                     fillSnapshot(trapped, snapshot);
                 }
+                PersistentPlaybackTrace.append(toJsonLine(trapped));
             }
         });
     }
@@ -66,6 +81,11 @@ public final class PlaybackEventTraps
         trapped.snapshotMonotonicMs = monotonicMs();
         trapped.snapshotLagMs = Math.max(0L, trapped.snapshotMonotonicMs - trapped.monotonicMs);
         trapped.playerPositionMs = snapshot.playerPositionMs;
+        trapped.bufferedPositionMs = snapshot.bufferedPositionMs;
+        trapped.durationMs = snapshot.durationMs;
+        trapped.connectionGeneration = snapshot.connectionGeneration;
+        trapped.connectionReconnectCount = snapshot.connectionReconnectCount;
+        trapped.playbackSessionGeneration = snapshot.playbackSessionGeneration;
         trapped.miniState = snapshot.miniState;
         trapped.playbackState = snapshot.playbackState;
         trapped.isPlaying = snapshot.isPlaying || snapshot.basicIsPlaying;
@@ -132,6 +152,21 @@ public final class PlaybackEventTraps
             EVENTS.clear();
         }
         return "cleared=true;trapSequence=" + sequence;
+    }
+
+    public static String traceStatusWire(android.content.Context context)
+    {
+        return PersistentPlaybackTrace.statusWire(context);
+    }
+
+    public static String clearTraceWire(android.content.Context context)
+    {
+        return PersistentPlaybackTrace.clearWire(context);
+    }
+
+    public static String setTraceEnabledWire(android.content.Context context, boolean enabled)
+    {
+        return PersistentPlaybackTrace.setEnabledWire(context, enabled);
     }
 
     static long currentSequence()
@@ -235,15 +270,98 @@ public final class PlaybackEventTraps
                 .replace(' ', '_').replace('\n', '_').replace('\r', '_');
     }
 
+    private static String toJsonLine(Event e)
+    {
+        StringBuilder out = new StringBuilder(640);
+        out.append('{');
+        appendJson(out, "schema", 1).append(',');
+        appendJson(out, "sequence", e.sequence).append(',');
+        appendJson(out, "event", e.event).append(',');
+        appendJson(out, "detail", e.detail).append(',');
+        appendJson(out, "wallMs", e.wallMs).append(',');
+        appendJson(out, "monotonicMs", e.monotonicMs).append(',');
+        appendJson(out, "snapshotLagMs", e.snapshotLagMs).append(',');
+        appendJson(out, "playerPositionMs", e.playerPositionMs).append(',');
+        appendJson(out, "bufferedPositionMs", e.bufferedPositionMs).append(',');
+        appendJson(out, "durationMs", e.durationMs).append(',');
+        appendJson(out, "connectionGeneration", e.connectionGeneration).append(',');
+        appendJson(out, "connectionReconnectCount", e.connectionReconnectCount).append(',');
+        appendJson(out, "playbackSessionGeneration", e.playbackSessionGeneration).append(',');
+        appendJson(out, "miniState", e.miniState).append(',');
+        appendJson(out, "playbackState", e.playbackState).append(',');
+        appendJson(out, "isPlaying", e.isPlaying).append(',');
+        appendJson(out, "isLoading", e.isLoading).append(',');
+        appendJson(out, "videoExpected", e.videoExpected).append(',');
+        appendJson(out, "audioExpected", e.audioExpected).append(',');
+        appendJson(out, "videoRendered", e.videoRendered).append(',');
+        appendJson(out, "videoQueuedInput", e.videoQueuedInput).append(',');
+        appendJson(out, "videoDecoderInitCount", e.videoDecoderInitCount).append(',');
+        appendJson(out, "videoDecoderReleaseCount", e.videoDecoderReleaseCount).append(',');
+        appendJson(out, "audioRendered", e.audioRendered).append(',');
+        appendJson(out, "audioQueuedInput", e.audioQueuedInput).append(',');
+        appendJson(out, "audioDecoderInitCount", e.audioDecoderInitCount).append(',');
+        appendJson(out, "audioDecoderReleaseCount", e.audioDecoderReleaseCount).append(',');
+        appendJson(out, "audioHeadFrames", e.audioHeadFrames).append(',');
+        appendJson(out, "audioSessionId", e.audioSessionId).append(',');
+        appendJson(out, "surfaceValid", e.surfaceValid).append(',');
+        appendJson(out, "probeSupported", e.probeSupported).append(',');
+        appendJson(out, "videoDecoderKind", e.videoDecoderKind).append(',');
+        appendJson(out, "audioDecoderKind", e.audioDecoderKind);
+        return out.append('}').toString();
+    }
+
+    private static StringBuilder appendJson(StringBuilder out, String name, long value)
+    {
+        return out.append('"').append(name).append("\":").append(value);
+    }
+
+    private static StringBuilder appendJson(StringBuilder out, String name, boolean value)
+    {
+        return out.append('"').append(name).append("\":").append(value);
+    }
+
+    private static StringBuilder appendJson(StringBuilder out, String name, String value)
+    {
+        out.append('"').append(name).append("\":\"");
+        if (value != null)
+        {
+            for (int index = 0; index < value.length(); index++)
+            {
+                char c = value.charAt(index);
+                if (c == '"' || c == '\\')
+                    out.append('\\');
+                if (c >= 0x20)
+                    out.append(c);
+            }
+        }
+        return out.append('"');
+    }
+
+    private static String safeDetail(String value)
+    {
+        if (value == null)
+            return "";
+        String redacted = value
+                .replaceAll("(?i)(password|passwd|pwd|token|secret)=([^;&\\s]+)", "$1=<redacted>")
+                .replaceAll("(?i)(smb://)([^/@:]+):([^/@]+)@", "$1<redacted>@");
+        return redacted.replace('\n', ' ').replace('\r', ' ');
+    }
+
     private static final class Event
     {
         long sequence;
         String event = "";
+        String detail = "";
         long monotonicMs;
         long wallMs;
         long snapshotMonotonicMs = -1;
         long snapshotLagMs = -1;
         long playerPositionMs = -1;
+        long bufferedPositionMs = -1;
+        long durationMs = -1;
+        long connectionGeneration = -1;
+        long connectionReconnectCount = -1;
+        long playbackSessionGeneration = -1;
         int miniState = -1;
         int playbackState = -1;
         boolean isPlaying;

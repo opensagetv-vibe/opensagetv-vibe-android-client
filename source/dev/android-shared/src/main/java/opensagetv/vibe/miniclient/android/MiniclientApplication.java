@@ -112,6 +112,11 @@ public class MiniclientApplication extends Application
     public void onTerminate()
     {
         log.logDebug("Destroying MiniClient");
+        if (client != null)
+        {
+            client.shutdown();
+            client = null;
+        }
         Intent i = new Intent(getBaseContext(), MiniclientService.class);
         stopService(i);
         unregisterActivityLifecycleCallbacks(backgroundSessionOwner);

@@ -13,6 +13,7 @@ final class PlaybackDebugEventBridge
     private static final String TRAP_CLASS = "opensagetv.vibe.miniclient.android.tv.debug.PlaybackEventTraps";
     private static volatile boolean lookupComplete;
     private static volatile Method recordAsyncMethod;
+    private static volatile Method recordAsyncDetailedMethod;
 
     private PlaybackDebugEventBridge()
     {
@@ -33,6 +34,25 @@ final class PlaybackDebugEventBridge
         }
     }
 
+    static void recordAsyncDetailed(String event, MiniPlayerPlugin player, String detail)
+    {
+        resolve();
+        Method method = recordAsyncDetailedMethod;
+        if (method == null)
+        {
+            recordAsync(event, player);
+            return;
+        }
+        try
+        {
+            method.invoke(null, event, player, detail);
+        }
+        catch (Throwable ignored)
+        {
+            // Debug evidence must never interfere with the media-command thread.
+        }
+    }
+
     private static Method resolve()
     {
         if (lookupComplete)
@@ -45,10 +65,13 @@ final class PlaybackDebugEventBridge
             {
                 Class<?> trapClass = Class.forName(TRAP_CLASS);
                 recordAsyncMethod = trapClass.getMethod("recordAsync", String.class, MiniPlayerPlugin.class);
+                recordAsyncDetailedMethod = trapClass.getMethod("recordAsyncDetailed",
+                        String.class, MiniPlayerPlugin.class, String.class);
             }
             catch (Throwable ignored)
             {
                 recordAsyncMethod = null;
+                recordAsyncDetailedMethod = null;
             }
             lookupComplete = true;
             return recordAsyncMethod;

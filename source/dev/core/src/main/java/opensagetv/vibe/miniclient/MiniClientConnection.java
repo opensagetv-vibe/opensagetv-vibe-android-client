@@ -2735,6 +2735,15 @@ public class MiniClientConnection implements SageTVInputCallback
                         os.flush();
                         connectionDiagnostics.mediaReply(command);
                     }
+                    // SageTV closes the old player socket after it receives the DEINIT reply,
+                    // then waits for a freshly registered MiniPlayer media socket before it
+                    // can load the next file. Do not depend on TCP EOF delivery to wake this
+                    // worker: some Fire OS builds leave readFully() blocked long enough for
+                    // the server's player-socket wait to time out during a full file switch.
+                    if (command == MediaCmd.MEDIACMD_DEINIT) {
+                        PlaybackDebugEventBridge.recordAsync("media_socket_recycle_after_deinit", null);
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 log.logError("Error w/ Media Thread", e);

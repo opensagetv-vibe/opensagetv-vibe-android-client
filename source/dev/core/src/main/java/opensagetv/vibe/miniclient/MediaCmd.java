@@ -131,6 +131,12 @@ public class MediaCmd
     private volatile long controlledReloadRequestedMs = -1;
     private volatile int controlledReloadCorrectionCount;
     private volatile boolean controlledReloadAwaitingReplacementStc;
+    // Bounded debug evidence for the brief OPENURL interval where stock STVs
+    // can paint an incorrect end-of-file timeline. The reflective bridge is a
+    // no-op in release/desktop builds, and the counter prevents continuous
+    // GETMEDIATIME instrumentation.
+    private long startupMediaTimeTraceDeadlineMs = -1;
+    private int startupMediaTimeTraceRemaining;
 
     static
     {
@@ -376,12 +382,15 @@ public class MediaCmd
             case MEDIACMD_DEINIT:
 
                 writeInt(1, retbuf, 0);
+                PlaybackDebugEventBridge.recordAsync("server_deinit_command", playa);
                 close();
                 return 4;
 
             case MEDIACMD_OPENURL:
                 this.setLastServerStartPosition(-1);
                 resetDetailedPushStats();
+                startupMediaTimeTraceDeadlineMs = monotonicMs() + 4_000L;
+                startupMediaTimeTraceRemaining = 12;
 
                 int strLen = readInt(0, cmddata);
                 String urlString = "";
@@ -392,6 +401,8 @@ public class MediaCmd
                     urlString = new String(cmddata, 4, strLen - 1);
                     log.debug("JVL - MEDIACMD_OPENURL {}", urlString);
                 }
+                PlaybackDebugEventBridge.recordAsyncDetailed(
+                        "server_openurl_command", playa, "source=" + urlString);
 
                 String lowerUrl = urlString.toLowerCase();
                 // An explicit Vibe transport URL changes only the pushed media
@@ -423,9 +434,11 @@ public class MediaCmd
                     {
                         playa = myConn.newPlayerPlugin( urlString);//new MiniMPlayerPlugin(myConn.getGfxCmd(), myConn);
                         playa.setPushMode(false);
+                        playa.setServerMediaMetadataExplicit(mediaContext.isExplicit());
                         playa.load(mediaContext.getMajorTypeHint(), mediaContext.getMinorTypeHint(),
                                 mediaContext.getEncodingHint(), urlString, null,
                                 mediaContext.isActive(), mediaContext.getBufferSize());
+                        notifyPlaybackLoadStarted();
                         applySageTvClosedCaptionState();
                         pushMode = false;
                     }
@@ -438,9 +451,11 @@ public class MediaCmd
                         // So we always say it's active to avoid any problems loading the file if it's a streamable file format.
                         boolean isActive = mediaContext.isActive();
                         playa.setPushMode(false);
+                        playa.setServerMediaMetadataExplicit(mediaContext.isExplicit());
                         playa.load(mediaContext.getMajorTypeHint(), mediaContext.getMinorTypeHint(),
                                 mediaContext.getEncodingHint(), urlString, myConn.getServerName(),
                                 isActive, mediaContext.getBufferSize());
+                        notifyPlaybackLoadStarted();
                         applySageTvClosedCaptionState();
                         pushMode = false;
                     }
@@ -458,7 +473,9 @@ public class MediaCmd
                         }
                         playa = myConn.newPlayerPlugin( urlString);//new MiniMPlayerPlugin(myConn.getGfxCmd(), myConn);
                         playa.setPushMode(true);
+                        playa.setServerMediaMetadataExplicit(mediaContext.isExplicit());
                         playa.load((byte) 0, (byte) 0, "", urlString, null, true, 0);
+                        notifyPlaybackLoadStarted();
                         applySageTvClosedCaptionState();
                     }
                 }
@@ -472,6 +489,18 @@ public class MediaCmd
                 // media socket until SageTV's 30-second timeout closes the UI.
                 long theTime = playa == null ? 0 : getMediaTimeMillis();
                 writeInt((int) theTime, retbuf, 0);
+                if (startupMediaTimeTraceRemaining > 0
+                        && monotonicMs() <= startupMediaTimeTraceDeadlineMs)
+                {
+                    startupMediaTimeTraceRemaining--;
+                    PlaybackDebugEventBridge.recordAsyncDetailed(
+                            "server_media_time_startup_reply", playa,
+                            "replyMs=" + theTime
+                                    + ";wireInt=" + (int) theTime
+                                    + ";playerPresent=" + (playa != null)
+                                    + ";playerState=" + (playa == null ? -1 : playa.getState())
+                                    + ";serverAnchorMs=" + getLastServerStartPosition());
+                }
                 // MiniDVDPlayer's legacy DVD wire protocol always consumes a
                 // four-byte GETMEDIATIME reply.  The optional fifth playback-
                 // state byte used by ordinary MiniPlayer sessions would remain
@@ -496,6 +525,7 @@ public class MediaCmd
                 writeInt(1, retbuf, 0);
                 if (playa == null)
                     return 4;
+                PlaybackDebugEventBridge.recordAsync("server_stop_command", playa);
                 playa.stop();
                 return 4;
             case MEDIACMD_PAUSE:
@@ -875,7 +905,8 @@ public class MediaCmd
                 lastServerSeekSequence++;
                 lastServerSeekMonotonicMs = monotonicMs();
                 lastServerSeekWallMs = System.currentTimeMillis();
-                PlaybackDebugEventBridge.recordAsync("server_seek_command", playa);
+                PlaybackDebugEventBridge.recordAsyncDetailed(
+                        "server_seek_command", playa, "requestedMs=" + seekTime);
 
                 if (playa != null)
                 {
@@ -1132,6 +1163,12 @@ public class MediaCmd
     private static long monotonicMs()
     {
         return System.nanoTime() / 1000000L;
+    }
+
+    private void notifyPlaybackLoadStarted()
+    {
+        if (myConn != null && myConn.getUiRenderer() != null)
+            myConn.getUiRenderer().onPlaybackLoadStarted();
     }
 
     public long getLastServerStartPosition()

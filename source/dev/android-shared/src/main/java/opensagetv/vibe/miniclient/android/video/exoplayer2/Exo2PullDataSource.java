@@ -25,6 +25,7 @@ import opensagetv.vibe.miniclient.net.ISageTVDataSource;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
+import opensagetv.vibe.miniclient.android.video.GrowingPlaybackSourcePolicy;
 import opensagetv.vibe.miniclient.android.video.smb.SmbDirectConfig;
 import opensagetv.vibe.miniclient.android.video.smb.SmbSourceSelector;
 
@@ -44,7 +45,8 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     private long startPos;
     private long bytesRemaining = C.LENGTH_UNSET;
     private Uri uri;
-    private final boolean potentiallyGrowing;
+    private final GrowingPlaybackSourcePolicy growthPolicy;
+    private volatile boolean effectivelyGrowing;
 
     private long closedNetworkReadCount;
     private long closedNetworkReadRequestedBytes;
@@ -79,8 +81,16 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     public Exo2PullDataSource(String host, boolean potentiallyGrowing,
                               SmbDirectConfig smbConfig, int pullReadBytes)
     {
+        this(host, potentiallyGrowing, true, smbConfig, pullReadBytes);
+    }
+
+    public Exo2PullDataSource(String host, boolean potentiallyGrowing,
+                              boolean metadataExplicit,
+                              SmbDirectConfig smbConfig, int pullReadBytes)
+    {
         this.host=host;
-        this.potentiallyGrowing = potentiallyGrowing;
+        this.growthPolicy = new GrowingPlaybackSourcePolicy(
+                potentiallyGrowing, metadataExplicit);
         this.smbConfig = smbConfig;
         if (pullReadBytes <= 0) throw new IllegalArgumentException("pullReadBytes must be positive");
         this.pullReadBytes = pullReadBytes;
@@ -127,6 +137,7 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
             lastOpenPosition = dataSpec.position;
         }
         this.startPos = dataSpec.position;
+        effectivelyGrowing = growthPolicy.resolve(dataSource, size);
         log.debug("Open: Offset: {}, Requested Length: {}, Size: {}", startPos, dataSpec.length, size);
 
         if (size >= 0 && dataSpec.position > size)
@@ -140,7 +151,14 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
         // total resource size. Returning the total file size for a non-zero byte-range
         // open makes Exo believe the resource extends past its real end and can cause
         // a later reopen to fail with IO_READ_POSITION_OUT_OF_RANGE.
-        if (dataSpec.length != C.LENGTH_UNSET)
+        // Do not expose the size sampled at OPEN as the final length of an
+        // active recording. Legacy Exo otherwise fixes its timeline at that
+        // old edge and may end before the next SageTV live segment is ready.
+        if (effectivelyGrowing)
+        {
+            bytesRemaining = C.LENGTH_UNSET;
+        }
+        else if (dataSpec.length != C.LENGTH_UNSET)
         {
             bytesRemaining = dataSpec.length;
         }
@@ -223,7 +241,7 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
             }
             if (bytesRemaining == 0)
             {
-                if (potentiallyGrowing && dataSource != null)
+                if (effectivelyGrowing && dataSource != null)
                 {
                     long refreshedSize = dataSource instanceof GrowingDataSource
                             ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
@@ -245,6 +263,18 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
             if (dataSource == null)
             {
                 throw new IOException("Exo2 Pull datasource closed during non-zero read");
+            }
+
+            if (effectivelyGrowing && bytesRemaining == C.LENGTH_UNSET
+                    && startPos >= dataSource.size())
+            {
+                long refreshedSize = dataSource instanceof GrowingDataSource
+                        ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
+                        : dataSource.size();
+                if (refreshedSize <= startPos)
+                {
+                    return C.RESULT_END_OF_INPUT;
+                }
             }
 
             int bytesToRead = bytesRemaining == C.LENGTH_UNSET

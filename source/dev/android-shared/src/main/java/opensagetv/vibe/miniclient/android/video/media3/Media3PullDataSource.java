@@ -25,6 +25,7 @@ import opensagetv.vibe.miniclient.net.ISageTVDataSource;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
+import opensagetv.vibe.miniclient.android.video.GrowingPlaybackSourcePolicy;
 import opensagetv.vibe.miniclient.android.video.smb.SmbDirectConfig;
 import opensagetv.vibe.miniclient.android.video.smb.SmbSourceSelector;
 
@@ -44,7 +45,8 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     private long startPos;
     private long bytesRemaining = C.LENGTH_UNSET;
     private Uri uri;
-    private final boolean potentiallyGrowing;
+    private final GrowingPlaybackSourcePolicy growthPolicy;
+    private volatile boolean effectivelyGrowing;
     private volatile boolean endOfInput;
 
     private long closedNetworkReadCount;
@@ -80,8 +82,16 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     public Media3PullDataSource(String host, boolean potentiallyGrowing,
                                 SmbDirectConfig smbConfig, int pullReadBytes)
     {
+        this(host, potentiallyGrowing, true, smbConfig, pullReadBytes);
+    }
+
+    public Media3PullDataSource(String host, boolean potentiallyGrowing,
+                                boolean metadataExplicit,
+                                SmbDirectConfig smbConfig, int pullReadBytes)
+    {
         this.host=host;
-        this.potentiallyGrowing = potentiallyGrowing;
+        this.growthPolicy = new GrowingPlaybackSourcePolicy(
+                potentiallyGrowing, metadataExplicit);
         this.smbConfig = smbConfig;
         if (pullReadBytes <= 0) throw new IllegalArgumentException("pullReadBytes must be positive");
         this.pullReadBytes = pullReadBytes;
@@ -129,6 +139,7 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
         }
         this.startPos = dataSpec.position;
         endOfInput = false;
+        effectivelyGrowing = growthPolicy.resolve(dataSource, size);
         log.debug("Open: Offset: {}, Requested Length: {}, Size: {}", startPos, dataSpec.length, size);
 
         if (size >= 0 && dataSpec.position > size)
@@ -141,7 +152,16 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
         // Media3 DataSource.open() returns the readable length of THIS request, not
         // the total resource size. Returning the total file size for a non-zero
         // byte-range open causes the logical end position to grow across reopens.
-        if (dataSpec.length != C.LENGTH_UNSET)
+        // A recording that is still being written must not publish the size
+        // observed at OPEN as its final resource length. Media3 1.11 can pin
+        // the ProgressiveMediaPeriod to that stale boundary and eventually
+        // raise StuckPlayingNotEnding even though SageTV continues to append
+        // bytes. Keep the request unbounded and check SIZE at the read edge.
+        if (effectivelyGrowing)
+        {
+            bytesRemaining = C.LENGTH_UNSET;
+        }
+        else if (dataSpec.length != C.LENGTH_UNSET)
         {
             bytesRemaining = dataSpec.length;
         }
@@ -225,7 +245,7 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             }
             if (bytesRemaining == 0)
             {
-                if (potentiallyGrowing && dataSource != null)
+                if (effectivelyGrowing && dataSource != null)
                 {
                     long refreshedSize = dataSource instanceof GrowingDataSource
                             ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
@@ -249,6 +269,19 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             if (dataSource == null)
             {
                 throw new IOException("Media3 Pull datasource closed during non-zero read");
+            }
+
+            if (effectivelyGrowing && bytesRemaining == C.LENGTH_UNSET
+                    && startPos >= dataSource.size())
+            {
+                long refreshedSize = dataSource instanceof GrowingDataSource
+                        ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
+                        : dataSource.size();
+                if (refreshedSize <= startPos)
+                {
+                    endOfInput = true;
+                    return C.RESULT_END_OF_INPUT;
+                }
             }
 
             int bytesToRead = bytesRemaining == C.LENGTH_UNSET

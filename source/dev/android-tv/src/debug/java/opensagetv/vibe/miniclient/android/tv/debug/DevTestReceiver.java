@@ -48,6 +48,19 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(PlaybackEventTraps.clearWire());
             }
+            else if ("trace_status".equals(op))
+            {
+                ok(PlaybackEventTraps.traceStatusWire(context));
+            }
+            else if ("trace_clear".equals(op))
+            {
+                ok(PlaybackEventTraps.clearTraceWire(context));
+            }
+            else if ("trace_enable".equals(op))
+            {
+                boolean enabled = parseBoolean(clean(intent.getStringExtra("enabled")), true);
+                ok(PlaybackEventTraps.setTraceEnabledWire(context, enabled));
+            }
             else if ("config".equals(op))
             {
                 ok(DebugPlayerConfigCommands.configure(context, intent));

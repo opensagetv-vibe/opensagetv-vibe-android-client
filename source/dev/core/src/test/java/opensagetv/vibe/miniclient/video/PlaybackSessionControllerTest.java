@@ -37,17 +37,22 @@ public class PlaybackSessionControllerTest
     }
 
     @Test
-    public void stopAndFreeInvalidateAllTokens()
+    public void stopPreservesLoadedSessionAndFreeInvalidatesIt()
     {
         PlaybackSessionController controller = new PlaybackSessionController();
         PlaybackSessionController.Token first = controller.beginSession();
-        controller.endSession(PlaybackSessionController.Operation.STOP);
-        assertFalse(controller.isCurrentSession(first));
-        assertFalse(controller.isActive());
+        PlaybackSessionController.Token stopped = controller.beginOperation(
+                PlaybackSessionController.Operation.STOP);
+        PlaybackSessionController.Token restarted = controller.beginOperation(
+                PlaybackSessionController.Operation.PLAY);
+        assertTrue(controller.isCurrentSession(first));
+        assertTrue(controller.isCurrentSession(stopped));
+        assertTrue(controller.isCurrentSession(restarted));
+        assertTrue(controller.isActive());
 
-        PlaybackSessionController.Token second = controller.beginSession();
         controller.endSession(PlaybackSessionController.Operation.FREE);
-        assertFalse(controller.isCurrentSession(second));
+        assertFalse(controller.isCurrentSession(first));
+        assertFalse(controller.isCurrentSession(restarted));
         assertFalse(controller.isActive());
     }
 

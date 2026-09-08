@@ -60,6 +60,35 @@ class LifecycleSchedulingTests(unittest.TestCase):
             self.assertGreaterEqual(source.count("cancelProgressUpdates();"), 2)
             self.assertNotIn("handler = new Handler()", source)
 
+    def test_service_destruction_cannot_terminate_live_application_client(self):
+        service = (
+            ROOT
+            / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/MiniclientService.java"
+        ).read_text(encoding="utf-8")
+        application = (
+            ROOT
+            / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/MiniclientApplication.java"
+        ).read_text(encoding="utf-8")
+
+        on_destroy = service.split("public void onDestroy()", 1)[1].split(
+            "public IBinder onBind", 1
+        )[0]
+        on_terminate = application.split("public void onTerminate()", 1)[1].split(
+            "public void onLowMemory()", 1
+        )[0]
+        self.assertNotIn("getClient().shutdown()", on_destroy)
+        self.assertIn("client.shutdown();", on_terminate)
+
+    def test_optional_caption_work_cannot_reject_openurl(self):
+        for relative in (
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java",
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java",
+        ):
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("RejectedExecutionException", source)
+            self.assertIn("Skipping legacy-caption flush during client teardown", source)
+            self.assertIn("Skipping legacy-caption drain during client teardown", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,7 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     private String lastHostname;
     private boolean lastTimeshifted;
     private long lastBufferSize;
+    private boolean serverMediaMetadataExplicit;
     private volatile GSYPlayerEngine resolvedEngine = GSYPlayerEngine.AUTO;
     private volatile int systemFallbackCount;
     private volatile String systemFallbackReason = "";
@@ -112,6 +113,7 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
                 resolvedEngine = GSYPlayerEngine.MEDIA3;
                 delegate = new Media3MediaPlayerImpl(context);
                 delegate.setPushMode(pushMode);
+                delegate.setServerMediaMetadataExplicit(serverMediaMetadataExplicit);
                 delegate.load(lastMajorTypeHint, lastMinorTypeHint, lastEncodingHint,
                         lastUrlString, lastHostname, lastTimeshifted, lastBufferSize);
             }
@@ -140,6 +142,10 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
 
     @Override public void free() { if (d() != null) d().free(); delegate = null; }
     @Override public void setPushMode(boolean b) { pushMode = b; if (d() != null) d().setPushMode(b); }
+    @Override public void setServerMediaMetadataExplicit(boolean explicit) {
+        serverMediaMetadataExplicit = explicit;
+        if (d() != null) d().setServerMediaMetadataExplicit(explicit);
+    }
 
     @Override
     public void load(byte majorTypeHint, byte minorTypeHint, String encodingHint, String urlString,
@@ -158,6 +164,7 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
         GSYPlayerEngine configured = configuredEngine();
         delegate = createDelegate(configured, urlString);
         delegate.setPushMode(pushMode);
+        delegate.setServerMediaMetadataExplicit(serverMediaMetadataExplicit);
         delegate.load(majorTypeHint, minorTypeHint, encodingHint, urlString, hostname, timeshifted, bufferSize);
     }
 
@@ -170,6 +177,21 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public void seek(long timeMS) { if (d() != null) d().seek(timeMS); }
     @Override public float setPlaybackRate(float rate) { return d() == null ? 1.0f : d().setPlaybackRate(rate); }
     @Override public float getPlaybackRate() { return d() == null ? 1.0f : d().getPlaybackRate(); }
+    @Override public boolean hasRenderedFirstVideoFrame() { return d() != null && d().hasRenderedFirstVideoFrame(); }
+    @Override public boolean supportsSubtitleOffset() { return d() != null && d().supportsSubtitleOffset(); }
+    @Override public boolean setSubtitleOffsetMillis(int offsetMs) { return d() != null && d().setSubtitleOffsetMillis(offsetMs); }
+    @Override public int getSubtitleOffsetMillis() { return d() == null ? 0 : d().getSubtitleOffsetMillis(); }
+    @Override public boolean supportsTextSubtitlePresentation() { return d() != null && d().supportsTextSubtitlePresentation(); }
+    @Override public boolean setTextSubtitlePresentation(int safeAreaPercent, int textScalePercent, String style) {
+        return d() != null && d().setTextSubtitlePresentation(safeAreaPercent, textScalePercent, style);
+    }
+    @Override public int getTextSubtitleSafeAreaPercent() { return d() == null ? 18 : d().getTextSubtitleSafeAreaPercent(); }
+    @Override public int getTextSubtitleScalePercent() { return d() == null ? 100 : d().getTextSubtitleScalePercent(); }
+    @Override public String getTextSubtitleStyle() { return d() == null ? "system" : d().getTextSubtitleStyle(); }
+    @Override public boolean supportsAudioOffset() { return d() != null && d().supportsAudioOffset(); }
+    @Override public boolean setAudioOffsetMillis(int offsetMs) { return d() != null && d().setAudioOffsetMillis(offsetMs); }
+    @Override public int getAudioOffsetMillis() { return d() == null ? 0 : d().getAudioOffsetMillis(); }
+    @Override public float getContentFrameRateHz() { return d() == null ? -1f : d().getContentFrameRateHz(); }
     @Override public boolean frameStep(int amount) { return d() != null && d().frameStep(amount); }
     @Override public void setServerEOS() { if (d() != null) d().setServerEOS(); }
     @Override public void signalPushSegmentEnd() {
@@ -180,7 +202,14 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public int getVolume() { return d() == null ? 0 : d().getVolume(); }
     @Override public int setVolume(float v) { return d() == null ? 0 : d().setVolume(v); }
     @Override public void setAudioTrack(int streamPos) { if (d() != null) d().setAudioTrack(streamPos); }
+    @Override public int[] getAudioTrackIds() { return d() == null ? new int[0] : d().getAudioTrackIds(); }
+    @Override public String[] getAudioTrackLabels() { return d() == null ? new String[0] : d().getAudioTrackLabels(); }
+    @Override public int getSelectedAudioTrack() { return d() == null ? -1 : d().getSelectedAudioTrack(); }
+    @Override public String getAudioOutputSummary() { return d() == null ? "unknown" : d().getAudioOutputSummary(); }
+    @Override public boolean supportsAudioPassthroughControl() { return d() != null && d().supportsAudioPassthroughControl(); }
+    @Override public boolean setAudioPassthroughEnabled(boolean enabled) { return d() != null && d().setAudioPassthroughEnabled(enabled); }
     @Override public void setSubtitleTrack(int streamPos) { if (d() != null) d().setSubtitleTrack(streamPos); }
+    @Override public void setPreferredSubtitleTrack() { if (d() != null) d().setPreferredSubtitleTrack(); }
     @Override public int getSelectedSubtitleTrack() { return d() == null ? DISABLE_TRACK : d().getSelectedSubtitleTrack(); }
     @Override public int getSubtitleTrackCount() { return d() == null ? 0 : d().getSubtitleTrackCount(); }
     @Override public SubtitleTrack[] getSubtitleTracks() { return d() == null ? new SubtitleTrack[0] : d().getSubtitleTracks(); }
@@ -189,6 +218,14 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public void pushData(byte[] cmddata, int bufDataOffset, int buffSize) throws IOException { if (d() != null) d().pushData(cmddata, bufDataOffset, buffSize); }
     @Override public void flush() { if (d() != null) d().flush(); }
     @Override public int getBufferLeft() { return d() == null ? 0 : d().getBufferLeft(); }
+    @Override public long getBufferedPlaybackAheadMillis() { return d() == null ? -1L : d().getBufferedPlaybackAheadMillis(); }
     @Override public void setVideoAdvancedAspect(String aspectMode) { if (d() != null) d().setVideoAdvancedAspect(aspectMode); }
+    @Override public void dvdNewCell(int payloadSize, byte[] payload) { if (d() != null) d().dvdNewCell(payloadSize, payload); }
+    @Override public void dvdSetClut(int payloadSize, byte[] payload) { if (d() != null) d().dvdSetClut(payloadSize, payload); }
+    @Override public void dvdSetSpuControl(int payloadSize, byte[] payload) { if (d() != null) d().dvdSetSpuControl(payloadSize, payload); }
+    @Override public boolean isDvdMenuNavigationActive() { return d() != null && d().isDvdMenuNavigationActive(); }
+    @Override public void dvdSetStc(int stc) { if (d() != null) d().dvdSetStc(stc); }
+    @Override public void dvdSetFormat(int format) { if (d() != null) d().dvdSetFormat(format); }
+    @Override public void dvdSetStream(int streamType, int streamPosition) { if (d() != null) d().dvdSetStream(streamType, streamPosition); }
     @Override public void run() { if (d() != null) d().run(); }
 }

@@ -6,6 +6,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.Socket;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -99,6 +103,36 @@ public class SimplePullDataSourceTest {
 
         assertEquals(150, pds.waitForGrowth(100, 0));
         assertEquals("SIZE\r\n", commands.toString("ISO-8859-1"));
+    }
+
+    @Test
+    public void testCloseDoesNotWaitForMediaServerReply() throws Exception {
+        SimplePullDataSource pds = new SimplePullDataSource();
+        pds.remoteServer = new Socket();
+        pds.remoteReader = new DataInputStream(new InputStream() {
+            @Override
+            public int read() throws IOException {
+                throw new AssertionError("close must not wait for a CLOSE reply");
+            }
+        });
+        ByteArrayOutputStream commands = new ByteArrayOutputStream();
+        pds.remoteWriter = commands;
+        pds.opened = true;
+        CountDownLatch closed = new CountDownLatch(1);
+
+        Thread closer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                pds.close();
+                closed.countDown();
+            }
+        });
+        closer.start();
+
+        assertTrue("close must not block DEINIT waiting for MediaServer",
+                closed.await(1, TimeUnit.SECONDS));
+        assertEquals("CLOSE\r\n", commands.toString("ISO-8859-1"));
+        assertTrue(!pds.isOpen());
     }
 
     @Test

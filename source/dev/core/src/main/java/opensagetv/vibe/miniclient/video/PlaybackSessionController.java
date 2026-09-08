@@ -82,8 +82,8 @@ public final class PlaybackSessionController
 
     public synchronized Token endSession(Operation operation)
     {
-        if (operation != Operation.STOP && operation != Operation.FREE)
-            throw new IllegalArgumentException("Only STOP or FREE can end a playback session");
+        if (operation != Operation.FREE)
+            throw new IllegalArgumentException("Only FREE can end a playback session");
         Token ended = new Token(sessionGeneration, ++operationSequence, operation);
         latest = ended;
         active = false;

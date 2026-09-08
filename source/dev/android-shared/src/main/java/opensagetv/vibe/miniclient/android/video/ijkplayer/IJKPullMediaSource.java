@@ -6,8 +6,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 
 import opensagetv.vibe.miniclient.net.BufferedPullDataSource;
+import opensagetv.vibe.miniclient.net.GrowingDataSource;
 import opensagetv.vibe.miniclient.net.HasClose;
 import opensagetv.vibe.miniclient.net.ISageTVDataSource;
+import opensagetv.vibe.miniclient.android.video.GrowingPlaybackSourcePolicy;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 
@@ -16,16 +18,31 @@ import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
  */
 public class IJKPullMediaSource implements IMediaDataSource, HasClose {
     private static final Logger log = LoggerFactory.getLogger(IJKPullMediaSource.class);
+    private static final long GROWING_EDGE_WAIT_MS = 10_000L;
     private String host=null;
 
     private ISageTVDataSource dataSource;
     private String url;
+    private final GrowingPlaybackSourcePolicy growthPolicy;
+    private boolean effectivelyGrowing;
 
     public IJKPullMediaSource() {
+        this(null, false);
     }
 
     public IJKPullMediaSource(String host) {
-        this.host=host;
+        this(host, false);
+    }
+
+    public IJKPullMediaSource(String host, boolean potentiallyGrowing) {
+        this(host, potentiallyGrowing, true);
+    }
+
+    public IJKPullMediaSource(String host, boolean potentiallyGrowing,
+                              boolean metadataExplicit) {
+        this.host = host;
+        this.growthPolicy = new GrowingPlaybackSourcePolicy(
+                potentiallyGrowing, metadataExplicit);
     }
 
     public void open(String url) throws IOException {
@@ -36,7 +53,8 @@ public class IJKPullMediaSource implements IMediaDataSource, HasClose {
         if (dataSource != null) return;
         //dataSource = new SimplePullDataSource(host);
         dataSource = new BufferedPullDataSource(host);
-        dataSource.open(url);
+        long size = dataSource.open(url);
+        effectivelyGrowing = growthPolicy.resolve(dataSource, size);
     }
 
     @Override
@@ -45,6 +63,13 @@ public class IJKPullMediaSource implements IMediaDataSource, HasClose {
             log.debug("readAt(): pos: {}, offset:{}, size: {}", position, offset, size);
         try {
             if (dataSource == null) _open();
+            if (effectivelyGrowing && position >= dataSource.size()) {
+                long refreshedSize = dataSource instanceof GrowingDataSource
+                        ? ((GrowingDataSource) dataSource).waitForGrowth(position,
+                        GROWING_EDGE_WAIT_MS)
+                        : dataSource.size();
+                if (refreshedSize <= position) return -1;
+            }
             return dataSource.read(position, bytes, offset, size);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -55,7 +80,7 @@ public class IJKPullMediaSource implements IMediaDataSource, HasClose {
     @Override
     public long getSize() throws IOException {
         if (dataSource == null) _open();
-        return dataSource.size();
+        return effectivelyGrowing ? -1L : dataSource.size();
     }
 
     @Override

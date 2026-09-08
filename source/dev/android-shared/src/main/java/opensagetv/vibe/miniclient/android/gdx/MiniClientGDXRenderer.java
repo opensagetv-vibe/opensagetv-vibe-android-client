@@ -5,6 +5,9 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Point;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Display;
 import android.view.WindowManager;
@@ -37,6 +40,7 @@ import opensagetv.vibe.miniclient.MenuHint;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
+import opensagetv.vibe.miniclient.PlaybackStartupFrameGuard;
 import opensagetv.vibe.miniclient.android.AppUtil;
 import opensagetv.vibe.miniclient.android.R;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
@@ -102,6 +106,8 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
     long frame = 0;
     boolean firstFrame = true;
     private final RendererReadinessGate readiness = new RendererReadinessGate();
+    private final PlaybackStartupFrameGuard playbackStartupFrameGuard = new PlaybackStartupFrameGuard();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     boolean inFrame=false;
     // Current Surface (when surfaces are enabled)
     ImageHolder<GdxTexture> currentSurface = null;
@@ -121,6 +127,29 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
     private boolean firstResize = true; // true until after do the first resize
 
     private float uiAspectRatio = AspectHelper.ar_16_9;
+    private final Runnable delayedPlaybackOsdRender = new Runnable() {
+        @Override public void run() {
+            long nowMs = SystemClock.uptimeMillis();
+            boolean playbackStarted = hasPlaybackStarted();
+            if (playbackStartupFrameGuard.releaseIfReady(nowMs, playbackStarted)
+                    && Gdx.graphics != null) {
+                log.debug("Presenting first playback OSD after playback started");
+                Gdx.graphics.requestRendering();
+            } else {
+                long recheckMs = playbackStartupFrameGuard.deferFrame(nowMs, playbackStarted);
+                if (recheckMs > 0L)
+                    mainHandler.postDelayed(this, recheckMs);
+            }
+        }
+    };
+
+    private boolean hasPlaybackStarted() {
+        try {
+            return player != null && player.hasRenderedFirstVideoFrame();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
 
     public MiniClientGDXRenderer(AndroidUIController parent, MiniClient client) {
         this.activity = parent;
@@ -222,6 +251,19 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
     @Override
     public void render() {
         if (batch==null) return;
+        // A rendering request made for the previous STV frame can arrive
+        // after flipBuffer() has deferred the first playback OSD. Guard the
+        // presentation boundary itself so that request cannot expose retained
+        // timeline state.
+        long playbackOsdHoldMs = playbackStartupFrameGuard.isArmed()
+                ? playbackStartupFrameGuard.deferFrame(
+                        SystemClock.uptimeMillis(), hasPlaybackStarted())
+                : 0L;
+        if (playbackOsdHoldMs > 0L) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+            mainHandler.postDelayed(delayedPlaybackOsdRender, playbackOsdHoldMs);
+            return;
+        }
         int size=renderQueue.size();
         if (size==0) return;
 
@@ -289,6 +331,8 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
 
     @Override
     public void GFXCMD_DEINIT() {
+        mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+        playbackStartupFrameGuard.reset();
         readiness.cancel();
         activity.removeVideoFrame();
         activity.finish();
@@ -542,12 +586,19 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
     }
 
     @Override
-    public void unloadImage(int handle, ImageHolder<GdxTexture> bi) {
-        if (bi != null && bi.get() != null) {
-            log.debug("Unloading Image: {}", bi);
-            bi.get().dispose();
-            bi.dispose();
-        }
+    public void unloadImage(final int handle, final ImageHolder<GdxTexture> bi) {
+        if (bi == null || bi.get() == null) return;
+
+        // Preserve draw-before-unload ordering and dispose libGDX resources on
+        // its render thread instead of the MiniClient protocol thread.
+        invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                if (bi.get() == null) return;
+                log.debug("Unloading Image {}: {}", handle, bi);
+                bi.dispose();
+            }
+        });
     }
 
     @Override
@@ -720,7 +771,17 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
             renderQueue.addAll(frameQueue);
             frameQueue.clear();
         }
-        Gdx.graphics.requestRendering();
+        long playbackOsdHoldMs = playbackStartupFrameGuard.isArmed()
+                ? playbackStartupFrameGuard.deferFrame(
+                        SystemClock.uptimeMillis(), hasPlaybackStarted())
+                : 0L;
+        if (playbackOsdHoldMs > 0L) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+            mainHandler.postDelayed(delayedPlaybackOsdRender, playbackOsdHoldMs);
+            log.debug("Waiting up to {} ms to present first playback OSD", playbackOsdHoldMs);
+        } else {
+            Gdx.graphics.requestRendering();
+        }
         if (logFrameTime) {
             log.debug("FRAME: " + (frame) + "; Time: " + (System.currentTimeMillis() - frameTime) + "ms");
         }
@@ -827,7 +888,9 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
 
     @Override
     public void invokeLater(Runnable runnable) {
-        frameQueue.add(runnable);
+        synchronized (renderQueue) {
+            frameQueue.add(runnable);
+        }
     }
 
     @Override
@@ -923,6 +986,18 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
 
     @Override
     public void onMenuHint(MenuHint hint) {
+        boolean compatibilityEnabled = client.properties().getBoolean(
+                PrefStore.Keys.wait_for_playback_before_first_osd, false);
+        boolean releaseDeferredFrame = playbackStartupFrameGuard.onMenuHint(
+                hint, compatibilityEnabled, SystemClock.uptimeMillis());
+        boolean playbackOsd = compatibilityEnabled
+                && PlaybackStartupFrameGuard.isPlaybackOsd(hint);
+        if (!playbackOsd || releaseDeferredFrame) {
+            mainHandler.removeCallbacks(delayedPlaybackOsdRender);
+        }
+        if (releaseDeferredFrame && Gdx.graphics != null) {
+            Gdx.graphics.requestRendering();
+        }
         activity.showHideKeyboard(hint.hasTextInput);
     }
 
@@ -938,6 +1013,14 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
         if (player!=null) {
             player.setVideoAdvancedAspect(value);
         }
+    }
+
+    @Override
+    public void onPlaybackLoadStarted() {
+        playbackStartupFrameGuard.onPlaybackLoad(
+                client.properties().getBoolean(
+                        PrefStore.Keys.wait_for_playback_before_first_osd, false),
+                SystemClock.uptimeMillis());
     }
 
     @Override
