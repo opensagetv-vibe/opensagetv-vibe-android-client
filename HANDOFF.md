@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client handoff
 
-## v0.5.88 release candidate (2026-09-08)
+## GitHub v0.5.88 release (2026-09-08)
 
 Growing-file seek is corrected and physically gated on the commissioned
 non-Pro AFTMM/API-25 Fire TV (`192.168.10.25:5555`, DEV001) with hardware
@@ -27,9 +27,11 @@ Local release gates are green: 494 project/static tests, 70 MCP tests, Core
 Gradle tests, validation, and a clean 60-task build. The APK is
 `artifacts/firetv/OpenSageTV-Vibe-Android-Client-debug.apk`, SHA-256
 `f1791bf74cefc1c8ca98718c75912e2e7d4f0c12dc8de26ae7522f8cce247e3b`.
-Standalone CI repairs are included; the exact resume point is to publish the
-candidate commits, require the GitHub `source-contracts` job to pass, finalize
-the v0.5.88 release record/manifest, and publish the source/APK release.
+Standalone CI repairs are included. GitHub Repository checks run `34194405901`
+passed from a clean standalone checkout, including the repaired
+`source-contracts` job. The deterministic source archive, development-signed
+APK, checksums, and review bundle were independently inspected before the
+`v0.5.88` GitHub release was tagged.
 
 ## GitHub v0.5.87 release (2026-09-07)
 
