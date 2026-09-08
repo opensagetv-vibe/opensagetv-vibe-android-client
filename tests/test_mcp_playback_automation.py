@@ -570,6 +570,11 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('"dvdFrameReleaseGapCount"', disc_script)
         self.assertIn('state.get("dvdAppliedAudioStream", -1)', disc_script)
         self.assertIn('state.get("mediaTimeMs", -1)', disc_script)
+        self.assertIn('last.get("health_isPlaying") is False', disc_script)
+        self.assertIn('last.get("health_playWhenReady") is False', disc_script)
+        self.assertIn('str(last.get("popupName") or "").strip().lower() == "stoppopup"', disc_script)
+        self.assertIn('normalized["retainedStoppedPlayer"] = True', disc_script)
+        self.assertIn('popup_gone and backend_quiescent', disc_script)
 
     def test_completed_playback_lifecycle_gate_is_available(self):
         script = (ROOT / "scripts/mcp_lifecycle_test.py").read_text(encoding="utf-8")

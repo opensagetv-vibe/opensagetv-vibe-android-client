@@ -20,8 +20,10 @@ separately and must not block available work.
 - [ ] Complete the SageMC interoperability matrix on the commissioned non-Pro
   Fire TV and isolated `.232` server. Captions, full-screen exact-file
   playback, Live TV, root navigation, and native DVD root/submenu rendering
-  pass. Repeated exact-file playback after SageMC's retained `StopPopup`, DVD
-  Return, and resume-after-pause remain active physical gates.
+  pass. Native DVD pause/resume and real-disc submenu-to-root DVD Return also
+  pass. Repeated exact-file playback after SageMC's retained `StopPopup`
+  remains the final physical gate and requires activation of the already
+  staged Vibe Core redundant-watch fix.
 - [ ] After those gates pass, update durable results and manifests, run the
   complete suite, and publish the post-v0.5.88 automation update.
 

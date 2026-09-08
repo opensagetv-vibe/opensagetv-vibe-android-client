@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Completed the remaining independently executable SageMC DVD control gates on
+  the commissioned non-Pro Fire TV. Native Media3 hardware playback now passes
+  pause/resume with renewed A/V progress, and a commercial menu disc passes
+  root -> Languages submenu -> DVD Return -> root with screenshot evidence.
+  The DVD matrix cleanup also recognizes SageMC's retained player after the
+  exact `StopPopup` has been dismissed, but only while both backend playback
+  signals remain false. All 106 focused automation/DVD protocol tests pass.
+
 - Hardened exact-file commissioning when an alternate STV retains a stopped
   MiniPlayer session. The MCP helper now accepts that session only when both
   playback-health signals prove it quiescent, dismisses SageMC's retained

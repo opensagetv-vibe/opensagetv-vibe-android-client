@@ -26,6 +26,35 @@ def wait_stopped(client: MCPProcess, timeout_s: float = 20.0) -> dict:
         last = call_dict(client, "dev_player_state", timeout=30.0)
         if not bool(last.get("playerActive")):
             return last
+        # SageMC retains a quiescent MiniPlayer behind StopPopup. Treat that as
+        # stopped only when both backend playback signals agree. Dismiss the
+        # popup with HOME, then require either full player teardown or the same
+        # quiescent backend with the popup gone. SageMC can intentionally keep
+        # that stopped player object, so automationReady remains false even
+        # though no playback work survives. This is UI cleanup, not a
+        # relaxation of the physical playback gate.
+        retained_stop_popup = (
+            str(last.get("popupName") or "").strip().lower() == "stoppopup"
+            and last.get("health_isPlaying") is False
+            and last.get("health_playWhenReady") is False
+        )
+        if retained_stop_popup:
+            call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
+            normalize_deadline = min(deadline, time.monotonic() + 10.0)
+            while time.monotonic() < normalize_deadline:
+                normalized = call_dict(client, "dev_player_state", timeout=30.0)
+                if not bool(normalized.get("playerActive")):
+                    return normalized
+                popup_gone = not str(normalized.get("popupName") or "").strip()
+                backend_quiescent = (
+                    normalized.get("health_isPlaying") is False
+                    and normalized.get("health_playWhenReady") is False
+                )
+                if popup_gone and backend_quiescent:
+                    normalized["retainedStoppedPlayer"] = True
+                    return normalized
+                last = normalized
+                time.sleep(0.1)
         time.sleep(0.25)
     raise RuntimeError(f"DVD did not stop within {timeout_s:.1f}s: {last}")
 

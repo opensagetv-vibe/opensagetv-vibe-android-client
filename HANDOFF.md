@@ -1,5 +1,34 @@
 # OpenSageTV Vibe Android Client handoff
 
+## SageMC native DVD control completion (2026-09-08)
+
+Native Media3/hardware DVD pause and resume pass on non-Pro Fire TV `.25` and
+isolated server `.232`. Playback paused at 6,976 ms, resumed with both backend
+play signals true, and advanced to 18,168 ms with renewed audio/video output.
+The complete matrix, including STOP cleanup, is
+`artifacts/firetv/sagemc-dvd-pause-resume-20260908-rerun.json`.
+
+DVD Return was then verified visually on the commercial
+`SCOOBY_DOO_AND_BATMAN` disc. The Sage command path opened the root menu, moved
+RIGHT to Languages, selected its submenu, and returned to the root with
+`dvd_return`. The four screenshots are `20260908-115225_screen.png` through
+`20260908-115251_screen.png`; structured evidence is
+`artifacts/firetv/sagemc-real-dvd-return-20260908-horizontal.json`. Earlier
+transport-green attempts using DOWN were rejected after screenshot review
+because this disc's root buttons are horizontal. Physical video evidence,
+not merely an active player object, is the completion criterion.
+
+SageMC may keep the stopped player object after HOME closes `StopPopup`.
+`mcp_disc_test.py` now accepts that cleanup state only after the exact popup
+was observed and dismissed and both `health_isPlaying` and
+`health_playWhenReady` remain false. Full teardown is still accepted normally.
+The combined playback-automation/DVD-protocol suite passes all 106 tests.
+The complete post-change local gate also passes: 494 project/static tests, 70
+MCP tests, Core Gradle tests, structural validation, and a clean 60-task APK
+build. Because this slice changes only test automation and durable documents,
+the rebuilt APK remains byte-identical to v0.5.88 with SHA-256
+`f1791bf74cefc1c8ca98718c75912e2e7d4f0c12dc8de26ae7522f8cce247e3b`.
+
 ## SageMC retained-player interoperability (2026-09-08)
 
 SageMC leaves a stopped MiniPlayer loaded behind `StopPopup`. The debug-only
