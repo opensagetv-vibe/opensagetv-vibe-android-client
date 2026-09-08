@@ -125,6 +125,7 @@ docs/PHASE1_VALIDATION.md
 scripts/build_docker.sh
 scripts/build_existing_app.sh
 scripts/build_local.sh
+scripts/capture_hdmi_validation.ps1
 scripts/compile_existing_app.sh
 scripts/connect_firetv.sh
 scripts/install_firetv.sh

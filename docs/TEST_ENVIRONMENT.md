@@ -67,6 +67,20 @@ still require an explicit media path when automatically choosing a file would
 be unsafe. The config checker reports missing selections, duplicate aliases,
 malformed SMB mappings, and protected package IDs with actionable messages.
 
+## HDMI capture
+
+Capture independent HDMI evidence on Windows from the project root with the
+Python-backed command below. It does not depend on PowerShell script execution
+policy:
+
+```cmd
+capture_hdmi_validation.cmd --output artifacts\firetv\validation.mp4 --duration 45
+```
+
+Use `--video-device` and `--audio-device` when the DirectShow names differ
+from the commissioned USB capture adapter defaults. `VIBE_VLC_PATH` can point
+to a non-default `vlc.exe` installation.
+
 ## Secrets and release safety
 
 Put real Web and SMB credentials only in `config/firetv.toml` or supported

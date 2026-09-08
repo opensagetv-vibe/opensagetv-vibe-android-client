@@ -25,7 +25,8 @@ ROOT_PREFS = ROOT / "source/dev/android-shared/src/main/res/xml/prefs.xml"
 DEBUG_STATE = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java"
 MCP_SERVER = ROOT / "mcp/src/sagetv_dev_mcp/server.py"
 DVD_MCP_HARNESS = ROOT / "scripts/mcp_disc_test.py"
-HDMI_CAPTURE = ROOT / "scripts/capture_hdmi_validation.ps1"
+HDMI_CAPTURE = ROOT / "scripts/capture_hdmi_validation.py"
+HDMI_CAPTURE_CMD = ROOT / "capture_hdmi_validation.cmd"
 PLAYER_FACTORY = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/PlayerFactory.java"
 DISC_POLICY = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/video/DiscPlaybackPolicy.java"
 ACTIVE_ADJUSTMENTS = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ActivePlayerAdjustmentsDialog.java"
@@ -1005,6 +1006,7 @@ class DvdProtocolTests(unittest.TestCase):
 
     def test_hdmi_validation_capture_requires_video_and_audio_devices(self):
         capture = HDMI_CAPTURE.read_text(encoding="utf-8")
+        wrapper = HDMI_CAPTURE_CMD.read_text(encoding="utf-8")
         self.assertIn("USB Video", capture)
         self.assertIn("Digital Audio Interface (USB Digital Audio)", capture)
         self.assertIn(":dshow-vdev=", capture)
@@ -1014,7 +1016,9 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("vcodec=h264", capture)
         self.assertIn(":dshow-fps=30", capture)
         self.assertNotIn("file/avi", capture)
-        self.assertIn("if ($file.Length -le 0)", capture)
+        self.assertIn("if size <= 0", capture)
+        self.assertIn("capture_hdmi_validation.py", wrapper)
+        self.assertNotIn("powershell", wrapper.lower())
 
     def test_controlled_dvd_reload_reseeks_only_after_replacement_release(self):
         media = MEDIA.read_text(encoding="utf-8")

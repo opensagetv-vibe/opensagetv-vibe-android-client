@@ -184,7 +184,7 @@ six-disc representative chapter/control matrix pass under
 `dvd-representative-six-strict-controls.json`.
 
 The final independent HDMI capture is the reproducible AVI produced by
-`scripts/capture_hdmi_validation.ps1`. It contains 1920x1080 MJPEG and stereo
+`capture_hdmi_validation.cmd`. It contains 1920x1080 H.264 and stereo
 44.1 kHz PCM; the extracted frame shows clean Scooby title playback without a
 stale authored overlay. These files are
 `dvd-presentation-v21-final-hdmi-av-18s.avi`, its `.ffprobe.json`, and
