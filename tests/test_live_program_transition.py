@@ -10,7 +10,7 @@ class LiveProgramTransitionTest(unittest.TestCase):
     def read(self, relative):
         return (JAVA / relative).read_text(encoding="utf-8")
 
-    def test_exo_pull_sources_publish_unknown_length_for_growing_media(self):
+    def test_exo_pull_sources_keep_growing_reads_open_ended(self):
         for relative in (
             "media3/Media3PullDataSource.java",
             "exoplayer2/Exo2PullDataSource.java",
@@ -21,6 +21,31 @@ class LiveProgramTransitionTest(unittest.TestCase):
             self.assertLess(growing_branch, explicit_length_branch, relative)
             self.assertIn("bytesRemaining = C.LENGTH_UNSET;", source[growing_branch:explicit_length_branch])
             self.assertIn("waitForGrowth(startPos, 2000)", source)
+
+    def test_exo_pull_sources_expose_only_temporary_seekable_snapshots(self):
+        for relative in (
+            "media3/Media3PullDataSource.java",
+            "exoplayer2/Exo2PullDataSource.java",
+        ):
+            source = self.read(relative)
+            self.assertIn("seekableSnapshotPreparation && size >= 0", source, relative)
+            self.assertIn("return reportedLength;", source, relative)
+            self.assertIn("beginSeekableSnapshotPreparation()", source, relative)
+            self.assertIn("endSeekableSnapshotPreparation()", source, relative)
+
+    def test_growing_exo_seek_reprepares_with_a_current_ts_seek_map(self):
+        for relative, pull_type in (
+            ("media3/Media3MediaPlayerImpl.java", "Media3PullDataSource"),
+            ("exoplayer2/Exo2MediaPlayerImpl.java", "Exo2PullDataSource"),
+        ):
+            source = self.read(relative)
+            self.assertIn("boolean growingPullSeek =", source, relative)
+            self.assertIn("boolean repreparePullSeek = smbDirectSeek || growingPullSeek;", source, relative)
+            self.assertIn("pull.beginSeekableSnapshotPreparation();", source, relative)
+            self.assertIn("scheduleGrowingPullSeek(safePositionMs", source, relative)
+            self.assertIn("GROWING_PULL_SEEK_COALESCE_MS = 300L", source, relative)
+            self.assertIn('"growing_pull_seek_reprepare_before"', source, relative)
+            self.assertIn(f"(({pull_type}) dataSource).endSeekableSnapshotPreparation();", source, relative)
 
     def test_exo_error_recovery_keeps_the_pre_error_position(self):
         for relative in (
@@ -187,7 +212,8 @@ class LiveProgramTransitionTest(unittest.TestCase):
     def test_native_bridges_use_unknown_size_and_session_guarding(self):
         ijk_source = self.read("ijkplayer/IJKPullMediaSource.java")
         system_source = self.read("gsy/SagePullMediaDataSource.java")
-        self.assertIn("return effectivelyGrowing ? -1L : dataSource.size();", ijk_source)
+        self.assertIn("return dataSource.size();", ijk_source)
+        self.assertIn("isEffectivelyGrowing()", ijk_source)
         self.assertIn("GROWING_EDGE_WAIT_MS = 10_000L", ijk_source)
         self.assertIn("GROWING_EDGE_WAIT_MS)", ijk_source)
         self.assertIn("return effectivelyGrowing ? -1L : active.size();", system_source)
@@ -205,6 +231,9 @@ class LiveProgramTransitionTest(unittest.TestCase):
         ijk_player = self.read("ijkplayer/IJKMediaPlayerImpl.java")
         self.assertIn("IMediaPlayer activePlayer = player;", ijk_player)
         self.assertIn("if (activePlayer == null) return 0L;", ijk_player)
+        self.assertIn("growingPullSeekOffsetMs", ijk_player)
+        self.assertIn('"growing_pull_seek_relative_clock"', ijk_player)
+        self.assertIn("time + 500L < growingPullSeekLastRawMs", ijk_player)
 
     def test_stock_ts_growth_guess_is_probed_before_publishing_unknown_length(self):
         policy = self.read("GrowingPlaybackSourcePolicy.java")
@@ -221,6 +250,18 @@ class LiveProgramTransitionTest(unittest.TestCase):
             "playa.setServerMediaMetadataExplicit(mediaContext.isExplicit());",
             media_cmd,
         )
+
+    def test_live_physical_gate_checks_both_server_owned_seek_directions(self):
+        script = (ROOT / "scripts/mcp_live_tv_test.py").read_text(encoding="utf-8")
+        self.assertIn('"--verify-live-seek"', script)
+        self.assertIn('"dev_ensure_fullscreen_playback"', script)
+        self.assertIn("full-screen playback was not visible", script)
+        self.assertIn('(("rew", -10_000, -1), ("ff", 30_000, 1))', script)
+        self.assertIn("args.live_seek_preroll_ms", script)
+        self.assertIn('"dev_run_seek_check"', script)
+        self.assertIn('result.get("serverSeekObserved", False)', script)
+        self.assertIn('observed_ms * direction > 1000', script)
+        self.assertIn('"GSYSystemMediaPlayerImpl" in backend_class', script)
 
 
 if __name__ == "__main__":

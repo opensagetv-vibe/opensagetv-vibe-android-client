@@ -19,9 +19,9 @@ public class PlaybackSeekPolicyTest
     }
 
     @Test
-    public void keepsGrowingRecordingBehindLiveEdge()
+    public void preservesServerOwnedGrowingTargetWhenSnapshotDurationIsStale()
     {
-        assertEquals(58_000, PlaybackSeekPolicy.clamp(60_000, 60_000, true));
+        assertEquals(65_000, PlaybackSeekPolicy.clamp(65_000, 60_000, true));
     }
 
     @Test
@@ -32,20 +32,8 @@ public class PlaybackSeekPolicyTest
     }
 
     @Test
-    public void growingUnknownDurationUsesBufferedLiveEdge()
+    public void growingUnknownDurationPreservesServerTarget()
     {
-        assertEquals(58_000, PlaybackSeekPolicy.clamp(120_000, -1, 60_000, true));
-    }
-
-    @Test
-    public void completedUnknownDurationDoesNotUseBufferedEdge()
-    {
-        assertEquals(120_000, PlaybackSeekPolicy.clamp(120_000, -1, 60_000, false));
-    }
-
-    @Test
-    public void growingUnknownDurationWithoutBufferDoesNotInventAnEdge()
-    {
-        assertEquals(120_000, PlaybackSeekPolicy.clamp(120_000, -1, -1, true));
+        assertEquals(120_000, PlaybackSeekPolicy.clamp(120_000, -1, true));
     }
 }

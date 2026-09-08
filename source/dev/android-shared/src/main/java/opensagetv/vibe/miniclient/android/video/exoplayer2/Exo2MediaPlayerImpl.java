@@ -327,6 +327,54 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
+    private static final long GROWING_PULL_SEEK_COALESCE_MS = 300L;
+    private long pendingGrowingPullSeekTargetMs = -1L;
+    private ExoPlayer pendingGrowingPullSeekPlayer;
+    private PlaybackSessionController.Token pendingGrowingPullSeekSession;
+    private boolean pendingGrowingPullSeekResume;
+    private boolean pendingGrowingPullSeekSmb;
+    private final Runnable growingPullSeekRunnable = new Runnable()
+    {
+        @Override
+        public void run()
+        {
+            ExoPlayer expectedPlayer = pendingGrowingPullSeekPlayer;
+            PlaybackSessionController.Token expectedSession = pendingGrowingPullSeekSession;
+            long targetMs = pendingGrowingPullSeekTargetMs;
+            boolean resume = pendingGrowingPullSeekResume;
+            boolean smb = pendingGrowingPullSeekSmb;
+            pendingGrowingPullSeekPlayer = null;
+            pendingGrowingPullSeekSession = null;
+            pendingGrowingPullSeekTargetMs = -1L;
+            if (expectedPlayer == null || expectedPlayer != player
+                    || !isCurrentPlaybackSession(expectedSession)
+                    || !(dataSource instanceof Exo2PullDataSource)
+                    || mediaSource == null)
+                return;
+            try
+            {
+                Exo2PullDataSource pull = (Exo2PullDataSource) dataSource;
+                pull.beginSeekableSnapshotPreparation();
+                PlaybackDebugTrap.recordDetailed(smb
+                                ? "smb_seek_reprepare_before"
+                                : "growing_pull_seek_reprepare_before",
+                        Exo2MediaPlayerImpl.this, "coalescedTargetMs=" + targetMs);
+                expectedPlayer.setMediaSource(mediaSource, targetMs);
+                expectedPlayer.prepare();
+                expectedPlayer.setPlayWhenReady(resume);
+                PlaybackDebugTrap.recordDetailed(smb
+                                ? "smb_seek_reprepare_after"
+                                : "growing_pull_seek_reprepare_after",
+                        Exo2MediaPlayerImpl.this, "coalescedTargetMs=" + targetMs);
+            }
+            catch (Exception ex)
+            {
+                PlaybackDebugTrap.record("growing_pull_seek_reprepare_error_"
+                        + ex.getClass().getSimpleName(), Exo2MediaPlayerImpl.this);
+                log.logError("Growing Pull seek reprepare failed at " + targetMs + "ms", ex);
+            }
+        }
+    };
     private final PlaybackRateController playbackRateController =
             new PlaybackRateController(progressHandler);
     private final PlaybackRateController.Driver playbackRateDriver =
@@ -527,6 +575,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         playbackRateController.reset();
         cancelProgressUpdates();
         cancelPullSeekRecovery();
+        cancelGrowingPullSeek();
         final ExoPlayer playerToRelease = player;
         final MediaSessionCompat sessionToRelease = mediaSession;
         // Keep MediaSession teardown on Android's main thread. Calling into
@@ -629,6 +678,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     public void stop()
     {
         playbackRateController.reset();
+        cancelGrowingPullSeek();
         final ExoPlayer playerToStop = player;
         final MediaSessionCompat sessionToStop = mediaSession;
         context.runOnUiThread(new Runnable()
@@ -809,6 +859,29 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         pullSeekRecoveryMonitor.cancel();
     }
 
+    private void cancelGrowingPullSeek()
+    {
+        progressHandler.removeCallbacks(growingPullSeekRunnable);
+        pendingGrowingPullSeekPlayer = null;
+        pendingGrowingPullSeekSession = null;
+        pendingGrowingPullSeekTargetMs = -1L;
+    }
+
+    private void scheduleGrowingPullSeek(long targetMs, boolean resume, boolean smb,
+                                         PlaybackSessionController.Token session)
+    {
+        pendingGrowingPullSeekTargetMs = targetMs;
+        pendingGrowingPullSeekResume = resume;
+        pendingGrowingPullSeekSmb = smb;
+        pendingGrowingPullSeekPlayer = player;
+        pendingGrowingPullSeekSession = session;
+        progressHandler.removeCallbacks(growingPullSeekRunnable);
+        progressHandler.postDelayed(growingPullSeekRunnable,
+                GROWING_PULL_SEEK_COALESCE_MS);
+        PlaybackDebugTrap.recordDetailed("growing_pull_seek_coalesced", this,
+                "targetMs=" + targetMs + ";delayMs=" + GROWING_PULL_SEEK_COALESCE_MS);
+    }
+
     private SeekParameters choosePullSeekParameters(long currentPositionMs, long targetPositionMs)
     {
         PlaybackSyncPointPolicy.Target target = PlaybackSyncPointPolicy.choose(
@@ -887,8 +960,16 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         long currentPositionMs = player.getContentPosition();
                         long durationMs = player.getDuration();
                         long bufferedPositionMs = player.getBufferedPosition();
+                        // Exo's buffered position is only the end of its local
+                        // playback cache. It is not the live edge of a growing
+                        // SageTV file. Near startup it may be only a few seconds
+                        // even when SageTV has already recorded much more media;
+                        // clamping a server-owned skip to it incorrectly seeks
+                        // back to zero. Clamp only when the extractor provides a
+                        // real duration. With unknown duration, SageTV remains
+                        // authoritative for the requested live/timeshift target.
                         long safePositionMs = PlaybackSeekPolicy.clamp(
-                                timeInMillis, durationMs, bufferedPositionMs, mediaContext.isTimeshifted());
+                                timeInMillis, durationMs, mediaContext.isTimeshifted());
                         log.logDebug("Seek Called - Current Position: " + currentPositionMs + "  Seek Request: " + timeInMillis
                                 + " Safe Position: " + safePositionMs + " Duration: " + durationMs
                                 + " Buffered Edge: " + bufferedPositionMs
@@ -916,15 +997,27 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                             cancelPullSeekRecovery();
                         }
 
-                        boolean smbDirectSeek = !pushMode
+                        Exo2PullDataSource pullDataSource = !pushMode
                                 && dataSource instanceof Exo2PullDataSource
-                                && ((Exo2PullDataSource) dataSource).isSmbModeConfigured();
+                                ? (Exo2PullDataSource) dataSource : null;
+                        boolean smbDirectSeek = pullDataSource != null
+                                && pullDataSource.isSmbModeConfigured();
+                        boolean growingPullSeek = pullDataSource != null
+                                && (mediaContext.isTimeshifted()
+                                || mediaContext.getBufferSize() > 0L);
+                        boolean repreparePullSeek = smbDirectSeek || growingPullSeek;
                         PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
                                 Exo2MediaPlayerImpl.this,
                                 "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
                                         + ";durationMs=" + durationMs
                                         + ";bufferedMs=" + bufferedPositionMs);
-                        if (smbDirectSeek)
+                        if (growingPullSeek)
+                        {
+                            cancelPullSeekRecovery();
+                            scheduleGrowingPullSeek(safePositionMs,
+                                    player.getPlayWhenReady(), smbDirectSeek, session);
+                        }
+                        else if (smbDirectSeek)
                         {
                             // On the tested Fire TV MPEG-2 decoder, seekTo() updates
                             // Exo's clock and SMB byte range but can keep presenting
@@ -934,18 +1027,20 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                             // MediaServer session.
                             boolean resumeWhenReady = player.getPlayWhenReady();
                             cancelPullSeekRecovery();
-                            PlaybackDebugTrap.record("smb_seek_reprepare_before", Exo2MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("smb_seek_reprepare_before",
+                                    Exo2MediaPlayerImpl.this);
                             player.setMediaSource(mediaSource, safePositionMs);
                             player.prepare();
                             player.setPlayWhenReady(resumeWhenReady);
-                            PlaybackDebugTrap.record("smb_seek_reprepare_after", Exo2MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("smb_seek_reprepare_after",
+                                    Exo2MediaPlayerImpl.this);
                         }
                         else
                         {
                             player.seekTo(safePositionMs);
                         }
                         PlaybackDebugTrap.record("backend_seek_return", Exo2MediaPlayerImpl.this);
-                        if (!pushMode && !smbDirectSeek)
+                        if (!pushMode && !repreparePullSeek)
                         {
                             armPullSeekRecovery(safePositionMs);
                         }
@@ -1533,6 +1628,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 firstVideoFrameRendered = true;
+                if (dataSource instanceof Exo2PullDataSource)
+                    ((Exo2PullDataSource) dataSource).endSeekableSnapshotPreparation();
                 cancelPullSeekRecovery();
                 PlaybackDebugTrap.record("first_video_frame", Exo2MediaPlayerImpl.this);
             }

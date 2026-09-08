@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.5.88 - 2026-09-08
+
+- Corrected server-owned seek/FF/rewind on unknown-duration growing Pull
+  streams. Media3 and legacy ExoPlayer no longer clamp SageTV's timeline to a
+  small local buffered window; each performs a coalesced same-source
+  reprepare with a temporary finite extractor snapshot while keeping actual
+  reads open-ended. IJK now publishes its refreshed MediaServer size so its
+  native demuxer remains seekable and compensates only when FFmpeg proves it
+  reset a growing MPEG-TS clock to segment-relative time. Completed-file
+  hardware Pull regression passed all 42 checks across legacy ExoPlayer,
+  Media3, IJK, GSY Auto, GSY Media3, GSY Legacy Exo, and the guarded GSY
+  System selection. Growing stock-server Live TV passed backward and forward
+  seek with recovered playback on every usable engine. Android System cannot
+  initialize the growing `MediaDataSource` on the commissioned API-25 Fire TV;
+  its explicit probe fails with that evidence and normal selection safely
+  falls back to Media3.
+
+- Hardened the physical Live TV gate after HDMI review exposed a telemetry-
+  only IJK false positive. A test now requires the stable full-screen SageTV
+  playback destination and rechecks output after promotion before measuring a
+  seek. The corrected IJK run moved backward 8.2 seconds and forward 11.8
+  seconds on stock `.175`; a concurrent 120-second HDMI capture shows distinct
+  live frames before and after the operations. The clean debug APK SHA-256 is
+  `f1791bf74cefc1c8ca98718c75912e2e7d4f0c12dc8de26ae7522f8cce247e3b`.
+
+- Repaired standalone GitHub source contracts. MCP matrix scripts bootstrap
+  their checked-in package path, UTF-8 text manifests use a canonical LF hash
+  across Windows and Linux, release source ZIPs package that same canonical
+  representation, shell entry points retain executable Git modes, and CI
+  checks out the public unified build-environment contracts. GitHub Actions
+  now use the Node-24-based checkout/setup-python major versions. Replaced the
+  execution-policy-blocked HDMI PowerShell capture with a Python implementation
+  and root `.cmd` launcher. Final local gates passed 494 project/static tests,
+  70 MCP/workflow tests, Core Gradle tests, project validation, and a clean
+  60-task APK build.
+
 ## v0.5.87 - 2026-09-07
 
 - Completed the cross-backend STOP/restart, source-replacement, live-TV, and

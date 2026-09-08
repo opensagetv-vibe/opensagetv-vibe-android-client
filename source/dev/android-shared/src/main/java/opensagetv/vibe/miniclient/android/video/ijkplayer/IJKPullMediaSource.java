@@ -24,7 +24,7 @@ public class IJKPullMediaSource implements IMediaDataSource, HasClose {
     private ISageTVDataSource dataSource;
     private String url;
     private final GrowingPlaybackSourcePolicy growthPolicy;
-    private boolean effectivelyGrowing;
+    private volatile boolean effectivelyGrowing;
 
     public IJKPullMediaSource() {
         this(null, false);
@@ -80,7 +80,14 @@ public class IJKPullMediaSource implements IMediaDataSource, HasClose {
     @Override
     public long getSize() throws IOException {
         if (dataSource == null) _open();
-        return effectivelyGrowing ? -1L : dataSource.size();
+        // Returning -1 here makes IJK/FFmpeg cache the custom source as
+        // permanently unseekable. The underlying MediaServer size is refreshed
+        // on every call, while readAt() continues waiting at a growing edge.
+        return dataSource.size();
+    }
+
+    public boolean isEffectivelyGrowing() {
+        return effectivelyGrowing;
     }
 
     @Override

@@ -9,8 +9,6 @@ public final class PlaybackSeekPolicy
     // least one ordinary broadcast GOP while remaining a small end-of-file
     // guard relative to a recording.
     public static final long COMPLETED_MEDIA_TAIL_MARGIN_MS = 5000;
-    public static final long GROWING_MEDIA_LIVE_EDGE_MARGIN_MS = 2000;
-
     private PlaybackSeekPolicy()
     {
     }
@@ -21,30 +19,17 @@ public final class PlaybackSeekPolicy
      */
     public static long clamp(long requestedPositionMs, long durationMs, boolean growingMedia)
     {
-        if (requestedPositionMs < 0 || durationMs <= 0)
+        // A duration exposed while seeking a growing TS is only a point-in-time
+        // file-size/PCR snapshot. SageTV owns the live timeline and may request
+        // a newer position than that stale snapshot on the next command.
+        if (requestedPositionMs < 0 || durationMs <= 0 || growingMedia)
         {
             return requestedPositionMs;
         }
 
-        long marginMs = growingMedia
-                ? GROWING_MEDIA_LIVE_EDGE_MARGIN_MS
-                : COMPLETED_MEDIA_TAIL_MARGIN_MS;
-        long latestSafePositionMs = Math.max(0, durationMs - marginMs);
+        long latestSafePositionMs = Math.max(0,
+                durationMs - COMPLETED_MEDIA_TAIL_MARGIN_MS);
         return Math.min(requestedPositionMs, latestSafePositionMs);
     }
 
-    /**
-     * Clamp using the decoder's buffered edge when a growing source has no
-     * stable duration. Completed media must not infer an end from buffering.
-     */
-    public static long clamp(long requestedPositionMs, long durationMs,
-                             long bufferedPositionMs, boolean growingMedia)
-    {
-        long effectiveDurationMs = durationMs;
-        if (effectiveDurationMs <= 0 && growingMedia && bufferedPositionMs > 0)
-        {
-            effectiveDurationMs = bufferedPositionMs;
-        }
-        return clamp(requestedPositionMs, effectiveDurationMs, growingMedia);
-    }
 }

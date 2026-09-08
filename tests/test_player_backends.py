@@ -196,7 +196,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.87")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.88")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -264,7 +264,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn("if (timeInMillis >= 0)", seek_impl, rel)
             self.assertRegex(
                 seek_impl,
-                r"PlaybackSeekPolicy\.clamp\(\s*timeInMillis,\s*durationMs,\s*bufferedPositionMs,\s*mediaContext\.isTimeshifted\(\)\)",
+                r"PlaybackSeekPolicy\.clamp\(\s*timeInMillis,\s*durationMs,\s*mediaContext\.isTimeshifted\(\)\)",
                 rel,
             )
             self.assertIn("player.seekTo(safePositionMs);", seek_impl, rel)
@@ -366,7 +366,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn("private long bytesRemaining = C.LENGTH_UNSET;", text, rel)
             self.assertIn("bytesRemaining = Math.max(0, size - dataSpec.position);", text, rel)
             self.assertIn("if (dataSpec.length != C.LENGTH_UNSET)", text, rel)
-            self.assertIn("return bytesRemaining;", text, rel)
+            self.assertIn("return reportedLength;", text, rel)
             self.assertNotIn("return size;", text, rel)
             self.assertIn("int bytesToRead = bytesRemaining == C.LENGTH_UNSET", text, rel)
             self.assertIn("bytesRemaining -= bytes;", text, rel)

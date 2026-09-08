@@ -47,6 +47,7 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     private Uri uri;
     private final GrowingPlaybackSourcePolicy growthPolicy;
     private volatile boolean effectivelyGrowing;
+    private volatile boolean seekableSnapshotPreparation;
 
     private long closedNetworkReadCount;
     private long closedNetworkReadRequestedBytes;
@@ -154,24 +155,37 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
         // Do not expose the size sampled at OPEN as the final length of an
         // active recording. Legacy Exo otherwise fixes its timeline at that
         // old edge and may end before the next SageTV live segment is ready.
+        long reportedLength;
         if (effectivelyGrowing)
         {
             bytesRemaining = C.LENGTH_UNSET;
+            // Ordinary growing playback must remain open-ended so crossing a
+            // live program boundary does not end the player. During an
+            // explicit seek reprepare, however, Exo's TS duration reader needs
+            // a finite input length to inspect the first/last PCR and publish
+            // a SeekMap. Keep actual reads open-ended while temporarily
+            // reporting the current file-size snapshot to the extractor.
+            reportedLength = seekableSnapshotPreparation && size >= 0
+                    ? Math.max(0, size - dataSpec.position)
+                    : C.LENGTH_UNSET;
         }
         else if (dataSpec.length != C.LENGTH_UNSET)
         {
             bytesRemaining = dataSpec.length;
+            reportedLength = bytesRemaining;
         }
         else if (size >= 0)
         {
             bytesRemaining = Math.max(0, size - dataSpec.position);
+            reportedLength = bytesRemaining;
         }
         else
         {
             bytesRemaining = C.LENGTH_UNSET;
+            reportedLength = bytesRemaining;
         }
 
-        return bytesRemaining;
+        return reportedLength;
     }
 
     @Override
@@ -339,6 +353,18 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     }
 
     public boolean isSmbModeConfigured() { return smbConfig != null; }
+
+    /** Makes the next growing-source preparation seekable without ending growth reads. */
+    public void beginSeekableSnapshotPreparation()
+    {
+        seekableSnapshotPreparation = true;
+    }
+
+    /** Restores the normal unknown-length contract after the first post-seek frame. */
+    public void endSeekableSnapshotPreparation()
+    {
+        seekableSnapshotPreparation = false;
+    }
 
     private long currentPhysicalReadCount()
     {

@@ -270,6 +270,54 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
+    private static final long GROWING_PULL_SEEK_COALESCE_MS = 300L;
+    private long pendingGrowingPullSeekTargetMs = -1L;
+    private ExoPlayer pendingGrowingPullSeekPlayer;
+    private PlaybackSessionController.Token pendingGrowingPullSeekSession;
+    private boolean pendingGrowingPullSeekResume;
+    private boolean pendingGrowingPullSeekSmb;
+    private final Runnable growingPullSeekRunnable = new Runnable()
+    {
+        @Override
+        public void run()
+        {
+            ExoPlayer expectedPlayer = pendingGrowingPullSeekPlayer;
+            PlaybackSessionController.Token expectedSession = pendingGrowingPullSeekSession;
+            long targetMs = pendingGrowingPullSeekTargetMs;
+            boolean resume = pendingGrowingPullSeekResume;
+            boolean smb = pendingGrowingPullSeekSmb;
+            pendingGrowingPullSeekPlayer = null;
+            pendingGrowingPullSeekSession = null;
+            pendingGrowingPullSeekTargetMs = -1L;
+            if (expectedPlayer == null || expectedPlayer != player
+                    || !isCurrentPlaybackSession(expectedSession)
+                    || !(dataSource instanceof Media3PullDataSource)
+                    || mediaSource == null)
+                return;
+            try
+            {
+                Media3PullDataSource pull = (Media3PullDataSource) dataSource;
+                pull.beginSeekableSnapshotPreparation();
+                PlaybackDebugTrap.recordDetailed(smb
+                                ? "smb_seek_reprepare_before"
+                                : "growing_pull_seek_reprepare_before",
+                        Media3MediaPlayerImpl.this, "coalescedTargetMs=" + targetMs);
+                expectedPlayer.setMediaSource(mediaSource, targetMs);
+                expectedPlayer.prepare();
+                expectedPlayer.setPlayWhenReady(resume);
+                PlaybackDebugTrap.recordDetailed(smb
+                                ? "smb_seek_reprepare_after"
+                                : "growing_pull_seek_reprepare_after",
+                        Media3MediaPlayerImpl.this, "coalescedTargetMs=" + targetMs);
+            }
+            catch (Exception ex)
+            {
+                PlaybackDebugTrap.record("growing_pull_seek_reprepare_error_"
+                        + ex.getClass().getSimpleName(), Media3MediaPlayerImpl.this);
+                log.logError("Growing Pull seek reprepare failed at " + targetMs + "ms", ex);
+            }
+        }
+    };
     private final PlaybackRateController playbackRateController =
             new PlaybackRateController(progressHandler);
     private final PlaybackRateController.Driver playbackRateDriver =
@@ -885,6 +933,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         playbackRateController.reset();
         cancelProgressUpdates();
         cancelPullSeekRecovery();
+        cancelGrowingPullSeek();
         final ExoPlayer playerToRelease = player;
         final MediaSessionCompat sessionToRelease = mediaSession;
         // MediaSessionCompat is owned by Android's main thread. In particular,
@@ -998,6 +1047,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     public void stop()
     {
         playbackRateController.reset();
+        cancelGrowingPullSeek();
         final ExoPlayer playerToStop = player;
         final MediaSessionCompat sessionToStop = mediaSession;
         context.runOnUiThread(new Runnable()
@@ -1179,6 +1229,29 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         pullSeekRecoveryMonitor.cancel();
     }
 
+    private void cancelGrowingPullSeek()
+    {
+        progressHandler.removeCallbacks(growingPullSeekRunnable);
+        pendingGrowingPullSeekPlayer = null;
+        pendingGrowingPullSeekSession = null;
+        pendingGrowingPullSeekTargetMs = -1L;
+    }
+
+    private void scheduleGrowingPullSeek(long targetMs, boolean resume, boolean smb,
+                                         PlaybackSessionController.Token session)
+    {
+        pendingGrowingPullSeekTargetMs = targetMs;
+        pendingGrowingPullSeekResume = resume;
+        pendingGrowingPullSeekSmb = smb;
+        pendingGrowingPullSeekPlayer = player;
+        pendingGrowingPullSeekSession = session;
+        progressHandler.removeCallbacks(growingPullSeekRunnable);
+        progressHandler.postDelayed(growingPullSeekRunnable,
+                GROWING_PULL_SEEK_COALESCE_MS);
+        PlaybackDebugTrap.recordDetailed("growing_pull_seek_coalesced", this,
+                "targetMs=" + targetMs + ";delayMs=" + GROWING_PULL_SEEK_COALESCE_MS);
+    }
+
     private SeekParameters choosePullSeekParameters(long currentPositionMs, long targetPositionMs)
     {
         PlaybackSyncPointPolicy.Target target = PlaybackSyncPointPolicy.choose(
@@ -1258,8 +1331,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         long currentPositionMs = player.getContentPosition();
                         long durationMs = player.getDuration();
                         long bufferedPositionMs = player.getBufferedPosition();
+                        // The buffered position describes Media3's local cache,
+                        // not the live edge of SageTV's growing recording. Using
+                        // it as a duration makes an early server skip collapse to
+                        // zero. A known extractor duration is still bounded; an
+                        // unknown-duration live target remains owned by SageTV.
                         long safePositionMs = PlaybackSeekPolicy.clamp(
-                                timeInMillis, durationMs, bufferedPositionMs, mediaContext.isTimeshifted());
+                                timeInMillis, durationMs, mediaContext.isTimeshifted());
                         log.logDebug("Seek Called - Current Position: " + currentPositionMs + "  Seek Request: " + timeInMillis
                                 + " Safe Position: " + safePositionMs + " Duration: " + durationMs
                                 + " Buffered Edge: " + bufferedPositionMs
@@ -1287,30 +1365,44 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             cancelPullSeekRecovery();
                         }
 
-                        boolean smbDirectSeek = !pushMode
+                        Media3PullDataSource pullDataSource = !pushMode
                                 && dataSource instanceof Media3PullDataSource
-                                && ((Media3PullDataSource) dataSource).isSmbModeConfigured();
+                                ? (Media3PullDataSource) dataSource : null;
+                        boolean smbDirectSeek = pullDataSource != null
+                                && pullDataSource.isSmbModeConfigured();
+                        boolean growingPullSeek = pullDataSource != null
+                                && (mediaContext.isTimeshifted()
+                                || mediaContext.getBufferSize() > 0L);
+                        boolean repreparePullSeek = smbDirectSeek || growingPullSeek;
                         PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
                                 Media3MediaPlayerImpl.this,
                                 "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
                                         + ";durationMs=" + durationMs
                                         + ";bufferedMs=" + bufferedPositionMs);
-                        if (smbDirectSeek)
+                        if (growingPullSeek)
+                        {
+                            cancelPullSeekRecovery();
+                            scheduleGrowingPullSeek(safePositionMs,
+                                    player.getPlayWhenReady(), smbDirectSeek, session);
+                        }
+                        else if (smbDirectSeek)
                         {
                             boolean resumeWhenReady = player.getPlayWhenReady();
                             cancelPullSeekRecovery();
-                            PlaybackDebugTrap.record("smb_seek_reprepare_before", Media3MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("smb_seek_reprepare_before",
+                                    Media3MediaPlayerImpl.this);
                             player.setMediaSource(mediaSource, safePositionMs);
                             player.prepare();
                             player.setPlayWhenReady(resumeWhenReady);
-                            PlaybackDebugTrap.record("smb_seek_reprepare_after", Media3MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("smb_seek_reprepare_after",
+                                    Media3MediaPlayerImpl.this);
                         }
                         else
                         {
                             player.seekTo(safePositionMs);
                         }
                         PlaybackDebugTrap.record("backend_seek_return", Media3MediaPlayerImpl.this);
-                        if (!pushMode && !smbDirectSeek)
+                        if (!pushMode && !repreparePullSeek)
                         {
                             armPullSeekRecovery(safePositionMs);
                         }
@@ -2164,6 +2256,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 firstVideoFrameRendered = true;
+                if (dataSource instanceof Media3PullDataSource)
+                    ((Media3PullDataSource) dataSource).endSeekableSnapshotPreparation();
                 cancelPullSeekRecovery();
                 PlaybackDebugTrap.record("first_video_frame", Media3MediaPlayerImpl.this);
                 if (fastSwitchAwaitingFirstFrame)

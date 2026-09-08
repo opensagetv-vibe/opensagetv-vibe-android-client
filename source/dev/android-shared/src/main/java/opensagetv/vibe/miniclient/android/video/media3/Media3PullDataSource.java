@@ -47,6 +47,7 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     private Uri uri;
     private final GrowingPlaybackSourcePolicy growthPolicy;
     private volatile boolean effectivelyGrowing;
+    private volatile boolean seekableSnapshotPreparation;
     private volatile boolean endOfInput;
 
     private long closedNetworkReadCount;
@@ -157,24 +158,35 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
         // the ProgressiveMediaPeriod to that stale boundary and eventually
         // raise StuckPlayingNotEnding even though SageTV continues to append
         // bytes. Keep the request unbounded and check SIZE at the read edge.
+        long reportedLength;
         if (effectivelyGrowing)
         {
             bytesRemaining = C.LENGTH_UNSET;
+            // Keep growing reads open-ended, but let the TS extractor see a
+            // temporary size snapshot while rebuilding a seek map. Without a
+            // finite input length Media3 marks the item unseekable and resolves
+            // an otherwise valid SageTV live seek back to byte/time zero.
+            reportedLength = seekableSnapshotPreparation && size >= 0
+                    ? Math.max(0, size - dataSpec.position)
+                    : C.LENGTH_UNSET;
         }
         else if (dataSpec.length != C.LENGTH_UNSET)
         {
             bytesRemaining = dataSpec.length;
+            reportedLength = bytesRemaining;
         }
         else if (size >= 0)
         {
             bytesRemaining = Math.max(0, size - dataSpec.position);
+            reportedLength = bytesRemaining;
         }
         else
         {
             bytesRemaining = C.LENGTH_UNSET;
+            reportedLength = bytesRemaining;
         }
 
-        return bytesRemaining;
+        return reportedLength;
     }
 
     @Override
@@ -347,6 +359,18 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     }
 
     public boolean isSmbModeConfigured() { return smbConfig != null; }
+
+    /** Makes the next growing-source preparation seekable without ending growth reads. */
+    public void beginSeekableSnapshotPreparation()
+    {
+        seekableSnapshotPreparation = true;
+    }
+
+    /** Restores the normal unknown-length contract after the first post-seek frame. */
+    public void endSeekableSnapshotPreparation()
+    {
+        seekableSnapshotPreparation = false;
+    }
 
     private long currentPhysicalReadCount()
     {

@@ -44,6 +44,9 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     private boolean serverMediaMetadataExplicit;
     private boolean stoppedForResume;
     private volatile boolean firstVideoFrameRendered;
+    private long growingPullSeekOffsetMs = -1L;
+    private long growingPullSeekLastRawMs = -1L;
+    private boolean growingPullSeekClockRelative;
 
     public IJKMediaPlayerImpl(AndroidUIController activity)
     {
@@ -155,6 +158,24 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
             }
         }
 
+
+        if (!pushMode && growingPullSeekOffsetMs >= 0L)
+        {
+            // IJK/FFmpeg can successfully seek a growing MPEG-TS source and
+            // then reset getCurrentPosition() to a segment-relative clock.
+            // Detect the discontinuity rather than assuming it: streams whose
+            // native clock stays absolute continue through unchanged.
+            if (!growingPullSeekClockRelative && growingPullSeekLastRawMs >= 0L
+                    && time + 500L < growingPullSeekLastRawMs)
+            {
+                growingPullSeekClockRelative = true;
+                PlaybackDebugTrap.record("growing_pull_seek_relative_clock",
+                        IJKMediaPlayerImpl.this);
+            }
+            growingPullSeekLastRawMs = time;
+            if (growingPullSeekClockRelative)
+                time += growingPullSeekOffsetMs;
+        }
 
         return time;
     }
@@ -353,6 +374,9 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         logTime = -1;
         stoppedForResume = false;
         firstVideoFrameRendered = false;
+        growingPullSeekOffsetMs = -1L;
+        growingPullSeekLastRawMs = -1L;
+        growingPullSeekClockRelative = false;
 
         releasePlayer();
         try
@@ -567,6 +591,14 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     protected void seekToImpl(long timeInMillis)
     {
         seekPending = true;
+        if (!pushMode && timeInMillis != Long.MAX_VALUE
+                && dataSource instanceof IJKPullMediaSource
+                && ((IJKPullMediaSource) dataSource).isEffectivelyGrowing())
+        {
+            growingPullSeekOffsetMs = Math.max(0L, timeInMillis);
+            growingPullSeekLastRawMs = growingPullSeekOffsetMs;
+            growingPullSeekClockRelative = false;
+        }
         PlaybackDebugTrap.record("backend_seek_invoke", IJKMediaPlayerImpl.this);
         player.seekTo(timeInMillis);
         PlaybackDebugTrap.record("backend_seek_return", IJKMediaPlayerImpl.this);
