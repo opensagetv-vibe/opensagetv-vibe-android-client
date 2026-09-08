@@ -36,6 +36,7 @@ class GithubReleaseBundleTest(unittest.TestCase):
             '".sh", ".py"',
             '"sourceRevisionKind"',
             '"project-manifest"',
+            "canonical_content(ROOT / name)",
         ):
             self.assertIn(marker, text)
 

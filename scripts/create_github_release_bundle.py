@@ -12,6 +12,12 @@ import subprocess
 import sys
 import zipfile
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from project_manifest import canonical_content
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PROJECT_MANIFEST.sha256"
@@ -79,7 +85,9 @@ def create_source_archive(path: Path, version: str, entries: dict[str, str]) -> 
     prefix = f"opensagetv-vibe-android-client-{version}/"
     with zipfile.ZipFile(path, "w") as archive:
         for name in sorted(entries):
-            data = (ROOT / name).read_bytes()
+            # Package the same portable LF representation signed by the
+            # project manifest, even from a Windows CRLF checkout.
+            data = canonical_content(ROOT / name)
             actual = sha256_bytes(data)
             if actual != entries[name]:
                 raise ValueError(f"manifest mismatch before packaging: {name}")

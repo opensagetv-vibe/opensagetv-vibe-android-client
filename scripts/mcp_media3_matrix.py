@@ -10,8 +10,6 @@ Pull recovery latency can be compared without changing player code first.
 """
 from __future__ import annotations
 
-from sagetv_dev_mcp.config import default_server_address, default_server_value
-
 import argparse
 import json
 import os
@@ -20,6 +18,14 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+# Keep this script importable by the standalone source-contract suite as well
+# as executable through dev.sh, which normally provides PYTHONPATH.
+MCP_SRC = Path(__file__).resolve().parents[1] / "mcp" / "src"
+if str(MCP_SRC) not in sys.path:
+    sys.path.insert(0, str(MCP_SRC))
+
+from sagetv_dev_mcp.config import default_server_address, default_server_value
 
 from mcp_playback_test import start_recording_via_search
 from mcp_config_values import (

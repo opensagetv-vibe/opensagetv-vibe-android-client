@@ -78,11 +78,29 @@ def repository_files() -> list[str]:
     )
 
 
+def canonical_content(path: Path) -> bytes:
+    """Return portable bytes while preserving genuinely binary content.
+
+    Git intentionally checks Windows command/PowerShell files out as CRLF and
+    shell/source files as LF.  A release manifest must describe the same source
+    on both platforms, so valid UTF-8 text with conventional line endings is
+    hashed in LF form.  Binary data, invalid UTF-8, and files with lone CR bytes
+    remain byte-exact.
+    """
+    data = path.read_bytes()
+    if b"\x00" in data:
+        return data
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    normalized = data.replace(b"\r\n", b"\n")
+    return data if b"\r" in normalized else normalized
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            value.update(block)
+    value.update(canonical_content(path))
     return value.hexdigest()
 
 

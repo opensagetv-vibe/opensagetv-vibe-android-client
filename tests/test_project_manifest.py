@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -10,6 +12,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectManifestTests(unittest.TestCase):
+    def test_text_hash_is_portable_across_lf_and_crlf_checkouts(self):
+        spec = importlib.util.spec_from_file_location(
+            "project_manifest", ROOT / "scripts" / "project_manifest.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            lf = Path(directory) / "lf.cmd"
+            crlf = Path(directory) / "crlf.cmd"
+            lf.write_bytes(b"@echo off\nexit /b 0\n")
+            crlf.write_bytes(b"@echo off\r\nexit /b 0\r\n")
+            expected = hashlib.sha256(lf.read_bytes()).hexdigest()
+            self.assertEqual(expected, module.digest(lf))
+            self.assertEqual(expected, module.digest(crlf))
+
     def test_validator_defaults_to_its_extracted_checkout(self):
         validator = (ROOT / "scripts" / "validate_project.py").read_text(encoding="utf-8")
         self.assertIn("DEFAULT_WORKSPACE = Path(__file__).resolve().parents[1]", validator)
@@ -32,7 +50,9 @@ class ProjectManifestTests(unittest.TestCase):
                          checkout / "scripts" / "project_manifest.py")
             (checkout / "payload.txt").write_text("archive payload\n", encoding="utf-8")
             import hashlib
-            digest = hashlib.sha256((checkout / "payload.txt").read_bytes()).hexdigest()
+            # Manifest hashes are portable LF hashes even when a Windows
+            # checkout materializes this UTF-8 text as CRLF.
+            digest = hashlib.sha256(b"archive payload\n").hexdigest()
             (checkout / "PROJECT_MANIFEST.sha256").write_text(
                 f"{digest}  payload.txt\n", encoding="ascii"
             )

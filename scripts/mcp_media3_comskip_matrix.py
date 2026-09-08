@@ -9,8 +9,6 @@ so the run records real decoded A/V recovery and landing/jump diagnostics withou
 """
 from __future__ import annotations
 
-from sagetv_dev_mcp.config import default_server_address, default_server_value
-
 import argparse
 import json
 import os
@@ -18,6 +16,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+# Keep this script importable by the standalone source-contract suite as well
+# as executable through dev.sh, which normally provides PYTHONPATH.
+MCP_SRC = Path(__file__).resolve().parents[1] / "mcp" / "src"
+if str(MCP_SRC) not in sys.path:
+    sys.path.insert(0, str(MCP_SRC))
+
+from sagetv_dev_mcp.config import default_server_address, default_server_value
 
 from mcp_media3_matrix import DEFAULT_MODES, MCPProcess, call_dict, initialize, parse_modes, safe_checkpoint, start_mode
 from mcp_config_values import (DECODING_SELECTIONS, add_fixed_encoding_args, decoding_preference, fixed_config_from_args, normalize_decoding, validate_fixed_config)

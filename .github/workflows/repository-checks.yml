@@ -13,9 +13,17 @@ permissions:
 jobs:
   source-contracts:
     runs-on: ubuntu-24.04
+    env:
+      OPENSAGETV_VIBE_BUILD_ENV_ROOT: ${{ github.workspace }}/.ci/opensagetv-vibe-build-env
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - name: Check out unified build contracts
+        uses: actions/checkout@v7
+        with:
+          repository: opensagetv-vibe/opensagetv-vibe-build-env
+          path: .ci/opensagetv-vibe-build-env
+          persist-credentials: false
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Verify shell syntax
