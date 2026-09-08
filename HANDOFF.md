@@ -1,5 +1,16 @@
 # OpenSageTV Vibe Android Client handoff
 
+## SageMC HOME and user-pause lifecycle gate (2026-09-08)
+
+The lifecycle runner now accepts `--repeat 0` so HOME/background behavior can
+be gated independently from the server's optional exact-watch replay loop. On
+non-Pro `.25` against isolated `.232`, Media3/hardware Pull preserved the exact
+MiniClient connection, hid/released and recreated the surface, resumed
+advancing A/V after HOME only when playback had been active, preserved an
+explicit user pause without emitting an automatic PLAY, and completed clean
+teardown. The follow-on same-file replay remains a separate Core activation
+gate rather than invalidating this lifecycle evidence.
+
 ## SageMC native DVD control completion (2026-09-08)
 
 Native Media3/hardware DVD pause and resume pass on non-Pro Fire TV `.25` and

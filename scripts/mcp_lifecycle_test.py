@@ -105,13 +105,17 @@ def main() -> int:
                               action="store_false",
                               help="Preserve the session but leave Home-interrupted playback paused")
     parser.set_defaults(resume_background_playback=True)
-    parser.add_argument("--repeat", type=int, default=3)
+    parser.add_argument(
+        "--repeat", type=int, default=3,
+        help=("Number of post-lifecycle playback restarts; use 0 when gating "
+              "HOME/pause persistence independently from server watch/restart behavior"),
+    )
     parser.add_argument("--playback-timeout-s", type=float, default=45.0)
     parser.add_argument("--verify-ms", type=int, default=1500)
     args = parser.parse_args()
     require(bool(args.server_path.strip()) != bool(args.search_text.strip()),
             "exactly one of --server-path or --search-text is required")
-    args.repeat = max(1, min(args.repeat, 10))
+    args.repeat = max(0, min(args.repeat, 10))
     args.background_seconds = max(1.0, min(args.background_seconds, 30.0))
     args.session_timeout_seconds = max(0, min(args.session_timeout_seconds, 86400))
     if args.expect_session_timeout:

@@ -584,6 +584,7 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('dev_wait_for_playback_started', script)
         self.assertIn('def wait_automation_ready(', script)
         self.assertIn('wait_automation_root(client, timeout_s=timeout_s, stable_ms=2000)', script)
+        self.assertIn('args.repeat = max(0, min(args.repeat, 10))', script)
         self.assertIn('Foreground return created a second connection', script)
         self.assertIn('foreground return preserved the exact connection', script)
         self.assertIn('surface_released_or_hidden', script)

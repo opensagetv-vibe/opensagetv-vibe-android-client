@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Allowed the physical lifecycle runner to set `--repeat 0`, separating its
+  HOME/background/user-pause contract from the optional server watch/restart
+  loop. A SageMC Media3/hardware Pull run now passes same-connection HOME
+  return, surface recreation, automatic recovery only when previously playing,
+  explicit user-pause preservation, and teardown. Same-file STOP/restart stays
+  a separate gate for the staged Core redundant-watch fix.
+
 - Completed the remaining independently executable SageMC DVD control gates on
   the commissioned non-Pro Fire TV. Native Media3 hardware playback now passes
   pause/resume with renewed A/V progress, and a commercial menu disc passes
