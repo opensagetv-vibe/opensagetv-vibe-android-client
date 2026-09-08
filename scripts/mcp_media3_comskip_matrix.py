@@ -9,6 +9,8 @@ so the run records real decoded A/V recovery and landing/jump diagnostics withou
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -223,8 +225,8 @@ def write_report(report: dict[str, Any], requested_path: str) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run fresh-session Media3 Push vs Pull debug-direct Comskip matrix")
-    parser.add_argument("--server", default="192.168.10.232")
-    parser.add_argument("--port", type=int, default=31099)
+    parser.add_argument("--server", default=default_server_address())
+    parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--modes", default="push,pull", help="Comma-separated: push,pull (legacy dynamic alias accepted)")
     parser.add_argument("--directions", default="right,left", help="Comma-separated: right,left")
     parser.add_argument("--decoding", "--decoder", dest="decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default="hardware", help="Decoding selection: hardware, software, fallback")

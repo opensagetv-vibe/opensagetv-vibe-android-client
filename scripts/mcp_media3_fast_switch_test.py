@@ -2,6 +2,8 @@
 """Verify retained Media3 completed-file replacement on a physical Android device."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_smb_mappings, default_smb_value, default_server_value
+
 import argparse
 import json
 import sys
@@ -26,14 +28,14 @@ def wait_for_success(client: MCPProcess, before_attempts: int, timeout_s: float)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Media3 retained-source physical gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--initial-path", required=True)
     parser.add_argument("--switch-path", required=True)
     parser.add_argument("--streaming", choices=("pull", "smb_direct"), default="pull")
-    parser.add_argument("--smb-mappings", default="/var/media/ => smb://nas.example.invalid/media/")
-    parser.add_argument("--smb-username", default="")
-    parser.add_argument("--smb-password", default="")
+    parser.add_argument("--smb-mappings", default=default_smb_mappings())
+    parser.add_argument("--smb-username", default=default_smb_value("username"))
+    parser.add_argument("--smb-password", default=default_smb_value("password"))
     parser.add_argument("--playback-timeout-s", type=float, default=60.0)
     parser.add_argument("--switch-timeout-s", type=float, default=30.0)
     args = parser.parse_args()

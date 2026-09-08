@@ -2,6 +2,8 @@
 """Commission the on-device MediaCodec profile and fallback candidate policy."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_fixture, default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -13,11 +15,11 @@ from mcp_lifecycle_test import MCPProcess, call_dict, initialize, require, wait_
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android MediaCodec capability gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
         "--server-path",
-        default="/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts",
+        default=default_fixture("seek_server_path", "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"),
     )
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "push"), default="pull")

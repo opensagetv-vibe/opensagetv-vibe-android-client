@@ -11,7 +11,9 @@ Before changing code, read:
 2. `HANDOFF.md`
 3. `TASKS.md`
 4. `docs/PLAYBACK_DIAGNOSTICS.md` for playback work
-5. the relevant architecture/workflow document
+5. `docs/TEST_ENVIRONMENT.md` before commissioning or physical tests
+6. `docs/COMMISSIONING.md` before creating a new test environment
+7. the relevant architecture/workflow document
 
 `TASKS.md` is the only authoritative subproject backlog. Do not create
 `TASK_CODEX.md`, prompt-specific task files, review-note backlogs, or duplicate

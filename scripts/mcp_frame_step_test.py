@@ -2,6 +2,8 @@
 """Verify MiniPlayer command 28 against a real hardware-decoded recording."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import sys
@@ -43,8 +45,8 @@ def wait_for_step(client: MCPProcess, before_ms: int, before_rendered: int,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android command-28 physical gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", required=True)
     parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "push", "smb_direct", "smb_auto"), default="pull")

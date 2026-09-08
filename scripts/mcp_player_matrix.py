@@ -16,6 +16,8 @@ That expands to 63 configuration cases: 27 non-GSY + 36 GSY.
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -985,8 +987,8 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the complete SageTV MiniClient player/backend MCP regression matrix")
-    parser.add_argument("--server", default="192.168.10.232")
-    parser.add_argument("--port", type=int, default=31099)
+    parser.add_argument("--server", default=default_server_address())
+    parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--text", default="", help="SageTV Search text; required unless --server-path is supplied")
     parser.add_argument("--server-path", default="", help="Exact SageTV-server MediaFile path through the Vibe test-control extension")
     parser.add_argument("--text-char-delay-ms", type=int, default=0, help="Text injection pacing for every case: 0 uses MiniClient native key events; >0 enables legacy Android/ADB diagnostic pacing (ms)")

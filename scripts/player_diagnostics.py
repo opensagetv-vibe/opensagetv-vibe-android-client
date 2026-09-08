@@ -30,7 +30,13 @@ def main() -> int:
 
     if label.lower() == "clear":
         adb.clear_logcat()
-        print("Player diagnostic logcat cleared. Reproduce the problem, then run: ./dev.sh player-diag <label>")
+        trace_result = safe_text(adb.clear_playback_trace)
+        trace_status = (json.dumps(trace_result, sort_keys=True)
+                        if isinstance(trace_result, dict) else str(trace_result).strip())
+        print("Player diagnostic logcat and playback trace cleared. "
+              "Reproduce the problem, then run: ./dev.sh player-diag <label>")
+        if trace_status:
+            print(trace_status)
         return 0
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -45,6 +51,7 @@ def main() -> int:
         "window": Path(str(base) + "_window.txt"),
         "package": Path(str(base) + "_package.txt"),
         "screenshot": Path(str(base) + "_screen.png"),
+        "trace": Path(str(base) + "_playback-trace.jsonl"),
     }
 
     logcat = safe_text(lambda: adb.logcat_tail(10000))
@@ -66,6 +73,7 @@ def main() -> int:
     outputs["media"].write_text(safe_text(adb.dumpsys_media_codec), encoding="utf-8")
     outputs["window"].write_text(safe_text(adb.focused_window), encoding="utf-8")
     outputs["package"].write_text(safe_text(adb.package_info), encoding="utf-8")
+    safe_text(lambda: adb.export_playback_trace(outputs["trace"]))
     try:
         adb.screenshot(outputs["screenshot"])
     except Exception as exc:

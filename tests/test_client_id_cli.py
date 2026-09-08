@@ -40,7 +40,8 @@ class ClientIdCliTests(unittest.TestCase):
 
     def test_automated_tests_default_to_deterministic_id(self):
         dev = (ROOT / "dev.sh").read_text(encoding="utf-8")
-        self.assertIn('DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"', dev)
+        self.assertIn('configured_automated_client_id()', dev)
+        self.assertIn('identity.automated_client_id', dev)
         self.assertIn('run_automated_mcp_test()', dev)
         self.assertIn('--client-id)', dev)
         self.assertRegex(dev, r'mcp_client_id\.py"? --ensure "\$client_id" --quiet')

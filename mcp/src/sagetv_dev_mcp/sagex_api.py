@@ -11,6 +11,8 @@ from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
+from .config import load_test_environment
+
 
 DEFAULT_PORTS = (8080, 8081, 80)
 
@@ -42,6 +44,11 @@ class SagexApiClient:
         explicit = os.environ.get("SAGETV_SAGEX_BASE", "").strip()
         if explicit:
             return [explicit.rstrip("/")]
+        environment = load_test_environment()
+        server = environment.server_for_address(host)
+        configured = str(server.get("sagex_base_url", "")).strip()
+        if configured:
+            return [configured.rstrip("/")]
         ports_text = os.environ.get("SAGETV_SAGEX_PORTS", "").strip()
         ports: list[int] = []
         if ports_text:
@@ -63,8 +70,9 @@ class SagexApiClient:
 
     @classmethod
     def discover(cls, host: str) -> "SagexApiClient":
-        user = os.environ.get("SAGETV_SAGEX_USER", "")
-        password = os.environ.get("SAGETV_SAGEX_PASSWORD", "")
+        server = load_test_environment().server_for_address(host)
+        user = os.environ.get("SAGETV_SAGEX_USER", str(server.get("web_username", "")))
+        password = os.environ.get("SAGETV_SAGEX_PASSWORD", str(server.get("web_password", "")))
         errors: list[str] = []
         for base in cls.candidate_bases(host):
             client = cls(base, user, password)
@@ -295,6 +303,13 @@ class SagexApiClient:
                 return int(node)
         return None
 
+    def clear_watched(self, media_file_id: int) -> Any:
+        """Remove SageTV's complete watched/resume record for one MediaFile."""
+        media_file_id = int(media_file_id)
+        if media_file_id <= 0:
+            raise ValueError("media_file_id must be > 0")
+        return self.call("ClearWatched", f"mediafile:{media_file_id}")
+
 
 class SageWebApiClient:
     """Compatibility adapter for Nielm's stock-era SageTV Web Interface 4.x."""
@@ -311,6 +326,13 @@ class SageWebApiClient:
         explicit = os.environ.get("SAGETV_WEB_BASE", "").strip()
         if explicit:
             base = explicit.rstrip("/")
+            if base.endswith("/Home"):
+                base = base[:-5]
+            return [base]
+        server = load_test_environment().server_for_address(host)
+        configured = str(server.get("web_base_url", "")).strip()
+        if configured:
+            base = configured.rstrip("/")
             if base.endswith("/Home"):
                 base = base[:-5]
             return [base]
@@ -452,3 +474,19 @@ class SageWebApiClient:
         body = self._request("Home", {"xml": "currplaying", "context": context})
         found = re.search(r"MediaFileId[=\"']+(\d+)", body, re.IGNORECASE)
         return int(found.group(1)) if found else None
+
+    def clear_watched(self, media_file_id: int) -> Any:
+        """Use the stock Web Interface ClearWatched command for one MediaFile."""
+        media_file_id = int(media_file_id)
+        if media_file_id <= 0:
+            raise ValueError("media_file_id must be > 0")
+        self._request("MediaFileCommand", {
+            "command": "ClearWatched",
+            "MediaFileId": media_file_id,
+            "returnto": "Home",
+        })
+        return {
+            "accepted": True,
+            "transport": "sage_web_clear_watched",
+            "mediaFileId": media_file_id,
+        }

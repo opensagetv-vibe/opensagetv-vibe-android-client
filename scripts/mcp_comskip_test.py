@@ -7,6 +7,8 @@ start/end metadata from the SageTV STV, so the test records the actual recovery 
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import sys
@@ -116,8 +118,8 @@ def main() -> int:
     parser.add_argument("--recovery-timeout-ms", type=int, default=12000)
     parser.add_argument("--verify-playback-ms", type=int, default=3000)
     parser.add_argument("--health-poll-ms", type=int, default=250)
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", help="Exact SageTV server path to start before testing")
     parser.add_argument("--player", choices=("exoplayer", "media3"), default="media3")
     parser.add_argument("--streaming", choices=("dynamic", "push", "pull", "smb_direct", "smb_auto", "fixed"), default="pull")

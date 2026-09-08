@@ -650,6 +650,32 @@ class AdbClient:
     def clear_player_event_traps(self) -> dict[str, Any]:
         return self.dev_control("events_clear")
 
+    def playback_trace_status(self) -> dict[str, Any]:
+        return self.dev_control("trace_status")
+
+    def clear_playback_trace(self) -> dict[str, Any]:
+        return self.dev_control("trace_clear")
+
+    def set_playback_trace_enabled(self, enabled: bool) -> dict[str, Any]:
+        return self.dev_control("trace_enable", enabled="true" if enabled else "false")
+
+    def export_playback_trace(self, output: Path) -> Path:
+        """Export the bounded debug-app trace oldest-first without storage permission."""
+        self._ensure_dev_package(self.dev_package)
+        trace_dir = "files/diagnostics"
+        parts: list[str] = []
+        for suffix in (".3", ".2", ".1", ""):
+            name = f"playback-trace.jsonl{suffix}"
+            data = self.shell(
+                f"run-as {shlex.quote(self.dev_package)} cat {trace_dir}/{name} 2>/dev/null",
+                check=False,
+            )
+            if data:
+                parts.append(data.rstrip("\n"))
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("\n".join(parts) + ("\n" if parts else ""), encoding="utf-8")
+        return output
+
     def set_datasource_capture(self, enabled: bool) -> dict[str, Any]:
         """Enable the bounded raw Push-byte capture for the next playback."""
         return self.dev_control(
@@ -699,6 +725,7 @@ class AdbClient:
         disc_skip_previews: bool | None = None,
         disc_compatibility_fallback: bool | None = None,
         disc_mpeg2_timestamp_repair: str = "",
+        wait_for_playback_before_first_osd: bool | None = None,
     ) -> dict[str, Any]:
         requested_streaming = str(streaming or "").strip().lower()
         requested_decoding = str(decoding or "").strip().lower()
@@ -759,6 +786,9 @@ class AdbClient:
                 "true" if disc_compatibility_fallback else "false"
             ) if isinstance(disc_compatibility_fallback, bool) else "",
             "disc_mpeg2_timestamp_repair": disc_mpeg2_timestamp_repair,
+            "wait_for_playback_before_first_osd": (
+                "true" if wait_for_playback_before_first_osd else "false"
+            ) if isinstance(wait_for_playback_before_first_osd, bool) else "",
         }
         result = self.dev_control("config", **extras)
         if requested_streaming:

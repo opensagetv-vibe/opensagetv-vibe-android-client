@@ -2,6 +2,8 @@
 """Commission server-driven live TV and bounded channel changes on the Dev client."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_test_value, default_server_value
+
 import argparse
 import json
 import re
@@ -48,16 +50,25 @@ def tune_channel(client: MCPProcess, channel: str, timeout_s: float, verify_ms: 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android server-driven live-TV physical gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default="media3")
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="auto")
     parser.add_argument("--streaming", choices=("dynamic", "pull", "fixed"), default="pull")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
     add_fixed_encoding_args(parser)
-    parser.add_argument("--channels", type=parse_channels, default=parse_channels("2.1,5.1"),
-                        help="Comma-separated known-good channels used for tuning (default: 2.1,5.1)")
+    configured_channels = ",".join(default_test_value("live_channels", ["2.1", "5.1"]))
+    parser.add_argument("--channels", type=parse_channels, default=parse_channels(configured_channels),
+                        help="Comma-separated known-good channels used for tuning (default: shared TOML)")
     parser.add_argument("--channel-changes", type=int, default=0)
+    parser.add_argument(
+        "--current-channel-only",
+        action="store_true",
+        help=(
+            "Verify the channel selected by SageTV's normal Live TV command without "
+            "using the Vibe-only direct-channel event. Use this for an unmodified server."
+        ),
+    )
     parser.add_argument("--timeout-s", type=float, default=60.0)
     parser.add_argument("--verify-ms", type=int, default=3000)
     parser.add_argument(
@@ -67,6 +78,8 @@ def main() -> int:
     )
     args = parser.parse_args()
     args.channel_changes = max(0, min(args.channel_changes, 10))
+    if args.current_channel_only and args.channel_changes:
+        parser.error("--current-channel-only cannot be combined with --channel-changes")
     fixed_config = fixed_config_from_args(args)
     try:
         validate_fixed_config(fixed_config)
@@ -105,14 +118,21 @@ def main() -> int:
             "timeout_s": min(args.timeout_s, 20.0),
         }, timeout=min(args.timeout_s, 20.0) + 10.0)
         require(bool(active.get("passed")), f"Live TV did not create an active media session: {active}")
-        # SageTV's Live TV command resumes the last tuned station, which may be
-        # unavailable or outside the explicitly commissioned set.  Make the
-        # first tune deterministic before judging Fixed/MIM startup health.
-        tune_channel(client, args.channels[0], args.timeout_s, args.verify_ms)
-        print(
-            "PASS: server-driven live TV produced advancing video and audio "
-            f"on commissioned channel {args.channels[0]}"
-        )
+        if args.current_channel_only:
+            wait_for_av(client, args.timeout_s, args.verify_ms)
+            print(
+                "PASS: stock-compatible Live TV command produced advancing video and audio "
+                "on SageTV's current channel"
+            )
+        else:
+            # SageTV's Live TV command resumes the last tuned station, which may be
+            # unavailable or outside the explicitly commissioned set. Make the
+            # first tune deterministic before judging Fixed/MIM startup health.
+            tune_channel(client, args.channels[0], args.timeout_s, args.verify_ms)
+            print(
+                "PASS: server-driven live TV produced advancing video and audio "
+                f"on commissioned channel {args.channels[0]}"
+            )
 
         if args.verify_live_edge_clamp:
             require(args.player in ("media3", "exoplayer"),

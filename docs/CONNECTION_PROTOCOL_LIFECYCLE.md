@@ -73,6 +73,13 @@ submitting all workers to a pool is not equivalent.
 - Renderer calls that explicitly require UI affinity continue through
   `uiRenderer.invokeLater()` or the renderer implementation. A class split
   must not silently move all GFX work to the Android main thread.
+- Image unload follows the same ordering rule. `ImageCache` removes protocol
+  ownership and accounting synchronously, but the renderer performs final
+  holder/resource disposal. OpenGL and libGDX queue disposal behind prior draw
+  commands so an `UNLOADIMAGE` cannot invalidate a texture before its queued
+  frame uses it; OpenGL resource deletion occurs on the GL context thread.
+  OpenGL may downsample a stable `ChannelLogos` cache resource for upload while
+  retaining its original logical dimensions for SageTV source coordinates.
 
 ## Reconnect behavior
 
@@ -101,6 +108,23 @@ Connection reconnect by itself does not create a new playback generation; the
 generation changes only when SageTV supplies a replacement media load. This
 preserves the reconnect rules above while preventing an old player callback
 from mutating the current media session.
+
+## Media DEINIT and replacement socket ordering
+
+A stock server uses `MEDIACMD_DEINIT` as a hard player boundary during many
+recording switches. Android must write and flush the command reply, leave the
+media read loop, close the old socket, and register a replacement media socket
+without waiting for TCP EOF from the server. Player cleanup must therefore not
+perform potentially blocking Android framework work on the media-command
+thread.
+
+Media3 and legacy Exo capture the old player and `MediaSessionCompat`, clear
+their shared references, and post framework/player release to Android's main
+thread. This keeps STOP and media-session Binder callbacks ordered on their
+owning thread while the protocol thread remains free to answer DEINIT and
+reconnect. Static regression coverage verifies that media-session deactivation
+and release remain inside the main-thread runnable; physical stock-server
+coverage verifies the externally visible DEINIT/reconnect/OPENURL sequence.
 
 ## Teardown behavior and known gaps
 

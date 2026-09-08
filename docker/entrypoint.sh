@@ -88,6 +88,7 @@ Commands:
   adb [args...]          Raw ADB diagnostic escape hatch
   mcp                    Start Python Fire TV MCP over stdio (waits for a client)
   mcp-test               Run real MCP stdio handshake/tool-call smoke test
+  config-check           Validate the shared local test-environment TOML
   shell                  Interactive development shell
 USAGE
 }
@@ -266,6 +267,10 @@ case "${1:-shell}" in
     ;;
   mcp-test)
     exec python3 "$PROJECT/scripts/mcp_smoke_test.py"
+    ;;
+  config-check)
+    shift
+    exec python3 "$PROJECT/scripts/test_environment_config.py" "$@"
     ;;
   shell|bash)
     exec bash

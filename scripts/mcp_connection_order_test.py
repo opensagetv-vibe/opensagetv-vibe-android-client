@@ -2,6 +2,8 @@
 """Capture the physical MiniClient connection/protocol/lifecycle ordering baseline."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_fixture, default_server_address, default_server_value
+
 import argparse
 from datetime import datetime
 import json
@@ -103,11 +105,11 @@ def validate_startup(state: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run physical connection ordering gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
         "--server-path",
-        default="/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts",
+        default=default_fixture("seek_server_path", "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"),
         help="Exact SageTV path; defaults to the canonical captioned/comskip fixture",
     )
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")

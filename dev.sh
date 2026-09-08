@@ -25,18 +25,17 @@ ensure_dev_container() {
 
 dev_exec() {
   ensure_dev_container
-  # Forward only the explicitly supported Sagex commissioning settings. They
-  # are intentionally not baked into the development image or persisted in
-  # the project; stock servers commonly protect their Web/Sagex plugin.
-  local sagex_env=()
-  local sagex_name
-  for sagex_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD; do
-    if [[ -n "${!sagex_name:-}" ]]; then
-      sagex_env+=("$sagex_name=${!sagex_name}")
+  # Forward only supported local overrides. Durable commissioning defaults and
+  # credentials stay in the ignored test-environment TOML.
+  local commissioning_env=()
+  local commissioning_name
+  for commissioning_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD SAGETV_TEST_DEVICE_ALIAS SAGETV_TEST_SERVER_ALIAS SAGETV_TEST_SERVER_ADDRESS; do
+    if [[ -n "${!commissioning_name:-}" ]]; then
+      commissioning_env+=("$commissioning_name=${!commissioning_name}")
     fi
   done
   docker exec -i -w "$CONTAINER_WORKSPACE" "$UNIFIED_CONTAINER" env \
-      "${sagex_env[@]}" \
+      "${commissioning_env[@]}" \
       JAVA_HOME=/opt/java/jdk17 \
       JDK_HOME=/opt/java/jdk17 \
       GRADLE_USER_HOME=/work/.gradle/android \
@@ -68,10 +67,19 @@ repair_dev_gradle() {
   dev_exec python3 "$CONTAINER_WORKSPACE/scripts/repair_dev_gradle.py" --workspace "$CONTAINER_WORKSPACE"
 }
 
-DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"
+configured_automated_client_id() {
+  local configured
+  configured="$(dev_exec python3 "$CONTAINER_WORKSPACE/scripts/test_environment_config.py" --get identity.automated_client_id)"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+  else
+    printf '%s\n' "44:45:56:30:30:31"
+  fi
+}
 
 run_scripted_launch() {
-  local client_id="$DEFAULT_AUTOMATED_TEST_CLIENT_ID"
+  local client_id
+  client_id="$(configured_automated_client_id)"
   local id_source="default"
 
   while (($#)); do
@@ -114,7 +122,8 @@ run_scripted_launch() {
 run_automated_mcp_test() {
   local script="$1"
   shift
-  local client_id="$DEFAULT_AUTOMATED_TEST_CLIENT_ID"
+  local client_id
+  client_id="$(configured_automated_client_id)"
   local id_source="default"
   local filtered=()
 
@@ -183,6 +192,10 @@ case "${1:-help}" in
     # The smoke-test script is bind-mounted from the workspace, so this works
     # with an existing image and requires no Docker rebuild.
     run_automated_mcp_test mcp_smoke_test.py "$@"
+    ;;
+  config-check)
+    shift
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/test_environment_config.py" "$@"
     ;;
   mcp-telemetry)
     shift
@@ -358,7 +371,7 @@ case "${1:-help}" in
     ;;
   player-diag)
     shift
-    # External-only player diagnostics. Does not add hooks to the Android player.
+    # External system evidence plus the debug APK's bounded structured trace.
     dev_exec python3 "$CONTAINER_WORKSPACE/scripts/player_diagnostics.py" "$@"
     ;;
   inspect-apk)
@@ -469,6 +482,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp                           Start Dockerized MCP server (stdio; waits for a client)
   client-id [--show|--set ID|--generate]  Show/set/generate the persisted SageTV client ID
   mcp-test                      Run end-to-end MCP protocol smoke test (no Codex/Node)
+  config-check                  Validate the shared local test-environment TOML
   mcp-telemetry [max_events]    Read legacy telemetry status through MCP
   mcp-seek-test [options]       Automate seek/pause checks on the currently playing recording
   mcp-seek-time --target-ms N   Debug seek active playback to exact passed time (0 = beginning)
@@ -501,7 +515,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-frame-step-test --server-path PATH [options]  Verify paused command 28 and unsupported behavior
   mcp-fast-switch-test --initial-path PATH --switch-path PATH [options]  Verify retained Media3 Pull/SMB replacement
   mcp-playback-rate-test --server-path PATH [options]  Verify hardware native-rate and seek-scan playback
-  player-diag clear|LABEL       Clear logcat or collect external player/crash diagnostics
+  player-diag clear|LABEL       Clear logcat or collect system/player/crash/trace diagnostics
   inspect-apk APK --variant V   Inspect debug/release APK package, permissions, debug surface, secrets, and signer
   shell                         Interactive development shell
 

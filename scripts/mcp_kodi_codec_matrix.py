@@ -8,6 +8,8 @@ remains alive without a crash signature.
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import configured_device_serial, default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -113,8 +115,8 @@ def ensure_idle(client: MCPProcess, args: argparse.Namespace) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run generated codec fixtures with strict hardware evidence")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
         "--server-root",
         default="/var/media/videos/OpenSageTV-Vibe-Kodi-Codec-Test",
@@ -131,8 +133,9 @@ def main() -> int:
         print(f"PASS: MCP initialize handshake ({negotiated})")
         connection = call_dict(client, "adb_connect", timeout=30.0)
         serial = str(connection.get("serial") or connection.get("device") or "")
-        require(serial.endswith("192.168.10.25:5555") or "192.168.10.25:5555" in json.dumps(connection),
-                f"physical codec matrix is restricted to non-Pro .25, got: {connection}")
+        required_serial = configured_device_serial("non_pro") or configured_device_serial()
+        require(serial.endswith(required_serial) or required_serial in json.dumps(connection),
+                f"physical codec matrix is restricted to configured non-Pro device {required_serial}, got: {connection}")
         clean = call_dict(client, "dev_prepare_clean_start", {
             "wake": True, "graceful_timeout_s": 2.0,
         }, timeout=30.0)
@@ -237,7 +240,7 @@ def main() -> int:
                      for row in results) and not bool(crash.get("signatureDetected"))
         report = {
             "passed": passed,
-            "deviceRestriction": "192.168.10.25:5555",
+            "deviceRestriction": required_serial,
             "player": args.player,
             "streaming": args.streaming,
             "decoding": "hardware",

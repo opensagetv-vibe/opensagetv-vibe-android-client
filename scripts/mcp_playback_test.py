@@ -7,6 +7,8 @@ and verifies that playback starts. Legacy sendkey/sendtext remain available for 
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import sys
@@ -182,8 +184,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Launch/configure/connect MiniClient and start the standard test recording through native client input"
     )
-    parser.add_argument("--server", default="192.168.10.232", help="SageTV server IP/address")
-    parser.add_argument("--port", type=int, default=31099, help="SageTV MiniClient port")
+    parser.add_argument("--server", default=default_server_address(), help="SageTV server IP/address")
+    parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)), help="SageTV MiniClient port")
     parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default="media3")
     parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default="push", help="Streaming selection: push, pull, smb_direct, smb_auto, fixed (legacy dynamic accepted)")
     parser.add_argument("--decoding", "--decoder", dest="decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default="hardware", help="Decoding selection: hardware, software, fallback (legacy hardware_preferred accepted)")

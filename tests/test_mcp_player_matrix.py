@@ -327,7 +327,8 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertIn('videoRendered', trap)
         self.assertIn('audioHeadFrames', trap)
         self.assertIn('serverRequestedSeekMs', state)
-        self.assertIn('PlaybackDebugEventBridge.recordAsync("server_seek_command"', media_cmd)
+        self.assertIn('PlaybackDebugEventBridge.recordAsyncDetailed(', media_cmd)
+        self.assertIn('"server_seek_command", playa, "requestedMs=" + seekTime', media_cmd)
         self.assertIn('def dev_player_events()', server)
 
     def test_issue_only_known_profile_targets_current_abnormal_cases(self):

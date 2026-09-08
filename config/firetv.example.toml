@@ -1,9 +1,98 @@
-# Copy this file to the Windows workspace as:
-# Copy to opensagetv-vibe-android-client/config/firetv.toml and edit locally.
-# Then edit the Fire TV address.
-device = "192.168.1.50:5555"
+# OpenSageTV Vibe local commissioning and regression environment.
+# Copy this tracked example to config/firetv.toml and replace documentation
+# addresses/blank credentials locally. config/firetv.toml is ignored by Git and
+# excluded from release/handoff archives.
+schema = 2
+active_device = "primary"
+active_server = "vibe"
 dev_package = "opensagetv.vibe.miniclient.debug"
 adb = "adb"
 artifact_dir = "/workspace/android-client/artifacts/firetv"
-# Optional. aapt is already available in the development image.
 aapt = "/opt/android-sdk/build-tools/29.0.2/aapt"
+
+[identities]
+automated_client_id = "44:45:56:30:30:31"
+
+[devices.primary]
+alias = "living-room"
+serial = "192.0.2.10:5555"
+label = "Primary Android TV test device"
+model = "replace-me"
+api = 0
+enabled = true
+client_id = "44:45:56:30:30:31"
+
+[devices.secondary]
+alias = "bedroom"
+serial = "192.0.2.11:5555"
+label = "Optional secondary Android TV test device"
+model = "replace-me"
+api = 0
+enabled = false
+client_id = "44:45:56:30:30:32"
+
+[servers.vibe]
+alias = "development"
+address = "192.0.2.20"
+miniclient_port = 31099
+label = "Vibe test server"
+stock = false
+web_base_url = "http://192.0.2.20:8080"
+web_remote_url = "http://192.0.2.20:8080/sage/webremote.html"
+web_username = ""
+web_password = ""
+smb_url = "smb://192.0.2.20/media/"
+smb_username = ""
+smb_password = ""
+smb_configuration_url = "smb://192.0.2.20/media/config/"
+smb_mappings = [
+  { sage_prefix = "/var/media/", smb_root = "smb://192.0.2.20/media/" },
+]
+
+[servers.stock]
+alias = "compatibility"
+address = "192.0.2.21"
+miniclient_port = 31099
+label = "Unmodified SageTV compatibility server"
+stock = true
+web_base_url = "http://192.0.2.21:8080"
+web_remote_url = "http://192.0.2.21:8080/sage/webremote.html"
+web_username = ""
+web_password = ""
+smb_url = "smb://192.0.2.21/media/"
+smb_username = ""
+smb_password = ""
+smb_configuration_url = "smb://192.0.2.21/media/config/"
+smb_mappings = [
+  { sage_prefix = "/var/media/", smb_root = "smb://192.0.2.21/media/" },
+  { sage_prefix = 'D:\Recordings\', smb_root = "smb://192.0.2.21/recordings/" },
+]
+
+[fixtures]
+seek_server_path = "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+caption_server_path = "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dvd_server_path = "/var/media/videos/OpenSageTV_Vibe_Test_DVD"
+dvd_motion_server_path = "/var/media/videos/replace-with-local-dvd"
+prerecorded_search = "replace-with-safe-recording"
+
+[capture]
+enabled = false
+backend = "directshow"
+video_input = ""
+audio_input = ""
+output_directory = "/workspace/android-client/artifacts/firetv"
+
+[test_defaults]
+player = "media3"
+streaming = "pull"
+decoding = "hardware"
+renderer = "opengl"
+live_channels = ["2.1", "5.1"]
+startup_timeout_seconds = 45
+recovery_timeout_seconds = 20
+observation_seconds = 15
+
+[safety]
+protected_packages = ["jvl.sage.miniclient", "jvl.sage.miniclient.dev"]
+allow_clear_data = false
+allow_recording_delete = false

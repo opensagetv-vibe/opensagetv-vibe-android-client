@@ -130,8 +130,8 @@ def main() -> int:
     if report.get("automated_test_client_id_default") != "44:45:56:30:30:31":
         fail("refactor report does not record the deterministic automated-test client ID")
     dev_sh = (WORKSPACE / "dev.sh").read_text(errors="ignore")
-    if 'DEFAULT_AUTOMATED_TEST_CLIENT_ID="44:45:56:30:30:31"' not in dev_sh:
-        fail("automated MCP/player tests no longer default to DEV001 / 44:45:56:30:30:31")
+    if 'configured_automated_client_id()' not in dev_sh or 'identity.automated_client_id' not in dev_sh:
+        fail("automated MCP/player tests no longer resolve their client ID from the shared TOML")
     if 'run_automated_mcp_test()' not in dev_sh or not re.search(
         r'mcp_client_id\.py"? --ensure "\$client_id" --quiet', dev_sh
     ):
@@ -225,6 +225,14 @@ def main() -> int:
             # lifecycle change is a protected per-load hook used by extractor
             # backends to flush caption state before a new playback session.
             "f34e82d2118603672a02ef1a5141603d0387f3c21b53ea0aa989706b3f5337f8",
+            # Reviewed OPENURL load-transition guard. Releasing the previous
+            # Android player must not expose a transient -1/EOS media time to
+            # stock SageTV while the replacement is created on the UI thread.
+            "e43f76c591d802b31eab760018e8c5985596ce67f52e990aa695b7ab2e1fe712",
+            # Reviewed stock-server Stop/Restart lifecycle. STOP preserves the
+            # loaded playback generation so a retained SEEK/PLAY reaches the
+            # backend; MEDIACMD_DEINIT/FREE remains the invalidation boundary.
+            "a24f1d8c24b921de8d98962d7a018fbf235b6533405a5b9aab356cf004232bd7",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

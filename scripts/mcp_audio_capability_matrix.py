@@ -2,6 +2,8 @@
 """Physically characterize AC3/EAC3/DTS without equating playback with passthrough."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -51,8 +53,8 @@ def clean_start(client: MCPProcess, args: argparse.Namespace) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the physical Android audio capability matrix")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     args = parser.parse_args()
 
     client = MCPProcess()

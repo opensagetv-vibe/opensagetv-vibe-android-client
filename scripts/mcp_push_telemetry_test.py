@@ -2,6 +2,8 @@
 """Verify bounded original-PlaceShifter Push telemetry on a real client."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import sys
@@ -34,8 +36,8 @@ def wait_snapshot(client: MCPProcess, timeout_s: float) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android detailed Push telemetry physical gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", required=True)
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")

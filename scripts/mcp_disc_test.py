@@ -2,6 +2,8 @@
 """Run bounded remote-DVD startup/STOP/crash gates through the real MCP path."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import re
@@ -139,8 +141,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Commission one or more indexed remote DVD paths on a real device"
     )
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", action="append", default=[],
                         help="Exact indexed DVD directory; repeat for multiple discs")
     parser.add_argument("--media-name", action="append", default=[],

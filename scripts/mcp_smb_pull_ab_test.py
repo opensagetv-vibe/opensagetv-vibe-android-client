@@ -2,6 +2,14 @@
 """Compare SageTV Pull and SMB Direct seek recovery on one generated fixture."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import (
+    default_fixture,
+    default_server_address,
+    default_smb_mappings,
+    default_smb_value,
+    default_server_value,
+)
+
 import argparse
 import json
 import sys
@@ -33,6 +41,8 @@ def run_mode(client: MCPProcess, args: argparse.Namespace, mode: str) -> dict:
             "streaming": mode,
             "decoding": args.decoding,
             "smb_mappings": args.smb_mappings,
+            "smb_username": args.smb_username,
+            "smb_password": args.smb_password,
         },
     )
     call_dict(
@@ -110,14 +120,16 @@ def run_mode(client: MCPProcess, args: argparse.Namespace, mode: str) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Physical Pull versus SMB Direct seek A/B")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
-        "--server-path", default="/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+        "--server-path", default=default_fixture("seek_server_path", "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts")
     )
     parser.add_argument(
-        "--smb-mappings", default="/var/media/ => smb://nas.example.invalid/media/"
+        "--smb-mappings", default=default_smb_mappings()
     )
+    parser.add_argument("--smb-username", default=default_smb_value("username"))
+    parser.add_argument("--smb-password", default=default_smb_value("password"))
     parser.add_argument("--player", choices=("exoplayer", "media3"), default="exoplayer")
     parser.add_argument("--decoding", choices=("hardware", "software", "fallback"), default="hardware")
     parser.add_argument("--start-ms", type=int, default=120000)

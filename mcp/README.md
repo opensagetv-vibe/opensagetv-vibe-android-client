@@ -16,12 +16,21 @@ and the Android build. Codex is optional; any compatible MCP client can use it.
 
 ## Run
 
-Configure `config/firetv.toml`, then from the repository root:
+Copy `config/firetv.example.toml` to the ignored `config/firetv.toml`, add all
+named/aliased devices and servers plus each server's local SMB/Web credentials,
+then from the repository root:
 
 ```bash
 ./dev.sh mcp-test
 ./dev.sh mcp
 ```
+
+Run `./dev.sh config-check` first. The selected device, server, per-device test
+client ID, Web/Sagex credentials, SMB mappings/credentials, fixtures, and test
+defaults come from that one file. `SAGETV_TEST_DEVICE_ALIAS` and
+`SAGETV_TEST_SERVER_ALIAS` select another configured entry for one shell; CLI
+options remain the highest-priority per-test override. See
+`../docs/TEST_ENVIRONMENT.md` for the complete schema and secret-handling rule.
 
 PowerShell uses the same commands through `.\dev.ps1`. `mcp` uses stdio and
 therefore intentionally waits on an apparently blank terminal.
@@ -47,6 +56,10 @@ To register with Codex CLI when desired:
 - Filterable player/tuning matrices covering Legacy Exo, Media3, IJK, and GSY
   engines across Push/Pull/Fixed and decoder policies.
 - Client-ID inspection/override tools for deterministic test sessions.
+- Guarded `dev_reset_media_watch_state` support for recreating a genuinely
+  never-watched/no-resume recording. The first unconfirmed call returns the
+  target and warning; only `confirm=true` clears that MediaFile's server watch
+  history through Sagex or the stock SageTV Web Interface.
 - Credential-free named profile list/save/load/delete through the same production
   SMB2/SMB3 repository used by the settings UI. Run
   `python3 scripts/mcp_smb_profile_test.py` for physical share acceptance.

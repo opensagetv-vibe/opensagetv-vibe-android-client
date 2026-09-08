@@ -15,6 +15,7 @@ from .adb import AdbClient
 from .config import load_config
 from .sagex_api import SagexApiClient, SagexApiError
 from .sequence import parse_sequence_script
+from .trace_analysis import analyze_jsonl
 
 cfg = load_config()
 adb = AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt)
@@ -1203,6 +1204,7 @@ def dev_set_player_config(
     disc_skip_previews: bool | None = None,
     disc_compatibility_fallback: bool | None = None,
     disc_mpeg2_timestamp_repair: str = "",
+    wait_for_playback_before_first_osd: bool | None = None,
 ) -> dict:
     """Set all debug APK playback preferences for the next playback.
 
@@ -1212,7 +1214,9 @@ def dev_set_player_config(
     SageTV STV caption Off/On authority. SMB credentials are accepted only by the Dev
     control path and are never returned by this tool.
     Disc/DVD policy, menu/preview skipping, and compatibility fallback are also
-    configurable and are reported in every snapshot. Fixed encoding parameters may
+    configurable and are reported in every snapshot. The optional first-OSD
+    switch waits for playback to advance before presenting the initial player OSD.
+    Fixed encoding parameters may
     also be supplied: encoding preference needed/always,
     container matroska/dvd, video bitrate/fps/keyframe/B-frames/resolution, audio
     codec/bitrate/channels, and fixed remuxing preference/format.
@@ -1254,6 +1258,7 @@ def dev_set_player_config(
         disc_skip_previews=disc_skip_previews,
         disc_compatibility_fallback=disc_compatibility_fallback,
         disc_mpeg2_timestamp_repair=disc_mpeg2_timestamp_repair,
+        wait_for_playback_before_first_osd=wait_for_playback_before_first_osd,
     )
 
 @mcp.tool()
@@ -1576,6 +1581,58 @@ def dev_current_media_file() -> dict:
         "clientId": client_id,
         "uiContext": context,
         "sagexBase": sagex.base_url,
+    }
+
+
+@mcp.tool()
+def dev_reset_media_watch_state(media_file_id: int, confirm: bool = False) -> dict:
+    """Reset one recording to SageTV's never-watched/no-resume state.
+
+    This removes the server's complete Watched record for the supplied MediaFile,
+    including its saved resume time. It is intentionally guarded because the
+    operation changes the user's SageTV watch history. Call once without confirm
+    to inspect the target and warning, then call with ``confirm=true``.
+    """
+    media_file_id = int(media_file_id)
+    if media_file_id <= 0:
+        raise ValueError("media_file_id must be > 0")
+    state = adb.player_state_snapshot()
+    if not bool(state.get("connected")):
+        raise RuntimeError("MiniClient must be connected before resetting watch state")
+    server_address = str(state.get("serverAddress", "")).strip()
+    client_id = str(state.get("clientId", "")).strip()
+    if not server_address or not client_id:
+        raise RuntimeError(
+            f"Connected MiniClient snapshot is missing server/client identity: {_compact_state(state)}"
+        )
+    sagex = SagexApiClient.discover(server_address)
+    context = sagex.resolve_context(client_id)
+    warning = (
+        "This permanently clears SageTV watched history and the saved resume "
+        f"position for MediaFile {media_file_id}."
+    )
+    if not bool(confirm):
+        return {
+            "changed": False,
+            "confirmationRequired": True,
+            "warning": warning,
+            "mediaFileId": media_file_id,
+            "serverAddress": server_address,
+            "clientId": client_id,
+            "uiContext": context,
+            "sagexBase": sagex.base_url,
+        }
+    reply = sagex.clear_watched(media_file_id)
+    return {
+        "changed": True,
+        "confirmationRequired": False,
+        "warning": warning,
+        "mediaFileId": media_file_id,
+        "serverAddress": server_address,
+        "clientId": client_id,
+        "uiContext": context,
+        "sagexBase": sagex.base_url,
+        "reply": reply,
     }
 
 
@@ -2784,6 +2841,30 @@ def media_codec_diagnostics() -> str:
     return adb.dumpsys_media_codec()
 
 @mcp.tool()
+def playback_trace_status() -> dict:
+    """Return status for the debug app's bounded persistent JSON-lines playback trace."""
+    return adb.playback_trace_status()
+
+@mcp.tool()
+def clear_playback_trace() -> dict:
+    """Clear only the debug app's bounded persistent playback-trace files."""
+    return adb.clear_playback_trace()
+
+@mcp.tool()
+def set_playback_trace_enabled(enabled: bool = True) -> dict:
+    """Enable or disable new persistent trace records without deleting existing trace files."""
+    return adb.set_playback_trace_enabled(enabled)
+
+@mcp.tool()
+def analyze_playback_trace(label: str = "playback-trace") -> dict:
+    """Export and analyze the current rotating app trace for switches, seeks and errors."""
+    trace_path = artifact(label, "_playback-trace.jsonl")
+    adb.export_playback_trace(trace_path)
+    result = analyze_jsonl(trace_path.read_text(encoding="utf-8"))
+    result["trace"] = str(trace_path)
+    return result
+
+@mcp.tool()
 def focused_window() -> str:
     """Return the currently focused Android application/window."""
     return adb.focused_window()
@@ -2800,6 +2881,7 @@ def collect_playback_diagnostics(label: str = "playback", log_lines: int = 2500)
         "window": Path(str(base) + "_window.txt"),
         "state": Path(str(base) + "_state.json"),
         "screenshot": Path(str(base) + "_screen.png"),
+        "trace": Path(str(base) + "_playback-trace.jsonl"),
     }
     state = _compact_state(adb.player_state_snapshot())
     paths["logcat"].write_text(adb.logcat_tail(log_lines), encoding="utf-8")
@@ -2809,6 +2891,7 @@ def collect_playback_diagnostics(label: str = "playback", log_lines: int = 2500)
     paths["window"].write_text(adb.focused_window(), encoding="utf-8")
     paths["state"].write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
     adb.screenshot(paths["screenshot"])
+    adb.export_playback_trace(paths["trace"])
     result = {k: str(v) for k, v in paths.items()}
     result["state_snapshot"] = state
     return result

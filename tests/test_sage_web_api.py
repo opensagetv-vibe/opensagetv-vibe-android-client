@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "mcp" / "src"))
 
-from sagetv_dev_mcp.sagex_api import SageWebApiClient
+from sagetv_dev_mcp.sagex_api import SageWebApiClient, SagexApiClient
 
 
 class FakeSageWebApiClient(SageWebApiClient):
@@ -32,6 +32,16 @@ class FakeSageWebApiClient(SageWebApiClient):
         if path in ("MediaFileCommand", "SageCommand"):
             return "ok"
         raise AssertionError((path, params))
+
+
+class FakeSagexApiClient(SagexApiClient):
+    def __init__(self):
+        super().__init__("http://sagetv.test:8080/sagex/api")
+        self.calls = []
+
+    def call(self, command, *args, **kwargs):
+        self.calls.append((command, args, kwargs))
+        return {"Result": None}
 
 
 class SageWebApiClientTests(unittest.TestCase):
@@ -67,6 +77,21 @@ class SageWebApiClientTests(unittest.TestCase):
         self.assertEqual("yes", params["RetImage"])
         self.assertEqual("Full Screen", params["command"])
         self.assertEqual("444556303031", params["context"])
+
+    def test_clear_watched_removes_complete_stock_server_watch_record(self):
+        client = FakeSageWebApiClient()
+        result = client.clear_watched(20)
+        self.assertTrue(result["accepted"])
+        self.assertEqual("sage_web_clear_watched", result["transport"])
+        path, params = client.calls[-1]
+        self.assertEqual("MediaFileCommand", path)
+        self.assertEqual("ClearWatched", params["command"])
+        self.assertEqual(20, params["MediaFileId"])
+
+    def test_clear_watched_uses_mediafile_reference_with_sagex(self):
+        client = FakeSagexApiClient()
+        client.clear_watched(20)
+        self.assertEqual(("ClearWatched", ("mediafile:20",), {}), client.calls[-1])
 
 
 if __name__ == "__main__":

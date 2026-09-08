@@ -2,6 +2,8 @@
 """Sweep Dev runtime player tuning combinations through MCP without rebuilding between tests."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import itertools
 import json
@@ -84,13 +86,13 @@ def csv_bools(value: str) -> list[bool]:
 def backend_defaults(player: str) -> dict[str, Any]:
     if player == "media3":
         return {
-            "tsSearchMultiplier": 8, "seekPolicy": "closest", "pullReadKb": 256,
+            "tsSearchMultiplier": 16, "seekPolicy": "closest", "pullReadKb": 256,
             "minBufferMs": 5000, "maxBufferMs": 20000, "playbackBufferMs": 500,
             "rebufferMs": 1000, "seekRecovery": False, "seekRecoveryMs": 10000,
             "codecMode": "sync", "directionalSyncMinDeltaMs": 2000,
         }
     return {
-        "tsSearchMultiplier": 8, "seekPolicy": "directional", "pullReadKb": 512,
+        "tsSearchMultiplier": 16, "seekPolicy": "directional", "pullReadKb": 512,
         "minBufferMs": 5000, "maxBufferMs": 20000, "playbackBufferMs": 500,
         "rebufferMs": 1000, "seekRecovery": True, "seekRecoveryMs": 10000,
         "codecMode": "sync", "directionalSyncMinDeltaMs": 2000,
@@ -352,8 +354,8 @@ def write_report(report: dict[str, Any], requested: str) -> Path:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Sweep runtime Media3/legacy Exo2 tuning combinations through MCP")
-    p.add_argument("--server", default="192.168.10.232")
-    p.add_argument("--port", type=int, default=31099)
+    p.add_argument("--server", default=default_server_address())
+    p.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     p.add_argument("--text", default="", help="SageTV Search text when --server-path is not supplied")
     p.add_argument("--server-path", default="", help="Exact SageTV server-side MediaFile path for deterministic fixture runs")
     p.add_argument("--player", choices=("media3", "exoplayer"), default="media3")

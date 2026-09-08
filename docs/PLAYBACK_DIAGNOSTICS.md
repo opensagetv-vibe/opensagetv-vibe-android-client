@@ -39,6 +39,25 @@ Before changing code after a failure, capture:
 - SageTV server request, transfer, mux, and transcoder evidence;
 - process/crash status and exact timestamps.
 
+Debug APKs also maintain a persistent structured playback trace in app-private
+storage. `playback-trace.jsonl` records exact event and wall/monotonic times,
+connection and playback generations, requested/applied seek details, player and
+buffer positions, decoder input/output counters, surface validity, and playback
+state. It is written on a low-priority background worker, contains no media
+payloads, redacts URI credentials and secret-like fields, and rotates at 2 MiB
+with three retained files. It therefore survives player teardown and SageTV's
+on-screen error dialog without growing without bound.
+
+`./dev.sh player-diag LABEL` and MCP `collect_playback_diagnostics` export all
+available rotations, oldest first, into `*_playback-trace.jsonl`. MCP also
+provides `playback_trace_status`, `set_playback_trace_enabled`, and
+`clear_playback_trace`. Tracing defaults on in debug builds, its enabled state
+persists across app restarts, disabling preserves existing evidence, and clearing removes
+only these bounded debug trace files. `analyze_playback_trace` exports and
+summarizes DEINIT/reconnect/OPENURL cycles, requested/applied seeks, time to
+first frame, generations, trace gaps, and error/timeout events. Release APKs do
+not contain this recorder or its debug broadcast controls.
+
 The on-screen **Playback Stats** panel is the preferred first look during a
 physical reproduction. Use compact mode while watching for a symptom and
 detailed mode to correlate it with decoder, datasource, synchronization, and
@@ -49,10 +68,13 @@ use those same colors, with a neutral `Total`. Values appear once above each bar
 duplicate detail rows and the invariant estimated link-capacity bar are omitted.
 Detail rows use the same 10.5sp normal typeface as the graph labels.
 Export produces a bounded redacted snapshot with no media path, server address,
-credential, or client ID. CPU sampling starts
-and stops with the overlay. Preserve the normal MCP/server evidence as well
-when a root-cause claim depends
-on another process.
+credential, or client ID. Total-device CPU prefers aggregate `/proc/stat` and
+falls back to `/proc/uptime` cumulative idle time, then cached read-only per-CPU
+sysfs idle-state counters on Fire OS versions that restrict both proc sources.
+A source change resets the interval instead of mixing units. The fallbacks need
+no additional permission or service. CPU
+sampling starts and stops with the overlay. Preserve the normal MCP/server
+evidence as well when a root-cause claim depends on another process.
 
 The long-press navigation panel's bar-chart icon, the submenu's checked/unchecked
 row, and MCP use the same overlay controller. The icon is white while disabled
@@ -209,6 +231,29 @@ and NIO recovery of 447/638 ms. First physical reads were 85/167 ms versus
 558/178 ms; first rendered frames were 621/692 ms versus 728/828 ms. Because
 all four runs recovered with consistent MediaServer bytes and NIO did not win,
 do not patch Core transfer loops without new direct evidence of a short write.
+
+## Growing live-TV source contract
+
+When `OPENURL` identifies an active/growing recording, every local random-access
+adapter must report an unknown total length to its player. The SIZE value seen
+at open is only the current readable edge; presenting it as a final content
+length can freeze the player timeline while the SageTV file continues growing.
+Media3 1.11 may then report `StuckPlayingNotEnding` after 60 seconds. A recovery
+must capture the current position before changing player state and must not
+silently reopen at zero.
+
+For a live-program transition, a new `OPENURL` owns a new playback generation.
+Media3 fast replacement is prohibited when the current item is growing, and
+late prepared/completion/error/seek callbacks from IJK or Android System must
+be ignored when their player or generation is no longer current. The native
+bridges use a bounded ten-second SIZE wait at the live edge; this tolerates
+tuner/HDD write gaps without creating an uninterruptible read.
+
+The strict channel-change gate must use a server that implements the Vibe
+debug channel-set event. A stock server can validate sustained live playback,
+but accepting the Android broadcast does not prove that SageTV changed the
+channel; `channel_identity_not_confirmed` on that server is an automation
+limitation rather than evidence of a decoder failure.
 
 ## Active-player controls derived from Kodi
 

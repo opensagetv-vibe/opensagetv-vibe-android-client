@@ -15,7 +15,15 @@ import json
 import sys
 import time
 
-from mcp_seek_suite import MCPProcess, call_dict, initialize
+from sagetv_dev_mcp.config import (
+    default_server_address,
+    default_server_value,
+    default_smb_mappings,
+    default_smb_value,
+    default_test_value,
+)
+
+from mcp_seek_suite import MCPProcess, call_dict, initialize, tool_call
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -33,21 +41,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Automate a complete SageTV MiniClient Dev test session")
     server = parser.add_mutually_exclusive_group()
     server.add_argument("--server-name", default="", help="Saved MiniClient server name")
-    server.add_argument("--server-address", default="", help="Direct SageTV server address/IP")
-    parser.add_argument("--server-port", type=int, default=31099)
+    server.add_argument("--server-address", default=default_server_address(), help="Direct SageTV server address/IP (default: active TOML server)")
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--no-save-server", action="store_true")
-    parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default="")
+    parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default=default_test_value("player", "media3"))
     # argparse applies type conversion to string defaults.  None keeps these
     # optional without sending an invalid empty value through the normalizers.
-    parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default=None, help="Streaming selection: push, pull, fixed (legacy dynamic accepted)")
-    parser.add_argument("--decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default=None, help="Decoding selection: hardware, software, fallback (legacy hardware_preferred accepted)")
+    parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default=default_test_value("streaming", "pull"), help="Streaming selection: push, pull, fixed (legacy dynamic accepted)")
+    parser.add_argument("--decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default=default_test_value("decoding", "hardware"), help="Decoding selection: hardware, software, fallback (legacy hardware_preferred accepted)")
     add_fixed_encoding_args(parser)
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="")
     parser.add_argument(
         "--smb-mappings",
-        default="",
+        default=default_smb_mappings(),
         help="Optional Dev-only SageTV-prefix to SMB-root mappings applied before playback",
     )
+    parser.add_argument("--smb-username", default=default_smb_value("username"))
+    parser.add_argument("--smb-password", default=default_smb_value("password"))
     parser.add_argument("--video-name", default="", help="Exact or uniquely matching SageTV video/recording name through Sagex")
     parser.add_argument("--server-path", default="", help="Exact SageTV-server MediaFile path through the Vibe MiniClient protocol extension")
     parser.add_argument("--connect-timeout-s", type=float, default=30.0)
@@ -57,7 +67,7 @@ def main() -> int:
         default=2000,
         help="Require a non-empty SageTV menu hint to remain stable this long after connection (default: 2000 ms)",
     )
-    parser.add_argument("--playback-timeout-s", type=float, default=45.0)
+    parser.add_argument("--playback-timeout-s", type=float, default=float(default_test_value("startup_timeout_seconds", 45)))
     parser.add_argument("--verify-ms", type=int, default=1500)
     parser.add_argument(
         "--start-ms",
@@ -106,6 +116,11 @@ def main() -> int:
         print(f"PASS: MCP initialize handshake ({negotiated})")
         print("PASS: adb_connect")
         call_dict(client, "adb_connect", timeout=30.0)
+        # ADB's crash buffer survives app upgrades and process restarts. Clear
+        # it before the bounded session so a tombstone from an earlier failed
+        # build cannot make a later healthy run fail its final crash gate.
+        tool_call(client, "clear_logcat", {}, timeout=30.0)
+        print("PASS: stale device logcat cleared before session")
 
         print("STEP: prepare clean Dev app start")
         clean = call_dict(client, "dev_prepare_clean_start", {"wake": True, "graceful_timeout_s": 2.0}, timeout=30.0)
@@ -120,6 +135,8 @@ def main() -> int:
             "decoding": decoding_preference(args.decoding) if args.decoding else "",
             "gsy_engine": args.gsy_engine,
             "smb_mappings": args.smb_mappings,
+            "smb_username": args.smb_username,
+            "smb_password": args.smb_password,
             **fixed_config,
         })
         print(json.dumps(configured, indent=2, sort_keys=True))
@@ -325,11 +342,30 @@ def main() -> int:
             restart_source(f"REPEATED_START_{iteration}")
 
         if args.run_stop_restart:
-            print("STEP: SageTV stop and source restart")
+            print("STEP: SageTV stop and retained-session PLAY restart")
             stopped = call_dict(client, "dev_sage_command", {"command": "stop"}, timeout=30.0)
             print("STOP: " + json.dumps(stopped, indent=2, sort_keys=True))
+            # STOP is deliberately non-terminal in the MiniPlayer protocol.
+            # Stock SageTV can follow it with PLAY (and sometimes SEEK) against
+            # the same loaded player without another OPENURL. Re-Watching the
+            # MediaFile through Sagex tests a different asynchronous STV path
+            # and can race SageMC's StopPopup cleanup.
             time.sleep(1.0)
-            restart_source("STOP_RESTART")
+            played = call_dict(client, "dev_sage_command", {"command": "play"}, timeout=30.0)
+            print("STOP_PLAY: " + json.dumps(played, indent=2, sort_keys=True))
+            recovered = call_dict(client, "dev_wait_for_playback_started", {
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": args.verify_ms,
+            }, timeout=args.playback_timeout_s + 35.0)
+            print("STOP_PLAY_RECOVERY: " + json.dumps(recovered, indent=2, sort_keys=True))
+            if not recovered.get("passed"):
+                raise RuntimeError(
+                    "retained-session PLAY did not recover A/V: "
+                    f"{recovered.get('failureReason', recovered)}"
+                )
+            normalize_start("STOP_PLAY")
+            if args.require_captions:
+                caption_state = wait_for_captions("STOP_PLAY")
 
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         print("CRASH CHECK: " + json.dumps(crash, indent=2, sort_keys=True))

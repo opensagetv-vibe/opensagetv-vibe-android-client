@@ -2,6 +2,8 @@
 """Physical hardware gate for negotiated native-rate and seek-scan playback."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_smb_mappings, default_smb_value, default_server_value
+
 import argparse
 import json
 import sys
@@ -73,15 +75,15 @@ def wait_rate(client: MCPProcess, expected: float, timeout_s: float = 8.0) -> di
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Android playback-rate physical gates")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", required=True)
     parser.add_argument("--player", choices=("media3", "exoplayer", "gsyplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "smb_direct"), default="pull")
     parser.add_argument("--gsy-engine", choices=("media3", "legacy_exo"), default="media3")
-    parser.add_argument("--smb-mappings", default="/var/media/ => smb://nas.example.invalid/media/")
-    parser.add_argument("--smb-username", default="")
-    parser.add_argument("--smb-password", default="")
+    parser.add_argument("--smb-mappings", default=default_smb_mappings())
+    parser.add_argument("--smb-username", default=default_smb_value("username"))
+    parser.add_argument("--smb-password", default=default_smb_value("password"))
     parser.add_argument("--playback-timeout-s", type=float, default=60.0)
     parser.add_argument("--server-negotiation", action="store_true",
                         help="also require SageTV smooth_ff/smooth_rew to use negotiated command 30")

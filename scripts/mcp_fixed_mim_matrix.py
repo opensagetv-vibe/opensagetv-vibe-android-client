@@ -7,6 +7,8 @@ prerecorded or live gate fails. GSY System is always reordered last.
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_fixture, default_server_address, default_test_value, default_server_value
+
 import argparse
 import json
 import os
@@ -195,14 +197,14 @@ def query_mim_status(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the complete Fixed FFmpeg/MIM Android commissioning matrix")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
-    parser.add_argument("--server-path", default="/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts")
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
+    parser.add_argument("--server-path", default=default_fixture("seek_server_path", "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"))
     parser.add_argument("--players", default=",".join(PLAYERS))
     parser.add_argument("--decoding", default=",".join(DECODING_SELECTIONS))
     parser.add_argument("--gsy-engines", default=",".join(GSY_ENGINES))
     parser.add_argument("--case-id", default="", help="Comma-separated exact case IDs to run")
-    parser.add_argument("--channels", default="2.1,5.1")
+    parser.add_argument("--channels", default=",".join(default_test_value("live_channels", ["2.1", "5.1"])))
     parser.add_argument("--live-channel-changes", type=int, default=2)
     parser.add_argument("--skip-live", action="store_true")
     parser.add_argument("--repeated-starts", type=int, default=1)

@@ -48,7 +48,8 @@ Source edits reuse the running container and Gradle caches.
 
 ## Device commands
 
-Configure `config/firetv.toml`, complete manual first-time setup after a fresh
+Copy and configure the single ignored `config/firetv.toml`, run
+`dev.cmd config-check`, then complete manual first-time setup after a fresh
 install, and then use the guarded install/launch/MCP commands. Package mutation
 must remain restricted to `opensagetv.vibe.miniclient.debug`.
 

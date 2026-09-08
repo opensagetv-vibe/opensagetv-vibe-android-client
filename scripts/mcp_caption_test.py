@@ -2,6 +2,8 @@
 """Verify SageTV-STV caption authority and rendered cue delivery."""
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import re
@@ -46,8 +48,8 @@ def wait_snapshot(client: MCPProcess, predicate, description: str, timeout_s: fl
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android caption physical gate")
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--server-path")
     source.add_argument(

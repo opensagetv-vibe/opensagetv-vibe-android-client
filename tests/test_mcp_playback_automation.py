@@ -43,7 +43,50 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn("PrefStore.Keys.gsy_player_engine", config)
         self.assertIn("PrefStore.Keys.gsy_system_probe_enabled", config)
         self.assertIn('intent.getStringExtra("gsy_system_probe")', config)
+        self.assertIn('intent.getStringExtra("wait_for_playback_before_first_osd")', config)
+        self.assertIn("PrefStore.Keys.wait_for_playback_before_first_osd", config)
         self.assertIn("appliesNextPlayback=true", config)
+
+    def test_wait_for_playback_before_first_osd_is_opt_in_and_player_osd_scoped(self):
+        prefs = (SHARED / "res/xml/prefs.xml").read_text(encoding="utf-8")
+        guard = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/PlaybackStartupFrameGuard.java").read_text(encoding="utf-8")
+        plugin = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/MiniPlayerPlugin.java").read_text(encoding="utf-8")
+        ogl = (SHARED / "java/opensagetv/vibe/miniclient/android/opengl/OpenGLRenderer.java").read_text(encoding="utf-8")
+        gdx = (SHARED / "java/opensagetv/vibe/miniclient/android/gdx/MiniClientGDXRenderer.java").read_text(encoding="utf-8")
+        self.assertIn('android:key="wait_for_playback_before_first_osd"', prefs)
+        self.assertIn('android:defaultValue="false"', prefs)
+        self.assertIn('hint.hasMenuLike("MediaPlayer OSD")', guard)
+        self.assertIn("onPlaybackLoad(boolean enabled", guard)
+        self.assertIn("MAX_HOLD_MS = 5000L", guard)
+        self.assertIn("READY_RECHECK_MS = 50L", guard)
+        self.assertIn("hasRenderedFirstVideoFrame()", plugin)
+        for renderer in (ogl, gdx):
+            self.assertIn("playbackStartupFrameGuard.deferFrame", renderer)
+            self.assertIn("public void render()", renderer)
+            self.assertIn("playbackStartupFrameGuard.isArmed()", renderer)
+            self.assertIn("player.hasRenderedFirstVideoFrame()", renderer)
+            self.assertIn("onPlaybackLoadStarted()", renderer)
+            self.assertIn("playbackStartupFrameGuard.onPlaybackLoad", renderer)
+            self.assertIn("PrefStore.Keys.wait_for_playback_before_first_osd", renderer)
+
+        media_cmd = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java").read_text(encoding="utf-8")
+        self.assertGreaterEqual(media_cmd.count("notifyPlaybackLoadStarted();"), 3)
+        self.assertIn("getUiRenderer().onPlaybackLoadStarted();", media_cmd)
+
+        backends = {
+            "media3": SHARED / "java/opensagetv/vibe/miniclient/android/video/media3/Media3MediaPlayerImpl.java",
+            "legacy-exo": SHARED / "java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java",
+            "ijk": SHARED / "java/opensagetv/vibe/miniclient/android/video/ijkplayer/IJKMediaPlayerImpl.java",
+            "gsy-system": SHARED / "java/opensagetv/vibe/miniclient/android/video/gsy/GSYSystemMediaPlayerImpl.java",
+        }
+        for name, path in backends.items():
+            with self.subTest(backend=name):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn("hasRenderedFirstVideoFrame()", source)
+                self.assertIn("firstVideoFrameRendered = true", source)
+
+        gsy = (SHARED / "java/opensagetv/vibe/miniclient/android/video/gsy/GSYMediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn("d().hasRenderedFirstVideoFrame()", gsy)
 
     def test_mcp_server_exposes_seek_automation_tools(self):
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
@@ -337,6 +380,9 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('menu_present: bool | None = None', server)
         self.assertIn('stable_ms: int = 0', server)
         self.assertIn('def dev_wait_for_playback_started(', server)
+        self.assertIn('def dev_reset_media_watch_state(', server)
+        self.assertIn('confirmationRequired', server)
+        self.assertIn('sagex.clear_watched(media_file_id)', server)
         self.assertIn('def dev_play_video(', server)
         self.assertIn('def dev_play_server_path(', server)
         self.assertIn('def dev_set_live_channel(', server)
@@ -356,6 +402,11 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('clientId', state)
         self.assertIn('uiContextHint', state)
         self.assertIn('STEP: apply playback settings before connection/video start', script)
+        self.assertIn('tool_call(client, "clear_logcat", {}, timeout=30.0)', script)
+        self.assertLess(
+            script.index('tool_call(client, "clear_logcat"'),
+            script.index('"dev_prepare_clean_start"'),
+        )
         self.assertIn('STEP: connect SageTV server', script)
         self.assertIn('STEP: play video by name on this MiniClient', script)
         self.assertIn('--video-name', script)
@@ -368,6 +419,10 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('call_dict(client, "dev_seek_time"', script)
         self.assertIn('normalize_start("INITIAL")', script)
         self.assertIn('normalize_start(label)', script)
+        self.assertIn('"STOP_PLAY: "', script)
+        self.assertIn('"STOP_PLAY_RECOVERY: "', script)
+        self.assertIn('"dev_wait_for_playback_started"', script)
+        self.assertIn('"retained-session PLAY did not recover A/V', script)
         self.assertNotIn('--nav', script)
         self.assertIn('--exit', script)
         self.assertIn('mcp-session-test', devsh)
@@ -375,12 +430,15 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
     def test_live_tv_gate_uses_only_explicit_verified_channels(self):
         script = (ROOT / "scripts/mcp_live_tv_test.py").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
-        self.assertIn('default=parse_channels("2.1,5.1")', script)
+        self.assertIn('default_test_value("live_channels", ["2.1", "5.1"])', script)
         self.assertIn('"gsyplayer"', script)
         self.assertIn('"gsy_engine": args.gsy_engine', script)
         self.assertIn('add_fixed_encoding_args(parser)', script)
         self.assertIn('**fixed_config', script)
         self.assertIn('call_dict(client, "dev_set_live_channel"', script)
+        self.assertIn('"--current-channel-only"', script)
+        self.assertIn('if args.current_channel_only:', script)
+        self.assertIn('wait_for_av(client, args.timeout_s, args.verify_ms)', script)
         self.assertIn('result.get("confirmedChannel"', script)
         self.assertIn('"alreadyActive": True', server)
         self.assertIn('changed_channel == requested', server)
@@ -418,7 +476,7 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
     def test_native_end_to_end_playback_start_test_uses_explicit_server_and_exact_sequence(self):
         script = (ROOT / "scripts/mcp_playback_test.py").read_text(encoding="utf-8")
         devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
-        self.assertIn('default="192.168.10.232"', script)
+        self.assertIn('default=default_server_address()', script)
         self.assertIn('default="media3"', script)
         self.assertIn('default="push"', script)
         self.assertIn('default="hardware"', script)

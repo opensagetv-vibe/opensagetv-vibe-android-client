@@ -39,6 +39,15 @@ class WorkspaceMountTests(unittest.TestCase):
         self.assertNotIn("ValueFromRemainingArguments", powershell)
         self.assertNotIn("CmdletBinding", powershell)
 
+    def test_windows_dev_wrapper_forwards_commissioning_aliases(self):
+        powershell = (ROOT / "dev.ps1").read_text(encoding="utf-8")
+        for name in (
+            "SAGETV_TEST_DEVICE_ALIAS",
+            "SAGETV_TEST_SERVER_ALIAS",
+            "SAGETV_TEST_SERVER_ADDRESS",
+        ):
+            self.assertIn(name, powershell)
+
     def test_unified_wrapper_rebinds_when_sibling_checkout_changes(self):
         candidates = []
         if os.environ.get("OPENSAGETV_VIBE_BUILD_ENV_ROOT"):

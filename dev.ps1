@@ -44,7 +44,10 @@ foreach ($name in @(
     'SAGETV_WEB_BASE',
     'SAGETV_SAGEX_PORTS',
     'SAGETV_SAGEX_USER',
-    'SAGETV_SAGEX_PASSWORD'
+    'SAGETV_SAGEX_PASSWORD',
+    'SAGETV_TEST_DEVICE_ALIAS',
+    'SAGETV_TEST_SERVER_ALIAS',
+    'SAGETV_TEST_SERVER_ADDRESS'
 )) {
     $value = [Environment]::GetEnvironmentVariable($name)
     if (-not [String]::IsNullOrEmpty($value)) {

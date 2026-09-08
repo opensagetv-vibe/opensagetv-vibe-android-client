@@ -9,6 +9,8 @@ rectangle to the Main Menu preview.
 """
 from __future__ import annotations
 
+from sagetv_dev_mcp.config import default_server_address, default_server_value
+
 import argparse
 import json
 import os
@@ -69,8 +71,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Verify real A/V while leaving fullscreen for SageTV's embedded preview"
     )
-    parser.add_argument("--server-address", default="192.168.10.232")
-    parser.add_argument("--server-port", type=int, default=31099)
+    parser.add_argument("--server-address", default=default_server_address())
+    parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", required=True)
     parser.add_argument("--player", choices=("exoplayer", "media3"), default="exoplayer")
     parser.add_argument(
