@@ -1,5 +1,36 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.88 release candidate (2026-09-08)
+
+Growing-file seek is corrected and physically gated on the commissioned
+non-Pro AFTMM/API-25 Fire TV (`192.168.10.25:5555`, DEV001) with hardware
+decoding. The completed-file Pull matrix at
+`artifacts/firetv/20260907_all_player_pull_hardware_seek_matrix.json` ran seven
+player/engine selections and all 42 absolute seek, forward, backward,
+pause/resume, Comskip-right, and Comskip-left checks recovered. Stock `.175`
+growing Live TV then passed server-owned rewind/forward on legacy ExoPlayer,
+Media3, IJK, GSY Auto, GSY Media3, and GSY Legacy Exo. The guarded GSY System
+selection is deliberately a compatibility fallback on this device: its native
+probe records `GenericSource: Failed to init from data source` and
+`android_system_player_error`, then Media3 hardware playback recovers.
+
+IJK's native bridge must expose the current growing file size to FFmpeg; `-1`
+causes the demuxer to cache the source as permanently unseekable. After a
+successful seek, only a proven backward raw-clock discontinuity enables the
+segment-relative clock offset. The final strict IJK run rewound 8,190 ms and
+advanced 11,823 ms. The live test now promotes and verifies full-screen output
+before seek measurement because its earlier timeline-only verdict passed while
+HDMI still showed an STV menu. Corrected visual evidence is
+`artifacts/firetv/20260908_ijk_live_seek_fullscreen.mp4` and its contact sheet.
+
+Local release gates are green: 494 project/static tests, 70 MCP tests, Core
+Gradle tests, validation, and a clean 60-task build. The APK is
+`artifacts/firetv/OpenSageTV-Vibe-Android-Client-debug.apk`, SHA-256
+`f1791bf74cefc1c8ca98718c75912e2e7d4f0c12dc8de26ae7522f8cce247e3b`.
+Standalone CI repairs are included; the exact resume point is to publish the
+candidate commits, require the GitHub `source-contracts` job to pass, finalize
+the v0.5.88 release record/manifest, and publish the source/APK release.
+
 ## GitHub v0.5.87 release (2026-09-07)
 
 The final source tree, deterministic source archive, development-signed APK,
@@ -895,7 +926,8 @@ belong in `CHANGELOG.md`; open work belongs in `TASKS.md`.
   `artifacts/firetv/dvd-presentation-v21-final-hdmi-av-18s.avi`: ffprobe finds
   1920x1080 MJPEG and stereo 44.1 kHz PCM, and
   `dvd-presentation-v21-final-hdmi-frame.png` visibly confirms clean title
-  video. `scripts/capture_hdmi_validation.ps1` makes this check repeatable.
+  video. `capture_hdmi_validation.cmd` makes this check repeatable without
+  depending on PowerShell script execution policy.
 - The final clean-source APK after policy/backend integration is
   `artifacts/firetv/OpenSageTV-Vibe-Android-Client-debug.apk`, SHA-256
   `d0735a0da6e6413d13194daafda108e066cef2efee21ddbefb441080daffc110`.

@@ -17,9 +17,8 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-There are no unfinished tasks that can be executed with the currently
-commissioned environment. The v0.5.87 source/APK release passed its final
-validation and publication gates.
+- [ ] Publish the completed v0.5.88 source/APK update and require the repaired
+  standalone GitHub `source-contracts` job to pass before tagging the release.
 
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw
