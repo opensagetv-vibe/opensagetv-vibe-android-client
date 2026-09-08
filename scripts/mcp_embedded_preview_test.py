@@ -19,6 +19,7 @@ import sys
 import time
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize
+from mcp_ui_roots import wait_automation_root
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -162,22 +163,7 @@ def main() -> int:
         if not ready.get("passed"):
             raise RuntimeError(f"SageTV connection failed after three attempts: {ready}")
 
-        ready = call_dict(client, "dev_wait_for_ui", {
-            "connected": True,
-            "automation_ready": True,
-            "stable_ms": 1500,
-            "timeout_s": 20.0,
-        }, timeout=30.0)
-        if not ready.get("passed") and bool(ready.get("state", {}).get("connected")):
-            call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-            ready = call_dict(client, "dev_wait_for_ui", {
-                "connected": True,
-                "automation_ready": True,
-                "stable_ms": 1500,
-                "timeout_s": 20.0,
-            }, timeout=30.0)
-        if not ready.get("passed"):
-            raise RuntimeError(f"SageTV UI did not become automation-ready: {ready}")
+        ready = wait_automation_root(client, timeout_s=20.0, stable_ms=1500)
 
         started = call_dict(client, "dev_play_server_path", {
             "server_path": args.server_path,

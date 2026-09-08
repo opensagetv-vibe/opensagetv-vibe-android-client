@@ -15,6 +15,7 @@ import json
 import sys
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize
+from mcp_ui_roots import wait_automation_root
 
 
 TIMING_FIELDS = (
@@ -50,14 +51,10 @@ def run_mode(client: MCPProcess, args: argparse.Namespace, mode: str) -> dict:
         "dev_connect_server",
         {"address": args.server_address, "port": args.server_port, "save": True},
     )
-    ready = call_dict(
-        client,
-        "dev_wait_for_ui",
-        {"connected": True, "automation_ready": True, "stable_ms": 1000, "timeout_s": 30.0},
-        timeout=40.0,
-    )
-    if not ready.get("passed"):
-        raise RuntimeError(f"{mode}: SageTV UI did not become automation-ready")
+    try:
+        ready = wait_automation_root(client, timeout_s=30.0, stable_ms=1000)
+    except RuntimeError as exc:
+        raise RuntimeError(f"{mode}: SageTV UI did not reach a supported automation root") from exc
     started = call_dict(
         client,
         "dev_play_server_path",

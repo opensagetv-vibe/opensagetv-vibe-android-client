@@ -30,6 +30,7 @@ from typing import Any, Iterable
 
 from mcp_media3_matrix import MCPProcess, call_dict, initialize, safe_checkpoint
 from mcp_playback_test import start_recording_via_search
+from mcp_ui_roots import wait_automation_root
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -726,16 +727,11 @@ def start_case(
     if not app_status.get("running"):
         raise RuntimeError(f"Dev app is not running after direct connect: {app_status}")
 
-    if not connected_state.get("state", {}).get("automationReady", False):
-        call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-    ready = call_dict(client, "dev_wait_for_ui", {
-        "connected": True,
-        "automation_ready": True,
-        "stable_ms": ui_stable_ms,
-        "timeout_s": connect_timeout_s,
-    }, timeout=connect_timeout_s + 10.0)
-    if not ready.get("passed"):
-        raise RuntimeError(f"automationReady not reached: {ready}")
+    ready = wait_automation_root(
+        client,
+        timeout_s=connect_timeout_s,
+        stable_ms=ui_stable_ms,
+    )
 
     if server_path.strip():
         search = {

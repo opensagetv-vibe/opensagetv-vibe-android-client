@@ -28,6 +28,7 @@ if str(MCP_SRC) not in sys.path:
 from sagetv_dev_mcp.config import default_server_address, default_server_value
 
 from mcp_playback_test import start_recording_via_search
+from mcp_ui_roots import wait_automation_root
 from mcp_config_values import (
     DECODING_SELECTIONS,
     add_fixed_encoding_args,
@@ -193,35 +194,16 @@ def start_mode(
         raise RuntimeError(f"Dev app is not running after direct SageTV connect: {app_status}")
     print(f"PASS [{mode}]: Dev app running after direct connect: " + json.dumps(app_status, sort_keys=True))
 
-    # A fixed MiniClient client ID can reconnect to the server's previous UI context
-    # (for example Search with the Android keyboard still active).  Trust the debug
-    # APK's explicit automationReady state. If it is stale, use SageTV HOME to
-    # normalize the server-side UI before any Search/test input is sent.
-    if not connected_state.get("state", {}).get("automationReady", False):
-        stale = connected_state.get("state", {})
-        print(f"INFO [{mode}]: normalizing stale SageTV UI before automation: "
-              f"uiState={stale.get('uiState')} menu={stale.get('menuName')} "
-              f"hasTextInput={stale.get('hasTextInput')}")
-        call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-
-    ready = call_dict(
+    ready = wait_automation_root(
         client,
-        "dev_wait_for_ui",
-        {
-            "connected": True,
-            "automation_ready": True,
-            "stable_ms": ui_stable_ms,
-            "timeout_s": connect_timeout_s,
-        },
-        timeout=connect_timeout_s + 10.0,
+        timeout_s=connect_timeout_s,
+        stable_ms=ui_stable_ms,
     )
-    if not ready.get("passed"):
-        raise RuntimeError(f"Android debug app did not report automationReady before native Search: {ready}")
     state = ready.get("state", {})
     actual_server = str(state.get("serverAddress", "")).strip()
     if actual_server and actual_server != server:
         raise RuntimeError(f"connected to wrong SageTV server: expected {server}, got {actual_server}")
-    print(f"PASS [{mode}]: Android debug status automationReady=true; starting native recording sequence")
+    print(f"PASS [{mode}]: supported automation root ready; starting native recording sequence")
 
     search_start = start_recording_via_search(client, search_text, text_char_delay_ms=text_char_delay_ms)
     print(f"PASS [{mode}]: Search opened, Android keyboard verified, text entered, and recording start commands sent")

@@ -24,6 +24,7 @@ from sagetv_dev_mcp.config import (
 )
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize, tool_call
+from mcp_ui_roots import is_automation_root
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -35,22 +36,6 @@ from mcp_config_values import (
     normalize_streaming,
     streaming_preference,
 )
-
-
-AUTOMATION_ROOT_MENUS = {"main menu", "dynamic menu by nielm"}
-
-
-def is_automation_root(state: dict) -> bool:
-    """Accept the stock root and SageMC's historical dynamic-menu root."""
-    if bool(state.get("automationReady")):
-        return True
-    return (
-        bool(state.get("connected"))
-        and not bool(state.get("playerActive"))
-        and not bool(state.get("hasTextInput"))
-        and not str(state.get("popupName") or "").strip()
-        and str(state.get("menuName") or "").strip().lower() in AUTOMATION_ROOT_MENUS
-    )
 
 
 def main() -> int:

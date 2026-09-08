@@ -12,6 +12,7 @@ import sys
 import time
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize
+from mcp_ui_roots import wait_automation_root
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,24 +44,7 @@ def require_order(names: list[str], expected: list[str], label: str) -> None:
 
 
 def wait_ready(client: MCPProcess, timeout_s: float = 35.0) -> dict:
-    result = call_dict(
-        client,
-        "dev_wait_for_ui",
-        {"connected": True, "automation_ready": True, "stable_ms": 1500,
-         "timeout_s": timeout_s},
-        timeout=timeout_s + 10.0,
-    )
-    if not result.get("passed"):
-        call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-        result = call_dict(
-            client,
-            "dev_wait_for_ui",
-            {"connected": True, "automation_ready": True, "stable_ms": 1500,
-             "timeout_s": timeout_s},
-            timeout=timeout_s + 10.0,
-        )
-    require(bool(result.get("passed")), f"MiniClient did not reach ready UI: {result}")
-    return result
+    return wait_automation_root(client, timeout_s=timeout_s, stable_ms=1500)
 
 
 def wait_closed_trace(client: MCPProcess, timeout_s: float = 10.0) -> dict:

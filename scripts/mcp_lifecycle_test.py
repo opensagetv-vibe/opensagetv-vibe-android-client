@@ -17,6 +17,7 @@ import time
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize
 from mcp_playback_test import start_recording_via_search
+from mcp_ui_roots import wait_automation_root
 
 
 def require(condition: bool, message: str) -> None:
@@ -25,29 +26,8 @@ def require(condition: bool, message: str) -> None:
 
 
 def wait_automation_ready(client: MCPProcess, timeout_s: float = 30.0) -> dict:
-    """Wait for both MiniClient transport and the new GFX/UI context to settle."""
-    connected = call_dict(
-        client,
-        "dev_wait_for_ui",
-        {"connected": True, "timeout_s": timeout_s},
-        timeout=timeout_s + 10.0,
-    )
-    require(bool(connected.get("passed")), f"MiniClient connection failed: {connected}")
-    if not connected.get("state", {}).get("automationReady", False):
-        call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-    ready = call_dict(
-        client,
-        "dev_wait_for_ui",
-        {
-            "connected": True,
-            "automation_ready": True,
-            "stable_ms": 2000,
-            "timeout_s": timeout_s,
-        },
-        timeout=timeout_s + 10.0,
-    )
-    require(bool(ready.get("passed")), f"MiniClient UI did not become stable: {ready}")
-    return ready
+    """Compatibility name retained for all existing physical test runners."""
+    return wait_automation_root(client, timeout_s=timeout_s, stable_ms=2000)
 
 
 def clear_restored_playback(client: MCPProcess, settle_s: float = 12.0) -> None:

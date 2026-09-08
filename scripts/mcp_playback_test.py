@@ -15,6 +15,7 @@ import sys
 import time
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize
+from mcp_ui_roots import wait_automation_root
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -265,25 +266,16 @@ def main() -> int:
         if not app_status.get("running"):
             raise RuntimeError(f"Dev app is not running after direct SageTV connect: {app_status}")
         print("PASS: Dev app running after direct connect: " + json.dumps(app_status, sort_keys=True))
-        if not connected_ready.get("state", {}).get("automationReady", False):
-            stale = connected_ready.get("state", {})
-            print("INFO: normalizing stale SageTV UI with direct HOME command: "
-                  f"uiState={stale.get('uiState')} menu={stale.get('menuName')} "
-                  f"hasTextInput={stale.get('hasTextInput')}")
-            call_dict(client, "dev_sage_command", {"command": "home"}, timeout=30.0)
-        ready = call_dict(client, "dev_wait_for_ui", {
-            "connected": True,
-            "automation_ready": True,
-            "stable_ms": args.ui_stable_ms,
-            "timeout_s": args.connect_timeout_s,
-        }, timeout=args.connect_timeout_s + 10.0)
-        if not ready.get("passed"):
-            raise RuntimeError(f"Android debug app did not report automationReady within timeout: {ready}")
+        ready = wait_automation_root(
+            client,
+            timeout_s=args.connect_timeout_s,
+            stable_ms=args.ui_stable_ms,
+        )
         state = ready.get("state", {})
         actual_server = str(state.get("serverAddress", "")).strip()
         if actual_server and actual_server != args.server:
             raise RuntimeError(f"Connected to wrong SageTV server: expected {args.server}, got {actual_server}")
-        print(f"PASS: connected to requested server {args.server}; automationReady=true")
+        print(f"PASS: connected to requested server {args.server}; supported automation root ready")
         print(json.dumps(state, indent=2, sort_keys=True))
 
         if args.server_path.strip():

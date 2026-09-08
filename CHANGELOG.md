@@ -2,12 +2,14 @@
 
 ## Unreleased
 
-- Taught the physical MCP session runner to recognize SageMC's historical
+- Taught the shared physical MCP UI-root guard to recognize SageMC's historical
   `Dynamic Menu by nielm` screen as a valid idle automation root. The guard
   still requires an active server connection, no player, no popup, and no text
   input, so alternate STV support does not weaken playback-state validation.
-  This enabled the first full-screen exact-file playback pass through the
-  independently packaged SageMC STV on the isolated Vibe server.
+  Connection-order, playback, Media3/player/tuning matrices, SMB A/B, embedded
+  preview, lifecycle, and session runners now use that one implementation.
+  This enabled the first full-screen exact-file and Live TV playback passes
+  through the independently packaged SageMC STV on the isolated Vibe server.
 
 ## v0.5.88 - 2026-09-08
 

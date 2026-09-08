@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp_media3_matrix import MCPProcess, call_dict, initialize, safe_checkpoint
+from mcp_ui_roots import wait_automation_root
 from mcp_config_values import (
     add_fixed_encoding_args,
     decoding_preference,
@@ -269,14 +270,11 @@ def fast_start_case(
             )
 
     connected = call_dict(client, "dev_connect_server", {"address": server, "port": port, "save": False}, timeout=30.0)
-    ready = call_dict(client, "dev_wait_for_ui", {
-        "connected": True,
-        "automation_ready": True,
-        "stable_ms": ui_stable_ms,
-        "timeout_s": connect_timeout_s,
-    }, timeout=connect_timeout_s + 10.0)
-    if not ready.get("passed"):
-        raise RuntimeError(f"fast replay automationReady not reached: {ready}")
+    ready = wait_automation_root(
+        client,
+        timeout_s=connect_timeout_s,
+        stable_ms=ui_stable_ms,
+    )
 
     call_dict(client, "dev_clear_player_events", {}, timeout=30.0)
     playback = call_dict(client, "dev_play_media_file_id", {
