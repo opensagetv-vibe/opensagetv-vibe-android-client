@@ -69,9 +69,9 @@ smb_mappings = [
 ]
 
 [fixtures]
-seek_server_path = "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-caption_server_path = "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-dvd_server_path = "/var/media/videos/OpenSageTV_Vibe_Test_DVD"
+seek_server_path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+caption_server_path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dvd_server_path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD"
 dvd_motion_server_path = "/var/media/videos/replace-with-local-dvd"
 prerecorded_search = "replace-with-safe-recording"
 

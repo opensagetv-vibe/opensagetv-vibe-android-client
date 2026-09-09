@@ -1,5 +1,29 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Stock-server MKV and fixture-layout checkpoint (2026-09-09)
+
+The current Vibe Android client plays ordinary MKVs correctly without a
+modified server. Physical Media3/hardware/Pull sessions on non-Pro Fire TV
+`.25` against unmodified SageTV `.175` passed `Scream_1` (MPEG-2/AC-3,
+6,656,404 ms) and `The Lion King` (H.264/AAC, 5,303,721 ms), including FF,
+REW, large jumps, pause/resume, advancing A/V counters, stable hardware video
+decoders, and zero player/datasource/crash errors. Legacy Exo hardware Pull
+also passed the complete sequence for both MKVs. Stock SageTV supplied valid
+durations and seek targets. A separate `The Lion King` entry on the modified
+test server was indexed as a 1 ms Matroska file with no streams, so that server
+could only request a 1 ms seek. Treat that as invalid server library metadata,
+not a player-side MKV failure. Prefer stock-compatible client/protocol behavior;
+optional Sage.jar/MIM changes are last-resort enhancements and must retain a
+safe stock fallback.
+
+All generated video, caption, audio-codec, Kodi-codec, and authored-DVD
+regression fixtures now live beneath
+`/var/media/OpenSageTV_Vibe_Tests` / SMB share directory
+`OpenSageTV_Vibe_Tests`. The obsolete authored-DVD backup was moved to the SMB
+recycle directory; real recordings and commercial DVDs were not moved. The
+post-move local gate passes 496 project tests, 72 MCP/workflow tests, and Core
+Gradle tests.
+
 ## MCP connection reuse checkpoint (2026-09-09)
 
 `dev_connect_server` now returns the existing healthy session when its address
@@ -1705,7 +1729,7 @@ container was rebound to this real checkout and the temporary tree was removed.
 
 The SageMC interoperability gate is complete on the commissioned non-Pro
 Fire TV (`192.168.10.25:5555`) against isolated Vibe server `.232`. The exact
-`/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` path passed initial
+`/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` path passed initial
 playback, same-connection HOME return and Surface recreation, manual-pause
 preservation, three consecutive exact-file watch cycles, and teardown with the
 staged Core redundant-watch correction active. The lifecycle runner now clears

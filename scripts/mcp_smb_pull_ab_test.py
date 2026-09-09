@@ -120,7 +120,7 @@ def main() -> int:
     parser.add_argument("--server-address", default=default_server_address())
     parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
-        "--server-path", default=default_fixture("seek_server_path", "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts")
+        "--server-path", default=default_fixture("seek_server_path", "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts")
     )
     parser.add_argument(
         "--smb-mappings", default=default_smb_mappings()

@@ -219,20 +219,20 @@ The commissioned Vibe server supports an opt-in debug-only exact-path start
 that avoids Search UI navigation:
 
 ```bat
-dev.cmd mcp-session-test --server-address 192.168.10.232 --no-save-server --player media3 --streaming push --decoding hardware --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --exit none
+dev.cmd mcp-session-test --server-address 192.168.10.232 --no-save-server --player media3 --streaming push --decoding hardware --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --exit none
 ```
 
 Run the repeatable completed-file background/return/replay/teardown gate with:
 
 ```powershell
-dev.cmd mcp-lifecycle-test --server-address 192.168.10.232 --player media3 --streaming dynamic --decoding hardware --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-dev.cmd mcp-eof-test --server-address 192.168.10.232 --player media3 --decoding hardware --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dev.cmd mcp-lifecycle-test --server-address 192.168.10.232 --player media3 --streaming dynamic --decoding hardware --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dev.cmd mcp-eof-test --server-address 192.168.10.232 --player media3 --decoding hardware --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
 dev.cmd mcp-caption-test --server-address 192.168.10.232 --player media3 --streaming dynamic --decoding hardware --server-path "/var/media/tv/MeetthePress-65149351-0.ts"
-dev.cmd mcp-frame-step-test --server-address 192.168.10.232 --player media3 --streaming pull --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-dev.cmd mcp-fast-switch-test --initial-path "/var/media/videos/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming pull
-dev.cmd mcp-fast-switch-test --initial-path "/var/media/videos/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming smb_direct
-dev.cmd mcp-playback-rate-test --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player media3 --streaming pull --server-negotiation
-dev.cmd mcp-playback-rate-test --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player exoplayer --streaming smb_direct
+dev.cmd mcp-frame-step-test --server-address 192.168.10.232 --player media3 --streaming pull --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming pull
+dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming smb_direct
+dev.cmd mcp-playback-rate-test --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player media3 --streaming pull --server-negotiation
+dev.cmd mcp-playback-rate-test --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player exoplayer --streaming smb_direct
 dev.cmd mcp-codec-capability-test --player media3 --streaming pull
 dev.cmd mcp-codec-capability-test --player exoplayer --streaming pull
 ```
@@ -289,7 +289,7 @@ cancelled when it is hidden or the playback Activity leaves the foreground.
 Exercise an explicit service without bypassing STV authority:
 
 ```powershell
-dev.cmd mcp-caption-test --server-address 192.168.10.232 --player media3 --streaming pull --decoding hardware --authority stv --preferred-caption-standard cea708 --preferred-caption-service 1 --server-path "/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+dev.cmd mcp-caption-test --server-address 192.168.10.232 --player media3 --streaming pull --decoding hardware --authority stv --preferred-caption-standard cea708 --preferred-caption-service 1 --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
 ```
 
 This requires `VIBE_TEST_CONTROL=true` in the isolated test server container.
@@ -350,8 +350,8 @@ shared cue clock.
 The currently commissioned copy is:
 
 ```text
-SMB:    \\192.168.10.175\sagemedia\videos\OpenSageTV_Vibe_Test_DVD
-SageTV: /var/media/videos/OpenSageTV_Vibe_Test_DVD
+SMB:    \\192.168.10.175\sagemedia\OpenSageTV_Vibe_Tests\OpenSageTV_Vibe_Test_DVD
+SageTV: /var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD
 ```
 
 DVD authoring uses FFmpeg/FFprobe, dvdauthor/spumux, ImageMagick, and DejaVu

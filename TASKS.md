@@ -17,9 +17,16 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-No foundation or release task is currently open. Release `v0.5.89` passed its
-local suite, independent source-archive test/validate/build gate, GitHub
-`source-contracts` workflow, and fresh public-download hash verification.
+No Android playback defect remains open from the MKV report. Physical tests on
+the non-Pro Fire TV proved both MPEG-2/AC-3 (`Scream_1`) and H.264/AAC
+(`The Lion King`) MKVs through Media3 and legacy Exo hardware Pull against
+unmodified SageTV.
+The separate 1 ms timeline was traced to corrupt imported metadata in the
+modified test server's library, not to the Android MKV extractor or datasource.
+
+Release `v0.5.89` passed its local suite, independent source-archive
+test/validate/build gate, GitHub `source-contracts` workflow, and fresh
+public-download hash verification.
 
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw
@@ -59,7 +66,7 @@ Amazon Appstore and Google Play publication are not part of the current release
 scope. The current deliverable is reviewable source plus an installable APK on
 GitHub.
 
-The v0.5.87 GitHub source/APK release is complete: durable documentation, stable machine
+The v0.5.89 GitHub source/APK release is complete: durable documentation, stable machine
 metadata, dependency/license notices, manifests, deterministic APK/source
 bundles, and the changed-files handoff workflow are verified. An untouched
 v0.5.75 Windows worktree applied the original v0.5.85 release, normalized only proven CRLF-equivalent

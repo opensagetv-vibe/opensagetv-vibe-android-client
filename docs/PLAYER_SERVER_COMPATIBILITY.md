@@ -70,6 +70,16 @@ CLUT/SPU/highlight commands, pause/play, and zero dropped video frames. The
 authenticated Web/Sagex plugin was used only to invoke the ordinary STV
 `Watch` operation; no Vibe protocol event, patched `Sage.jar`, or MIM was used.
 
+Ordinary imported MKV playback is also stock-compatible. A physical stock
+server test on September 9, 2026 passed both MPEG-2/AC-3 and H.264/AAC MKVs in
+both Media3 and legacy Exo hardware Pull,
+including FF/REW, large jumps, and pause/resume. SageTV's
+database remains the authority for the STV timeline and remote seek targets:
+if an imported file is incorrectly stored with a 1 ms duration/no streams, the
+stock-compatible remedy is to repair or reimport that server metadata. The
+Android player cannot infer a user's intended seek from a server command that
+has already been clamped to 1 ms.
+
 The following optional Vibe features are unavailable on stock Core:
 
 | Feature unavailable on stock Core | Required component | Safe stock behavior |

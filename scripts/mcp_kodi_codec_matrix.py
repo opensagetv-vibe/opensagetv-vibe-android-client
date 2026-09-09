@@ -119,7 +119,7 @@ def main() -> int:
     parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument(
         "--server-root",
-        default="/var/media/videos/OpenSageTV-Vibe-Kodi-Codec-Test",
+        default="/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Kodi-Codec-Test",
     )
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "push"), default="pull")

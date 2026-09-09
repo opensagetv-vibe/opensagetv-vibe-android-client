@@ -14,9 +14,9 @@ from mcp_lifecycle_test import MCPProcess, call_dict, initialize, require, wait_
 
 
 FIXTURES = {
-    "AC3": "/var/media/videos/VibeAudioCapability/vibe-audio-ac3.ts",
-    "EAC3": "/var/media/videos/VibeAudioCapability/vibe-audio-eac3.ts",
-    "DTS": "/var/media/videos/VibeAudioCapability/vibe-audio-dts.ts",
+    "AC3": "/var/media/OpenSageTV_Vibe_Tests/VibeAudioCapability/vibe-audio-ac3.ts",
+    "EAC3": "/var/media/OpenSageTV_Vibe_Tests/VibeAudioCapability/vibe-audio-eac3.ts",
+    "DTS": "/var/media/OpenSageTV_Vibe_Tests/VibeAudioCapability/vibe-audio-dts.ts",
 }
 
 

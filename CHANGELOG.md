@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Proved ordinary MKV playback remains compatible with an unmodified SageTV
+  server. On non-Pro Fire TV `.25`, Media3 hardware Pull played and navigated
+  stock-server entries `Scream_1` (MPEG-2/AC-3, 6,656,404 ms) and
+  `The Lion King` (H.264/AAC, 5,303,721 ms). FF/REW, large jumps, and
+  pause/resume recovered with advancing audio/video, no decoder recreation,
+  no datasource error, and no crash. Legacy Exo hardware Pull independently
+  passed both MKVs with the same control sequence and correct durations. The
+  previously observed 1 ms duration and end-marker restart were isolated to
+  corrupt library metadata on the modified
+  test server; they are not an Android MKV compatibility limitation.
+
+- Consolidated generated regression media under the single server directory
+  `/var/media/OpenSageTV_Vibe_Tests` (SMB directory
+  `OpenSageTV_Vibe_Tests`). Updated tracked examples, local commissioning
+  configuration, MCP matrix defaults, and current documentation. Real media
+  and commercial-disc fixtures remain outside this generated-test directory.
+  The post-move gate passes 496 project tests, 72 MCP/workflow tests, and Core
+  Gradle tests.
+
 - Made MCP server connection requests idempotent for an already-connected,
   healthy MiniClient session on the same address and port. Follow-up automation
   can now inspect or navigate the session it just created without replacing its
@@ -1236,7 +1255,7 @@
 - Removed the superseded non-captioned `VibeSeekTest-1080i-MPEG2-AC3.ts` and
   matching `.edl` locally and from the commissioned Unraid test instance. The
   connection gate now defaults to
-  `/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` so future omitted-path
+  `/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` so future omitted-path
   runs use the newest embedded-caption fixture.
 - Split `GFXCMD2` behind a characterized family map into lifecycle/frame,
   drawing, image/cache, font, surface/video, and transform/batch handlers. A
