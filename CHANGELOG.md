@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Made MCP server connection requests idempotent for an already-connected,
+  healthy MiniClient session on the same address and port. Follow-up automation
+  can now inspect or navigate the session it just created without replacing its
+  live MiniClient sockets. An explicit renderer change still performs the
+  existing reconnect operation. Focused unit coverage and the physical MCP
+  smoke test on non-Pro Fire TV `.25` pass; this changes host tooling only and
+  does not require a new APK.
+
 ## v0.5.89 - 2026-09-08
 
 - Removed three misleading Android-side failures without weakening playback

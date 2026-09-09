@@ -483,6 +483,36 @@ exit 2
         self.assertTrue(result["automationForegroundLaunched"])
         self.assertEqual(result["automationForegroundLaunchResult"], "Status: ok")
 
+    def test_session_connect_reuses_matching_healthy_session(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        snapshot = {
+            "connected": True,
+            "serverName": "Existing",
+            "serverAddress": "192.168.1.2",
+            "serverPort": 31099,
+        }
+        with patch.object(c, "app_status", return_value={"foreground": True}), \
+             patch.object(c, "player_state_snapshot", return_value=snapshot) as state, \
+             patch.object(c, "dev_control") as control:
+            result = c.connect_server(address="192.168.1.2", port=31099, save=False)
+        state.assert_called_once_with()
+        control.assert_not_called()
+        self.assertTrue(result["alreadyConnected"])
+        self.assertEqual(result["source"], "existing_session")
+        self.assertEqual(result["serverAddress"], "192.168.1.2")
+
+    def test_session_connect_does_not_reuse_session_for_renderer_switch(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        connected = {"ok": True, "serverAddress": "192.168.1.2"}
+        with patch.object(c, "app_status", return_value={"foreground": True}), \
+             patch.object(c, "player_state_snapshot") as state, \
+             patch.object(c, "dev_control", return_value=connected) as control:
+            c.connect_server(address="192.168.1.2", save=False, renderer="opengl")
+        state.assert_not_called()
+        control.assert_called_once_with(
+            "connect", server_name="", address="192.168.1.2", port=31099,
+            save="false", renderer="opengl")
+
     def test_android_skip_check_builds_debug_broadcast_and_parses_delta(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=skip_check;commands=ff,ff,ff;'

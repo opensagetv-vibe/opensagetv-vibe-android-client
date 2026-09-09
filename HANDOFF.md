@@ -1,5 +1,15 @@
 # OpenSageTV Vibe Android Client handoff
 
+## MCP connection reuse checkpoint (2026-09-09)
+
+`dev_connect_server` now returns the existing healthy session when its address
+and port already match and no renderer switch was requested. This prevents a
+short follow-up MCP process from replacing the MiniClient sockets established
+by the preceding process. Explicit renderer selection retains the established
+reconnect path, and unavailable/older state snapshots safely fall through to
+normal connect behavior. Unit tests and the physical MCP smoke test on non-Pro
+Fire TV `.25` pass. This is MCP host tooling only; the v0.5.89 APK is unchanged.
+
 ## SageMC HOME and user-pause lifecycle gate (2026-09-08)
 
 The lifecycle runner now accepts `--repeat 0` so HOME/background behavior can

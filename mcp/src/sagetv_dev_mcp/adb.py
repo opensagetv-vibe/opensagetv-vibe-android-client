@@ -897,6 +897,35 @@ class AdbClient:
                     "Android would block the renderer Activity launch"
                 )
 
+        # Reissuing the debug ``connect`` operation while the requested server is
+        # already active replaces the live MiniClient sockets.  Short MCP scripts
+        # commonly establish their own client process, so without this guard a
+        # follow-up screenshot/navigation command can tear down the session that
+        # the preceding script just created.  Preserve an existing healthy session
+        # when no renderer switch was requested.  A failed/older snapshot simply
+        # falls through to the normal connection operation.
+        if address and not renderer:
+            try:
+                snapshot = self.player_state_snapshot()
+                active_address = str(snapshot.get("serverAddress", "")).strip()
+                active_port = int(snapshot.get("serverPort", port) or port)
+                if (bool(snapshot.get("connected"))
+                        and active_address == str(address).strip()
+                        and active_port == max(1, min(int(port), 65535))):
+                    return {
+                        "ok": True,
+                        "op": "connect",
+                        "source": "existing_session",
+                        "serverName": str(snapshot.get("serverName", server_name)),
+                        "serverAddress": active_address,
+                        "serverPort": active_port,
+                        "save": bool(save),
+                        "alreadyConnected": True,
+                        "automationForegroundLaunched": foreground_launch,
+                    }
+            except (RuntimeError, TypeError, ValueError):
+                pass
+
         result = self.dev_control(
             "connect",
             server_name=server_name,

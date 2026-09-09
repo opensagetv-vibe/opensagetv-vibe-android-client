@@ -44,6 +44,8 @@ To register with Codex CLI when desired:
 ## Current capabilities
 
 - ADB connection, device identity, wake, app status, and guarded package tools.
+- Idempotent server connection: requesting the already-active address and port
+  reuses the healthy MiniClient session unless a renderer switch is explicit.
 - Fire TV remote keys, exact SageTV commands, native text/Search entry, and
   explicit command sequences.
 - Logcat, screenshot, screen recording, focused-window, codec, Surface, and
