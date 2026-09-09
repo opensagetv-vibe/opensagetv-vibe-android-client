@@ -77,6 +77,7 @@ import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.util.Utils;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
+import opensagetv.vibe.miniclient.video.PlaybackErrorPresentationPolicy;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
 import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
@@ -1479,10 +1480,18 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
                 error.printStackTrace();
 
-                if (retryCount == 0)
+                if (retryCount == 0 && PlaybackErrorPresentationPolicy.shouldShowFirstError(
+                        error.getErrorCodeName(), firstVideoFrameRendered))
                 {
                     //Show toast on first error
                     context.showErrorMessage(error.getErrorCodeName(), "Exo2MediaPlayer");
+                }
+                else if (retryCount == 0)
+                {
+                    PlaybackDebugTrap.record("recoverable_player_warning_suppressed_"
+                            + error.getErrorCodeName(), Exo2MediaPlayerImpl.this);
+                    log.logDebug("Suppressing recoverable post-start player warning: "
+                            + error.getErrorCodeName());
                 }
 
                 if (retryCount <= MAX_PLAYBACK_RETRY_COUNT)

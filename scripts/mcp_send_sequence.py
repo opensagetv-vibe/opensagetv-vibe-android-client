@@ -12,7 +12,9 @@ from mcp_smoke_test import MCPProcess, compact_tool_result, initialize, tool_cal
 
 def _read_sequence(args: argparse.Namespace) -> str:
     if args.sequence is not None:
-        return args.sequence
+        # Literal ``\n`` separators survive cmd.exe/PowerShell -> WSL -> Docker
+        # argument forwarding, where embedded newline arguments can be split.
+        return args.sequence.replace("\\n", "\n")
     if args.file is not None:
         return Path(args.file).read_text(encoding="utf-8")
     data = sys.stdin.read()
@@ -37,6 +39,21 @@ def main() -> int:
     src = parser.add_mutually_exclusive_group()
     src.add_argument("--sequence", help="Inline multiline sequence")
     src.add_argument("--file", help="Read sequence from a text file")
+    parser.add_argument(
+        "--screenshot",
+        metavar="LABEL",
+        help="Capture a labeled Fire TV screenshot after the sequence completes",
+    )
+    parser.add_argument(
+        "--state",
+        action="store_true",
+        help="Print compact player/debug state after the sequence completes",
+    )
+    parser.add_argument(
+        "--server-address",
+        help="Launch/connect the Vibe client to this SageTV server before sending the sequence",
+    )
+    parser.add_argument("--server-port", type=int, default=31099)
     args = parser.parse_args()
     sequence = _read_sequence(args)
 
@@ -47,6 +64,19 @@ def main() -> int:
         connected = tool_call(client, "adb_connect", timeout=30.0)
         print("PASS: adb_connect")
         print(compact_tool_result(connected))
+        if args.server_address:
+            server = tool_call(
+                client,
+                "dev_connect_server",
+                {
+                    "address": args.server_address,
+                    "port": max(1, min(args.server_port, 65535)),
+                    "save": False,
+                },
+                timeout=30.0,
+            )
+            print("PASS: dev_connect_server")
+            print(compact_tool_result(server))
         result = tool_call(
             client,
             "dev_send_sequence",
@@ -55,6 +85,19 @@ def main() -> int:
         )
         print("PASS: dev_send_sequence")
         print(compact_tool_result(result))
+        if args.screenshot:
+            screenshot = tool_call(
+                client,
+                "take_screenshot",
+                {"label": args.screenshot},
+                timeout=30.0,
+            )
+            print("PASS: take_screenshot")
+            print(compact_tool_result(screenshot))
+        if args.state:
+            state = tool_call(client, "dev_player_state", timeout=30.0)
+            print("PASS: dev_player_state")
+            print(compact_tool_result(state))
         return 0
     finally:
         client.close()

@@ -1,6 +1,32 @@
 # Changelog
 
-## Unreleased
+## v0.5.89 - 2026-09-08
+
+- Removed three misleading Android-side failures without weakening playback
+  diagnostics. The Media Keys screen now uses AndroidX
+  `SwitchPreferenceCompat` consistently and opens on the commissioned API-25
+  Fire TV instead of throwing a `ClassCastException`. Both Exo generations
+  continue to log and recover `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`, but
+  no longer interrupt users with that known transient warning after the
+  current load has already rendered video; genuine startup failures, other
+  error types, and exhausted retries remain visible. APK version name now
+  comes from the repository `VERSION` file, with the guarded canonical Gradle
+  copy kept identical, so Settings and Android package metadata report
+  `0.5.89-DEV-DEBUG` instead of the inherited `1.14.0`.
+  On the Fire TV Pro (`.29`) against the unmodified SageTV server (`.175`),
+  Media3 hardware MPEG-2 Push passed seek, large jump, pause/resume, and six
+  rapid FF/rewind recoveries (821-2,093 ms). A subsequent manual legacy
+  ExoPlayer hardware Push seek/FF/rewind/pause/stop-restart pass produced no
+  player error, crash, maximum-retry failure, or visible unsupported-container
+  warning in the captured Android trace.
+
+- Completed the isolated SageMC repeated-playback gate required by the staged
+  Core redundant-watch correction. The exact generated MPEG-2/AC-3/CEA-608
+  fixture passed initial playback, same-connection HOME/surface recovery,
+  explicit pause preservation, three consecutive exact-file watch cycles,
+  and teardown on the non-Pro Fire TV. The lifecycle runner now clears stale
+  Fire OS crash-buffer entries before a bounded run, preventing an old PID's
+  already-fixed settings crash from failing a healthy current process.
 
 - Allowed the physical lifecycle runner to set `--repeat 0`, separating its
   HOME/background/user-pause contract from the optional server watch/restart

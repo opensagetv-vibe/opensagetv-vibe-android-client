@@ -344,6 +344,7 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         adb = (ROOT / "mcp/src/sagetv_dev_mcp/adb.py").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
         script = (ROOT / "scripts/mcp_session_test.py").read_text(encoding="utf-8")
+        lifecycle = (ROOT / "scripts/mcp_lifecycle_test.py").read_text(encoding="utf-8")
         devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
         roots = (ROOT / "scripts/mcp_ui_roots.py").read_text(encoding="utf-8")
         self.assertIn("from mcp_ui_roots import is_automation_root", script)
@@ -405,6 +406,11 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('"retainedStoppedPlayer": retained_stopped_player', server)
         self.assertIn('"existing_playback_stop_popup_did_not_close"', server)
         self.assertIn('stop_popup_dismissal = adb.dev_control("command", command="home")', server)
+        self.assertIn('tool_call(client, "clear_logcat", {}, timeout=30.0)', lifecycle)
+        self.assertLess(
+            lifecycle.index('tool_call(client, "clear_logcat"'),
+            lifecycle.index('"dev_prepare_clean_start"'),
+        )
         self.assertIn('SagexApiClient.discover(server_address)', server)
         self.assertIn('sagex.resolve_context(client_id)', server)
         self.assertIn('sagex.find_media(requested)', server)
@@ -821,6 +827,14 @@ class MCPSearchCommandTests(unittest.TestCase):
         self.assertIn('hasTextInput', server)
         self.assertIn("mcp-send-sequence)", devsh)
         self.assertIn('tool_call(\n            client,\n            "dev_send_sequence"', script)
+        self.assertIn('"--screenshot"', script)
+        self.assertIn('"take_screenshot"', script)
+        self.assertIn('"--state"', script)
+        self.assertIn('"dev_player_state"', script)
+        self.assertIn('"--server-address"', script)
+        self.assertIn('"dev_connect_server"', script)
+        self.assertIn('args.sequence.replace("\\\\n", "\\n")', script)
+        self.assertIn('f"line {item.line}: command {item.value!r} failed: {exc}"', server)
 
     def test_search_is_first_class_mcp_tool_and_host_command(self):
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")

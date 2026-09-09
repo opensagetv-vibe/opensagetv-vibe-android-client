@@ -219,7 +219,7 @@ case "${1:-help}" in
     ;;
   mcp-send-sequence)
     shift
-    # Read an explicit multiline command/sendkey/sendtext/directtext/hideime/delay/wait script and execute it as one MCP tool call.
+    # Read an explicit multiline input/wait script; optionally capture --screenshot LABEL and --state afterward.
     dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_send_sequence.py" "$@"
     ;;
   mcp-comskip-test)

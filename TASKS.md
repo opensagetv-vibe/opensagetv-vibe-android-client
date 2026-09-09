@@ -17,15 +17,9 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-- [ ] Complete the SageMC interoperability matrix on the commissioned non-Pro
-  Fire TV and isolated `.232` server. Captions, full-screen exact-file
-  playback, Live TV, root navigation, and native DVD root/submenu rendering
-  pass. Native DVD pause/resume and real-disc submenu-to-root DVD Return also
-  pass. Repeated exact-file playback after SageMC's retained `StopPopup`
-  remains the final physical gate and requires activation of the already
-  staged Vibe Core redundant-watch fix.
-- [ ] After those gates pass, update durable results and manifests, run the
-  complete suite, and publish the post-v0.5.88 automation update.
+- [ ] Finish v0.5.89 release records and manifests, run the complete suite,
+  publish the source/APK release, and verify the public artifacts from an
+  independent download.
 
 The v0.5.88 source/APK release passed its local and standalone GitHub
 `source-contracts` validation gates.

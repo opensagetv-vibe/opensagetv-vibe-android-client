@@ -15,7 +15,7 @@ import json
 import sys
 import time
 
-from mcp_seek_suite import MCPProcess, call_dict, initialize
+from mcp_seek_suite import MCPProcess, call_dict, initialize, tool_call
 from mcp_playback_test import start_recording_via_search
 from mcp_ui_roots import wait_automation_root
 
@@ -129,6 +129,11 @@ def main() -> int:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
         call_dict(client, "adb_connect", timeout=30.0)
+        # Fire OS retains crash-buffer entries across process restarts and APK
+        # upgrades. Scope this physical gate to failures produced by this run,
+        # matching the session and player-matrix runners.
+        tool_call(client, "clear_logcat", {}, timeout=30.0)
+        print("PASS: stale device logcat cleared before lifecycle session")
         try:
             clean = call_dict(
                 client,

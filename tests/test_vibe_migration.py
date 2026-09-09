@@ -19,6 +19,15 @@ class VibeMigrationTests(unittest.TestCase):
         self.assertTrue((ROOT / "docs" / "BASELINE_VALIDATION.md").is_file())
         self.assertTrue((ROOT / ".gitattributes").is_file())
 
+    def test_android_version_name_uses_the_project_version_file(self):
+        for relative_path in (
+                "source/dev/build.gradle",
+                "config/dev-root-build.gradle.canonical"):
+            build = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertIn('file("${rootDir}/../../VERSION")', build)
+            self.assertIn("appVersionName = vibeVersionName", build)
+            self.assertNotIn('appVersionName = "1.14.0"', build)
+
     def test_artifact_name_is_consistent(self):
         expected = "OpenSageTV-Vibe-Android-Client-debug.apk"
         entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text()

@@ -1691,6 +1691,36 @@ An independently committed temporary sibling layout passed its own root
 workspace. It generated a fresh private debug key as expected, then the single
 container was rebound to this real checkout and the temporary tree was removed.
 
+## v0.5.89 release-candidate state
+
+The SageMC interoperability gate is complete on the commissioned non-Pro
+Fire TV (`192.168.10.25:5555`) against isolated Vibe server `.232`. The exact
+`/var/media/videos/VibeSeekTest-1080i-MPEG2-AC3-CC.ts` path passed initial
+playback, same-connection HOME return and Surface recreation, manual-pause
+preservation, three consecutive exact-file watch cycles, and teardown with the
+staged Core redundant-watch correction active. The lifecycle runner now clears
+the Android crash buffer before evaluating the current process, matching the
+other physical runners and excluding stale-PID failures.
+
+The v0.5.89 Android candidate also fixes the Media Keys settings
+`SwitchPreference`/`SwitchPreferenceCompat` mismatch and applies one bounded
+error-presentation rule to Media3 and legacy ExoPlayer: a transient
+`ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED` remains logged and recovered but is
+not shown after the current load has already rendered its first frame. Startup
+container errors, other errors, and maximum-retry failures stay user-visible.
+The package version is sourced from root `VERSION`; both `dumpsys package` and
+the physically rendered Settings screen confirmed the version name rather than
+the inherited upstream `1.14.0`. The final clean APK reports
+`0.5.89-DEV-DEBUG`, has SHA-256
+`6a9fe6f7a416d4f7a42de103a0a84319372794a5e6835fdce712978344b944d6`, and is
+installed on the Fire TV Pro (`192.168.10.29:5555`). Against the unmodified
+`.175` server, Media3 hardware MPEG-2 Push passed seek, large-jump,
+pause/resume, and six rapid FF/rewind cycles with 821-2,093 ms recovery. The
+user then passed the same remote operations manually with legacy ExoPlayer
+hardware Push. The captured trace contained no player error, crash,
+maximum-retry failure, or visible unsupported-container warning. Public bundle
+and independent-download verification remain the release publication gate.
+
 ## Exact resume sequence
 
 Fire TV Pro testing on `192.168.10.29` was resumed by the user on 2026-09-05.

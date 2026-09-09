@@ -4,7 +4,7 @@
     <PreferenceCategory
         android:title="General Settings">
 
-        <SwitchPreference
+        <SwitchPreferenceCompat
             android:key="smart_remote_mappings"
             android:summary="Changes remote mappings based on the currently active screen"
             android:title="Enable Smart Remote Mappings"
@@ -24,19 +24,19 @@
             android:inputType="number"
             android:defaultValue="1000" />
 
-        <SwitchPreference
+        <SwitchPreferenceCompat
             android:key="sound_effects_enabled"
             android:summary="Enable Sound Effects"
             android:title="Sound Effects"
             android:defaultValue="false" />
 
-        <SwitchPreference
+        <SwitchPreferenceCompat
             android:key="debug_key_presses"
             android:summary="Debug Key Presses"
             android:title="Debug Key Presses"
             android:defaultValue="false" />
 
-        <SwitchPreference
+        <SwitchPreferenceCompat
             android:key="debug_sage_commands"
             android:summary="Debug Sage Commands"
             android:title="Debug Sage Commands"

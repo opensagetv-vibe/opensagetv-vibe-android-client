@@ -75,6 +75,7 @@ import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.util.Utils;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
+import opensagetv.vibe.miniclient.video.PlaybackErrorPresentationPolicy;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.MediaReplacementPolicy;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
@@ -2083,10 +2084,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     return;
                 }
 
-                if (retryCount == 0)
+                if (retryCount == 0 && PlaybackErrorPresentationPolicy.shouldShowFirstError(
+                        error.getErrorCodeName(), firstVideoFrameRendered))
                 {
                     //Show toast on first error
                     context.showErrorMessage(error.getErrorCodeName(), "Media3MediaPlayer");
+                }
+                else if (retryCount == 0)
+                {
+                    PlaybackDebugTrap.record("recoverable_player_warning_suppressed_"
+                            + error.getErrorCodeName(), Media3MediaPlayerImpl.this);
+                    log.logDebug("Suppressing recoverable post-start player warning: "
+                            + error.getErrorCodeName());
                 }
 
                 if (retryCount <= MAX_PLAYBACK_RETRY_COUNT)

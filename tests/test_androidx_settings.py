@@ -4,6 +4,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings"
+SETTINGS_XML = ROOT / "source/dev/android-shared/src/main/res/xml"
 
 
 class AndroidXSettingsTests(unittest.TestCase):
@@ -43,6 +44,13 @@ class AndroidXSettingsTests(unittest.TestCase):
         self.assertIn("androidx.fragment.app.DialogFragment", text)
         self.assertIn("androidx.fragment.app.FragmentManager", text)
         self.assertNotIn("android.app.DialogFragment", text)
+
+    def test_media_mapping_switches_match_the_compat_fragment_type(self):
+        text = (SETTINGS_XML / "media_mappings_prefs.xml").read_text(encoding="utf-8")
+        self.assertEqual(text.count("<SwitchPreferenceCompat"), 4)
+        self.assertNotIn("<SwitchPreference\n", text)
+        fragment = (SETTINGS / "MediaMappingsFragment.java").read_text(encoding="utf-8")
+        self.assertIn("SwitchPreferenceCompat spSmartRemote", fragment)
 
 
 if __name__ == "__main__":

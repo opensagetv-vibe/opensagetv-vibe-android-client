@@ -2351,7 +2351,12 @@ def dev_send_sequence(sequence: str) -> dict:
     results: list[dict] = []
     for item in actions:
         if item.action == "command":
-            result = adb.sage_command(str(item.value))
+            try:
+                result = adb.sage_command(str(item.value))
+            except Exception as exc:
+                raise RuntimeError(
+                    f"line {item.line}: command {item.value!r} failed: {exc}"
+                ) from exc
         elif item.action == "sendkey":
             result = adb.key(str(item.value))
         elif item.action == "sendtext":
