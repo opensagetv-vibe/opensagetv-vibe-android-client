@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Made unmodified SageTV the explicit first compatibility and physical-test
+  gate. Documented stock Core's self-clearing full imported-media reindex and
+  single-item reimport as the preferred remedies for corrupt persisted media
+  metadata; Vibe Core's targeted playback repair remains optional and disabled
+  by default.
 - Proved ordinary MKV playback remains compatible with an unmodified SageTV
   server. On non-Pro Fire TV `.25`, Media3 hardware Pull played and navigated
   stock-server entries `Scream_1` (MPEG-2/AC-3, 6,656,404 ms) and

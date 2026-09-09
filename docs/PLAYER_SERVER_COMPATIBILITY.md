@@ -80,6 +80,15 @@ stock-compatible remedy is to repair or reimport that server metadata. The
 Android player cannot infer a user's intended seek from a server command that
 has already been clamped to 1 ms.
 
+Stock Core can force all imported files through its existing metadata parser by
+setting `force_full_content_reindex=true` and running the normal imported-media
+scan; Core clears that flag after the scan. Use that broad repair only with a
+database backup because it reparses the whole imported library. Removing and
+reimporting one affected item is the narrower stock alternative. Vibe Core's
+`videoframe/repair_invalid_imported_metadata_on_playback` is an optional,
+disabled-by-default targeted convenience, never an Android playback
+requirement.
+
 The following optional Vibe features are unavailable on stock Core:
 
 | Feature unavailable on stock Core | Required component | Safe stock behavior |
