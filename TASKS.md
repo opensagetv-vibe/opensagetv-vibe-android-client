@@ -17,12 +17,9 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-- [ ] Finish v0.5.89 release records and manifests, run the complete suite,
-  publish the source/APK release, and verify the public artifacts from an
-  independent download.
-
-The v0.5.88 source/APK release passed its local and standalone GitHub
-`source-contracts` validation gates.
+No foundation or release task is currently open. Release `v0.5.89` passed its
+local suite, independent source-archive test/validate/build gate, GitHub
+`source-contracts` workflow, and fresh public-download hash verification.
 
 The useful legacy-extender semantics that can be implemented and physically
 tested in the current environment are complete. Media3 and legacy Exo emit raw

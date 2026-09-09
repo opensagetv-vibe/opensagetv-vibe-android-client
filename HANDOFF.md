@@ -1718,8 +1718,17 @@ installed on the Fire TV Pro (`192.168.10.29:5555`). Against the unmodified
 pause/resume, and six rapid FF/rewind cycles with 821-2,093 ms recovery. The
 user then passed the same remote operations manually with legacy ExoPlayer
 hardware Push. The captured trace contained no player error, crash,
-maximum-retry failure, or visible unsupported-container warning. Public bundle
-and independent-download verification remain the release publication gate.
+maximum-retry failure, or visible unsupported-container warning.
+
+Release `v0.5.89` is published at
+<https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.89>.
+Commit `c37e4a46bc41112b39bebc52c28e4197773f29af` passed GitHub's
+`source-contracts` workflow. The manifest-exact source ZIP independently
+passed all 496 project/static tests, all 70 MCP/workflow tests, Gradle core
+tests, project validation, and a clean 60-task APK build from a separate
+extracted checkout. All five public assets were downloaded into a fresh local
+directory and matched GitHub's SHA-256 digests; the published APK retains the
+physically tested SHA-256 above.
 
 ## Exact resume sequence
 
