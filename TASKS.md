@@ -20,7 +20,7 @@ separately and must not block available work.
 No task in this section is currently open. Add only work with a concrete
 implementation and an executable acceptance gate.
 
-Release `v0.5.89` passed its local suite, independent source-archive
+Release `v0.5.90` passed its local suite, independent source-archive
 test/validate/build gate, GitHub `source-contracts` workflow, and fresh
 public-download hash verification.
 
@@ -62,7 +62,7 @@ Amazon Appstore and Google Play publication are not part of the current release
 scope. The current deliverable is reviewable source plus an installable APK on
 GitHub.
 
-The v0.5.89 GitHub source/APK release is complete: durable documentation, stable machine
+The v0.5.90 GitHub source/APK release is complete: durable documentation, stable machine
 metadata, dependency/license notices, manifests, deterministic APK/source
 bundles, and the changed-files handoff workflow are verified. An untouched
 v0.5.75 Windows worktree applied the original v0.5.85 release, normalized only proven CRLF-equivalent

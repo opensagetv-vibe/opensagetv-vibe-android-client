@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.5.90 - 2026-09-09
+
 - Added a strict stock-SageTV MKV compatibility workflow. The new
   `dev mcp-stock-mkv-matrix` command reads repeatable MediaFile names from the
   shared TOML test environment, bypasses STV-specific Search screens through
@@ -20,7 +22,12 @@
   on AFTMM its existing safety rule intentionally rejects the known-broken
   MPEG-2 MediaCodec and uses bundled FFmpeg. GSY System selection safely used
   the Media3 datasource-compatible backend for Pull. This is host workflow and
-  compatibility evidence; the v0.5.89 APK/player source is unchanged. The
+  compatibility evidence; Android player source is unchanged from v0.5.89.
+  v0.5.90 rebuilds the APK so the installable GitHub asset carries the current
+  version and repository state. The clean 60-task APK build has SHA-256
+  `7d2343d20bee7decb285ddb0a8631c8cf97da3c84616aecc39826b6b090a1469`;
+  package/signing inspection passes, and the exact APK installs and launches on
+  non-Pro Fire TV `.25` reporting `0.5.90-DEV-DEBUG`. The
   post-change local gate passes 503 project tests, 72 MCP/workflow tests, Core
   Gradle tests, structural validation, manifest verification, and diff checks.
 - Made unmodified SageTV the explicit first compatibility and physical-test

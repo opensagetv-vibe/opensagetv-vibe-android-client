@@ -2,7 +2,8 @@
 
 ## Stock-server all-player MKV checkpoint (2026-09-09)
 
-The current v0.5.89 APK plays ordinary MKVs without a modified server. The
+The v0.5.90 APK retains the physically proven v0.5.89 player source and plays
+ordinary MKVs without a modified server. The
 strict aggregate report is
 `artifacts/firetv/20260909_stock_mkv_all_player_matrix.json`. On non-Pro Fire
 TV `.25` against unmodified SageTV `.175`, `The Lion King` (H.264/AAC,
@@ -24,7 +25,12 @@ gate. It reads `fixtures.mkv_searches` from the private TOML and uses stock
 Sagex `Watch`, avoiding STV-dependent Search keyboard navigation. The common
 matrix verifies the active post-launch configuration and retries one clean
 apply/connect cycle when a stale prior setting is observed. These are host
-workflow changes only; no Android player source or APK changed. The local gate
+workflow changes only; no Android player source changed. v0.5.90 rebuilds the
+APK so GitHub provides an installable asset matching the current version. The
+clean APK SHA-256 is
+`7d2343d20bee7decb285ddb0a8631c8cf97da3c84616aecc39826b6b090a1469`;
+inspection passes, and the exact artifact installs and launches on `.25` with
+device package metadata `0.5.90-DEV-DEBUG`. The local gate
 passes 503 project tests, 72 MCP/workflow tests, Core Gradle tests, structural
 validation, manifest verification, and diff checks.
 
