@@ -20,6 +20,7 @@ class TestEnvironmentWorkflowTests(unittest.TestCase):
             self.assertIn(section, data)
         self.assertIn("smb_url", data["servers"]["vibe"])
         self.assertIn("smb_url", data["servers"]["stock"])
+        self.assertEqual(len(data["fixtures"]["mkv_searches"]), 2)
         text = path.read_text(encoding="utf-8")
         self.assertNotIn("192.168.10.", text)
         self.assertNotIn('web_password = "frey"', text)

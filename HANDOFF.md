@@ -1,20 +1,39 @@
 # OpenSageTV Vibe Android Client handoff
 
-## Stock-server MKV and fixture-layout checkpoint (2026-09-09)
+## Stock-server all-player MKV checkpoint (2026-09-09)
 
-The current Vibe Android client plays ordinary MKVs correctly without a
-modified server. Physical Media3/hardware/Pull sessions on non-Pro Fire TV
-`.25` against unmodified SageTV `.175` passed `Scream_1` (MPEG-2/AC-3,
-6,656,404 ms) and `The Lion King` (H.264/AAC, 5,303,721 ms), including FF,
-REW, large jumps, pause/resume, advancing A/V counters, stable hardware video
-decoders, and zero player/datasource/crash errors. Legacy Exo hardware Pull
-also passed the complete sequence for both MKVs. Stock SageTV supplied valid
-durations and seek targets. A separate `The Lion King` entry on the modified
-test server was indexed as a 1 ms Matroska file with no streams, so that server
-could only request a 1 ms seek. Treat that as invalid server library metadata,
-not a player-side MKV failure. Prefer stock-compatible client/protocol behavior;
-optional Sage.jar/MIM changes are last-resort enhancements and must retain a
-safe stock fallback.
+The current v0.5.89 APK plays ordinary MKVs without a modified server. The
+strict aggregate report is
+`artifacts/firetv/20260909_stock_mkv_all_player_matrix.json`. On non-Pro Fire
+TV `.25` against unmodified SageTV `.175`, `The Lion King` (H.264/AAC,
+5,303,721 ms) passed 28/28 startup/control checks and `Scream_1`
+(MPEG-2/AC-3, 6,656,404 ms) passed all 28 checks across legacy Exo, Media3,
+IJK, and GSY Auto/Media3/legacy-Exo/System selections. One GSY/Media3 forward
+seek on `Scream_1` recovered slowly in 15.352 seconds after 18.510 seconds of
+Pull datasource read wait; no case crashed, exhausted the watchdog, or failed
+to recover. MTK hardware AVC/MPEG-2 decoder identity is proven for the
+Exo/Media3-backed cases. IJK's legacy health API proves control/timeline
+recovery but does not report its decoder name; the existing AFTMM rule
+intentionally rejects that device's broken MPEG-2 MediaCodec and falls back to
+bundled FFmpeg. GSY System selection uses the datasource-compatible Media3
+backend for Pull, which the report records rather than claiming native Android
+System MediaPlayer playback.
+
+Use `dev.cmd mcp-stock-mkv-matrix` (or the shell equivalent) to repeat the
+gate. It reads `fixtures.mkv_searches` from the private TOML and uses stock
+Sagex `Watch`, avoiding STV-dependent Search keyboard navigation. The common
+matrix verifies the active post-launch configuration and retries one clean
+apply/connect cycle when a stale prior setting is observed. These are host
+workflow changes only; no Android player source or APK changed. The local gate
+passes 503 project tests, 72 MCP/workflow tests, Core Gradle tests, structural
+validation, manifest verification, and diff checks.
+
+Stock SageTV supplied valid durations and seek targets. A separate `The Lion
+King` entry on the modified test server was indexed as a 1 ms Matroska file
+with no streams, so that server could only request a 1 ms seek. Treat that as
+invalid server library metadata, not a player-side MKV failure. Prefer
+stock-compatible client/protocol behavior; optional Sage.jar/MIM changes are
+last-resort enhancements and must retain a safe stock fallback.
 
 All generated video, caption, audio-codec, Kodi-codec, and authored-DVD
 regression fixtures now live beneath

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Added a strict stock-SageTV MKV compatibility workflow. The new
+  `dev mcp-stock-mkv-matrix` command reads repeatable MediaFile names from the
+  shared TOML test environment, bypasses STV-specific Search screens through
+  stock Sagex `Watch`, requires healthy startup and absolute seek, forward,
+  backward, and pause/resume recovery, and preserves the effective backend and
+  decoder evidence in one aggregate report. The common player matrix now
+  verifies that the requested configuration is active after launch and retries
+  one clean apply/connect cycle if shutdown races leave a stale prior setting.
+  On non-Pro Fire TV `.25` against unmodified SageTV `.175`, `The Lion King`
+  passed 28/28 operations across legacy Exo, Media3, IJK, and all four GSY
+  selections. `Scream_1` passed all 28 operations; one GSY/Media3 forward seek
+  was a 15.352-second slow recovery correlated with 18.510 seconds of Pull read
+  wait, while every other recovery completed normally. Hardware MTK AVC/MPEG-2
+  decoder identity was proven for Exo/Media3-backed cases. IJK completed every
+  control operation but its legacy health API does not expose decoder identity;
+  on AFTMM its existing safety rule intentionally rejects the known-broken
+  MPEG-2 MediaCodec and uses bundled FFmpeg. GSY System selection safely used
+  the Media3 datasource-compatible backend for Pull. This is host workflow and
+  compatibility evidence; the v0.5.89 APK/player source is unchanged. The
+  post-change local gate passes 503 project tests, 72 MCP/workflow tests, Core
+  Gradle tests, structural validation, manifest verification, and diff checks.
 - Made unmodified SageTV the explicit first compatibility and physical-test
   gate. Documented stock Core's self-clearing full imported-media reindex and
   single-item reimport as the preferred remedies for corrupt persisted media
@@ -13,10 +34,11 @@
   `The Lion King` (H.264/AAC, 5,303,721 ms). FF/REW, large jumps, and
   pause/resume recovered with advancing audio/video, no decoder recreation,
   no datasource error, and no crash. Legacy Exo hardware Pull independently
-  passed both MKVs with the same control sequence and correct durations. The
-  previously observed 1 ms duration and end-marker restart were isolated to
-  corrupt library metadata on the modified
-  test server; they are not an Android MKV compatibility limitation.
+  passed both MKVs with the same control sequence and correct durations. That
+  initial two-backend check has now been superseded by the strict all-player
+  matrix above. The previously observed 1 ms duration and end-marker restart
+  were isolated to corrupt library metadata on the modified test server; they
+  are not an Android MKV compatibility limitation.
 
 - Consolidated generated regression media under the single server directory
   `/var/media/OpenSageTV_Vibe_Tests` (SMB directory

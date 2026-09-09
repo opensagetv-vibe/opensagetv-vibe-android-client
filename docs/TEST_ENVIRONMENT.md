@@ -57,6 +57,7 @@ The schema records:
   Web/Sagex endpoints, Web Remote context, and local credentials;
 - per-server SMB shares, credentials, configuration directory, and path maps;
 - prerecorded, caption, DVD, and other deterministic media fixtures;
+- repeatable stock-library MKV MediaFile names for the strict all-player matrix;
 - HDMI capture backend/device names and artifact directory;
 - player, transport, hardware-decoding, renderer, live-channel, timeout, and
   observation defaults;

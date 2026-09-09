@@ -17,12 +17,8 @@ separately and must not block available work.
 
 ## 1. Active and immediately executable
 
-No Android playback defect remains open from the MKV report. Physical tests on
-the non-Pro Fire TV proved both MPEG-2/AC-3 (`Scream_1`) and H.264/AAC
-(`The Lion King`) MKVs through Media3 and legacy Exo hardware Pull against
-unmodified SageTV.
-The separate 1 ms timeline was traced to corrupt imported metadata in the
-modified test server's library, not to the Android MKV extractor or datasource.
+No task in this section is currently open. Add only work with a concrete
+implementation and an executable acceptance gate.
 
 Release `v0.5.89` passed its local suite, independent source-archive
 test/validate/build gate, GitHub `source-contracts` workflow, and fresh

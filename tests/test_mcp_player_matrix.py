@@ -16,6 +16,18 @@ spec.loader.exec_module(module)
 
 
 class MCPPlayerMatrixTests(unittest.TestCase):
+    def test_stock_video_name_bypasses_stv_search_and_uses_sagex_watch(self):
+        script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--video-name"', script)
+        self.assertIn('call_dict(client, "dev_play_video", {', script)
+        self.assertIn('"reason": "stock_sagex_video_name_requested"', script)
+
+    def test_case_launch_verifies_active_configuration_and_retries_once(self):
+        script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
+        self.assertIn("for activation_attempt in (1, 2):", script)
+        self.assertIn('active_config = call_dict(client, "dev_player_state")', script)
+        self.assertIn("active player configuration did not apply after retry", script)
+
     def test_full_matrix_expands_to_105_configuration_cases(self):
         cases = module.build_cases(
             list(module.PLAYERS),
@@ -81,7 +93,7 @@ class MCPPlayerMatrixTests(unittest.TestCase):
     def test_matrix_can_use_exact_server_path_without_search_navigation(self):
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
         self.assertIn('parser.add_argument("--server-path"', script)
-        self.assertIn('one of --text or --server-path is required', script)
+        self.assertIn('one of --text, --video-name, or --server-path is required', script)
         self.assertIn('if server_path.strip():', script)
         self.assertIn('call_dict(client, "dev_play_server_path"', script)
         self.assertIn('"reason": "exact_server_path_requested"', script)

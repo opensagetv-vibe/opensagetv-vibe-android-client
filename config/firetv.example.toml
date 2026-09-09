@@ -74,6 +74,7 @@ caption_server_path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2
 dvd_server_path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD"
 dvd_motion_server_path = "/var/media/videos/replace-with-local-dvd"
 prerecorded_search = "replace-with-safe-recording"
+mkv_searches = ["replace-with-safe-mkv-one", "replace-with-safe-mkv-two"]
 
 [capture]
 enabled = false

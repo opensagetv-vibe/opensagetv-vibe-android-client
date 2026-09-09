@@ -73,11 +73,20 @@ in Docker before Phase 1 began.
 
 ## Git publication
 
-The repository is local-only. No remote has been added and nothing has been
-pushed. When the owner approves publication, the intended remote is
-`https://github.com/opensagetv-vibe/opensagetv-vibe-android-client.git`.
-Preserve the exact baseline import commit and all subsequent logical migration
-commits when publishing.
+The repository is published at
+`https://github.com/opensagetv-vibe/opensagetv-vibe-android-client.git` as a
+GitHub fork of `OpenSageTV/sagetv-miniclient`. `origin` is the Vibe fork and
+`upstream` is fetch-only. The Vibe default branch is `main`; upstream's branch
+remains available as `master`.
+
+The exact baseline import and every subsequent Vibe commit are preserved. The
+baseline was necessarily imported as a historyless snapshot because the source
+workspace contained no Git metadata. An explicit tree-preserving ancestry merge
+links upstream `master` to Vibe `main` for provenance and prevents GitHub from
+misleadingly reporting the snapshot as hundreds of commits behind. That merge
+does not replace or silently merge upstream file content into the active Vibe
+tree; future upstream changes require the reviewed source-replacement process
+below.
 
 Initial post-change equivalence evidence is consolidated in
 [docs/BASELINE_VALIDATION.md](docs/BASELINE_VALIDATION.md). The migrated APK was

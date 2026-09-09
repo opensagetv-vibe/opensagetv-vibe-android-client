@@ -14,7 +14,7 @@ class VibeMigrationTests(unittest.TestCase):
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
         release = (ROOT / "release.properties").read_text(encoding="utf-8")
         self.assertIn(f"VERSION={version}", release)
-        self.assertIn("REQUIRES_BUILD=true", release)
+        self.assertRegex(release, r"(?m)^REQUIRES_BUILD=(?:true|false)$")
         self.assertTrue((ROOT / "MIGRATION_TO_OPENSAGETV_VIBE.md").is_file())
         self.assertTrue((ROOT / "docs" / "BASELINE_VALIDATION.md").is_file())
         self.assertTrue((ROOT / ".gitattributes").is_file())

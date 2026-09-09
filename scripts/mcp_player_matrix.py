@@ -677,6 +677,7 @@ def start_case(
     server: str,
     port: int,
     text: str,
+    video_name: str,
     server_path: str,
     text_char_delay_ms: int,
     connect_timeout_s: float,
@@ -687,16 +688,6 @@ def start_case(
     tuning_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     print(f"\n=== CASE {case.id} ===")
-    clean = call_dict(client, "dev_prepare_clean_start", {"wake": True, "graceful_timeout_s": 2.0}, timeout=30.0)
-    if not clean.get("readyToLaunch") or clean.get("stopped", {}).get("running"):
-        raise RuntimeError(f"Dev app could not be stopped cleanly: {clean}")
-
-    tuning = None
-    if tuning_config is not None:
-        tuning = call_dict(client, "dev_set_player_tuning", {"reset": True, **tuning_config})
-        if not tuning.get("ok", True):
-            raise RuntimeError(f"player tuning was not applied: {tuning}")
-
     config_request = {
         "player": case.player,
         "streaming": streaming_preference(case.streaming),
@@ -704,7 +695,6 @@ def start_case(
         "gsy_engine": case.gsy_engine,
         **fixed_config,
     }
-    configured = call_dict(client, "dev_set_player_config", config_request)
     expected_configured = {
         "player": case.player,
         "streaming": streaming_preference(case.streaming),
@@ -712,26 +702,67 @@ def start_case(
         "gsyEngine": case.gsy_engine,
         **fixed_expected_snapshot(fixed_config),
     }
-    for key, value in expected_configured.items():
-        actual = str(configured.get(key, "")).lower()
-        if actual != value:
-            raise RuntimeError(
-                f"configuration parameter was not applied: {key} selected={value} response={actual or '<missing>'}"
+    tuning = None
+    configured = None
+    connected = None
+    connected_state = None
+    ready = None
+    activation_mismatches: list[str] = []
+    for activation_attempt in (1, 2):
+        clean = call_dict(client, "dev_prepare_clean_start", {"wake": True, "graceful_timeout_s": 2.0}, timeout=30.0)
+        if not clean.get("readyToLaunch") or clean.get("stopped", {}).get("running"):
+            raise RuntimeError(f"Dev app could not be stopped cleanly: {clean}")
+
+        if tuning_config is not None:
+            tuning = call_dict(client, "dev_set_player_tuning", {"reset": True, **tuning_config})
+            if not tuning.get("ok", True):
+                raise RuntimeError(f"player tuning was not applied: {tuning}")
+
+        configured = call_dict(client, "dev_set_player_config", config_request)
+        for key, value in expected_configured.items():
+            actual = str(configured.get(key, "")).lower()
+            if actual != value:
+                raise RuntimeError(
+                    f"configuration parameter was not applied: {key} selected={value} response={actual or '<missing>'}"
+                )
+        connected = call_dict(client, "dev_connect_server", {"address": server, "port": port, "save": False}, timeout=30.0)
+        connected_state = call_dict(client, "dev_wait_for_ui", {"connected": True, "timeout_s": connect_timeout_s}, timeout=connect_timeout_s + 10.0)
+        if not connected_state.get("passed"):
+            raise RuntimeError(f"SageTV did not connect: {connected_state}")
+
+        app_status = call_dict(client, "dev_app_status", {}, timeout=30.0)
+        if not app_status.get("running"):
+            raise RuntimeError(f"Dev app is not running after direct connect: {app_status}")
+
+        ready = wait_automation_root(
+            client,
+            timeout_s=connect_timeout_s,
+            stable_ms=ui_stable_ms,
+        )
+        active_config = call_dict(client, "dev_player_state")
+        active_expected = {
+            "player": case.player,
+            "streaming": case.streaming,
+            "decoding": case.decoder,
+            "gsyEngine": case.gsy_engine,
+        }
+        activation_mismatches = [
+            f"{key}={active_config.get(key, '<missing>')} (expected {value})"
+            for key, value in active_expected.items()
+            if str(active_config.get(key, "")).strip().lower() != str(value).lower()
+        ]
+        if not activation_mismatches:
+            break
+        if activation_attempt == 1:
+            print(
+                "RETRY: active player configuration did not match the requested case: "
+                + ", ".join(activation_mismatches)
             )
-    connected = call_dict(client, "dev_connect_server", {"address": server, "port": port, "save": False}, timeout=30.0)
-    connected_state = call_dict(client, "dev_wait_for_ui", {"connected": True, "timeout_s": connect_timeout_s}, timeout=connect_timeout_s + 10.0)
-    if not connected_state.get("passed"):
-        raise RuntimeError(f"SageTV did not connect: {connected_state}")
-
-    app_status = call_dict(client, "dev_app_status", {}, timeout=30.0)
-    if not app_status.get("running"):
-        raise RuntimeError(f"Dev app is not running after direct connect: {app_status}")
-
-    ready = wait_automation_root(
-        client,
-        timeout_s=connect_timeout_s,
-        stable_ms=ui_stable_ms,
-    )
+    if activation_mismatches:
+        raise RuntimeError(
+            "active player configuration did not apply after retry: "
+            + ", ".join(activation_mismatches)
+        )
 
     if server_path.strip():
         search = {
@@ -741,6 +772,17 @@ def start_case(
         }
         playback = call_dict(client, "dev_play_server_path", {
             "server_path": server_path,
+            "timeout_s": playback_timeout_s,
+            "verify_ms": verify_ms,
+        }, timeout=playback_timeout_s + 35.0)
+    elif video_name.strip():
+        search = {
+            "skipped": True,
+            "reason": "stock_sagex_video_name_requested",
+            "videoName": video_name,
+        }
+        playback = call_dict(client, "dev_play_video", {
+            "video_name": video_name,
             "timeout_s": playback_timeout_s,
             "verify_ms": verify_ms,
         }, timeout=playback_timeout_s + 35.0)
@@ -985,7 +1027,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the complete SageTV MiniClient player/backend MCP regression matrix")
     parser.add_argument("--server", default=default_server_address())
     parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
-    parser.add_argument("--text", default="", help="SageTV Search text; required unless --server-path is supplied")
+    parser.add_argument("--text", default="", help="SageTV Search text; required unless --video-name or --server-path is supplied")
+    parser.add_argument("--video-name", default="", help="Exact or uniquely matching stock SageTV MediaFile name through Sagex Watch")
     parser.add_argument("--server-path", default="", help="Exact SageTV-server MediaFile path through the Vibe test-control extension")
     parser.add_argument("--text-char-delay-ms", type=int, default=0, help="Text injection pacing for every case: 0 uses MiniClient native key events; >0 enables legacy Android/ADB diagnostic pacing (ms)")
     parser.add_argument("--players", default=",".join(PLAYERS))
@@ -1021,8 +1064,8 @@ def main() -> int:
     parser.add_argument("--leave-running", action="store_true")
     args = parser.parse_args()
 
-    if not args.text.strip() and not args.server_path.strip():
-        parser.error("one of --text or --server-path is required")
+    if not args.text.strip() and not args.video_name.strip() and not args.server_path.strip():
+        parser.error("one of --text, --video-name, or --server-path is required")
 
     try:
         players = _csv(args.players, PLAYERS, "players")
@@ -1086,7 +1129,8 @@ def main() -> int:
     def start_for_case(case: PlayerCase) -> dict[str, Any]:
         return start_case(
             client, case,
-            server=args.server, port=args.port, text=args.text, server_path=args.server_path,
+            server=args.server, port=args.port, text=args.text,
+            video_name=args.video_name, server_path=args.server_path,
             text_char_delay_ms=args.text_char_delay_ms,
             connect_timeout_s=args.connect_timeout_s,
             ui_stable_ms=args.ui_stable_ms,
@@ -1293,6 +1337,7 @@ def main() -> int:
             "server": args.server,
             "port": args.port,
             "searchText": args.text,
+            "videoName": args.video_name,
             "serverPath": args.server_path,
             "watchdogMs": args.watchdog_ms,
             "watchdogSeconds": args.watchdog_ms / 1000.0,

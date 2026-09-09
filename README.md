@@ -99,6 +99,7 @@ launch                launch Dev with deterministic DEV001 test identity
 client-id              inspect or explicitly manage the test client identity
 mcp-test              exercise the MCP protocol
 mcp-player-matrix     run device-backed playback cases
+mcp-stock-mkv-matrix run strict all-player stock-SageTV MKV compatibility cases
 ```
 
 For a new machine or AI handoff, run `commission_test_environment.cmd` on
@@ -214,6 +215,21 @@ Physical tests must record the APK hash, device/API, server build, backend,
 streaming mode, decoder, media state, visible A/V result, and correlated
 Android/server evidence. Watchdog expiration is an observation, not automatic
 fault attribution.
+
+Run the strict stock-server MKV gate with the selected non-production device
+and the `stock=true` server from `config/firetv.toml`:
+
+```powershell
+dev.cmd mcp-stock-mkv-matrix
+```
+
+The command reads `fixtures.mkv_searches` or repeatable `--text` MediaFile-name arguments and
+runs Media3, legacy ExoPlayer, IJK, and every GSY engine over hardware Pull.
+It requires healthy startup plus absolute seek, forward/backward seek, and
+pause/resume recovery for every file/backend. It starts the selected file with
+the stock Sagex `Watch` API rather than navigating an STV-specific Search UI.
+Unlike the exploratory player matrix, any missing/rejected playback operation
+makes this strict gate fail.
 
 The commissioned Vibe server supports an opt-in debug-only exact-path start
 that avoids Search UI navigation:

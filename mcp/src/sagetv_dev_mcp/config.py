@@ -111,6 +111,15 @@ class TestEnvironment:
     def fixture(self, name: str, default: str = "") -> str:
         return _string(_table(self.data, "fixtures").get(name), default)
 
+    def fixture_list(self, name: str, default: list[str] | None = None) -> list[str]:
+        value = _table(self.data, "fixtures").get(name)
+        if value is None:
+            return list(default or [])
+        if isinstance(value, list):
+            return [item for item in (_string(item) for item in value) if item]
+        single = _string(value)
+        return [single] if single else list(default or [])
+
     def test_default(self, name: str, default: Any = None) -> Any:
         return _table(self.data, "test_defaults").get(name, default)
 
@@ -193,6 +202,12 @@ class TestEnvironment:
         channels = self.test_default("live_channels", [])
         if channels and not isinstance(channels, list):
             errors.append("test_defaults.live_channels must be an array")
+        mkv_searches = _table(self.data, "fixtures").get("mkv_searches", [])
+        if mkv_searches and (
+            not isinstance(mkv_searches, list)
+            or not all(isinstance(item, str) and item.strip() for item in mkv_searches)
+        ):
+            errors.append("fixtures.mkv_searches must be an array of non-empty search strings")
         servers = _table(self.data, "servers")
         configs = [(name, self._smb_config_for_server(server)) for name, server in servers.items() if isinstance(server, dict)]
         if not configs:
@@ -240,6 +255,10 @@ def configured_device_serial(name: str | None = None) -> str:
 
 def default_fixture(name: str, default: str = "") -> str:
     return load_test_environment().fixture(name, default)
+
+
+def default_fixture_list(name: str, default: list[str] | None = None) -> list[str]:
+    return load_test_environment().fixture_list(name, default)
 
 
 def default_test_value(name: str, default: Any = None) -> Any:

@@ -247,6 +247,11 @@ case "${1:-help}" in
     # Complete player/backend matrix including all GSY engine selections; media watchdog outcomes are observational.
     run_automated_mcp_test mcp_player_matrix.py "$@"
     ;;
+  mcp-stock-mkv-matrix)
+    shift
+    # Strict stock-SageTV MKV Pull/hardware gate across every selectable player/backend.
+    run_automated_mcp_test mcp_stock_mkv_matrix.py "$@"
+    ;;
   mcp-player-tune)
     shift
     # Set/show Dev-only in-memory player tuning; requires v0.5.70 debugStatusVersion>=13.
@@ -493,6 +498,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-media3-matrix --text X [options]  Compare Media3 Push/Dynamic vs Pull seek and pause/resume recovery
   mcp-media3-comskip-matrix --text X [options]  Compare Media3 Push/Dynamic vs Pull direct-command Comskip recovery
   mcp-player-matrix --text X [options]  Full matrix or --issues-only focused regression rerun
+  mcp-stock-mkv-matrix [--text X ...]   Strict all-player Pull/hardware MKV gate by MediaFile name on a configured stock server
   mcp-player-tune [options]            Set/show Dev runtime player tuning without rebuilding
   mcp-player-tuning-matrix --text X [options]  Sweep runtime tuning; --streaming accepts pull,push
   mcp-session-test [options]    Launch/configure/connect/play-by-name/verify/exit an end-to-end test session
