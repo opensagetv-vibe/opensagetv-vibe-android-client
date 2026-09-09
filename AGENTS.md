@@ -99,6 +99,12 @@ Record skipped device tests as SKIPPED, never PASS.
 
 ## Playback safety
 
+- Treat an unmodified stock SageTV server as the primary compatibility target
+  and first physical test gate. Resolve playback and protocol issues in the
+  Android client whenever the stock protocol provides enough information.
+  Change Sage.jar, FFmpeg/MIM, or another server component only as a last
+  resort for behavior that stock SageTV cannot express; keep every such
+  extension optional, negotiated, and backed by a safe stock fallback.
 - Legacy ExoPlayer remains the default until physical commissioning says
   otherwise.
 - Preserve Push/Pull/Fixed behavior and do not merge their ownership semantics.

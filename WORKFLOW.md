@@ -14,6 +14,12 @@ All launchers resolve this checkout from their own location and reuse the
 sibling unified image/container. Android install is guarded to the Dev package;
 complete first-time setup manually before MCP playback automation.
 
+Unmodified stock SageTV is the default compatibility baseline. Test and fix the
+client against stock first. Server-side Sage.jar or FFmpeg/MIM changes are a
+last resort, must be optional and capability-negotiated, and must preserve a
+bounded stock fallback. A Vibe server may prove an optional enhancement, but
+must not replace the stock-server regression gate.
+
 Local commissioning uses only the ignored `config/firetv.toml`; the GitHub and
 handoff-safe schema is `config/firetv.example.toml`. Run `dev.cmd config-check`
 or `./dev.sh config-check` before device work. Named device/server aliases,
