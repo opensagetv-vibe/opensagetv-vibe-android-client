@@ -4,7 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -69,6 +74,7 @@ public class ServerDiscovery {
 
     private ServerInfo[] discoverServersLocked(int discoveryTimeout, ServerDiscoverCallback callback) {
         List<ServerInfo> servers = (callback == null) ? new ArrayList<ServerInfo>() : null;
+        Set<String> discoveredServers = new HashSet<String>();
         log.debug("Sending out discovery packets to find SageTVPlaceshifter Servers...");
         try {
             // Try on the encoder discovery port which is less likely to be in
@@ -87,18 +93,29 @@ public class ServerDiscovery {
             data[3] = 1;
             pack.setLength(32);
             sock.setBroadcast(true);
-            // Find the broadcast address for this subnet.
-            // String myIP = SageTV.api("GetLocalIPAddress", new
-            // Object[0]).toString();
-            // int lastIdx = myIP.lastIndexOf('.');
-            // myIP = myIP.substring(0, lastIdx) + ".255";
-            pack.setAddress(java.net.InetAddress.getByName("255.255.255.255"));
             pack.setPort(31100);
-            sock.send(pack);
+            int sentCount = 0;
+            for (java.net.InetAddress target : getDiscoveryBroadcastAddresses()) {
+                try {
+                    pack.setAddress(target);
+                    pack.setLength(32);
+                    sock.send(pack);
+                    sentCount++;
+                    log.debug("Sent SageTV discovery packet to {}", target.getHostAddress());
+                } catch (java.io.IOException sendError) {
+                    // A device can expose stale, VPN, or otherwise unusable
+                    // interfaces. Keep trying the remaining broadcast targets.
+                    log.debug("Unable to send SageTV discovery packet to {}",
+                            target.getHostAddress(), sendError);
+                }
+            }
+            if (sentCount == 0)
+                throw new java.io.IOException("No usable SageTV discovery broadcast target");
             long startTime = System.currentTimeMillis();
             do {
                 int currTimeout = (int) Math.max(1, (startTime + discoveryTimeout) - System.currentTimeMillis());
                 sock.setSoTimeout(currTimeout);
+                pack.setLength(data.length);
                 sock.receive(pack);
                 if (pack.getLength() >= 4) {
                     log.debug("Discovery packet received: {}", pack);
@@ -130,6 +147,11 @@ public class ServerDiscovery {
                         {
                             si.port = ((data[13] & 0xFF) << 8) | (data[14] & 0xFF);
                         }
+                        String serverKey = si.address + ":" + si.port + ":" + si.locatorID;
+                        if (!discoveredServers.add(serverKey)) {
+                            log.debug("Ignoring duplicate discovery response from {}", si.address);
+                            continue;
+                        }
                         log.debug("Added server info: {}", si);
                         if (callback != null)
                             callback.serverDiscovered(si);
@@ -150,6 +172,54 @@ public class ServerDiscovery {
             }
         }
         return (servers == null) ? null : servers.toArray(new ServerInfo[0]);
+    }
+
+    static List<java.net.InetAddress> getDiscoveryBroadcastAddresses() {
+        List<java.net.InetAddress> interfaceBroadcasts = new ArrayList<java.net.InetAddress>();
+        try {
+            Enumeration<java.net.NetworkInterface> interfaces =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            if (interfaces != null) {
+                for (java.net.NetworkInterface networkInterface : Collections.list(interfaces)) {
+                    try {
+                        if (!networkInterface.isUp() || networkInterface.isLoopback())
+                            continue;
+                    } catch (java.net.SocketException ignored) {
+                        continue;
+                    }
+                    for (java.net.InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                        java.net.InetAddress broadcast = interfaceAddress.getBroadcast();
+                        if (broadcast != null)
+                            interfaceBroadcasts.add(broadcast);
+                    }
+                }
+            }
+        } catch (java.net.SocketException ignored) {
+            // The limited broadcast remains available as the compatibility
+            // fallback when interface enumeration is unavailable.
+        } catch (SecurityException ignored) {
+            // Some restricted runtimes do not expose interface information.
+        }
+        return normalizeBroadcastTargets(interfaceBroadcasts);
+    }
+
+    static List<java.net.InetAddress> normalizeBroadcastTargets(
+            Iterable<java.net.InetAddress> interfaceBroadcasts) {
+        LinkedHashSet<java.net.InetAddress> targets = new LinkedHashSet<java.net.InetAddress>();
+        try {
+            targets.add(java.net.InetAddress.getByName("255.255.255.255"));
+        } catch (java.net.UnknownHostException impossible) {
+            throw new IllegalStateException("IPv4 limited broadcast address is unavailable", impossible);
+        }
+        if (interfaceBroadcasts != null) {
+            for (java.net.InetAddress address : interfaceBroadcasts) {
+                if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || address.isMulticastAddress())
+                    continue;
+                targets.add(address);
+            }
+        }
+        return new ArrayList<java.net.InetAddress>(targets);
     }
 
     public synchronized void close() {

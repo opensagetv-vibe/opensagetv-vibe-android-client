@@ -1,5 +1,22 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Directed-broadcast server discovery checkpoint (2026-09-09)
+
+The v0.5.91 client sends the unchanged SageTV `STV` discovery request to both
+the legacy IPv4 limited broadcast and every unique directed broadcast address
+reported by an active non-loopback interface. This covers Fire OS/network
+stacks that do not forward `255.255.255.255` while preserving stock-server
+protocol compatibility and manual/direct connection behavior. Duplicate
+responses are collapsed by address, advertised port, and locator ID. A broken
+or stale interface cannot prevent attempts on the remaining targets.
+
+Focused Core tests and the complete host test suite pass. The clean APK has
+SHA-256 `9d102efcbb5910df58e6286aa4e78086e770b01525be3d4bf71b1e6c951d8073`.
+After a clean uninstall/install on non-Pro Fire TV `.25`, Android package
+metadata reports `0.5.91-DEV-DEBUG` and a fresh launcher discovery lists stock
+`.175` and isolated Vibe `.232` exactly once. Screenshot evidence is
+`artifacts/firetv/20260910-001956_20260909-directed-discovery-clean-install.png`.
+
 ## Stock-server all-player MKV checkpoint (2026-09-09)
 
 The v0.5.90 APK retains the physically proven v0.5.89 player source and plays

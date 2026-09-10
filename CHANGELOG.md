@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## v0.5.91 - 2026-09-09
+
+- Made SageTV server auto-discovery reliable on networks where Android/Fire OS
+  does not route the IPv4 limited broadcast. Discovery now retains the stock
+  `255.255.255.255:31100` request and also sends the same protocol packet to
+  every unique directed broadcast address reported by an active non-loopback
+  interface. Unusable VPN/stale interfaces fail independently, repeated
+  replies from the same server are suppressed, and manual/direct server entry
+  remains unchanged. Host tests cover target ordering, filtering,
+  deduplication, limited-broadcast fallback, shutdown, and restart behavior.
+  The clean `0.5.91-DEV-DEBUG` APK has SHA-256
+  `9d102efcbb5910df58e6286aa4e78086e770b01525be3d4bf71b1e6c951d8073`.
+  After a clean uninstall/install on non-Pro Fire TV `.25`, a fresh launcher
+  discovery displayed both the unmodified stock server `.175` and isolated
+  Vibe server `.232` exactly once. Screenshot evidence is
+  `artifacts/firetv/20260910-001956_20260909-directed-discovery-clean-install.png`.
+
 ## v0.5.90 - 2026-09-09
 
 - Added a strict stock-SageTV MKV compatibility workflow. The new
