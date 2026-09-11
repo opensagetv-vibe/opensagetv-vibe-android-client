@@ -394,7 +394,8 @@ versioned `OpenSageTV-Vibe-Android-Client-v*.apk` asset, and starts the
 download. It also leaves visible **Download latest APK** and **View latest
 release** links for embedded TV browsers that block automatic navigation or
 when the unauthenticated GitHub API is temporarily unavailable. GitHub Pages
-must be configured to deploy the `/docs` folder from the `main` branch.
+is configured to deploy the `/docs` folder from the `main` branch with HTTPS
+enforced.
 
 ## Documentation map
 

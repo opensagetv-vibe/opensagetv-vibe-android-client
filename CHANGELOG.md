@@ -13,6 +13,8 @@
   Gradle tests, structural validation, and a clean 60-task build. The APK is
   byte-identical to the previously commissioned v0.5.91 artifact at SHA-256
   `9d102efcbb5910df58e6286aa4e78086e770b01525be3d4bf71b1e6c951d8073`.
+  GitHub Pages is enabled for `main:/docs`; the public HTTPS page built
+  successfully, returned HTTP 200, and resolved the current `v0.5.90` APK.
 
 ## v0.5.91 - 2026-09-09
 

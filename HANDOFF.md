@@ -7,8 +7,8 @@ the public `releases/latest` API, accepts only the established
 `OpenSageTV-Vibe-Android-Client-v*.apk` asset name, exposes a manual download
 button, then performs a browser redirect. A permanent latest-release link and
 safe text-only error state remain usable if automatic navigation or the API
-fails. Serve `/docs` from `main` in the repository's GitHub Pages settings;
-the resulting URL is
+fails. GitHub Pages is configured to serve `/docs` from `main` with HTTPS
+enforced. The resulting URL is
 `https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/`.
 This host-only addition does not change the APK; the checkout's existing
 `REQUIRES_BUILD=true` still reflects the earlier v0.5.91 Android discovery
@@ -16,6 +16,9 @@ change. The completed gate passes 507 repository tests, 72 MCP/workflow tests,
 Core Gradle tests, structural validation, and a clean 60-task build. The APK
 remains byte-identical at SHA-256
 `9d102efcbb5910df58e6286aa4e78086e770b01525be3d4bf71b1e6c951d8073`.
+Repository checks and Pages deployment passed at commit `9c58061`; the live
+page returned HTTP 200 and selected
+`OpenSageTV-Vibe-Android-Client-v0.5.90.apk` from public release `v0.5.90`.
 
 ## Directed-broadcast server discovery checkpoint (2026-09-09)
 
