@@ -383,6 +383,19 @@ APK name is:
 OpenSageTV-Vibe-Android-Client-debug.apk
 ```
 
+### Permanent latest-APK URL
+
+GitHub Pages serves a stable download entry point at:
+
+<https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/>
+
+The page queries this repository's public `releases/latest` API, selects the
+versioned `OpenSageTV-Vibe-Android-Client-v*.apk` asset, and starts the
+download. It also leaves visible **Download latest APK** and **View latest
+release** links for embedded TV browsers that block automatic navigation or
+when the unauthenticated GitHub API is temporarily unavailable. GitHub Pages
+must be configured to deploy the `/docs` folder from the `main` branch.
+
 ## Documentation map
 
 - `CHANGELOG.md` — all version history.

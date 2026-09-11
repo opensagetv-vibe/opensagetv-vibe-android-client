@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added a GitHub Pages latest-APK entry point under `docs/index.html`. It
+  discovers the public repository's latest release through the GitHub API,
+  matches the established versioned APK asset name, redirects automatically,
+  and retains manual APK/release links when scripted navigation or API access
+  is unavailable. Static tests lock the repository URL, asset-name contract,
+  fallback controls, and safe text-only error rendering. This is website,
+  documentation, and test code only; it does not alter the Android APK. The
+  completed gate passes 507 repository tests, 72 MCP/workflow tests, Core
+  Gradle tests, structural validation, and a clean 60-task build. The APK is
+  byte-identical to the previously commissioned v0.5.91 artifact at SHA-256
+  `9d102efcbb5910df58e6286aa4e78086e770b01525be3d4bf71b1e6c951d8073`.
+
 ## v0.5.91 - 2026-09-09
 
 - Made SageTV server auto-discovery reliable on networks where Android/Fire OS

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Download OpenSageTV Vibe</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #071126;
+      color: #f5f8ff;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #071126, #0b2f75);
+    }
+
+    main {
+      width: min(34rem, calc(100% - 3rem));
+      padding: 2rem;
+      border: 1px solid #457ee8;
+      border-radius: 1rem;
+      background: rgba(5, 14, 35, 0.9);
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    .button {
+      display: inline-block;
+      margin: 0.5rem;
+      padding: 0.8rem 1.15rem;
+      border-radius: 0.5rem;
+      background: #8bd800;
+      color: #102000;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .secondary {
+      background: #dbe7ff;
+      color: #071126;
+    }
+
+    #download[hidden] {
+      display: none;
+    }
+
+    #details {
+      overflow-wrap: anywhere;
+      color: #c4d4f4;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>OpenSageTV Vibe</h1>
+    <p id="status" role="status" aria-live="polite">Finding the latest Android APK&hellip;</p>
+    <p id="details"></p>
+    <p>
+      <a id="download" class="button" href="#" hidden>Download latest APK</a>
+      <a class="button secondary"
+         href="https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/latest">
+        View latest release
+      </a>
+    </p>
+    <noscript>
+      <p>JavaScript is required for automatic APK discovery. Use the latest-release link above.</p>
+    </noscript>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const api =
+        "https://api.github.com/repos/opensagetv-vibe/opensagetv-vibe-android-client/releases/latest";
+      const apkName = /^OpenSageTV-Vibe-Android-Client-v.*\.apk$/i;
+      const status = document.getElementById("status");
+      const details = document.getElementById("details");
+      const download = document.getElementById("download");
+
+      fetch(api, {
+        headers: { Accept: "application/vnd.github+json" }
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`GitHub API returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then((release) => {
+          const assets = Array.isArray(release.assets) ? release.assets : [];
+          const apk = assets.find((asset) => apkName.test(asset.name));
+          if (!apk || typeof apk.browser_download_url !== "string") {
+            throw new Error("The latest release does not contain the expected APK");
+          }
+
+          download.href = apk.browser_download_url;
+          download.hidden = false;
+          status.textContent = "Latest APK found. Starting download…";
+          details.textContent = `${release.tag_name || "Latest release"}: ${apk.name}`;
+
+          // Keep the visible link as a fallback for browsers that block or
+          // cancel scripted navigation, including embedded TV downloaders.
+          window.setTimeout(() => window.location.replace(apk.browser_download_url), 250);
+        })
+        .catch((error) => {
+          status.textContent = "Unable to locate the latest APK automatically.";
+          details.textContent = error instanceof Error ? error.message : String(error);
+        });
+    })();
+  </script>
+</body>
+</html>
