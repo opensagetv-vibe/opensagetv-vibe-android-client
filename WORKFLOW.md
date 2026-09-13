@@ -39,3 +39,9 @@ baseline drift before extraction, then resumes test, validate, build, and
 install. The package ID remains `opensagetv-vibe-android` for compatibility.
 Android then performs its guarded DEV001 launch as its commissioning action.
 The sibling build environment's `WORKFLOW.md` defines the common contract.
+
+GitHub release notes always use concise bullet points grouped by changes,
+fixes, compatibility, validation, and known limitations. Do not publish one
+large release-note paragraph. Playback issue instructions must keep the
+long-press diagnostic-export screenshots and no-email SMB retrieval steps
+current with the application UI.

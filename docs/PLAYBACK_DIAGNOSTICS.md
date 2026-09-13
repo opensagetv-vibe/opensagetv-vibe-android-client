@@ -90,8 +90,123 @@ labels, mystery text, wall-clock date/time, and other fields that do not help
 isolate a SageTV transport, buffering, decoder, cadence, seek, caption, or A/V
 sync fault.
 
+### Export a support bundle from a TV device
+
+The client can create a bounded, redacted support bundle without requiring an
+email or file-manager app on the TV. Configure its destination under
+**Settings > SMB Direct Settings > Diagnostic export**. This destination and
+its anonymous-or-credential authentication are independent of both media SMB
+and configuration SMB.
+
+Choose one mode:
+
+- **Off** keeps diagnostic SMB disabled. Local **Create and share** remains
+  available when Android has a suitable share target.
+- **On request** uploads one ZIP only after the user confirms the request.
+- **Always** maintains one bounded, rotated UTF-8 session log and refreshes it
+  atomically at a limited interval and on STOP, errors, background, and exit.
+  Failed uploads remain in the protected local spool and retry after launch.
+
+Use **Test diagnostics SMB connection** before reproducing a problem. A pass
+reports URL validation, DNS/connect, authentication, share-open, file
+write/read/hash/delete, and total latency. The tiny uniquely named test file is
+removed immediately. A failure identifies the exact stage without displaying
+credentials.
+
+During or immediately after the problem:
+
+1. Long-press the remote Select/OK key to open the playback panel.
+2. Select the bug icon beside the triangular **Video Info** icon.
+3. In **On request**, choose **Upload to SMB** and confirm. In **Always**,
+   choose **Upload now**. Use **Create and share** only when the device has a
+   useful Android share destination.
+4. In Settings, copy the displayed filename, byte count, SHA-256, last-update
+   time, and result into the GitHub issue. Retrieve the matching file from the
+   configured SMB directory on another computer and attach it to the issue.
+
+![Long-press playback menu with the diagnostic bug icon beside Video Info](images/diagnostics-long-press-menu.png)
+
+![Export Diagnostics dialog](images/diagnostics-export-dialog.png)
+
+The ZIP contains bounded app logs, recent playback traces, a player snapshot,
+redacted device/configuration metadata, and checksums. Review it before public
+upload. It excludes credentials, client IDs, server addresses, and full media
+paths; never attach a recording unless the user owns it and intends to share
+it.
+
+### Test the currently loaded video
+
+The long-press playback panel has a separate **Test Current Video** icon: a
+video rectangle with a play symbol and diagnostic pulse. It is independent of
+the bug/export icon. With a video already playing, select the test icon and
+confirm **Run test**. The bounded test:
+
+- samples sustained playback position, rendered/dropped frames, buffering,
+  source reads, decoder/output, display, sync, and transport state;
+- verifies pause and resume when the stream was originally playing;
+- seeks to a safe nearby position, returns, repeats the first target, and
+  records recovery time, landing error, bytes/reads, and Pull probe-cache use;
+- skips seek checks when a DVD menu is active or the media has no safe seek
+  window; and
+- restores the original position and play/pause state before showing results.
+
+The test intentionally moves playback for a short period; it does not modify
+the media file or SageTV metadata. A session/player replacement aborts the test
+safely. Each result is redacted and stored under
+`current-video-tests/` in the next manual ZIP, On-request SMB ZIP, or Always
+session export. The client retains only the latest four reports. The completion
+dialog can immediately view the report or open the normal export flow.
+
+Use this action on the affected device and media before changing player
+settings. It makes reports from Fire TV, ONN, NVIDIA, and other Android TV
+hardware comparable without requiring MCP or ADB.
+
+![Test Current Video icon selected in the long-press playback menu](images/test-current-video-menu.png)
+
+![Test Current Video confirmation dialog](images/test-current-video-dialog.png)
+
+All public workflow screenshots are tightly cropped captures made while the
+project-generated Vibe fixture is playing. They contain no broadcast, movie,
+or user recording frame.
+
 If one of these sources is unavailable, record it as unavailable rather than
 inferring a cause from another layer.
+
+### Long-recording OSD evidence
+
+Recording length alone is not an accepted root cause for a persistent SageTV
+timeline. The ONN v1 regression uses the completed 5.5-hour
+`ReconstructionAmericaAftertheCivilWar-48000171-0.ts` fixture and covers
+Wait-for-playback On/Off, smooth shuttle, Stop, restart, and an independent idle
+observation. On 2026-09-12 the OSD cleared normally against both stock `.175`
+and Vibe `.232`; server and client evidence also showed the shuttle rate return
+from `4.0` to `1.0`. Preserve this as a non-reproduction. A fix requires an
+affected-device trace that correlates GFX commands, remote repeats, playback
+rate, and the visible HDMI result.
+
+Debug/MCP server switching must not reuse the old resumed player activity. The
+debug receiver closes the prior session, finishes that activity, and applies a
+bounded 750 ms teardown delay before launching the new connection. A switch
+passes only when the replacement connection generation remains live after the
+old activity has completed teardown.
+
+### Stable reference-player comparison
+
+For every reproducible DVD, video, audio, subtitle, demux, timestamp, cadence,
+seek, or hardware-decoder defect, compare the same media and device with
+current Kodi, VLC, and, when source or observable behavior is available, MX
+Player. Inspect the relevant upstream demux, timestamp reconstruction, clock,
+frame scheduling, decoder selection, bitstream-conversion, subtitle, and
+platform-workaround code before inventing a Vibe-only rule.
+
+Treat reference-player success as a diagnostic lead, not proof that one whole
+engine should be embedded. Record the exact upstream behavior and license,
+map only the smallest compatible rule into Vibe's existing player boundary,
+and validate it with a one-variable before/after test. Never copy a global
+device blacklist or codec workaround merely because it exists upstream; the
+same failing fixture, Vibe telemetry, and physical hardware must demonstrate
+that the rule applies. Preserve hardware decoding, stock SageTV compatibility,
+and explicit fallback behavior.
 
 For legacy event-225 captions, advancing protocol counters alone are not a
 post-seek pass. Inspect the captured frame: CEA-608 lines must remain in
@@ -134,6 +249,15 @@ Never compare these as if they were interchangeable. Every seek report should
 record the requested target, actual backend landing position, applicable server
 anchor, duration/live edge, and timestamps for invoke, return, discontinuity,
 READY, first frame, and resumed audio.
+
+For a same-file MPEG-TS cache comparison, keep one player session alive and use
+the tuning matrix's `--check absolute_seek --repeat-count N` mode. It seeks to
+`--target-ms`, moves `--repeat-away-ms` away, then returns to the identical
+target. Compare each `repeatObservation` rather than treating an immediate seek
+to the already-current position as a cache hit. Record Pull-session reuse,
+probe-cache hit/miss/resident bytes, network reads/bytes/wait, decoder
+init/release counts, recovery time, and landing sanity. Reset runtime tuning
+after every physical experiment.
 
 ## Controlled-experiment rules
 

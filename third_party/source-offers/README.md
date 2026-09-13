@@ -1,7 +1,7 @@
 # Native LGPL source availability and reconstruction
 
-The active APK embeds native FFmpeg code through one ExoPlayer extension AAR
-and the legacy IJKPlayer AARs. This file identifies the exact distributed
+The active APK embeds native FFmpeg code through legacy ExoPlayer and Media3
+extension AARs plus the legacy IJKPlayer AARs. This file identifies the exact distributed
 artifacts, the source revisions evidenced by their binaries, and the build
 scripts retained in this source release. The full LGPL 2.1 text is packaged at
 `third_party/licenses/LGPL-2.1.txt`.
@@ -28,6 +28,35 @@ build environment's Android NDK r21 (or downloads r21 for a standalone build),
 enables the distributed decoder set, rebuilds the extension with 16 KB ELF
 `LOAD` alignment, and copies the resulting AAR. The embedded configuration
 disables GPL, nonfree, program, and unrelated-library features.
+
+## Media3 FFmpeg extension
+
+Distributed artifact:
+
+| File | SHA-256 |
+| --- | --- |
+| `source/dev/libs/extension-media3-ffmpeg-1.11.0.aar` | `62f16d106c6ea04905d63d4663877def776887cc1915105b486cb22cd4c53f07` |
+
+The Java/JNI wrapper is AndroidX Media tag `1.11.0`, exact commit
+`2bc207851df311340767e913931ca7b28cab1794`:
+
+`https://github.com/androidx/media/tree/2bc207851df311340767e913931ca7b28cab1794/libraries/decoder_ffmpeg`
+
+The embedded decoder reports `Lavc60.3.100` and was built from the FFmpeg 6.0
+branch at exact commit `ba69be84a1ceabfb39127831ad8da0fd7cb471f3`:
+
+`https://github.com/FFmpeg/FFmpeg/tree/ba69be84a1ceabfb39127831ad8da0fd7cb471f3`
+
+`source/dev/media3/buildffmpegext.sh` pins both revisions and Android NDK
+26.1.10909125, enables only AAC, MP3, AC-3/E-AC-3, TrueHD, DTS, Vorbis, Opus,
+FLAC, ALAC, mu-law, and A-law audio decoders, and rebuilds all four Android
+ABIs. It then renames only the packaged JNI library to
+`libmedia3ffmpegJNI.so`; the application configures that exact name so legacy
+Exo's independent `libffmpegJNI.so` can coexist in the same process. The
+project's renderer factory keeps MediaCodec video and does not register the
+module's experimental FFmpeg video renderer. The FFmpeg configuration starts
+from `--disable-everything`, disables programs and unrelated libraries, and
+enables no GPL or nonfree component.
 
 ## IJKPlayer and its FFmpeg runtime
 

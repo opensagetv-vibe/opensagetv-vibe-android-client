@@ -20,6 +20,7 @@
 /screenshots/*
 !/screenshots/.gitkeep
 /miniclient-src/
+/SageTV-MiniClient-Dev/
 /mcp/.venv/
 **/.gradle/
 **/.cxx/

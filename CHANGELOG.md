@@ -2,6 +2,225 @@
 
 ## Unreleased
 
+- Completed the ONN v1 native-hardware release matrix against the unmodified
+  SageTV server. Media3, legacy ExoPlayer, IJK, and both GSY delegates passed
+  applicable MPEG-2/AC-3 startup, audio, seek, pause/resume, STOP, and recovery
+  gates. The authored DVD, physical Scooby-Doo menus, and exact 8:00 Aladdin
+  main-title cadence/control/fallback checks also passed with clean teardown.
+
+- Added release-safe **Test Current Video** and diagnostic export icons to the
+  long-press playback menu. Diagnostic SMB has independent anonymous or
+  credential authentication, Off/On request/Always modes, a physical
+  write/read/hash/delete connection test, bounded redacted bundles, and retry
+  spooling. GitHub issue guidance now uses tightly cropped screenshots captured
+  over the generated Vibe fixture and explains retrieval without email.
+
+- Made known-file automation try the configured exact server path first, then
+  an indexed MediaFile Watch, and only then the legacy on-screen Search
+  fallback. `--direct-only` now fails closed for controlled fixture tests.
+  Raw `dev.sh adb` commands also pin the configured device unless the caller
+  supplies an explicit selector, preventing accidental prompts on another
+  commissioned Android device.
+
+- Finalized v0.5.91 release documentation and metadata. The complete project
+  gate passes 536 scaffold/static tests, 84 MCP tests, Core JUnit, and the
+  Gradle test build; `REQUIRES_BUILD=true` correctly reflects packaged player,
+  diagnostics, resource, and dependency changes.
+
+- Verified the v0.5.91 source/APK package independently. A fresh Windows-
+  extracted, Git-less checkout passed its 1,423-file manifest, 537
+  scaffold/static tests (one Git-metadata-only skip), 84 MCP tests, Core
+  JUnit, full validation, and a clean 60-task APK build. Manifest enumeration
+  now rejects an enclosing parent Git index and uses the archive manifest,
+  fixing the portability defect that this gate exposed.
+
+- Stabilized project task reporting: `TASKS.md` is now a durable master
+  checklist with permanent IDs, retained `[x]` completion state, and a dated
+  revision ledger. Updated the contributor rules so completed work is no
+  longer silently removed from the visible task list.
+
+- Completed the first two decoder-stability implementation gates after the
+  Kodi/VLC audit: bounded playback-error classification and policy-filtered
+  MediaCodec initialization fallback. Focused Core tests, 66 static player
+  checks, and Android Java compilation pass; physical cross-device proof
+  remains consolidated under D6.
+
+- Added bounded session-local fatal video-decoder quarantine for Media3 and
+  legacy Exo/GSY delegates. Only classifier-proven runtime codec failures can
+  exclude the currently selected decoder; the media source is reattached at
+  the preserved position so the renderer reconstructs against the next
+  policy-eligible candidate. Exclusions clear with the MediaFile session and
+  never apply to datasource, parser, seek, flush, audio, or teardown failures.
+
+- Added bounded MediaCodec/AudioTrack transition evidence for Media3 and
+  legacy Exo/GSY delegates: audio underruns, audio-output failures, downstream
+  format events, and track changes now flow through MCP, Test Current Video,
+  and redacted diagnostic exports. Extended the reproducible FFmpeg suite with
+  TS timestamp-discontinuity, AC-3-to-AAC PMT change, and MPEG-2 sequence-header
+  resolution-change fixtures. Generation produced 17 playable fixtures plus
+  three explicit source/fault-injection cases; 47 focused tests pass.
+
+- Added bounded per-session decoder-attempt telemetry to Media3, legacy Exo,
+  and their GSY delegates: ordered policy-eligible candidates, selected video
+  and audio decoders, codec/audio failures, underruns, track changes, temporary
+  exclusions, fallback reason/result, and a twelve-event trace. The same
+  redacted state is exposed through detailed playback stats, MCP snapshots,
+  Test Current Video, and manual/SMB diagnostic exports. Core tests, all 40
+  player-backend static tests, and Android TV Java compilation pass.
+
+- Completed the audit-first Kodi/VLC decoder-stability source review against
+  pinned revisions. The audit covers TS/PS/DVD/MKV demux, growing streams,
+  timestamps and clocks, MediaCodec and Surface lifecycle, audio output,
+  captions/subtitles, DVD navigation, controls, retries, and diagnostics. It
+  classifies each behavior as already handled, implementation work,
+  telemetry/test-only, rejected, or a separate feature and records the six
+  accepted tasks in dependency order. Kodi/VLC code is not copied or launched;
+  MX Player is excluded as a closed-source implementation reference.
+
+- Made direct context-aware MediaFile launch the default MCP playback-start
+  path. Known recordings are resolved through Sagex or the stock SageTV Web
+  Interface and started by MediaFile ID; fragile on-screen Search is now only
+  a last-resort fallback or explicit `--force-ui-search` UI test. Stock Web
+  resolution now covers both `TVFiles` recordings and `MediaFiles` imports.
+  Physical `.175`/ONN validation started and verified `Taskmaster` MediaFile
+  `65500403` through Media3 Pull/hardware without opening Search.
+
+- Completed the bounded same-file Pull probe cache for Media3 and legacy Exo.
+  It retains only exact random-read bytes for stable completed files and clears
+  on path, size/growth, disable, or session release. ONN testing proved a
+  524 KiB nearby repeat-cache hit with exact landing and 362 ms recovery.
+  A controlled 8 MiB/16 MiB distant seek-away comparison showed no meaningful
+  benefit from doubling memory, so the safer 8 MiB limit remains. Decoder
+  lifecycle stayed at one initialization and zero releases, isolating the
+  remaining long-seek cost to MPEG-TS timestamp/demux discovery.
+
+- Added a release-safe **Test Current Video** action with its own play/pulse
+  icon in every long-press navigation layout. It measures sustained cadence,
+  pause/resume, safe reversible and repeated seek recovery, landing accuracy,
+  decoder/frame output, buffering, source reads, and Pull cache reuse against
+  the already loaded media, then restores the original position/state. The
+  newest four redacted reports are automatically included in local and SMB
+  diagnostic exports. Physical ONN v1 testing passed all six applicable checks
+  and verified the report inside the exported ZIP.
+
+- Completed the stock-server OTA MPEG-2 reproduction on ONN v1 through
+  Media3, legacy ExoPlayer, and both GSY extractor delegates. All paths retained
+  `c2.amlogic.mpeg2.decoder` hardware video plus real decoded audio and recovered
+  after their applicable seek/pause operations. The captured legacy-GSY failure
+  proved that the 10-second seek watchdog was replacing an extractor while its
+  MPEG-TS timestamp search was still making physical Pull progress; that doubled
+  the work to 42 opens/83 MiB and surfaced a recoverable
+  `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`. Recovery now uses one shared,
+  unit-tested policy to defer while physical reads are advancing. An exact
+  post-fix repeat recovered in 844 ms with three reads/1.5 MiB and no reprepare,
+  parser error, decoder release, or decoder reinitialization. Independent HDMI
+  evidence shows sustained full-screen video and audio after the correction.
+- Added release-safe playback support bundles and an independent diagnostics
+  SMB destination. The new Settings area supports separate anonymous or
+  credential authentication, read-only media SMB testing, write/read/hash/
+  delete configuration and diagnostics tests, and Off, On request, or Always
+  export modes. On-request ZIPs contain bounded redacted logs, playback traces,
+  player/device/config snapshots, and checksums; Always mode atomically
+  refreshes one bounded UTF-8 session log without writing each log line over
+  the network. Failed uploads remain in protected local storage and retry on
+  the next launch.
+- Added a dedicated bug icon beside Video Info in every long-press navigation
+  layout and a GitHub playback issue form with physical ONN screenshots and a
+  no-email SMB retrieval walkthrough. Export status shows filename, byte size,
+  SHA-256, time, and URL/DNS-connect/auth/share/file-operation timing or the
+  exact redacted failure stage. Physical ONN testing verified byte-for-byte
+  upload hashes, atomic Always refresh, background flush, an unreachable-share
+  pending spool surviving a forced process stop, automatic retry after launch,
+  and cleanup of the validation artifacts.
+- Hardened debug/MCP server switching when an existing playback activity is
+  still resumed. The reconnect path now closes the old session, finishes its
+  activity, and delays launching the replacement connection by 750 ms so the
+  old activity teardown cannot close the new socket. Physical ONN v1 switching
+  from stock SageTV `.175` to Vibe `.232` and back retained a live, unique
+  MiniClient session on every generation.
+- Replaced the Windows HDMI-validation wrapper's former external-player
+  dependency with the project-built `opensagetv-vibe-ffmpeg-mim` FFmpeg. The
+  Python-backed command captures the DirectShow HDMI video/audio inputs to a
+  bounded H.264/AAC artifact and remains usable when PowerShell script execution
+  is disabled. A 5.5-hour MPEG-2 recording was then exercised on ONN v1 against
+  both stock and Vibe servers: Wait-for-playback On/Off, shuttle, Stop, and
+  restart all cleared the OSD normally. Server traces prove playback rate was
+  restored from `4.0` to `1.0`; duration alone did not reproduce the reported
+  persistent Fire TV timeline, so that affected-device investigation remains
+  open.
+- Fixed encoded-audio silence on the ONN v1/Amlogic HDMI path without a device
+  profile or server change. Media3 and legacy ExoPlayer now default to a
+  PCM-only sink capability policy and prefer their isolated FFmpeg audio
+  renderer for AC-3/E-AC-3/DTS while retaining hardware MediaCodec video;
+  explicit receiver passthrough remains available by turning off `Decode
+  encoded audio to PCM` in the corresponding player settings. Against stock
+  SageTV `.175`, `Meet the Press` retained `c2.amlogic.mpeg2.decoder` while
+  Media3, legacy ExoPlayer, IJK, and both GSY delegates produced picture and
+  advancing audio. Independent HDMI captures changed Media3 from digital
+  silence (`-91.0 dB` mean) to program audio (`-27.0 dB`), and legacy Exo from
+  `-91.0 dB` to `-26.1 dB`; both GSY delegates and IJK also measured real
+  program audio. Media3, legacy ExoPlayer, IJK, and both GSY delegates passed
+  their applicable FF/REW and pause/resume recovery gates.
+- Made the ADB diagnostic collector tolerate non-UTF-8 Android vendor logcat
+  bytes by decoding UTF-8 with replacement instead of aborting the entire
+  support bundle. The focused Windows unit test covers the malformed-byte
+  case; the unrelated POSIX executable-fixture test remains platform-specific.
+- Revalidated the accumulated Android/player tree with the complete project
+  validator and a clean 60-task Dev APK build. The exact debug APK is
+  50,449,749 bytes with SHA-256
+  `114d84471b4fd4854c8258e6a9e843bbb2c5788ab592e8114e1e3cf22f5403cf`.
+  A clean install on non-Pro Fire TV `.25` then passed native/hardware Aladdin
+  playback against unmodified SageTV `.175`: Media3 selected
+  `OMX.MTK.VIDEO.DECODER.MPEG2`, advanced 36,546 ms over 36,306 ms wall time
+  (1.0066x), rendered 1,740 video and 1,134 audio outputs, and recorded zero
+  dropped/skipped frames or new release gaps. A 34.7-second 1080p HDMI capture
+  independently contains continuous video and AAC audio.
+- Completed the Kodi-derived native-DVD missing-PTS correction on both
+  commissioned MPEG-2 hardware families without introducing a device-model
+  profile. `Auto` now recognizes MediaTek and NVIDIA decoder implementations;
+  explicit `On` and `Off` remain available. On the NVIDIA Shield Tube,
+  `OMX.Nvidia.mpeg2v.decode` held 1.014x real time for 30 seconds with 1,098
+  video and 941 audio outputs, zero dropped frames, and no sustained release
+  gaps; the matching HDMI capture independently shows continuous output. The
+  affected non-Pro Fire TV regression used
+  `OMX.MTK.VIDEO.DECODER.MPEG2`, held 0.992x real time for 31 seconds with
+  1,501 video and 978 audio outputs, and recorded zero drops, skips, or release
+  gaps. A separate stock-server debug-only 8:00 positioning request was not
+  treated as a cadence failure when that private server hook was unavailable.
+- Added stock-server UK DVB transport-stream support and physical Shield Tube
+  validation. Media3, legacy ExoPlayer, and both GSY delegates now select real
+  DVB bitmap subtitles ahead of descriptor-fallback CEA declarations, preserve
+  same-session Off/On behavior, choose the primary English audio instead of a
+  leading NAR track, and recover A/V plus subtitles after FF/REW. The supplied
+  `Breakfast`, `Classic Holby City`, and `Taskmaster` recordings all play with
+  NVIDIA hardware H.264 against unmodified SageTV `.175`; AC-3 falls back to
+  the bundled FFmpeg audio renderer only where the platform cannot decode it.
+  The debug health probe now ignores disabled extension renderers, so their
+  empty counters cannot overwrite the selected renderer, and correctly
+  classifies the Media3 FFmpeg decoder as software.
+- Fixed stock-server completed recordings being treated as growing during
+  seek. The player now uses the completed MediaServer SIZE-growth probe rather
+  than the ambiguous legacy OPENURL hint. Completed Pull recordings retain the
+  active source and use ordinary random-access seek; genuinely growing/live
+  streams and SMB Direct retain their established specialized paths. A
+  duplicate startup SEEK 0 is also recognized as already satisfied, avoiding
+  an extractor reprepare while MPEG-TS sniffing is in progress. The fix is
+  shared by Media3 and legacy ExoPlayer and therefore their GSY delegates.
+- Characterized DVB Teletext separately from DVB bitmap subtitles. Kodi uses a
+  dedicated Teletext demux/decoder subsystem and VLC uses its libzvbi module;
+  neither Media3 TS extractor generation exposes DVB Teletext. The shipped
+  Android FFmpeg extensions are audio decoders and contain no libzvbi path.
+  Adding a second native Teletext PES/page renderer is therefore not a bounded
+  player fix and remains unsupported. Real DVB bitmap tracks are selected and
+  labeled as DVB; injected ATSC CEA fallback tracks are never represented as
+  Teletext. MX Player is proprietary, so it can be used as a behavioral
+  comparison but has no auditable source to import.
+- Added complete redistribution and reconstruction records for the Media3
+  FFmpeg audio fallback. The checked-in AAR is tied to exact AndroidX Media and
+  FFmpeg 6.0 commits, its component-only rebuild script pins NDK 26.1, the
+  legacy and Media3 JNI libraries have distinct names, and executable legal
+  tests prove that the native module contains required audio decoders but no
+  H.264/MPEG-2 video decoder. MediaCodec remains the video path.
 - Added a GitHub Pages latest-APK entry point under `docs/index.html`. It
   discovers the public repository's latest release through the GitHub API,
   matches the established versioned APK asset name, redirects automatically,

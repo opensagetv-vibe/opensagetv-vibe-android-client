@@ -9,6 +9,7 @@ was unavailable; `UNTESTED` is not a pass.
 Current physical commissioning environment:
 
 - Android client: Amazon AFTMM / Android API 25, Dev package only
+- UK DVB client: NVIDIA Shield Tube `192.168.10.68:5555`, Dev package only
 - SageTV server: `sagetv-vibe-server-u26-gpu-j11`, Ubuntu 26.04 / Java 11
 - server GPU: Intel i915 through `/dev/dri/renderD128`
 - completed recording: `MeetthePress-65149351-0.ts`
@@ -56,6 +57,37 @@ The active-player statistics overlay and MIM `--mim-status` query are
 native and Hybrid DVD playback, caption handling, safe seek, Home recovery,
 decoder selection, and their user settings are **Normal features**, even when
 the fixtures and MCP controls above are used to validate them.
+
+## UK DVB subtitle and audio compatibility
+
+The original supplied transport streams were tested unchanged against stock
+SageTV `.175` on the NVIDIA Shield Tube. They cover H.264 1080i50/576i50,
+leading NAR audio, AC-3 and MPEG-L2 primary audio, DVB bitmap subtitles, and a
+separate DVB Teletext elementary stream. Media3, legacy ExoPlayer, and their
+two GSY delegates pass hardware video, primary-English audio selection, DVB
+bitmap display, same-session Off/On, and FF/REW recovery. The selected video
+decoder is NVIDIA MediaCodec; unsupported platform AC-3 audio uses the bundled
+FFmpeg audio decoder without moving video off hardware.
+
+DVB Teletext is not the same codec as DVB bitmap subtitles and is not claimed
+as supported. The comparison found:
+
+| Engine/reference | DVB bitmap | DVB Teletext implementation |
+|---|---|---|
+| Media3 / legacy ExoPlayer | Native TS extractor and bitmap cue renderer | No Teletext PES/page decoder exposed by either pinned extractor generation |
+| Kodi | Supported | Dedicated demux Teletext stream plus Teletext decoder/player state, separate from ordinary subtitle selection |
+| VLC | Supported when built for it | Native `modules/codec/zvbi.c` path backed by libzvbi |
+| FFmpeg | Build-dependent | `libzvbi_teletextdec` exists only when FFmpeg is compiled with libzvbi; the Vibe Android FFmpeg extensions are audio-only and do not contain it |
+| MX Player | Behavioral comparison only | Proprietary source; no auditable implementation can be ported |
+
+Adding Teletext correctly would require a new native dependency/license audit,
+TS PES extraction, page/service state, timing, rendering, controls, and both
+Exo integrations. That is a separate feature rather than a safe correction to
+DVB subtitle handling. The current safe fallback is deterministic: a real DVB
+bitmap track outranks the CEA declarations that must be injected for descriptor-
+less North American ATSC streams; those declarations remain labeled CEA and
+are never presented as Teletext. A Teletext-only service is not exposed or
+rendered instead of silently selecting the wrong subtitle type.
 
 ## What does not work with an unmodified SageTV server
 

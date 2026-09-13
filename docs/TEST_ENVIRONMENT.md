@@ -48,6 +48,25 @@ the share and SageTV-to-SMB path mappings aligned with the server whose
 `OPENURL` paths are being tested. The earlier root/nested SMB forms remain
 readable for local backward compatibility but must not be used in new files.
 
+Each server also declares `media_selection_mode`. Use `stock_web` for an
+unmodified server: automation resolves a MediaFile through Sagex or the stock
+Web Interface and sends the ordinary `Watch` command. `vibe_exact_path`
+requires the opt-in modified-sage.jar exact-path event. `auto` may try that
+extension and then fall back to stock-compatible indexed control. This server
+setting is independent of playback transport (Push, Pull, Fixed, or SMB).
+Set `webserver_installed = true` only when that server exposes Sagex or the
+stock SageTV Web Interface used for MediaFile lookup/Watch control. A
+`stock_web` selection requires it. A modified server using
+`vibe_exact_path` can be tested with it false.
+
+When a fixture supplies a `server_path`, playback automation always tries that
+exact path before title lookup. If exact-path control is unavailable, it may
+fall back to an indexed MediaFile Watch and finally to the legacy STV Search
+screen. Use `mcp-playback-test --direct-only` for deterministic fixture gates:
+an exact-path failure is then reported immediately and Search is never opened.
+Use `--force-ui-search` only when the Search workflow itself is the subject of
+the test.
+
 ## Covered settings
 
 The schema records:
@@ -56,8 +75,10 @@ The schema records:
 - multiple SageTV servers with aliases, MiniClient port, stock/Vibe status,
   Web/Sagex endpoints, Web Remote context, and local credentials;
 - per-server SMB shares, credentials, configuration directory, and path maps;
-- prerecorded, caption, DVD, and other deterministic media fixtures;
-- repeatable stock-library MKV MediaFile names for the strict all-player matrix;
+- multiple named media fixtures with one generic `path`, a `path_type`, a
+  master `enabled` switch, and independently enabled test modes;
+- exact generated/UK-broadcast server paths plus repeatable stock-library MKV
+  MediaFile searches for strict player matrices;
 - HDMI capture backend/device names and artifact directory;
 - player, transport, hardware-decoding, renderer, live-channel, timeout, and
   observation defaults;
@@ -66,7 +87,24 @@ The schema records:
 Command-line arguments continue to override TOML defaults. Specialized tests
 still require an explicit media path when automatically choosing a file would
 be unsafe. The config checker reports missing selections, duplicate aliases,
-malformed SMB mappings, and protected package IDs with actionable messages.
+malformed fixture records/mode switches, malformed SMB mappings, and protected
+package IDs with actionable messages. `path_type = "server_path"` means an
+exact SageTV-side file/DVD path, `server_root` means a generated fixture
+directory, and `search` means SageTV resolves the generic `path` text to a
+MediaFile.
+
+## Storage warm-up in playback matrices
+
+Storage handling is adaptive and independent for every server/file identity.
+On its first use, a file receives up to the extended startup allowance. If it
+starts within the normal threshold, that first start remains the measured
+result. If it is slow, the harness lets playback become healthy, discards only
+that startup timing, rebuilds the bounded playback session, and measures the
+second start under normal gates. Every successful use refreshes the same
+file's sliding recent-use timeout; another file starts its own interval. JSON
+reports distinguish normal-first, slow-discard/retry, recent-file, and explicit
+cold-start paths. Use `--skip-storage-warmup` only when cold startup itself is
+the intended measurement.
 
 ## HDMI capture
 
@@ -79,8 +117,9 @@ capture_hdmi_validation.cmd --output artifacts\firetv\validation.mp4 --duration 
 ```
 
 Use `--video-device` and `--audio-device` when the DirectShow names differ
-from the commissioned USB capture adapter defaults. `VIBE_VLC_PATH` can point
-to a non-default `vlc.exe` installation.
+from the commissioned USB capture adapter defaults. The command uses the
+compiled sibling `opensagetv-vibe-ffmpeg-mim` Windows binary by default;
+`VIBE_FFMPEG_PATH` can point to another Vibe `ffmpeg.real.exe` build.
 
 ## Secrets and release safety
 

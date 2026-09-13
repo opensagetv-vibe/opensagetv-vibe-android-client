@@ -15,21 +15,29 @@ Before changing code, read:
 6. `docs/COMMISSIONING.md` before creating a new test environment
 7. the relevant architecture/workflow document
 
-`TASKS.md` is the only authoritative subproject backlog. Do not create
-`TASK_CODEX.md`, prompt-specific task files, review-note backlogs, or duplicate
-task lists. Completed work is removed from `TASKS.md` and recorded in
-`CHANGELOG.md`/`HANDOFF.md`.
+`TASKS.md` is the only authoritative subproject backlog and durable master
+checklist. Do not create `TASK_CODEX.md`, prompt-specific task files,
+review-note backlogs, or duplicate task lists. Retain completed work in
+`TASKS.md` with a checked box and stable task ID; also record release-relevant
+results in `CHANGELOG.md`/`HANDOFF.md`.
 
 When a task's acceptance criteria pass, update task tracking in the same
-change: remove it from this repository's `TASKS.md`, remove/update the mirrored
-entry in the workspace-wide `task.md` when applicable, and record the result
-and evidence in `CHANGELOG.md` and `HANDOFF.md`. Do not leave completed
-checkboxes or wait for a later documentation pass.
+change: change its existing box to `[x]` without renumbering or deleting it,
+update any mirrored entry in the workspace-wide `task.md`, add a dated entry to
+the `TASKS.md` change ledger, and record the result and evidence in
+`CHANGELOG.md` and `HANDOFF.md`. New work receives a new ID. Reordering retains
+the original ID and is recorded in the ledger. Remove a task only when the user
+explicitly requests removal, and preserve that decision in the ledger.
 
 ## Workspace boundary
 
 - Modify only `opensagetv-vibe-android-client` unless the user explicitly puts
   another repository in scope.
+- Never create release downloads, extracted verification trees, or independent
+  Git clones as sibling directories under `C:\TMP_SAGETV_DOCKER\projects`.
+  Put disposable work under the workspace-level `artifacts/temp` directory
+  (or a system-created temporary directory) and clean it in `finally`/trap
+  handling. The `projects` directory is reserved for active project roots.
 - Before asking the user for a shared environment, commissioning, artifact, or
   release fact, search the workspace `task.md` and sibling
   `opensagetv-vibe-*` README/CHANGELOG/HANDOFF/config files read-only. Record
@@ -51,13 +59,18 @@ checkboxes or wait for a later documentation pass.
   OpenSageTV Vibe release tracking; never add Vibe release entries there.
 - `HANDOFF.md` contains current state and the exact resume point, not a second
   chronological changelog.
-- `TASKS.md` contains only active unchecked tasks.
+- `TASKS.md` contains the stable checked/unchecked master checklist and its
+  change ledger. Checked tasks remain visible so status reports do not appear
+  to change from one turn to the next.
 - Stable operational guidance belongs in README, AGENTS, `docs/`, or component
   READMEs; update those files in place.
 - Do not create `UPDATE_v*.txt`, version-named Markdown notes, dated matrix
   reviews, AI start prompts, or per-tool handoff documents.
 - Update `VERSION`, `release.properties`, `CHANGELOG.md`, `HANDOFF.md`, affected
   durable docs, tests, and `PROJECT_MANIFEST.sha256` together.
+- Write every GitHub release description as concise bullet points grouped by
+  changes, fixes, compatibility, validation, and known limitations. Never
+  publish the release description as one large paragraph.
 - `release.properties` must contain exactly one matching `VERSION=x.y.z` and
   one `REQUIRES_BUILD=true|false`. Use `true` whenever APK-packaged source,
   resources, manifests, dependencies, or build configuration changed.

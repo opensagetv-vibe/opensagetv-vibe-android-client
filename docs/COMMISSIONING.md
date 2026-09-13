@@ -63,8 +63,10 @@ Generated files remain under ignored `artifacts/test-media`. The TOML's active
 server provides `smb_url`, credentials, and `smb_mappings`, but the
 commissioning command does not overwrite a remote share automatically. Copy
 or synchronize the generated fixtures to that server's configured SMB media
-location, import/rescan them in SageTV, and set the corresponding paths in the
-TOML `[fixtures]` table. This explicit step prevents an AI or new contributor
+location, import/rescan them in SageTV, and add a `[[fixtures.cases]]` record
+with a stable id, generic `path`, `path_type`, master `enabled` switch, and
+boolean `modes` table. Keep the explanatory comment above the record so another
+operator knows exactly which regression it proves. This explicit step prevents an AI or new contributor
 from overwriting recordings merely by running setup.
 
 Then run `dev.cmd config-check`, followed by the relevant MCP physical gate.

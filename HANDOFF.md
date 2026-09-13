@@ -1,5 +1,368 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Release-candidate checkpoint (2026-09-13)
+
+ONN `MATRIX-002` is complete against stock SageTV `.175`. Applicable Media3,
+legacy ExoPlayer, IJK, and GSY paths passed hardware MPEG-2/AC-3 startup,
+audio, seek, pause/resume, STOP, and recovery. The authored DVD, physical
+Scooby-Doo menus, and exact 8:00 Aladdin main-title checks passed native menu,
+title, audio, subtitle, chapter, cadence, compatibility-fallback, and clean
+teardown gates. Cross-device `MATRIX-003` remains intentionally deferred until
+the GitHub source/APK release is published.
+
+The release reporting flow is also complete in the working tree. The
+long-press menu has separate Test Current Video and diagnostic-export icons;
+the latter supports independent authenticated/anonymous diagnostic SMB with
+Off, On request, and Always behavior. A physical ONN connection test passed
+URL, DNS/connect, authentication, share, write/read/hash, cleanup, and delete
+in 391 ms. Public issue instructions use tightly cropped screenshots captured
+while the generated Vibe test fixture was loaded, so no broadcast or movie
+frame is included.
+
+Known-file automation now tries a supplied server path first, then indexed
+MediaFile Watch, and uses the STV Search screen only as a final compatibility
+fallback. `--direct-only` makes controlled fixture selection fail closed. Raw
+`dev.sh adb` is scoped to the configured device unless an explicit ADB target
+is supplied; this fixes the unintentional multi-device authorization prompt
+found during release screenshot capture.
+
+GH-001 is complete for v0.5.91. The consolidated changelog, handoff,
+compatibility/diagnostic docs, GitHub issue form/screenshots, release metadata,
+and complete project manifest are synchronized. The project test gate passes
+536 scaffold/static tests, 84 MCP tests, Core JUnit, and its Gradle test build.
+GH-002 is also complete. The primary tree passed the full validator, clean
+60-task APK build, strict APK inspection, and handoff/GitHub bundle creation.
+A fresh Windows-extracted, Git-less source checkout passed its complete
+1,423-file manifest, 537 scaffold/static tests (one Git-metadata-only skip),
+84 MCP tests, Core JUnit, full validation, and another clean 60-task APK build.
+That gate found and fixed inherited parent-Git enumeration in extracted
+manifest checks. Resume at GH-003: logical commits, clean final bundle, push,
+tag/release publication, public hash verification, and Pages redirect.
+
+## Stable master-checklist rule (2026-09-12)
+
+At the user's request, `TASKS.md` is now a stable, revisioned master checklist
+rather than an active-only backlog. Every item has a permanent ID; completion
+changes its existing box to `[x]`; additions, removals, and reorders are
+recorded in the checklist ledger. `AGENTS.md` enforces this rule. Future status
+reports must reproduce the canonical checklist instead of reconstructing a
+different list from conversation history. Release-relevant evidence continues
+to be recorded here and in `CHANGELOG.md`.
+
+Decoder-stability tasks D1 and D2 are checked complete. The new classifier
+distinguishes datasource, container/parser, decoder initialization, fatal
+runtime decoder, audio-output, and teardown/transition failures and bounds the
+allowed recovery/presentation behavior. Media3 and legacy Exo now enable
+fallback only after Vibe's Hardware/Software/Fallback policy has filtered the
+candidate set. Focused Core tests, 66 static player tests, and Android Java
+compilation pass. D3 decoder-attempt telemetry is the active resume point.
+
+D3 is now also complete. `DecoderAttemptTelemetry` retains a maximum of twelve
+events per playback session and exposes ordered candidates, selected decoders,
+codec/audio errors, underruns, track/format counts, session exclusions, and
+fallback reason/result. Both player families reset it per media load; GSY
+delegates are unwrapped by diagnostics. Detailed stats, MCP, Test Current Video,
+and diagnostic bundles use the same redacted data. Core tests, 40 static player
+tests, and Android TV Java compilation pass. Resume at D4 session-local fatal
+decoder quarantine; do not persist exclusions or quarantine parser/datasource/
+seek/flush failures.
+
+D4 and D5 are now also complete in the implementation tree. Fatal runtime
+video-codec quarantine is session-local, limited to the selected decoder, and
+allows one position-preserving renderer/codec reconstruction. Audio underrun,
+audio output, downstream format, and track-change callbacks are bounded in the
+same diagnostic telemetry. The fixture generator now creates
+`mpeg2-sequence-resolution-switch.ts`, `h264-ts-timestamp-discontinuity.ts`, and
+`h264-pmt-audio-track-switch.ts`; a two-second generation pass produced all 17
+media fixtures and three explicit non-generatable/fault-injection records.
+Forty-seven focused tests, Core tests, Android TV Java compilation, and diff
+checks pass. Resume at D6 hardware-only regression; D4/D5 physical behavior is
+not claimed until that matrix passes.
+
+## Kodi/VLC decoder-stability audit (2026-09-12)
+
+The audit-first source comparison is complete in
+`docs/DECODER_STABILITY_SOURCE_COMPARISON.md`. It pins Kodi revision
+`b08930bb0056b235e3b45c80113046721896694b` and VLC revision
+`0a544554996ae900813ba92c70cd8c9408062497`, records the inspected demux,
+clock, MediaCodec, AudioTrack, subtitle, DVD-navigation, and lifecycle paths,
+and preserves the GPL/LGPL-to-Apache clean-room boundary. Reference players are
+not launched, their source is not copied, and MX Player is closed-source
+capability evidence only.
+
+The audit rejects duplicate TS/MKV/DVD demuxers, master clocks, MediaCodec/CSD
+state machines, AudioTrack sinks, speculative device blacklists, larger Pull
+caches, and guessed byte seeks. The active dependency order is D1 error
+classification, D2 policy-filtered initialization fallback, D3 decoder-attempt
+telemetry, D4 session-local fatal-decoder quarantine, D5 bounded transition and
+audio evidence, then D6 physical hardware validation. DVB Teletext is correctly
+identified as a separate licensed decoder feature rather than mislabeled as
+CEA or DVB bitmap.
+
+## Direct stock-server MediaFile launch rule (2026-09-12)
+
+Do not use on-screen SageTV Search as the normal way to start a known test
+recording. After the MiniClient connects, MCP must resolve the requested title
+to a unique SageTV MediaFile ID through Sagex or Nielm's stock-era Web
+Interface, resolve the exact MiniClient UI context from its client ID, and send
+the context-aware direct Watch command. For Web Interface-only servers the
+command is `MediaFileCommand?command=WatchNow&context=...&MediaFileId=...`.
+The Web Interface keeps recordings and imported media in separate `TVFiles`
+and `MediaFiles` search indexes, so server-side resolution queries both and
+deduplicates IDs. This lookup does not navigate the STV Search screen.
+
+`mcp-playback-test --text ...` now uses that direct path first and verifies the
+same MediaFile becomes active with healthy A/V. On-screen Search is permitted
+only when server-side direct control is unavailable/not found, or when the
+caller explicitly supplies `--force-ui-search` to test the UI itself. If a
+direct request resolves the MediaFile but playback fails, MCP reports that
+failure instead of masking it with Search. The stock `.175` physical gate
+resolved `Taskmaster` to MediaFile `65500403`, targeted UI context
+`444556303031`, started it without opening Search, and passed Media3
+Pull/hardware A/V verification with `OMX.MTK.VIDEO.DECODER.AVC`.
+
+## Bounded same-file Pull cache checkpoint (2026-09-12)
+
+Media3 and legacy ExoPlayer now share the session-owned
+`RetainedBufferedPullDataSource` behavior: one MediaServer session and an
+8 MiB access-ordered cache of exact random-read bytes for stable completed
+files. It never caches inferred offsets or parsed metadata. Path changes,
+observed size/growth changes, disabling, and final release clear the cache, so
+extractor and decoder policy changes cannot reuse parsed state.
+
+The in-client ONN current-video test proved the useful local case: the repeated
+target consumed 524,288 cached bytes, landed exactly, and recovered in 362 ms
+while `c2.amlogic.mpeg2.decoder` remained initialized. A controlled distant
+seek-away/return experiment then compared 8 MiB with 16 MiB using the same
+`MeetthePress-65149351-0.ts`, Media3 Pull/hardware path, 985220 ms target, and
+120000 ms away distance. Doubling memory did not materially improve the result:
+recovery remained about 6.1--6.2 seconds with roughly 143--156 physical reads
+and 37--41 MiB per target recovery. Decoder init/release stayed 1/0 for video
+and audio. The 16 MiB experiment was reverted; the remaining long seek delay is
+MPEG-TS timestamp/demux discovery and moves to the source-comparison phase.
+
+## In-client current-video diagnostic checkpoint (2026-09-12)
+
+The active playback long-press panel now has a distinct play/pulse
+**Test Current Video** icon in shared, Android TV, and no-touch layouts. The
+release-safe runner uses the current `MiniPlayerPlugin` and current loaded media
+instead of an MCP-only path. It captures baseline/cadence health, pause/resume,
+safe reversible first/away/repeat seeks, landing and recovery timing, frame
+output, buffer/source reads, Pull reuse/cache, active decoder, display and sync
+state. It skips unsafe DVD-menu/short-media checks and restores the original
+position and play/pause state. Exceptions and player-session replacements are
+contained and recorded instead of crashing playback.
+
+Each run writes one redacted report through `CurrentVideoTestStore`; the newest
+four are included in manual diagnostic ZIPs and Always/On-request SMB exports.
+Physical ONN v1 validation used Media3 Pull/hardware with
+`MeetthePress-65149351-0.ts`: 6 passes, zero warnings, zero skips, 9889 ms. The
+first/repeat seek recovered in 360/362 ms, the away seek in 2199 ms, and the
+player retained `c2.amlogic.mpeg2.decoder`. The inspected bundle
+`artifacts/firetv/onn-current-video-test-diagnostics.zip` contains
+`current-video-tests/test-1.txt` and no media path/server address. The current
+APK SHA-256 before the documentation-only edits is
+`22846c02f0066abb083dfcf6ab344d8ab7441b1f66b5e640c36863dcbc3f0f48`.
+
+## ONN stock-server MPEG-2 seek checkpoint (2026-09-12)
+
+The stock `.175` `Meet the Press` OTA MPEG-2/AC-3 recording has now run through
+Media3, legacy ExoPlayer, GSY/Media3, and GSY/legacy-Exo on ONN v1. Each path
+selected `c2.amlogic.mpeg2.decoder`, retained hardware video plus decoded audio,
+and recovered from its applicable seek, skip, and pause checks.
+
+The preserved legacy-GSY reproduction is
+`artifacts/firetv/onn-meet-the-press-gsy-legacy-isolated.json`. During the right
+skip, physical Pull reads continued, but the 10-second watchdog replaced the
+extractor anyway. That caused 42 additional opens, about 83 MiB of reads,
+18.9 seconds of read wait, and a recoverable
+`ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`; video recovery took 21.55 seconds.
+Both Exo generations now consult `PullSeekRecoveryPolicy`: a buffering watchdog
+defers when the datasource has advanced since arming and completed a physical
+read within the bounded grace window. Stale/no-progress cases retain the old
+reprepare recovery. Core unit tests cover active, stale, unchanged, unknown, and
+non-monotonic observations.
+
+The exact post-fix repeat is
+`artifacts/firetv/onn-meet-the-press-gsy-legacy-postguard-repeat1.json`: recovery
+completed in 844 ms with three reads/1.5 MiB, no parser error, no reprepare, and
+no video decoder release/reinitialization. The broader before/after artifact is
+`onn-meet-the-press-gsy-legacy-active-io-guard.json`. Independent 15-second
+full-screen HDMI evidence is
+`onn-meet-the-press-post-active-io-guard.mp4` with its three-frame contact sheet.
+The runtime tuning override used for diagnosis is reset; normal defaults are
+active. The next active item is the bounded same-file stream/seek-hint cache,
+followed by Kodi/VLC/FFmpeg/Media3/legacy-Exo source comparison. Reference
+players must not be launched for this work. MX Player is closed source, so it
+is excluded as a rule or code source; a user's successful MX playback remains
+useful only as evidence that the device and media are capable.
+
+## TV diagnostic export and issue-report checkpoint (2026-09-12)
+
+The Android client now creates bounded, redacted support artifacts without
+requiring email or a file-manager app on the TV. Media, configuration, and
+diagnostics SMB destinations remain independent. Diagnostics has its own URL,
+anonymous-or-credential authentication, test action, and Off/On request/Always
+mode. On-request output is one ZIP with logs, playback traces, a live player
+snapshot, redacted device/configuration metadata, and checksums. Always mode
+uses one rotated UTF-8 session log, an app-private pending spool, atomic SMB
+replacement, bounded local/remote retention, and checkpoints at the periodic
+interval, STOP, playback error, app background, and exit.
+
+The long-press remote panel's bug icon is immediately beside the triangular
+Video Info icon in the shared, TV, and TV no-touch layouts. Physical ONN
+evidence is `docs/images/diagnostics-long-press-menu.png`; selecting it opens
+the dialog shown in `docs/images/diagnostics-export-dialog.png`. The GitHub
+playback issue form and `docs/PLAYBACK_DIAGNOSTICS.md` explain the complete
+no-email workflow.
+
+Physical diagnostics-SMB validation on ONN reported URL 4 ms, DNS/connect
+190 ms, authentication 184 ms, share open 83 ms, write/read/hash/delete
+377 ms, total 916 ms, with verified cleanup. A reserved unreachable address
+produced a redacted DNS/connect failure and a pending local spool whose size
+and SHA-256 survived `am force-stop`. Relaunching with the real destination
+automatically uploaded and removed the old pending file. The client was
+restored to On request mode and all exact local/remote validation artifacts
+were removed. The final gate passes 514 project/static tests, 73 MCP/workflow
+tests, project validation, a clean 60-task APK build, GitHub issue-form YAML
+parsing, physical icon activation, and `git diff --check`. The resulting APK
+SHA-256 is
+`27db1fd90d8617fdbc9d186b3d21cdd9c7425d57fbacb0bda4426b25a6258`.
+
+## ONN long-recording and debug-reconnect checkpoint (2026-09-12)
+
+The V1 ONN client is fully commissioned for ADB/MCP and has a unique
+MiniClient ID. Debug-driven server changes no longer race the previous player
+activity's teardown: the client explicitly closes the old connection, finishes
+the resumed OpenGL/GDX player activity, and launches the replacement connection
+after a bounded 750 ms delay. Physical switches `.175 -> .232 -> .175` each
+created a new live connection generation without an immediate close request.
+
+The reported persistent timeline/OSD was tested with the completed 5.5-hour
+`ReconstructionAmericaAftertheCivilWar-48000171-0.ts` recording. Stock `.175`
+and Vibe `.232`, Wait-for-playback On/Off, smooth FF, Stop, restart, and a
+separate idle window all cleared the OSD normally on ONN. Vibe server logs show
+`setPlaybackRate(4.0)` during shuttle and `setPlaybackRate(1.0)` at Stop and
+Play, while client telemetry returned to `playbackRate=1.0`. This establishes
+that recording duration and a stale normal shuttle rate are not sufficient to
+cause the forum report; it is a non-reproduction, not a claim that the affected
+Fire TV case is fixed. Evidence is under `artifacts/firetv` as
+`onn-vibe-long-osd-shuttle-stop-restart.mp4` and
+`onn-vibe-long-osd-idle-after-restart.mp4`, with matching contact sheets.
+
+HDMI capture now uses the compiled sibling Vibe FFmpeg through
+`capture_hdmi_validation.cmd` and its Python implementation. Do not launch VLC
+for capture or media inspection.
+
+## ONN encoded-audio checkpoint (2026-09-12)
+
+ONN v1 `192.168.10.141` is commissioned as alias `onn_v1`, MiniClient ID
+`44:45:56:30:30:35`, against unmodified SageTV `.175`. `Meet the Press`
+reproduced a false-healthy AC-3 passthrough state: renderer counters advanced,
+but the Amlogic HAL logged invalid raw frames and HDMI capture measured only
+digital silence (`-91.0 dB` mean, `-84.3 dB` peak). Media3 and legacy
+ExoPlayer now default to a PCM-only AudioSink capability policy and prefer the
+bundled FFmpeg audio renderer, while video remains on
+`c2.amlogic.mpeg2.decoder`. Passthrough is still an explicit user choice by
+disabling `Decode encoded audio to PCM` in that player's settings.
+
+Physical captures under `artifacts/firetv` prove the result:
+`onn-meet-the-press-no-audio-baseline.mp4` is silent;
+`onn-meet-the-press-ffmpeg-pcm-audio.mp4` measures `-27.0/-11.6 dB` mean/peak;
+`onn-meet-the-press-legacy-exo-audio.mp4` is the silent legacy baseline; and
+`onn-meet-the-press-legacy-exo-pcm-fixed.mp4` measures `-26.1/-10.1 dB`.
+IJK and the GSY Media3/legacy delegates also have independent captures with
+real program audio. Their applicable seek/FF/REW/pause/resume gates pass.
+
+The complete video/DVD fixture matrix is intentionally deferred until the
+targeted ONN and Kodi/VLC/FFmpeg-derived corrections are stable, as section 3 of
+`TASKS.md`, so it is run once as a release gate rather than after every small
+player change. NVIDIA Shield Tube and ONN 4K Pro must receive the same matrix
+with separate aliases/client IDs; no Git commit or push is authorized yet.
+
+## Clean-build/non-Pro stock-server closure (2026-09-12)
+
+The complete validator and clean 60-task Dev APK build pass. The installed APK
+is 50,449,749 bytes with SHA-256
+`114d84471b4fd4854c8258e6a9e843bbb2c5788ab592e8114e1e3cf22f5403cf`.
+After a clean install on non-Pro Fire TV `.25`, stock SageTV `.175` accepted
+the normal MiniClient session and stock-compatible `ALADDIN` MediaFile launch.
+Native/hardware Media3 selected `OMX.MTK.VIDEO.DECODER.MPEG2`; the bounded
+cadence window advanced 36,546 ms media time over 36,306 ms wall time
+(1.0066x), emitted 1,740 video and 1,134 audio outputs, and added zero video
+drops, skips, or release gaps. Structured evidence is
+`artifacts/firetv/nonpro-aladdin-final-clean-build.json`.
+
+The independent USB HDMI capture is
+`artifacts/firetv/nonpro-aladdin-final-clean-build.mp4`: 34.726 seconds,
+1920x1080 H.264 video plus AAC audio. Its sampled frames show active main-title
+video throughout the capture. The app session was then stopped cleanly.
+
+## Native-DVD NVIDIA/Fire TV cadence closure (2026-09-12)
+
+The Kodi-derived missing-PTS repair is now retained as a decoder-family rule,
+not a device-model profile. `Auto` covers MediaTek OMX/Codec2 and NVIDIA
+OMX/Codec2 MPEG-2 implementations, while explicit `On` and `Off` remain usable
+for physical A/B testing. The NVIDIA Shield Tube `.68` passed stock-server
+Aladdin Native/hardware playback with `OMX.Nvidia.mpeg2v.decode`: 30,530 ms of
+media over 30,112 ms wall time (1.0139x), 1,098 video outputs, 941 audio
+outputs, zero dropped frames, and zero sustained/non-positive release gaps.
+Independent HDMI evidence is
+`artifacts/firetv/shield-aladdin-auto-nvidia-final.mp4`; structured evidence is
+`artifacts/firetv/shield-aladdin-auto-nvidia-final.json`.
+
+The affected non-Pro Fire TV `.25` regression also passes with
+`OMX.MTK.VIDEO.DECODER.MPEG2`: 31,042 ms of media over 31,294 ms wall time
+(0.9919x), 1,501 video outputs, 978 audio outputs, and zero drops, skips,
+sustained gaps, or non-positive release intervals. Evidence is
+`artifacts/firetv/nonpro-aladdin-auto-post-nvidia-rule-cadence.json`. An earlier
+run failed only because the stock `.175` server does not implement the private
+debug-only exact 8:00 positioning event; startup, decoding, and cadence were
+healthy. The production DVD/STV seek controls are not replaced by that test
+hook.
+
+## NVIDIA UK DVB checkpoint (2026-09-12)
+
+Unmodified SageTV `.175` and NVIDIA Shield Tube `.68` now pass the supplied UK
+DVB recordings through Media3, legacy ExoPlayer, GSY/Media3, and
+GSY/legacy-Exo Pull hardware paths. `Breakfast` proves a leading MPEG-L2 NAR
+track does not displace the English AC-3 primary track; `Classic Holby City`
+proves English MPEG-L2 primary selection over NAR; `Taskmaster` provides the
+long seek fixture. All three expose the real DVB bitmap track, and the long
+fixture passes same-session subtitle Off/On plus FF/REW with advancing NVIDIA
+H.264 output and advancing audio. Representative captures are
+`20260912-163350_caption-media3-pull-visible.png`,
+`20260912-163526_caption-exoplayer-pull-visible.png`,
+`20260912-163719_caption-gsyplayer-pull-visible.png`, and
+`20260912-163838_caption-gsyplayer-pull-visible.png` under
+`artifacts/firetv`.
+
+Two defects were corrected during that gate. Playback health now ignores
+disabled renderers before reading decoder counters, so an unused extension can
+no longer erase the active NVIDIA or FFmpeg renderer evidence. Completed stock
+recordings now use the datasource's observed SIZE-growth result for seek
+policy, not the ambiguous legacy OPENURL hint; this prevents a full TS
+reprepare on ordinary seek and retains the current source for a duplicate
+startup SEEK 0. Core seek-policy tests and the debug APK build pass.
+
+DVB Teletext remains a distinct, explicitly unsupported boundary. Kodi owns a
+separate Teletext decoder/player path, while VLC uses libzvbi. Media3 and the
+legacy Exo TS extractors expose DVB bitmap subtitles but not Teletext PES/page
+decoding, and the bundled Android FFmpeg extensions are audio-only without
+libzvbi. Implementing Teletext would require a new licensed native decoder,
+PES/page state machine, service selection, renderer, and equivalent integration
+for both Exo generations; it is not safe to disguise the injected ATSC CEA
+fallback declarations as Teletext. When both exist, Vibe automatically prefers
+the real DVB bitmap track. MX Player is closed-source and is comparison-only.
+
+The Media3 FFmpeg audio AAR now has a complete release boundary in
+`THIRD_PARTY_NOTICES.md`, `docs/DEPENDENCY_AUDIT.md`, and
+`third_party/source-offers/README.md`. Its component-only rebuild script is
+`source/dev/media3/buildffmpegext.sh`; it pins AndroidX Media 1.11.0, the exact
+FFmpeg 6.0 commit, NDK 26.1, the decoder list, and the distinct
+`libmedia3ffmpegJNI.so` package name. Static checks reject missing source/hash
+records or accidental inclusion of FFmpeg video decoders.
+
 ## GitHub Pages latest-APK checkpoint (2026-09-11)
 
 `docs/index.html` is the repository's stable latest-APK landing page. It calls
@@ -1827,6 +2190,44 @@ directory and matched GitHub's SHA-256 digests; the published APK retains the
 physically tested SHA-256 above.
 
 ## Exact resume sequence
+
+### Same-file MPEG-TS seek investigation (2026-09-12)
+
+ONN v1 hardware/Pull testing with `MeetthePress-65149351-0.ts` confirmed the
+video decoder remained `c2.amlogic.mpeg2.decoder` with one initialization and
+zero releases across repeated seeks. The remaining delay is Media3's repeated
+PCR binary search over SageTV Pull, not repeated container/track or decoder
+selection. The new retained Pull session and bounded completed-file probe cache
+compile and are active. Do not reduce the TS timestamp-search multiplier: the
+controlled multiplier-4 run took 29,597 ms versus 8,396 ms at the proven
+multiplier-16 default. A prototype that inferred a cached byte position from
+the first post-search extractor read took 11,583 ms on repeat and was removed;
+only an extractor-validated PCR position is acceptable for the unfinished
+same-file hint task. Runtime tuning was reset to compiled defaults afterward.
+The tuning runner now also accepts `--video-name` and passes the selector to
+the shared startup path; its focused 14-test suite passes.
+
+Media3's current `TsBinarySearchSeeker` reads up to the configured timestamp
+search window for each probe and reports the exact successful byte position
+only through `BinarySearchSeeker.onSeekOperationFinished`. The TS seeker is a
+package-private final implementation owned by `TsExtractor`, so Vibe cannot
+safely consume that callback through the public extractor API. Do not restore
+the discarded SeekMap-wrapper experiment: `TsExtractor.seek()` starts its own
+global PCR search regardless of the initial SeekMap byte estimate. The viable
+next choices are a bounded cache of the real probe bytes or a narrowly tracked,
+Apache-2.0-derived TS seeker/extractor implementation with explicit upstream
+diff tests; reflection and guessed byte offsets are rejected.
+
+A follow-up controlled block-size run used the same ONN v1, Vibe server,
+`MeetthePress-65149351-0.ts`, Media3 Pull/hardware decoder, 985220 ms target,
+and 16x PCR search window. A 128 KiB Pull block recovered in 7612 ms while the
+normal 256 KiB block recovered in 6296 ms; both retained
+`c2.amlogic.mpeg2.decoder` and completed without a player error. Smaller reads
+therefore increase MediaServer round-trip cost and are not a safe optimization.
+The report is
+`artifacts/firetv/onn-meet-the-press-pull-read-128-256.json`. All Dev runtime
+tuning was reset afterward; Media3 is back to 256 KiB/16x and legacy Exo to
+512 KiB/16x.
 
 Fire TV Pro testing on `192.168.10.29` was resumed by the user on 2026-09-05.
 Its ADB transport is authorized. Launcher/icon, captions, Native hardware DVD

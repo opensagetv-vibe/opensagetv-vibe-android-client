@@ -177,6 +177,15 @@ bitstream conversion branches. Those are format-specific playback features,
 not DVD rules. Media3 currently owns their capability checks; any Vibe override
 requires a legal fixture and physical display/decoder evidence.
 
+The same decoder-family rule is physically commissioned on NVIDIA rather than
+inferred from decoder enumeration. Shield Tube `.68` selected
+`OMX.Nvidia.mpeg2v.decode` and held 1.0139x real time for 30 seconds with zero
+dropped frames and no sustained/non-positive frame-release gaps. Independent
+HDMI capture confirmed continuous display output. The affected MediaTek Fire
+TV regression held 0.9919x real time for 31 seconds with zero drops, skips, or
+release gaps. These results justify matching decoder implementations while
+avoiding a device-model profile.
+
 On the AFTKRT/API-30 Fire TV Pro, the exact clean `0.5.85` APK used
 `OMX.MTK.VIDEO.DECODER.MPEG2` and held 1.0217x real time during the final
 20-second Aladdin Native/hardware measurement, with 756 video outputs and zero

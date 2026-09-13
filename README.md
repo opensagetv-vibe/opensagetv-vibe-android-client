@@ -17,6 +17,10 @@ resources.
 ## Project status
 
 - Current checkout version: see `VERSION`.
+- The current APK requires Android 6.0 / API 23 or newer and packages both
+  `armeabi-v7a` and `arm64-v8a`. Android 5 / API 21-22 rejects this APK at
+  manifest compatibility checking; that is an explicit platform boundary, not
+  a media-playback failure.
 - Release history: `CHANGELOG.md`.
 - Active work: `TASKS.md` (the only task backlog in this repository).
 - Current takeover state: `HANDOFF.md`.
@@ -216,6 +220,16 @@ streaming mode, decoder, media state, visible A/V result, and correlated
 Android/server evidence. Watchdog expiration is an observation, not automatic
 fault attribution.
 
+File-backed player matrices use an adaptive, per-server/per-file storage gate.
+The first use receives an extended allowance. A normally fast first start is
+the measured result; only a slow first start is allowed to reach healthy
+playback, discarded, and retried under the normal gate. Every successful use
+refreshes that file's short sliding warm-cache interval, so nearby tests do not
+repeat a warm-up and different files remain independent. This prevents HDD
+spin-up from being misreported as a decoder failure without hiding normal
+startup performance. Use `--skip-storage-warmup` only for an intentional cold
+start.
+
 Run the strict stock-server MKV gate with the selected non-production device
 and the `stock=true` server from `config/firetv.toml`:
 
@@ -223,8 +237,9 @@ and the `stock=true` server from `config/firetv.toml`:
 dev.cmd mcp-stock-mkv-matrix
 ```
 
-The command reads `fixtures.mkv_searches` or repeatable `--text` MediaFile-name arguments and
-runs Media3, legacy ExoPlayer, IJK, and every GSY engine over hardware Pull.
+The command reads enabled fixture records whose `modes.stock_mkv` value is true,
+or repeatable `--text` MediaFile-name arguments, and runs Media3, legacy
+ExoPlayer, IJK, and every GSY engine over hardware Pull.
 It requires healthy startup plus absolute seek, forward/backward seek, and
 pause/resume recovery for every file/backend. It starts the selected file with
 the stock Sagex `Watch` API rather than navigating an STV-specific Search UI.
@@ -245,8 +260,8 @@ dev.cmd mcp-lifecycle-test --server-address 192.168.10.232 --player media3 --str
 dev.cmd mcp-eof-test --server-address 192.168.10.232 --player media3 --decoding hardware --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
 dev.cmd mcp-caption-test --server-address 192.168.10.232 --player media3 --streaming dynamic --decoding hardware --server-path "/var/media/tv/MeetthePress-65149351-0.ts"
 dev.cmd mcp-frame-step-test --server-address 192.168.10.232 --player media3 --streaming pull --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming pull
-dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Kodi-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming smb_direct
+dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Hardware-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming pull
+dev.cmd mcp-fast-switch-test --initial-path "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Hardware-Codec-Test/mpeg2-interlaced-bframes.ts" --switch-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --streaming smb_direct
 dev.cmd mcp-playback-rate-test --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player media3 --streaming pull --server-negotiation
 dev.cmd mcp-playback-rate-test --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --player exoplayer --streaming smb_direct
 dev.cmd mcp-codec-capability-test --player media3 --streaming pull
@@ -302,6 +317,15 @@ The values are shown once above the bar. Duplicate text rows and the unhelpful e
 link-capacity bar are omitted. Sampling starts with the visible overlay and is
 cancelled when it is hidden or the playback Activity leaves the foreground.
 
+For a support report, configure **Settings > SMB Direct Settings > Diagnostic
+export**, test the independent destination, then long-press Select/OK and use
+the bug icon beside the triangular Video Info icon. **On request** uploads one
+redacted ZIP; **Always** atomically refreshes one bounded session log and
+retries protected pending data after a restart. Settings reports the exact
+filename, byte count, SHA-256, time, and SMB stage result so the file can be
+retrieved from another computer without email on the TV. See
+`docs/PLAYBACK_DIAGNOSTICS.md` and the GitHub playback issue form.
+
 Exercise an explicit service without bypassing STV authority:
 
 ```powershell
@@ -333,7 +357,7 @@ Generate the short Kodi-derived codec/profile/bitstream matrix with the same
 unified container:
 
 ```powershell
-dev.cmd codec-fixtures --duration 6 --output-dir artifacts/test-media/kodi-codec
+dev.cmd codec-fixtures --duration 6 --output-dir artifacts/test-media/hardware-codec
 ```
 
 The resulting `fixture-manifest.json` records SHA-256 and `ffprobe` metadata.
