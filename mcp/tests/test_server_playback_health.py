@@ -132,6 +132,33 @@ class PlaybackHealthTest(unittest.TestCase):
         self.assertFalse(details["video_advancing"])
         self.assertFalse(details["audio_advancing"])
 
+    def test_completed_short_fixture_with_real_outputs_is_healthy(self):
+        healthy, details = server._completed_short_media_health({
+            "health_playbackState": 4,
+            "health_durationMs": 7941,
+            "health_playerPositionMs": 8029,
+            "health_videoRendered": 476,
+            "health_audioRendered": 250,
+            "health_surfaceValid": True,
+            "health_errorState": False,
+            "health_playerError": "",
+        })
+
+        self.assertTrue(healthy)
+        self.assertEqual("completed_short_media_outputs", details["verdict_basis"])
+
+    def test_jump_to_end_without_sustained_output_is_not_healthy(self):
+        healthy, _ = server._completed_short_media_health({
+            "health_playbackState": 4,
+            "health_durationMs": 7941,
+            "health_playerPositionMs": 7941,
+            "health_videoRendered": 1,
+            "health_audioRendered": 0,
+            "health_surfaceValid": True,
+        })
+
+        self.assertFalse(healthy)
+
     def test_fullscreen_promotion_rejects_transient_osd_toggle(self):
         preview = self._preview_state()
         snapshots = [preview, self._fullscreen_state(), preview]
@@ -155,6 +182,60 @@ class PlaybackHealthTest(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertTrue(result["alreadyFullscreen"])
         self.assertGreaterEqual(result["stableMs"], 750)
+        command.assert_not_called()
+
+    def test_fullscreen_promotion_uses_miniclient_tv_command(self):
+        preview = self._preview_state()
+        remote = mock.Mock()
+        remote.remote_command.return_value = {"accepted": True}
+        with mock.patch.object(server.adb, "player_state_snapshot", return_value=preview), \
+                mock.patch.object(server.adb, "sage_command", return_value={"ok": True}) as command:
+            result = server._promote_preview_to_fullscreen(
+                timeout_s=2.2,
+                server_api=remote,
+                ui_context="444556303031",
+            )
+
+        self.assertFalse(result["passed"])
+        command.assert_called_once_with("tv")
+        remote.remote_command.assert_not_called()
+
+    def test_early_fullscreen_observes_preview_without_sending_toggle(self):
+        preview = self._preview_state()
+        states = [{"playerActive": False}]
+        remote = mock.Mock()
+        remote.remote_command.return_value = {"accepted": True}
+        with mock.patch.object(
+            server.adb,
+            "player_state_snapshot",
+            side_effect=lambda: states.pop(0) if states else preview,
+        ), mock.patch.object(
+            server.adb,
+            "sage_command",
+            return_value={"ok": True},
+        ) as command:
+            result = server._request_fullscreen_when_player_active(
+                timeout_s=0.5,
+                server_api=remote,
+                ui_context="444556303031",
+            )
+
+        self.assertFalse(result["requested"])
+        self.assertEqual("client_owned_promotion_not_yet_observed", result["reason"])
+        remote.remote_command.assert_not_called()
+        command.assert_not_called()
+
+    def test_client_owned_fullscreen_verification_never_sends_toggle(self):
+        preview = self._preview_state()
+        with mock.patch.object(server.adb, "player_state_snapshot", return_value=preview), \
+                mock.patch.object(server.adb, "sage_command") as command:
+            result = server._promote_preview_to_fullscreen(
+                timeout_s=1.0,
+                allow_command=False,
+            )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual("client_owned_fullscreen_surface_not_observed", result["reason"])
         command.assert_not_called()
 
 

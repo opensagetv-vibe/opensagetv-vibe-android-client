@@ -27,6 +27,8 @@ from typing import Any, Sequence
 GENERATED_OUTPUT_NAMES = (
     "fixture-manifest.json",
     "mpeg2-interlaced-bframes.ts",
+    "mpeg2-1080i29.97.ts",
+    "mpeg2-720p59.94.ts",
     "mpeg4-part2-bframes.avi",  # obsolete pre-MP4 fixture
     "mpeg4-part2-bframes.mp4",
     "mpeg4-part2-bframes.m4v",
@@ -44,6 +46,9 @@ GENERATED_OUTPUT_NAMES = (
     "vp9-profile2-10bit.mkv",
     "av1-main8.mkv",
     "h264-resolution-switch-annexb.ts",
+    "mpeg2-sequence-resolution-switch.ts",
+    "h264-ts-timestamp-discontinuity.ts",
+    "h264-pmt-audio-track-switch.ts",
     "h264-truncated-start.ts",
 )
 
@@ -108,9 +113,34 @@ def has_encoder(ffmpeg: str, name: str) -> bool:
                for line in result.stdout.splitlines())
 
 
-def source_inputs(size: str, rate: str, duration: float, frequency: int) -> list[str]:
+def _drawtext_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+
+
+def labeled_test_source(size: str, rate: str, label: str) -> str:
+    """Return a moving source whose pixels independently identify the case."""
+    identity = _drawtext_escape(label)
+    detail = _drawtext_escape(f"{size} @ {rate}")
+    return (
+        f"testsrc2=size={size}:rate={rate},"
+        "drawbox=x=0:y=0:w=iw:h=ih/4:color=black@0.72:t=fill,"
+        "drawtext=font='DejaVu Sans':text='OPENSAGETV VIBE CODEC TEST':"
+        "x=12:y=8:fontsize=h/22:fontcolor=white,"
+        f"drawtext=font='DejaVu Sans':text='{identity}':"
+        "x=12:y=h/14:fontsize=h/24:fontcolor=yellow,"
+        f"drawtext=font='DejaVu Sans':text='{detail}':"
+        "x=12:y=h/7:fontsize=h/28:fontcolor=cyan,"
+        "drawtext=font='DejaVu Sans':text='PTS %{pts\\:hms}':"
+        "x=w-tw-12:y=8:fontsize=h/22:fontcolor=lime"
+    )
+
+
+def source_inputs(size: str, rate: str, duration: float, frequency: int,
+                  label: str) -> list[str]:
+    if not label.strip():
+        raise ValueError("Every physical codec fixture requires a visible label")
     return [
-        "-f", "lavfi", "-i", f"testsrc2=size={size}:rate={rate}",
+        "-f", "lavfi", "-i", labeled_test_source(size, rate, label),
         "-f", "lavfi", "-i", f"sine=frequency={frequency}:sample_rate=48000",
         "-t", f"{duration:.3f}", "-shortest",
     ]
@@ -144,7 +174,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "mpeg2-interlaced-bframes.ts",
         "MPEG-2 interlace, B-frame timestamp ordering, aspect and clean EOS",
-        [*source_inputs("720x480", "60000/1001", duration, 440),
+        [*source_inputs("720x480", "60000/1001", duration, 440,
+                        "mpeg2-interlaced-bframes.ts"),
          "-vf", "tinterlace=interleave_top,setsar=8/9", "-r", "30000/1001",
          "-c:v", "mpeg2video", "-profile:v", "main", "-flags", "+ildct+ilme",
          "-top", "1", "-bf", "2", "-g", "15", "-b:v", "5000k",
@@ -152,10 +183,33 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
         expected_mime="video/mpeg2",
     )
 
+    make(
+        "mpeg2-1080i29.97.ts",
+        "MPEG-2 1080i29.97 hardware cadence and interlace handling",
+        [*source_inputs("1920x1080", "60000/1001", duration, 470,
+                        "mpeg2-1080i29.97.ts"),
+         "-vf", "tinterlace=interleave_top", "-r", "30000/1001",
+         "-c:v", "mpeg2video", "-profile:v", "main", "-flags", "+ildct+ilme",
+         "-top", "1", "-bf", "2", "-g", "15", "-b:v", "15000k",
+         "-c:a", "ac3", "-b:a", "384k", "-f", "mpegts"],
+        expected_mime="video/mpeg2", expected_scan="1080i29.97",
+    )
+
+    make(
+        "mpeg2-720p59.94.ts",
+        "MPEG-2 720p59.94 hardware cadence and high-frame-rate scheduling",
+        [*source_inputs("1280x720", "60000/1001", duration, 500,
+                        "mpeg2-720p59.94.ts"),
+         "-c:v", "mpeg2video", "-profile:v", "main", "-bf", "2", "-g", "15",
+         "-b:v", "12000k", "-c:a", "ac3", "-b:a", "384k", "-f", "mpegts"],
+        expected_mime="video/mpeg2", expected_scan="720p59.94",
+    )
+
     mpeg4_mp4 = make(
         "mpeg4-part2-bframes.mp4",
         "MPEG-4 Part 2 profile selection and B-frame PTS/DTS reordering",
-        [*source_inputs("640x360", "30000/1001", duration, 550),
+        [*source_inputs("640x360", "30000/1001", duration, 550,
+                        "mpeg4-part2-bframes.mp4"),
          "-c:v", "mpeg4", "-bf", "2", "-g", "30", "-q:v", "4",
          "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"],
         expected_mime="video/mp4v-es",
@@ -220,7 +274,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "h263-baseline.3gp",
         "H.263 MIME/profile and maximum-dimension selection",
-        [*source_inputs("352x288", "25", duration, 660),
+        [*source_inputs("352x288", "25", duration, 660,
+                        "h263-baseline.3gp"),
          "-c:v", "h263", "-g", "25", "-b:v", "600k",
          "-c:a", "aac", "-b:a", "96k", "-f", "3gp"],
         expected_mime="video/3gpp",
@@ -229,7 +284,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "h264-baseline-avcc.mp4",
         "H.264 Baseline profile and MP4 avcC configuration",
-        [*source_inputs("640x360", "30000/1001", duration, 770),
+        [*source_inputs("640x360", "30000/1001", duration, 770,
+                        "h264-baseline-avcc.mp4"),
          "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "baseline",
          "-level:v", "3.0", "-pix_fmt", "yuv420p", "-bf", "0", "-g", "30",
          "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"],
@@ -238,7 +294,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "h264-high-bframes-annexb.ts",
         "H.264 High profile, B-frame ordering and Annex-B conversion",
-        [*source_inputs("1280x720", "30000/1001", duration, 880),
+        [*source_inputs("1280x720", "30000/1001", duration, 880,
+                        "h264-high-bframes-annexb.ts"),
          "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high",
          "-level:v", "4.0", "-pix_fmt", "yuv420p", "-bf", "3", "-g", "30",
          "-c:a", "aac", "-b:a", "128k", "-f", "mpegts"],
@@ -249,7 +306,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
         make(
             "hevc-main-hvcc.mp4",
             "HEVC Main profile and MP4 hvcC configuration",
-            [*source_inputs("640x360", "30000/1001", duration, 990),
+            [*source_inputs("640x360", "30000/1001", duration, 990,
+                            "hevc-main-hvcc.mp4"),
              "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
              "-x265-params", "log-level=error:keyint=30", "-tag:v", "hvc1",
              "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"],
@@ -258,7 +316,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
         make(
             "hevc-main10-hdr10.mkv",
             "HEVC Main 10 profile plus HDR10 color-metadata capability gate",
-            [*source_inputs("640x360", "30000/1001", duration, 1100),
+            [*source_inputs("640x360", "30000/1001", duration, 1100,
+                            "hevc-main10-hdr10.mkv"),
              "-vf", "format=yuv420p10le", "-c:v", "libx265", "-preset", "ultrafast",
              "-pix_fmt", "yuv420p10le", "-color_primaries", "bt2020",
              "-color_trc", "smpte2084", "-colorspace", "bt2020nc",
@@ -270,7 +329,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "vp8-profile0.mkv",
         "VP8 hardware MIME selection and clean EOS",
-        [*source_inputs("640x360", "30", duration, 1210),
+        [*source_inputs("640x360", "30", duration, 1210,
+                        "vp8-profile0.mkv"),
          "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
          "-g", "30", "-b:v", "1000k", "-c:a", "aac", "-b:a", "96k"],
         expected_mime="video/x-vnd.on2.vp8",
@@ -278,7 +338,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "vp9-profile0.mkv",
         "VP9 Profile 0 capability/profile selection",
-        [*source_inputs("640x360", "30", duration, 1320),
+        [*source_inputs("640x360", "30", duration, 1320,
+                        "vp9-profile0.mkv"),
          "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8",
          "-row-mt", "1", "-g", "30", "-b:v", "1000k", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "96k"],
@@ -287,7 +348,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
     make(
         "vp9-profile2-10bit.mkv",
         "VP9 Profile 2 rejection or hardware/fallback selection",
-        [*source_inputs("640x360", "30", duration, 1430),
+        [*source_inputs("640x360", "30", duration, 1430,
+                        "vp9-profile2-10bit.mkv"),
          "-vf", "format=yuv420p10le", "-c:v", "libvpx-vp9", "-deadline", "realtime",
          "-cpu-used", "8", "-row-mt", "1", "-g", "30", "-b:v", "1000k",
          "-pix_fmt", "yuv420p10le", "-profile:v", "2",
@@ -299,7 +361,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
         make(
             "av1-main8.mkv",
             "AV1 Main profile selection; physical SKIP when device advertises no AV1 hardware",
-            [*source_inputs("640x360", "30", min(duration, 3.0), 1540),
+            [*source_inputs("640x360", "30", min(duration, 3.0), 1540,
+                            "av1-main8.mkv"),
              "-c:v", "libsvtav1", "-preset", "12", "-crf", "42",
              "-pix_fmt", "yuv420p", "-g", "30", "-c:a", "libopus", "-b:a", "96k"],
             expected_mime="video/av01", expected_profile="Main",
@@ -312,7 +375,8 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
         for index, size in enumerate(("640x360", "1280x720"), 1):
             segment = temp / f"segment{index}.ts"
             ffmpeg_run(ffmpeg, [
-                "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30",
+                "-f", "lavfi", "-i", labeled_test_source(
+                    size, "30", f"h264-resolution-switch SEG{index}"),
                 "-t", f"{segment_duration:.3f}", "-an",
                 "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high",
                 "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
@@ -351,6 +415,85 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
             "Adaptive H.264 sequence-header resolution change and renderer reconfiguration",
             ffprobe_json(ffprobe, switched),
             expected_mime="video/avc", observed_frame_dimensions=dimensions,
+        ))
+
+    with tempfile.TemporaryDirectory(prefix="vibe-ts-transition-") as temporary:
+        temp = Path(temporary)
+
+        mpeg2_segments = []
+        for index, size in enumerate(("720x480", "1280x720"), 1):
+            segment = temp / f"mpeg2-sequence-{index}.ts"
+            ffmpeg_run(ffmpeg, [
+                *source_inputs(size, "30000/1001", duration / 2.0,
+                               1750 + index * 100,
+                               f"mpeg2-sequence-switch SEG{index}"),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "mpeg2video", "-profile:v", "main", "-g", "15",
+                "-bf", "2", "-c:a", "ac3", "-b:a", "192k",
+                "-mpegts_flags", "+resend_headers", "-f", "mpegts", str(segment),
+            ])
+            mpeg2_segments.append(segment)
+        mpeg2_switch = output / "mpeg2-sequence-resolution-switch.ts"
+        mpeg2_switch.write_bytes(b"".join(path.read_bytes() for path in mpeg2_segments))
+        mpeg2_probe = ffprobe_json(ffprobe, mpeg2_switch, frames=True)
+        mpeg2_dimensions = sorted({
+            f"{frame.get('width')}x{frame.get('height')}"
+            for frame in mpeg2_probe.get("frames", [])
+            if frame.get("width") and frame.get("height")
+        })
+        records.append(video_record(
+            mpeg2_switch,
+            "MPEG-2 sequence-header dimension change and renderer reconfiguration",
+            mpeg2_probe,
+            expected_mime="video/mpeg2", observed_frame_dimensions=mpeg2_dimensions,
+        ))
+
+        discontinuity_segments = []
+        for index, offset in enumerate((0, 12), 1):
+            segment = temp / f"h264-discontinuity-{index}.ts"
+            ffmpeg_run(ffmpeg, [
+                *source_inputs("640x360", "30000/1001", duration / 2.0,
+                               1950 + index * 100,
+                               f"h264-ts-discontinuity SEG{index}"),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "libx264", "-preset", "veryfast", "-g", "30",
+                "-keyint_min", "30", "-sc_threshold", "0",
+                "-c:a", "ac3", "-b:a", "192k",
+                "-output_ts_offset", str(offset),
+                "-mpegts_flags", "+resend_headers", "-f", "mpegts", str(segment),
+            ])
+            discontinuity_segments.append(segment)
+        discontinuity = output / "h264-ts-timestamp-discontinuity.ts"
+        discontinuity.write_bytes(
+            b"".join(path.read_bytes() for path in discontinuity_segments))
+        records.append(video_record(
+            discontinuity,
+            "TS timestamp discontinuity with repeated PAT/PMT and preserved A/V",
+            ffprobe_json(ffprobe, discontinuity), expected_mime="video/avc",
+            expected_timestamp_discontinuity=True,
+        ))
+
+        pmt_segments = []
+        for index, audio_codec in enumerate(("ac3", "aac"), 1):
+            segment = temp / f"h264-pmt-audio-{index}.ts"
+            ffmpeg_run(ffmpeg, [
+                *source_inputs("640x360", "25", duration / 2.0,
+                               2150 + index * 100,
+                               f"h264-pmt-audio-switch SEG{index} {audio_codec}"),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "libx264", "-preset", "veryfast", "-g", "25",
+                "-keyint_min", "25", "-sc_threshold", "0",
+                "-c:a", audio_codec, "-b:a", "192k",
+                "-mpegts_flags", "+resend_headers", "-f", "mpegts", str(segment),
+            ])
+            pmt_segments.append(segment)
+        pmt_switch = output / "h264-pmt-audio-track-switch.ts"
+        pmt_switch.write_bytes(b"".join(path.read_bytes() for path in pmt_segments))
+        records.append(video_record(
+            pmt_switch,
+            "Repeated PMT changes audio stream type from AC-3 to AAC",
+            ffprobe_json(ffprobe, pmt_switch), expected_mime="video/avc",
+            expected_program_map_change=True,
         ))
 
     good = output / "h264-high-bframes-annexb.ts"
@@ -393,7 +536,7 @@ def generate(output: Path, duration: float, ffmpeg: str, ffprobe: str) -> list[d
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", default="artifacts/test-media/kodi-codec")
+    parser.add_argument("--output-dir", default="artifacts/test-media/hardware-codec")
     parser.add_argument("--duration", type=float, default=6.0)
     parser.add_argument("--ffmpeg", default=os.environ.get("FFMPEG", ""))
     parser.add_argument("--ffprobe", default=os.environ.get("FFPROBE", ""))

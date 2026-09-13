@@ -65,6 +65,27 @@ class ProjectManifestTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertIn("PASS: PROJECT_MANIFEST.sha256", result.stdout)
 
+    def test_extracted_checkout_does_not_inherit_parent_git_index(self):
+        artifacts = ROOT / "artifacts"
+        artifacts.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=artifacts) as directory:
+            checkout = Path(directory) / "checkout"
+            (checkout / "scripts").mkdir(parents=True)
+            shutil.copy2(ROOT / "scripts" / "project_manifest.py",
+                         checkout / "scripts" / "project_manifest.py")
+            (checkout / "payload.txt").write_text("nested payload\n", encoding="utf-8")
+            digest = hashlib.sha256(b"nested payload\n").hexdigest()
+            (checkout / "PROJECT_MANIFEST.sha256").write_text(
+                f"{digest}  payload.txt\n", encoding="ascii"
+            )
+            result = subprocess.run(
+                [sys.executable, str(checkout / "scripts" / "project_manifest.py"), "--check"],
+                cwd=checkout,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -109,16 +109,86 @@ class TestEnvironment:
         return _string(self.server(name).get("address"), DEFAULT_SERVER_ADDRESS)
 
     def fixture(self, name: str, default: str = "") -> str:
-        return _string(_table(self.data, "fixtures").get(name), default)
+        fixtures = _table(self.data, "fixtures")
+        direct = _string(fixtures.get(name))
+        if direct:
+            return direct
+        legacy_case_ids = {
+            "seek_server_path": "seek_caption",
+            "caption_server_path": "seek_caption",
+            "dvd_server_path": "authored_dvd",
+            "dvd_motion_server_path": "dvd_motion",
+            "prerecorded_search": "long_ota_mpeg2",
+            "long_ota_mpeg2_search": "long_ota_mpeg2",
+            "hardware_codec_server_root": "hardware_codec_matrix",
+            "uk_taskmaster_search": "uk_taskmaster",
+            "uk_breakfast_search": "uk_breakfast",
+            "uk_classic_holby_search": "uk_classic_holby",
+        }
+        case = self.fixture_case(legacy_case_ids.get(name, name))
+        return _string(case.get("path"), default)
 
     def fixture_list(self, name: str, default: list[str] | None = None) -> list[str]:
         value = _table(self.data, "fixtures").get(name)
         if value is None:
+            if name == "mkv_searches":
+                values = [
+                    _string(case.get("path"))
+                    for case in self.fixture_cases(mode="stock_mkv", enabled_only=True)
+                    if _string(case.get("path_type")) == "search"
+                ]
+                if values:
+                    return values
             return list(default or [])
         if isinstance(value, list):
             return [item for item in (_string(item) for item in value) if item]
         single = _string(value)
         return [single] if single else list(default or [])
+
+    def fixture_cases(self, *, mode: str | None = None,
+                      enabled_only: bool = False) -> list[dict[str, Any]]:
+        raw = _table(self.data, "fixtures").get("cases", [])
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, Any]] = []
+        for value in raw:
+            if not isinstance(value, dict):
+                continue
+            if enabled_only and value.get("enabled") is not True:
+                continue
+            modes = value.get("modes", {})
+            if mode is not None and (
+                not isinstance(modes, dict) or modes.get(mode) is not True
+            ):
+                continue
+            result.append(value)
+        return result
+
+    def fixture_case(self, name: str) -> dict[str, Any]:
+        matches = [
+            value for value in self.fixture_cases()
+            if _string(value.get("id")) == name
+        ]
+        return matches[0] if len(matches) == 1 else {}
+
+    def fixture_enabled(self, name: str, default: bool = True,
+                        mode: str | None = None) -> bool:
+        """Return whether a commissioned regression case may run.
+
+        Missing switches remain enabled for compatibility with schema-1 and
+        older schema-2 files. Values must be real TOML booleans; ``validate``
+        reports strings such as ``"false"`` instead of treating them as true.
+        """
+        case = self.fixture_case(name)
+        if case:
+            if case.get("enabled") is not True:
+                return False
+            if mode is None:
+                return True
+            modes = case.get("modes", {})
+            return isinstance(modes, dict) and modes.get(mode) is True
+        value = _table(self.data, "fixture_enabled").get(name)
+        return value if isinstance(value, bool) else default
 
     def test_default(self, name: str, default: Any = None) -> Any:
         return _table(self.data, "test_defaults").get(name, default)
@@ -196,6 +266,18 @@ class TestEnvironment:
             duplicates = sorted({alias for alias in aliases if aliases.count(alias) > 1})
             if duplicates:
                 errors.append(f"{kind} aliases must be unique: {', '.join(duplicates)}")
+        for device_name, device in _table(self.data, "devices").items():
+            if not isinstance(device, dict):
+                continue
+            stv_by_server = device.get("stv_by_server", {})
+            if stv_by_server and (
+                not isinstance(stv_by_server, dict)
+                or not all(isinstance(value, str) and value.strip()
+                           for value in stv_by_server.values())
+            ):
+                errors.append(
+                    f"devices.{device_name}.stv_by_server must map server names to non-empty STV names"
+                )
         package = _string(self.data.get("dev_package"), DEFAULT_DEV_PACKAGE)
         if package.startswith("jvl.sage.miniclient"):
             errors.append("dev_package must not use the protected jvl.sage.miniclient namespace")
@@ -208,7 +290,93 @@ class TestEnvironment:
             or not all(isinstance(item, str) and item.strip() for item in mkv_searches)
         ):
             errors.append("fixtures.mkv_searches must be an array of non-empty search strings")
+        fixture_enabled = _table(self.data, "fixture_enabled")
+        for name, enabled in fixture_enabled.items():
+            if not isinstance(enabled, bool):
+                errors.append(f"fixture_enabled.{name} must be true or false")
+        raw_cases = _table(self.data, "fixtures").get("cases", [])
+        if raw_cases and not isinstance(raw_cases, list):
+            errors.append("fixtures.cases must be an array of tables")
+        elif isinstance(raw_cases, list):
+            case_ids: list[str] = []
+            for index, case in enumerate(raw_cases):
+                prefix = f"fixtures.cases[{index}]"
+                if not isinstance(case, dict):
+                    errors.append(f"{prefix} must be a table")
+                    continue
+                case_id = _string(case.get("id"))
+                if not case_id:
+                    errors.append(f"{prefix}.id must be a non-empty string")
+                else:
+                    case_ids.append(case_id)
+                if not isinstance(case.get("enabled"), bool):
+                    errors.append(f"{prefix}.enabled must be true or false")
+                if _string(case.get("path_type")) not in ("server_path", "server_root", "search"):
+                    errors.append(f"{prefix}.path_type must be server_path, server_root, or search")
+                if not _string(case.get("path")):
+                    errors.append(f"{prefix}.path must be a non-empty string")
+                for expected_name in (
+                    "expected_container", "expected_video_mime",
+                    "expected_audio_mime", "expected_subtitle",
+                ):
+                    if expected_name in case and not _string(case.get(expected_name)):
+                        errors.append(f"{prefix}.{expected_name} must be a non-empty string")
+                minimum_duration = case.get("minimum_duration_seconds")
+                if (minimum_duration is not None
+                        and (not isinstance(minimum_duration, int)
+                             or isinstance(minimum_duration, bool)
+                             or minimum_duration < 0)):
+                    errors.append(
+                        f"{prefix}.minimum_duration_seconds must be a non-negative integer"
+                    )
+                modes = case.get("modes")
+                if not isinstance(modes, dict) or not modes:
+                    errors.append(f"{prefix}.modes must be a non-empty boolean table")
+                elif any(not isinstance(enabled, bool) for enabled in modes.values()):
+                    errors.append(f"{prefix}.modes values must be true or false")
+            duplicate_ids = sorted({value for value in case_ids if case_ids.count(value) > 1})
+            if duplicate_ids:
+                errors.append(f"fixtures.cases ids must be unique: {', '.join(duplicate_ids)}")
         servers = _table(self.data, "servers")
+        for server_name, server in servers.items():
+            if not isinstance(server, dict):
+                continue
+            selection_mode = _string(server.get("media_selection_mode"), "auto")
+            if selection_mode not in ("auto", "stock_web", "vibe_exact_path"):
+                errors.append(
+                    f"servers.{server_name}.media_selection_mode must be auto, "
+                    "stock_web, or vibe_exact_path"
+                )
+            if "webserver_installed" in server and not isinstance(
+                server.get("webserver_installed"), bool
+            ):
+                errors.append(
+                    f"servers.{server_name}.webserver_installed must be true or false"
+                )
+            if (selection_mode == "stock_web"
+                    and server.get("webserver_installed") is False):
+                errors.append(
+                    f"servers.{server_name}.stock_web requires webserver_installed=true"
+                )
+            server_type = _string(server.get("server_type"), "custom")
+            if server_type not in ("stock", "vibe", "custom"):
+                errors.append(
+                    f"servers.{server_name}.server_type must be stock, vibe, or custom"
+                )
+            web_control_mode = _string(server.get("web_control_mode"), "auto")
+            if web_control_mode not in ("auto", "sagex", "web_interface", "none"):
+                errors.append(
+                    f"servers.{server_name}.web_control_mode must be auto, sagex, "
+                    "web_interface, or none"
+                )
+            if (web_control_mode != "none"
+                    and server.get("webserver_installed") is False):
+                errors.append(
+                    f"servers.{server_name}.{web_control_mode} requires webserver_installed=true"
+                )
+            for extension in ("vibe_sage_jar", "vibe_mim", "vibe_ffmpeg"):
+                if extension in server and not isinstance(server.get(extension), bool):
+                    errors.append(f"servers.{server_name}.{extension} must be true or false")
         configs = [(name, self._smb_config_for_server(server)) for name, server in servers.items() if isinstance(server, dict)]
         if not configs:
             configs = [("legacy", _table(self.data, "smb"))]
@@ -259,6 +427,16 @@ def default_fixture(name: str, default: str = "") -> str:
 
 def default_fixture_list(name: str, default: list[str] | None = None) -> list[str]:
     return load_test_environment().fixture_list(name, default)
+
+
+def default_fixture_enabled(name: str, default: bool = True,
+                            mode: str | None = None) -> bool:
+    return load_test_environment().fixture_enabled(name, default, mode)
+
+
+def default_fixture_cases(*, mode: str | None = None,
+                          enabled_only: bool = False) -> list[dict[str, Any]]:
+    return load_test_environment().fixture_cases(mode=mode, enabled_only=enabled_only)
 
 
 def default_test_value(name: str, default: Any = None) -> Any:

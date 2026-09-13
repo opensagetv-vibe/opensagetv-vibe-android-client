@@ -12,6 +12,7 @@ from sagetv_dev_mcp.config import default_server_address, default_server_value
 
 import argparse
 import json
+from pathlib import Path
 import sys
 import time
 
@@ -88,10 +89,13 @@ def main() -> int:
     parser.add_argument("--server-address", default=default_server_address())
     parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", default="")
+    parser.add_argument("--video-name", default="",
+                        help="Start an exact indexed MediaFile through Sagex/WebRemote on stock SageTV")
     parser.add_argument("--search-text", default="",
                         help="Start an indexed recording through the stock SageTV Search UI")
     parser.add_argument("--search-media-type", choices=("tv", "videos"), default="videos")
     parser.add_argument("--player", choices=("exoplayer", "media3", "ijkplayer", "gsyplayer"), default="media3")
+    parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="auto")
     parser.add_argument("--streaming", choices=("dynamic", "pull", "fixed"), default="dynamic")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
     parser.add_argument("--background-seconds", type=float, default=3.0)
@@ -112,9 +116,13 @@ def main() -> int:
     )
     parser.add_argument("--playback-timeout-s", type=float, default=45.0)
     parser.add_argument("--verify-ms", type=int, default=1500)
+    parser.add_argument("--report", default="",
+                        help="Optional JSON evidence path")
     args = parser.parse_args()
-    require(bool(args.server_path.strip()) != bool(args.search_text.strip()),
-            "exactly one of --server-path or --search-text is required")
+    start_selectors = sum(bool(value.strip()) for value in
+                          (args.server_path, args.video_name, args.search_text))
+    require(start_selectors == 1,
+            "exactly one of --server-path, --video-name, or --search-text is required")
     args.repeat = max(0, min(args.repeat, 10))
     args.background_seconds = max(1.0, min(args.background_seconds, 30.0))
     args.session_timeout_seconds = max(0, min(args.session_timeout_seconds, 86400))
@@ -125,6 +133,23 @@ def main() -> int:
                 "--background-seconds must exceed --session-timeout-seconds")
 
     client = MCPProcess()
+    evidence = {
+        "status": "STARTING",
+        "player": args.player,
+        "gsyEngine": args.gsy_engine if args.player == "gsyplayer" else "",
+        "streaming": args.streaming,
+        "decoding": args.decoding,
+        "videoName": args.video_name,
+        "serverPath": args.server_path,
+    }
+
+    def write_evidence() -> None:
+        if not args.report:
+            return
+        report = Path(args.report)
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(evidence, indent=2, sort_keys=True), encoding="utf-8")
+
     try:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
@@ -152,14 +177,17 @@ def main() -> int:
             clean = {"readyToLaunch": True, "fallback": "kill_dev_app+firetv_wake"}
         require(bool(clean.get("readyToLaunch")), f"Dev app clean-start preparation failed: {clean}")
 
-        call_dict(client, "dev_set_player_config", {
+        player_config = {
             "player": args.player,
             "streaming": args.streaming,
             "decoding": args.decoding,
             "keep_session_in_background": True,
             "resume_background_playback": args.resume_background_playback,
             "background_session_timeout_seconds": args.session_timeout_seconds,
-        })
+        }
+        if args.player == "gsyplayer":
+            player_config["gsy_engine"] = args.gsy_engine
+        call_dict(client, "dev_set_player_config", player_config)
         call_dict(client, "dev_connect_server", {
             "address": args.server_address,
             "port": args.server_port,
@@ -171,7 +199,13 @@ def main() -> int:
         clear_restored_playback(client)
 
         print("STEP: establish real completed-file playback")
-        if args.search_text:
+        if args.video_name:
+            started = call_dict(client, "dev_play_video", {
+                "video_name": args.video_name,
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": args.verify_ms,
+            }, timeout=args.playback_timeout_s + 35.0)
+        elif args.search_text:
             search_start = start_recording_via_search(
                 client, args.search_text, search_timeout_s=15.0,
                 media_type=args.search_media_type,
@@ -192,6 +226,7 @@ def main() -> int:
             }, timeout=args.playback_timeout_s + 35.0)
         require(bool(started.get("passed")), f"Initial playback failed: {started}")
         surface_before = call_dict(client, "dev_player_state", timeout=30.0)
+        evidence["initialPlayback"] = surface_before
         connection_generation = int(surface_before.get("connectionGeneration", -1))
         require(connection_generation > 0, f"Missing connection generation: {surface_before}")
         require(
@@ -208,6 +243,7 @@ def main() -> int:
         require(bool(background.get("running")), f"Dev process died in background: {background}")
         require(not bool(background.get("foreground")), f"Dev app did not enter background: {background}")
         surface_background = call_dict(client, "dev_player_state", timeout=30.0)
+        evidence["background"] = surface_background
         if args.expect_session_timeout:
             expired = wait_for_player_predicate(
                 client,
@@ -311,6 +347,7 @@ def main() -> int:
                     f"A/V recovery used a replacement connection: {resumed_state}")
 
         surface_after = call_dict(client, "dev_player_state", timeout=30.0)
+        evidence["foregroundReturn"] = surface_after
         require(
             bool(surface_after.get("health_surfaceValid"))
             and bool(surface_after.get("health_surfaceShown")),
@@ -363,6 +400,7 @@ def main() -> int:
                 == play_requests_before_user_pause,
                 f"User-paused return incorrectly auto-resumed playback: {preserved_user_pause}")
         print("PASS: manual pause survived HOME/return without an automatic PLAY")
+        evidence["userPauseReturn"] = preserved_user_pause
         call_dict(client, "dev_sage_command", {"command": "play"}, timeout=30.0)
         user_resume = call_dict(client, "dev_wait_for_playback_started", {
             "timeout_s": args.playback_timeout_s,
@@ -374,7 +412,13 @@ def main() -> int:
                 f"Explicit PLAY did not resume the preserved user-paused session: {user_resume}")
 
         for iteration in range(1, args.repeat + 1):
-            if args.search_text:
+            if args.video_name:
+                replay = call_dict(client, "dev_play_video", {
+                    "video_name": args.video_name,
+                    "timeout_s": args.playback_timeout_s,
+                    "verify_ms": args.verify_ms,
+                }, timeout=args.playback_timeout_s + 35.0)
+            elif args.search_text:
                 replay_search = start_recording_via_search(
                     client, args.search_text, search_timeout_s=15.0,
                     media_type=args.search_media_type,
@@ -397,6 +441,7 @@ def main() -> int:
             print(f"PASS: repeated exact-path playback {iteration}/{args.repeat}")
 
         final_crash = call_dict(client, "dev_crash_probe", timeout=30.0)
+        evidence["finalCrashProbe"] = final_crash
         require(not bool(final_crash.get("signatureDetected")), f"Dev crash signature detected: {final_crash}")
         require(
             baseline_crash.get("signatureFingerprint", "") == final_crash.get("signatureFingerprint", ""),
@@ -410,9 +455,15 @@ def main() -> int:
                 or (bool(status.get("forceStopped")) and not bool(status.get("foreground"))),
                 f"Dev package remained executable after teardown: {status}")
         print("PASS: disconnect/force-stop teardown committed; Fire OS may briefly retain a terminating PID")
+        evidence["status"] = "PASS"
+        evidence["teardown"] = {"exit": exited, "appStatus": status}
+        write_evidence()
         print("ANDROID LIFECYCLE PLAYBACK: PASS")
         return 0
     except Exception as exc:
+        evidence["status"] = "FAIL"
+        evidence["reason"] = str(exc)
+        write_evidence()
         print(f"ANDROID LIFECYCLE PLAYBACK: FAIL\n{exc}", file=sys.stderr)
         try:
             diagnostics = call_dict(client, "collect_playback_diagnostics", {"label": "lifecycle-failure"}, timeout=90.0)

@@ -23,6 +23,8 @@ def main() -> int:
     )
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "push"), default="pull")
+    parser.add_argument("--inventory-only", action="store_true",
+                        help="Read and save the device MediaCodec inventory without starting playback")
     parser.add_argument("--expected-interlace", choices=("interlaced", "progressive", "any"),
                         default="interlaced")
     args = parser.parse_args()
@@ -32,6 +34,22 @@ def main() -> int:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
         call_dict(client, "adb_connect", timeout=30.0)
+        if args.inventory_only:
+            profile = call_dict(client, "dev_codec_capabilities", timeout=30.0)
+            count = int(profile.get("codecProfileCount", 0) or 0)
+            require(count > 0, f"empty codec profile: {profile}")
+            artifact_root = Path(os.environ.get("SAGETV_ARTIFACT_DIR", "artifacts/firetv"))
+            artifact_root.mkdir(parents=True, exist_ok=True)
+            device_label = str(profile.get("codecDevice") or "device")
+            safe_device = "".join(c if c.isalnum() or c in "-_" else "-" for c in device_label)
+            artifact = artifact_root / f"codec-capability-{safe_device}-api{profile.get('codecApi')}.json"
+            artifact.write_text(json.dumps(profile, indent=2, sort_keys=True), encoding="utf-8")
+            print(
+                "PASS: MediaCodec inventory "
+                f"device={profile.get('codecDevice')} api={profile.get('codecApi')} entries={count}"
+            )
+            print(f"PASS: evidence {artifact}")
+            return 0
         clean = call_dict(client, "dev_prepare_clean_start", {
             "wake": True,
             "graceful_timeout_s": 2.0,

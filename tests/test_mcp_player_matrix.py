@@ -20,7 +20,23 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
         self.assertIn('parser.add_argument("--video-name"', script)
         self.assertIn('call_dict(client, "dev_play_video", {', script)
+        self.assertIn('"refresh_if_missing": True', script)
         self.assertIn('"reason": "stock_sagex_video_name_requested"', script)
+
+    def test_first_slow_start_is_discarded_but_normal_or_recent_start_is_measured(self):
+        script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
+        self.assertIn('"--storage-warmup-timeout-s"', script)
+        self.assertIn('"--slow-startup-ms"', script)
+        self.assertIn('"--storage-warm-cache-s"', script)
+        self.assertIn('"--skip-storage-warmup"', script)
+        self.assertIn('def start_with_adaptive_storage_gate', script)
+        self.assertIn('"normal_start_used_as_measured_result"', script)
+        self.assertIn('"slow_start_discarded_and_retried"', script)
+        self.assertIn('"recent_media_uses_normal_gates"', script)
+        self.assertIn('"slidingTtlRefreshCount"', script)
+        self.assertIn('storage_warmup["slidingTtlRefreshCount"] = 2', script)
+        self.assertIn('"dev_player_control", {"action": "stop"}', script)
+        self.assertIn('"storageWarmup": storage_warmup', script)
 
     def test_case_launch_verifies_active_configuration_and_retries_once(self):
         script = (SCRIPTS / "mcp_player_matrix.py").read_text(encoding="utf-8")
@@ -96,7 +112,9 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertIn('one of --text, --video-name, or --server-path is required', script)
         self.assertIn('if server_path.strip():', script)
         self.assertIn('call_dict(client, "dev_play_server_path"', script)
-        self.assertIn('"reason": "exact_server_path_requested"', script)
+        self.assertIn('"reason": "vibe_exact_server_path_requested"', script)
+        self.assertIn('"reason": "stock_web_path_stem_lookup"', script)
+        self.assertIn('media_selection_mode == "auto"', script)
         self.assertIn('"serverPath": args.server_path', script)
 
 

@@ -143,7 +143,19 @@ class AdbClient:
 
     def run(self, args: Iterable[str], *, timeout: float = 30, check: bool = True, device: bool = True) -> subprocess.CompletedProcess[str]:
         cmd = self._base(device) + list(args)
-        cp = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        # Android logcat and a few vendor dumpsys services can emit arbitrary
+        # bytes (including legacy/vendor encodings).  Diagnostics must remain
+        # collectable when that happens, so decode lossily instead of allowing
+        # Python's text wrapper to abort the entire evidence bundle.
+        cp = subprocess.run(
+            cmd,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
         if check and cp.returncode:
             raise RuntimeError(f"Command failed ({cp.returncode}): {' '.join(cmd)}\n{cp.stderr.strip()}")
         return cp
@@ -717,6 +729,13 @@ class AdbClient:
         smb_profile_password: str = "",
         smb_profile_domain: str = "",
         smb_profile_clear_auth: bool = False,
+        smb_diagnostics_directory: str = "",
+        smb_diagnostics_mode: str = "",
+        smb_diagnostics_auth_mode: str = "",
+        smb_diagnostics_username: str = "",
+        smb_diagnostics_password: str = "",
+        smb_diagnostics_domain: str = "",
+        smb_diagnostics_clear_auth: bool = False,
         keep_session_in_background: bool | None = None,
         resume_background_playback: bool | None = None,
         background_session_timeout_seconds: int | str | None = "",
@@ -765,6 +784,13 @@ class AdbClient:
             "smb_profile_password": smb_profile_password,
             "smb_profile_domain": smb_profile_domain,
             "smb_profile_clear_auth": "true" if smb_profile_clear_auth else "",
+            "smb_diagnostics_directory": smb_diagnostics_directory,
+            "smb_diagnostics_mode": smb_diagnostics_mode,
+            "smb_diagnostics_auth_mode": smb_diagnostics_auth_mode,
+            "smb_diagnostics_username": smb_diagnostics_username,
+            "smb_diagnostics_password": smb_diagnostics_password,
+            "smb_diagnostics_domain": smb_diagnostics_domain,
+            "smb_diagnostics_clear_auth": "true" if smb_diagnostics_clear_auth else "",
             "keep_session_in_background": (
                 "true" if keep_session_in_background else "false"
             ) if isinstance(keep_session_in_background, bool) else "",

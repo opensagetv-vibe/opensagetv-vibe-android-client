@@ -24,6 +24,24 @@ def is_generated_delivery_artifact(name: str) -> bool:
 
 def repository_files() -> list[str]:
     try:
+        top_level = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={ROOT}",
+                "-C",
+                str(ROOT),
+                "rev-parse",
+                "--show-toplevel",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        owns_checkout = (
+            top_level.returncode == 0
+            and Path(top_level.stdout.strip()).resolve() == ROOT.resolve()
+        )
         result = subprocess.run(
             [
                 "git",
@@ -39,7 +57,7 @@ def repository_files() -> list[str]:
             ],
             check=False,
             capture_output=True,
-        )
+        ) if owns_checkout else None
     except FileNotFoundError:
         result = None
 

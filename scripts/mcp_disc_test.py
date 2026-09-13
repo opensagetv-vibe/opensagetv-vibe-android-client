@@ -2,21 +2,61 @@
 """Run bounded remote-DVD startup/STOP/crash gates through the real MCP path."""
 from __future__ import annotations
 
-from sagetv_dev_mcp.config import default_server_address, default_server_value
+from sagetv_dev_mcp.config import (
+    default_fixture_cases,
+    default_server_address,
+    default_server_value,
+    default_test_value,
+    load_test_environment,
+)
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
 from pathlib import Path
 
 from mcp_lifecycle_test import MCPProcess, call_dict, initialize, require, wait_automation_ready
+from media_warm_cache import mark_recent, media_identity, recent_entry
 
 
 def safe_label(path: str) -> str:
     label = re.sub(r"[^A-Za-z0-9._-]+", "-", path.rstrip("/\\").split("/")[-1])
     return label.strip("-")[:64] or "dvd"
+
+
+def configured_disc_targets(cases: list[dict], selection_mode: str) -> list[tuple[str, str, str]]:
+    """Translate generic fixture records into the server's supported launch path.
+
+    Stock SageTV cannot consume Vibe's exact-path debug event. For stock Web
+    control, resolve the final DVD directory name through the normal MediaFile
+    index and Watch command. Updated Vibe servers retain exact-path selection.
+    Fixture IDs label evidence only and never select a hard-coded path.
+    """
+    targets: list[tuple[str, str, str]] = []
+    for case in cases:
+        case_id = str(case.get("id") or "").strip()
+        path_type = str(case.get("path_type") or "").strip()
+        value = str(case.get("path") or "").strip()
+        if not case_id or not value:
+            continue
+        if path_type == "search":
+            targets.append(("name", value, case_id))
+        elif path_type == "server_path":
+            if selection_mode == "stock_web":
+                media_name = re.split(r"[/\\]+", value.rstrip("/\\"))[-1]
+                targets.append(("name", media_name, case_id))
+            else:
+                targets.append(("path", value, case_id))
+        elif path_type == "server_root":
+            raise ValueError(
+                f"DISC fixture {case_id} is a server_root collection; configure one DVD directory"
+            )
+        else:
+            raise ValueError(f"DISC fixture {case_id} has unsupported path_type={path_type!r}")
+    return targets
 
 
 def wait_stopped(client: MCPProcess, timeout_s: float = 20.0) -> dict:
@@ -181,6 +221,11 @@ def main() -> int:
                         help="Exact invalid/empty DVD path that must fail safely; repeat as needed")
     parser.add_argument("--paths-file", default="",
                         help="UTF-8 file containing one exact indexed DVD directory per line")
+    parser.add_argument("--fixture-mode", default="",
+                        help=("Add every enabled TOML fixture for this mode; fixture IDs label "
+                              "evidence and do not hard-code selection"))
+    parser.add_argument("--fixture-id", action="append", default=[],
+                        help="Limit --fixture-mode to one configured fixture ID; repeat as needed")
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     parser.add_argument("--decoding", choices=("hardware", "hardware_preferred"),
                         default="hardware")
@@ -196,6 +241,17 @@ def main() -> int:
     parser.add_argument("--no-native-fallback", action="store_true")
     parser.add_argument("--timeout-s", type=float, default=90.0,
                         help="Per-disc startup timeout, including possible HDD spin-up")
+    parser.add_argument("--storage-warmup-timeout-s", type=float,
+                        default=float(default_test_value("storage_warmup_timeout_seconds", 120)),
+                        help="Extended first-use allowance for a cold server/disc")
+    parser.add_argument("--slow-startup-ms", type=int,
+                        default=int(default_test_value("storage_slow_startup_ms", 10000)),
+                        help="Discard/retry only a successful first start slower than this")
+    parser.add_argument("--storage-warm-cache-s", type=float,
+                        default=float(default_test_value("storage_warm_cache_seconds", 600)),
+                        help="Sliding recent-use interval for each server/disc")
+    parser.add_argument("--skip-storage-warmup", action="store_true",
+                        help="Disable adaptive storage handling for intentional cold-start tests")
     parser.add_argument("--verify-ms", type=int, default=2000)
     parser.add_argument("--settle-s", type=float, default=3.0)
     parser.add_argument("--start-ms", type=int, default=-1,
@@ -255,13 +311,35 @@ def main() -> int:
             value = line.strip()
             if value and not value.startswith("#"):
                 paths.append(value)
-    targets = [("path", value) for value in paths]
-    targets.extend(("name", value) for value in media_names)
+    targets = [("path", value, "") for value in paths]
+    targets.extend(("name", value, "") for value in media_names)
+    fixture_cases: list[dict] = []
+    selection_mode = str(default_server_value("media_selection_mode", "auto"))
+    if args.fixture_mode:
+        fixture_cases = default_fixture_cases(mode=args.fixture_mode, enabled_only=True)
+        wanted = {value.strip() for value in args.fixture_id if value.strip()}
+        if wanted:
+            known = {str(case.get("id") or "") for case in fixture_cases}
+            missing = sorted(wanted - known)
+            require(not missing,
+                    f"enabled --fixture-mode {args.fixture_mode!r} has no fixture(s): {', '.join(missing)}")
+            fixture_cases = [case for case in fixture_cases
+                             if str(case.get("id") or "") in wanted]
+        environment = load_test_environment()
+        server = environment.server_for_address(args.server_address) or environment.server()
+        selection_mode = str(server.get("media_selection_mode") or selection_mode)
+        targets.extend(configured_disc_targets(fixture_cases, selection_mode))
     require(bool(targets),
-            "at least one --server-path, --paths-file, or --media-name entry is required")
+            "at least one --server-path, --paths-file, --media-name, or enabled --fixture-mode entry is required")
     require(not args.leave_playing or len(targets) == 1,
             "--leave-playing is valid only for a single disc")
     args.timeout_s = max(15.0, min(float(args.timeout_s), 180.0))
+    require(15.0 <= args.storage_warmup_timeout_s <= 300.0,
+            "--storage-warmup-timeout-s must be between 15 and 300 seconds")
+    require(1000 <= args.slow_startup_ms <= 120000,
+            "--slow-startup-ms must be between 1000 and 120000")
+    require(0.0 <= args.storage_warm_cache_s <= 3600.0,
+            "--storage-warm-cache-s must be between 0 and 3600 seconds")
     args.verify_ms = max(500, min(int(args.verify_ms), 10_000))
     args.settle_s = max(0.0, min(float(args.settle_s), 30.0))
     require(args.start_ms >= -1, "--start-ms must be -1 (disabled) or non-negative")
@@ -289,6 +367,9 @@ def main() -> int:
 
     client = MCPProcess()
     results: list[dict] = []
+    warm_cache_path = Path(
+        os.environ.get("SAGETV_ARTIFACT_DIR", "artifacts/firetv")
+    ) / ".media-warm-cache.json"
     try:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
@@ -320,13 +401,28 @@ def main() -> int:
         })
         wait_automation_ready(client, timeout_s=60.0)
 
-        for index, (target_kind, target_value) in enumerate(targets, 1):
+        fixture_by_id = {
+            str(case.get("id") or ""): case for case in fixture_cases
+            if str(case.get("id") or "")
+        }
+        for index, (target_kind, target_value, fixture_id) in enumerate(targets, 1):
             label = safe_label(target_value)
             result: dict = {
                 "index": index,
                 "launchMethod": "vibe_exact_path" if target_kind == "path" else "stock_sagex_watch",
                 "label": label,
             }
+            if fixture_id:
+                fixture = fixture_by_id.get(fixture_id, {})
+                result["fixtureId"] = fixture_id
+                result["enabledModes"] = sorted(
+                    name for name, enabled in fixture.get("modes", {}).items()
+                    if enabled is True
+                )
+                result["expected"] = {
+                    key: value for key, value in fixture.items()
+                    if key.startswith("expected_") or key == "minimum_duration_seconds"
+                }
             if target_kind == "path":
                 result["serverPath"] = target_value
             else:
@@ -340,19 +436,83 @@ def main() -> int:
                     require(bool(capture.get("enabled")),
                             f"DVD datasource capture did not enable: {capture}")
                     result["datasourceCapture"] = capture
-                if target_kind == "path":
-                    started = call_dict(client, "dev_play_server_path", {
-                        "server_path": target_value,
-                        "timeout_s": args.timeout_s,
-                        "verify_ms": args.verify_ms,
-                        "restart_from_beginning": True,
-                    }, timeout=args.timeout_s + 45.0)
-                else:
-                    started = call_dict(client, "dev_play_video", {
-                        "video_name": target_value,
-                        "timeout_s": args.timeout_s,
-                        "verify_ms": args.verify_ms,
-                    }, timeout=args.timeout_s + 45.0)
+                warm_identity = media_identity(
+                    server=args.server_address,
+                    port=args.server_port,
+                    server_path=target_value if target_kind == "path" else "",
+                    video_name=target_value if target_kind == "name" else "",
+                )
+                recent_warm = None if args.skip_storage_warmup else recent_entry(
+                    warm_cache_path, warm_identity, args.storage_warm_cache_s
+                )
+                adaptive_probe = bool(
+                    not args.skip_storage_warmup
+                    and recent_warm is None
+                    and not (target_kind == "path" and target_value in expected_failures)
+                )
+                storage_warmup = {
+                    "enabled": not args.skip_storage_warmup,
+                    "timeoutSeconds": args.storage_warmup_timeout_s,
+                    "slowStartupThresholdMs": args.slow_startup_ms,
+                    "recentWarmTtlSeconds": args.storage_warm_cache_s,
+                    "recentWarmHit": recent_warm is not None,
+                    "recentWarmAgeSeconds": recent_warm.get("ageSeconds") if recent_warm else None,
+                    "outcome": "disabled_for_intentional_cold_start_test"
+                               if args.skip_storage_warmup else
+                               "recent_media_uses_normal_gate" if recent_warm else
+                               "pending_first_start",
+                    "slidingTtlRefreshCount": 0,
+                }
+
+                def start_target(timeout_s: float) -> tuple[dict, int]:
+                    began = time.monotonic()
+                    if target_kind == "path":
+                        reply = call_dict(client, "dev_play_server_path", {
+                            "server_path": target_value,
+                            "timeout_s": timeout_s,
+                            "verify_ms": args.verify_ms,
+                            "restart_from_beginning": True,
+                        }, timeout=timeout_s + 45.0)
+                    else:
+                        reply = call_dict(client, "dev_play_video", {
+                            "video_name": target_value,
+                            "timeout_s": timeout_s,
+                            "verify_ms": args.verify_ms,
+                        }, timeout=timeout_s + 45.0)
+                    return reply, int((time.monotonic() - began) * 1000)
+
+                first_timeout_s = max(args.timeout_s, args.storage_warmup_timeout_s) \
+                    if adaptive_probe else args.timeout_s
+                started, startup_ms = start_target(first_timeout_s)
+                storage_warmup["firstStartupMs"] = startup_ms
+                storage_warmup["firstStartupPassed"] = bool(started.get("passed"))
+                if bool(started.get("passed")) and not args.skip_storage_warmup:
+                    storage_warmup["cacheEntry"] = mark_recent(
+                        warm_cache_path, warm_identity, startup_ms=startup_ms
+                    )
+                    storage_warmup["slidingTtlRefreshCount"] = 1
+                    if adaptive_probe and startup_ms > args.slow_startup_ms:
+                        storage_warmup["outcome"] = "slow_start_discarded_and_retried"
+                        storage_warmup["discardedStartupMs"] = startup_ms
+                        call_dict(client, "dev_sage_command", {"command": "stop"}, timeout=30.0)
+                        wait_stopped(client)
+                        cleanup = call_dict(client, "dev_prepare_clean_start", {
+                            "wake": False, "graceful_timeout_s": 3.0,
+                        }, timeout=30.0)
+                        storage_warmup["cleanupReadyToLaunch"] = bool(cleanup.get("readyToLaunch"))
+                        started, retry_ms = start_target(args.timeout_s)
+                        storage_warmup["measuredRetryStartupMs"] = retry_ms
+                        storage_warmup["measuredRetryPassed"] = bool(started.get("passed"))
+                        if bool(started.get("passed")):
+                            storage_warmup["cacheEntry"] = mark_recent(
+                                warm_cache_path, warm_identity, startup_ms=retry_ms
+                            )
+                            storage_warmup["slidingTtlRefreshCount"] = 2
+                    elif adaptive_probe:
+                        storage_warmup["outcome"] = "normal_start_used_as_measured_result"
+                    else:
+                        storage_warmup["outcome"] = "recent_media_uses_normal_gate"
+                result["storageWarmup"] = storage_warmup
                 result["startup"] = started
                 if target_kind == "path" and target_value in expected_failures:
                     require(not bool(started.get("passed")),
@@ -596,6 +756,8 @@ def main() -> int:
         evidence = {
             "passed": len(results) == len(targets) and all(item["passed"] for item in results),
             "serverAddress": args.server_address,
+            "mediaSelectionMode": selection_mode,
+            "fixtureMode": args.fixture_mode or None,
             "player": args.player,
             "decoding": args.decoding,
             "discPolicy": args.disc_policy,
@@ -605,6 +767,10 @@ def main() -> int:
             "seekToleranceMs": args.seek_tolerance_ms,
             "seekTimeoutSeconds": args.seek_timeout_s,
             "cadenceObserveSeconds": args.cadence_observe_s,
+            "storageWarmupTimeoutSeconds": args.storage_warmup_timeout_s,
+            "slowStartupThresholdMs": args.slow_startup_ms,
+            "storageWarmCacheSeconds": args.storage_warm_cache_s,
+            "storageWarmupEnabled": not args.skip_storage_warmup,
             "datasourceCaptureRequested": args.capture_datasource,
             "minimumRealtimeRatio": args.min_realtime_ratio,
             "nativeFallback": not args.no_native_fallback,

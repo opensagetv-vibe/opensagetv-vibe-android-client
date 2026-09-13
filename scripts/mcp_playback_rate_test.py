@@ -56,6 +56,42 @@ def measure(client: MCPProcess, seconds: float) -> tuple[dict, dict, int]:
     return before, after, position(after) - position(before)
 
 
+def observe_cadence(client: MCPProcess, seconds: float) -> dict:
+    before = wait_playing(client)
+    started_ns = time.monotonic_ns()
+    time.sleep(seconds)
+    after = state(client)
+    wall_ms = max(1, (time.monotonic_ns() - started_ns) // 1_000_000)
+
+    def value(snapshot: dict, key: str) -> int:
+        try:
+            return int(snapshot.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def delta(key: str) -> int:
+        return value(after, key) - value(before, key)
+
+    media_ms = position(after) - position(before)
+    return {
+        "requestedObserveMs": int(seconds * 1000),
+        "wallElapsedMs": wall_ms,
+        "playerPositionDeltaMs": media_ms,
+        "realtimeRatio": media_ms / wall_ms,
+        "videoOutputDelta": delta("health_videoRendered"),
+        "videoDroppedDelta": delta("health_videoDropped"),
+        "videoSkippedDelta": delta("health_videoSkipped"),
+        "audioOutputDelta": delta("health_audioRendered"),
+        "audioDroppedDelta": delta("health_audioDropped"),
+        "videoDecoder": after.get("health_videoDecoder", ""),
+        "videoDecoderKind": after.get("health_videoDecoderKind", ""),
+        "audioDecoder": after.get("health_audioDecoder", ""),
+        "audioDecoderKind": after.get("health_audioDecoderKind", ""),
+        "playerError": after.get("health_playerError", after.get("playerError", "")),
+        "stillPlaying": bool(after.get("health_isPlaying")),
+    }
+
+
 def set_rate(client: MCPProcess, requested: float) -> dict:
     result = call_dict(client, "dev_playback_rate", {"rate": requested}, timeout=30.0)
     accepted = float(result.get("acceptedRate", 1.0))
@@ -77,7 +113,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Android playback-rate physical gates")
     parser.add_argument("--server-address", default=default_server_address())
     parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
-    parser.add_argument("--server-path", required=True)
+    media = parser.add_mutually_exclusive_group(required=True)
+    media.add_argument("--server-path",
+                       help="Exact server path; requires the optional Vibe server watch-file event")
+    media.add_argument("--video-name",
+                       help="Resolve and play a SageTV MediaFile by name (stock-server compatible)")
     parser.add_argument("--player", choices=("media3", "exoplayer", "gsyplayer"), default="media3")
     parser.add_argument("--streaming", choices=("pull", "smb_direct"), default="pull")
     parser.add_argument("--gsy-engine", choices=("media3", "legacy_exo"), default="media3")
@@ -85,6 +125,10 @@ def main() -> int:
     parser.add_argument("--smb-username", default=default_smb_value("username"))
     parser.add_argument("--smb-password", default=default_smb_value("password"))
     parser.add_argument("--playback-timeout-s", type=float, default=60.0)
+    parser.add_argument("--cadence-only", action="store_true",
+                        help="measure stable 1x playback without requiring native scan rates")
+    parser.add_argument("--cadence-observe-s", type=float, default=30.0)
+    parser.add_argument("--min-realtime-ratio", type=float, default=0.95)
     parser.add_argument("--server-negotiation", action="store_true",
                         help="also require SageTV smooth_ff/smooth_rew to use negotiated command 30")
     args = parser.parse_args()
@@ -119,15 +163,48 @@ def main() -> int:
             "save": False,
         }, timeout=30.0)
         wait_automation_ready(client)
-        started = call_dict(client, "dev_play_server_path", {
-            "server_path": args.server_path,
-            "timeout_s": args.playback_timeout_s,
-            "verify_ms": 2500,
-        }, timeout=args.playback_timeout_s + 35.0)
+        if args.video_name:
+            started = call_dict(client, "dev_play_video", {
+                "video_name": args.video_name,
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": 2500,
+            }, timeout=args.playback_timeout_s + 35.0)
+        else:
+            started = call_dict(client, "dev_play_server_path", {
+                "server_path": args.server_path,
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": 2500,
+            }, timeout=args.playback_timeout_s + 35.0)
         require(bool(started.get("passed")), f"initial playback failed: {started}")
+        if args.video_name:
+            # A named stock-server launch can inherit SageTV's saved resume
+            # point. Normalize only the active player for deterministic rate
+            # measurements without modifying the user's watched metadata.
+            call_dict(client, "dev_local_seek_absolute", {"target_ms": 0}, timeout=30.0)
         initial = wait_playing(client)
         require(str(initial.get("health_videoDecoderKind", "")).lower() == "hardware",
                 f"hardware decoder required: {initial.get('health_videoDecoderKind')}")
+
+        if args.cadence_only:
+            cadence = observe_cadence(client, max(2.0, min(args.cadence_observe_s, 900.0)))
+            require(cadence["stillPlaying"], f"playback stopped during cadence gate: {cadence}")
+            require(not str(cadence["playerError"] or "").strip(),
+                    f"player error during cadence gate: {cadence}")
+            require(cadence["videoOutputDelta"] > 0,
+                    f"video output did not advance: {cadence}")
+            require(cadence["audioOutputDelta"] > 0,
+                    f"audio output did not advance: {cadence}")
+            require(cadence["realtimeRatio"] >= args.min_realtime_ratio,
+                    f"media clock below realtime threshold: {cadence}")
+            call_dict(client, "dev_player_control", {"action": "stop"}, timeout=30.0)
+            print("ANDROID PLAYBACK CADENCE: PASS")
+            print(json.dumps({
+                "player": args.player,
+                "gsyEngine": args.gsy_engine if args.player == "gsyplayer" else "",
+                "streaming": args.streaming,
+                "cadence": cadence,
+            }, indent=2, sort_keys=True))
+            return 0
 
         normal_before, normal_after, normal_delta = measure(client, 2.0)
         require(normal_delta >= 1000, f"1x media clock did not advance: {normal_delta}ms")

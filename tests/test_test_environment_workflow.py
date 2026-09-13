@@ -20,7 +20,28 @@ class TestEnvironmentWorkflowTests(unittest.TestCase):
             self.assertIn(section, data)
         self.assertIn("smb_url", data["servers"]["vibe"])
         self.assertIn("smb_url", data["servers"]["stock"])
-        self.assertEqual(len(data["fixtures"]["mkv_searches"]), 2)
+        self.assertEqual(data["servers"]["stock"]["media_selection_mode"], "stock_web")
+        self.assertIs(data["servers"]["stock"]["webserver_installed"], True)
+        self.assertIn(data["servers"]["vibe"]["media_selection_mode"], ("auto", "vibe_exact_path"))
+        self.assertIsInstance(data["servers"]["vibe"]["webserver_installed"], bool)
+        cases = data["fixtures"]["cases"]
+        ids = {case["id"] for case in cases}
+        self.assertEqual(len(ids), len(cases))
+        self.assertTrue({
+            "seek_caption", "authored_dvd", "dvd_motion", "long_ota_mpeg2",
+            "stock_mkv_one", "stock_mkv_two", "stock_mkv_three",
+            "hardware_codec_matrix", "uk_taskmaster", "uk_breakfast",
+            "uk_classic_holby",
+        }.issubset(ids))
+        for case in cases:
+            self.assertIsInstance(case["enabled"], bool, case["id"])
+            self.assertIn(case["path_type"], ("server_path", "server_root", "search"))
+            self.assertTrue(case["path"])
+            self.assertTrue(case["modes"])
+            self.assertTrue(all(isinstance(value, bool) for value in case["modes"].values()))
+        text = path.read_text(encoding="utf-8")
+        self.assertNotIn("seek_server_path", text)
+        self.assertNotIn("caption_server_path", text)
         text = path.read_text(encoding="utf-8")
         self.assertNotIn("192.168.10.", text)
         self.assertNotIn('web_password = "frey"', text)
@@ -34,6 +55,12 @@ class TestEnvironmentWorkflowTests(unittest.TestCase):
         self.assertIn("config-check)", dev)
         self.assertIn("test_environment_config.py", dev)
         self.assertIn("config-check)", entrypoint)
+
+    def test_raw_adb_is_scoped_to_the_active_device(self):
+        shell = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        self.assertIn("configured_device_serial", shell)
+        self.assertIn('dev_exec adb -s "$serial" "$@"', shell)
+        self.assertIn('run_scoped_adb "$@"', shell)
 
     def test_physical_scripts_use_selected_server_instead_of_private_address(self):
         offenders = []

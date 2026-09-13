@@ -11,6 +11,17 @@ from sagetv_dev_mcp.adb import AdbClient, parse_broadcast_result, parse_telemetr
 
 class AdbSafetyTests(unittest.TestCase):
 
+    def test_run_replaces_non_utf8_vendor_output(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        completed = subprocess.CompletedProcess(
+            ["adb"], 0, stdout="valid\ufffdvendor\n", stderr=""
+        )
+        with patch("subprocess.run", return_value=completed) as run:
+            result = c.run(["logcat", "-d"])
+        self.assertEqual(result.stdout, "valid\ufffdvendor\n")
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+        self.assertEqual(run.call_args.kwargs["errors"], "replace")
+
     def test_persistent_shell_reuses_one_adb_shell_process(self):
         with tempfile.TemporaryDirectory() as td:
             fake_adb = Path(td) / "adb"

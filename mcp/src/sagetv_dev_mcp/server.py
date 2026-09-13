@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlparse
 from mcp.server import MCPServer
 
 from .adb import AdbClient
-from .config import load_config
+from .config import load_config, load_test_environment
 from .sagex_api import SagexApiClient, SagexApiError
 from .sequence import parse_sequence_script
 from .trace_analysis import analyze_jsonl
@@ -23,6 +23,26 @@ atexit.register(adb.close)
 mcp = MCPServer("SageTV Dev Fire TV MCP")
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SEEK_FIXTURE_DIR = PROJECT_ROOT / "artifacts" / "test-media"
+_sage_control_sessions: dict[tuple[str, str], tuple[object, str]] = {}
+
+
+def _sage_control_session(server_address: str, client_id: str) -> tuple[object, str]:
+    """Reuse a verified stock control endpoint/context within one MCP process.
+
+    Hardware matrices issue many exact Watch operations in succession. Repeating
+    Sagex discovery and UI-context enumeration for every row adds avoidable
+    Jetty load. This cache is intentionally process-local: starting a new MCP
+    process after server recovery always performs fresh discovery.
+    """
+    key = (str(server_address).strip(), str(client_id).strip())
+    cached = _sage_control_sessions.get(key)
+    if cached is not None:
+        return cached
+    sagex = SagexApiClient.discover(key[0])
+    context = sagex.resolve_context(key[1])
+    resolved = (sagex, context)
+    _sage_control_sessions[key] = resolved
+    return resolved
 
 
 
@@ -146,6 +166,10 @@ def _compact_state(state: dict) -> dict:
         "legacyCaptionCallbackCount", "legacyCaptionCallbackBytes",
         "serverName", "serverAddress", "serverPort", "clientId", "uiContextHint", "menuName", "popupName", "hasTextInput",
         "debugStatusVersion", "maxRecoveryWatchdogMs", "uiState", "automationReady", "imeRequested", "imeSuppressedForDebug", "imeVisibleKnown", "imeVisible",
+        "inputEventSequence", "inputLastKeyCode", "inputLastKeyName",
+        "inputLastScanCode", "inputLastAction", "inputLastRepeatCount",
+        "inputLastSource", "inputLastDeviceId", "inputLastLongPress",
+        "inputLastMappedCommand",
         "connectionTraceAvailable", "connectionGeneration", "connectionServer",
         "connectionCreatedMonotonicMs", "connectionAlive", "connectionCloseRequested",
         "connectionCloseComplete", "connectionMediaWorkerRunning",
@@ -205,12 +229,19 @@ def _compact_state(state: dict) -> dict:
         "lastFileReadPos", "videoWidth", "videoHeight",
         "videoDestX", "videoDestY", "videoDestWidth", "videoDestHeight",
         "videoUiWidth", "videoUiHeight", "videoLayoutStateError",
+        "fullscreenPromotionSent", "fullscreenPromotionCheckScheduled",
+        "fullscreenPromotionCheckCount", "fullscreenPromotionCommandCount",
+        "fullscreenPromotionStablePreviewCount",
+        "fullscreenPromotionStableFullscreenCount",
+        "fullscreenPromotionLastDecision",
         "fastSwitchAttemptCount", "fastSwitchSuccessCount",
         "fastSwitchFallbackCount", "fastSwitchAwaitingFirstFrame",
         "fastSwitchLastReason", "fastSwitchTargetUrl",
         "subtitleTrackCount", "selectedSubtitleTrack", "selectedSubtitleTrackRaw", "subtitleTracks",
-        "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "lastSubtitleCueText", "currentSubtitleCueText",
+        "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "subtitleBitmapCueCount",
+        "currentSubtitleCueCount", "lastSubtitleCueText", "currentSubtitleCueText",
         "subtitleOverlayAttached", "subtitleStateError",
+        "selectedAudioTrack", "audioTrackCount", "audioTracks", "audioStateError",
         "health_probeSupported", "health_probeProvider", "health_probeReason",
         "health_topLevelPlayerClass", "health_backendClass", "health_backendPlayerClass", "health_dataSourceClass",
         "health_dataSourceOpenCount", "health_dataSourceOpenWaitMs", "health_dataSourceLastOpenPosition",
@@ -361,6 +392,48 @@ def _playback_health_from_pair(
     details["timeline_advancing_fallback"] = advancing
     details["verdict_basis"] = "timeline_fallback"
     return advancing, details
+
+
+def _completed_short_media_health(
+    state: dict,
+    *,
+    expect_video: bool = True,
+    expect_audio: bool = True,
+) -> tuple[bool, dict]:
+    """Recognize a short fixture that cleanly reached EOF between probes.
+
+    On slower devices an eight-second regression fixture can decode completely
+    during one verification interval. Its counters no longer advance in the
+    second snapshot, but hundreds of rendered outputs plus position-at-duration
+    prove real playback. Keep the exception strict so an initial seek/jump to
+    EOF with only a frame or two cannot pass.
+    """
+    duration_ms = int(state.get("health_durationMs", 0) or 0)
+    position_ms = int(state.get("health_playerPositionMs", state.get("mediaTimeMs", 0)) or 0)
+    video_outputs = int(state.get("health_videoRendered", 0) or 0)
+    audio_outputs = int(state.get("health_audioRendered", 0) or 0)
+    ended = int(state.get("health_playbackState", -1) or -1) == 4
+    near_end = duration_ms > 0 and position_ms >= max(0, duration_ms - 1000)
+    video_proven = (not expect_video) or video_outputs >= 10
+    audio_proven = (not expect_audio) or audio_outputs >= 10
+    surface_ok = (not expect_video) or bool(state.get("health_surfaceValid", False))
+    no_error = not bool(state.get("health_errorState", False)) and not bool(
+        state.get("health_playerError")
+    )
+    passed = ended and near_end and video_proven and audio_proven and surface_ok and no_error
+    return passed, {
+        "ended": ended,
+        "near_end": near_end,
+        "duration_ms": duration_ms,
+        "position_ms": position_ms,
+        "video_outputs": video_outputs,
+        "audio_outputs": audio_outputs,
+        "video_proven": video_proven,
+        "audio_proven": audio_proven,
+        "surface_ok": surface_ok,
+        "no_error": no_error,
+        "verdict_basis": "completed_short_media_outputs",
+    }
 
 
 def _dvd_static_menu_health(state: dict) -> tuple[bool, dict]:
@@ -550,6 +623,21 @@ def _wait_for_playback(
                     "baselineCrashProbe": baseline_crash_probe,
                     "longWaitProbes": long_wait_probes,
                 }
+            completed, completed_details = _completed_short_media_health(
+                second,
+                expect_video=expect_video,
+                expect_audio=expect_audio,
+            )
+            if completed:
+                return {
+                    "passed": True,
+                    "verify_ms": verify_ms,
+                    "health": completed_details,
+                    "before": _compact_state(first),
+                    "after": _compact_state(second),
+                    "baselineCrashProbe": baseline_crash_probe,
+                    "longWaitProbes": long_wait_probes,
+                }
 
         elapsed_ms = int(round((time.monotonic() - started) * 1000.0))
         while pending_crash_milestones_ms and elapsed_ms >= pending_crash_milestones_ms[0]:
@@ -626,8 +714,65 @@ def _is_fullscreen_playback(state: dict) -> bool:
     return not embedded
 
 
+def _send_playback_osd(server_api=None, ui_context: str = "") -> dict:
+    """Enter SageTV's full-screen playback OSD through one guarded TV event.
+
+    ``Full Screen On`` changes the desktop/UI window state in SageTV.  The
+    server's own screen-saver recovery and the MiniClient use ``TV`` to move
+    an active embedded video into the MediaPlayer OSD.  TV is a toggle, so do
+    not send it through two transports.
+    """
+    try:
+        command = adb.sage_command("tv")
+        return {"requested": True, "transport": "miniclient_event", "command": command}
+    except Exception as exc:
+        client_error = str(exc)
+    if server_api is not None and str(ui_context or "").strip():
+        try:
+            command = server_api.remote_command(ui_context, "TV")
+            return {"requested": True, "transport": "web_remote", "command": command,
+                    "clientError": client_error}
+        except Exception as exc:
+            return {"requested": False, "clientError": client_error,
+                    "webRemoteError": str(exc)}
+    return {
+        "requested": False,
+        "clientError": client_error,
+    }
+
+
+def _request_fullscreen_when_player_active(timeout_s: float = 4.0,
+                                           server_api=None,
+                                           ui_context: str = "") -> dict:
+    """Observe startup without competing with the client's guarded promotion.
+
+    TV is a toggle. If MCP and the client both send it, the second event returns
+    the first item to its embedded window. The explicit fullscreen recovery
+    tool may still send TV, but automatic playback startup has one owner.
+    """
+    deadline = time.monotonic() + max(0.25, min(float(timeout_s), 6.0))
+    last = {}
+    while time.monotonic() < deadline:
+        last = adb.player_state_snapshot()
+        if bool(last.get("playerActive")):
+            if _is_fullscreen_playback(last):
+                return {"requested": False, "playerActive": True,
+                        "fullscreenStable": True,
+                        "reason": "client_owned_promotion_observed",
+                        "state": _compact_state(last)}
+        time.sleep(0.10)
+    return {
+        "requested": False,
+        "playerActive": bool(last.get("playerActive")),
+        "fullscreenStable": _is_fullscreen_playback(last),
+        "reason": "client_owned_promotion_not_yet_observed",
+        "state": _compact_state(last),
+    }
+
+
 def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
-                                   ui_context: str = "") -> dict:
+                                   ui_context: str = "",
+                                   allow_command: bool = True) -> dict:
     """Enter the STV playback screen after Watch() has opened its preview player."""
     before = adb.player_state_snapshot()
     if not bool(before.get("playerActive")):
@@ -640,9 +785,9 @@ def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
 
     # A Vibe-aware server enters MediaPlayer OSD asynchronously after accepting
     # its private watch-file event. Wait for that transition first. Stock-era
-    # STVs can leave Web/Sagex Watch in their embedded preview; request the
-    # protocol's idempotent Full Screen On event rather than TV. TV is not a
-    # fullscreen command and can change content on older STVs.
+    # STVs can leave Web/Sagex Watch in their embedded preview. SageTV's own
+    # full-video transition is the TV event; the ordinary Full Screen events
+    # only control the UI window state.
     passive_deadline = min(deadline, started + 2.0)
     while time.monotonic() < passive_deadline:
         last = adb.player_state_snapshot()
@@ -661,23 +806,9 @@ def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
         time.sleep(0.10)
 
     commands = []
-    web_remote_sent = False
-    if server_api is not None and str(ui_context or "").strip():
-        try:
-            commands.append(server_api.remote_command(ui_context, "Full Screen"))
-            web_remote_sent = True
-        except Exception as exc:
-            commands.append({
-                "ok": False,
-                "transport": "sage_web_remote",
-                "command": "Full Screen",
-                "error": str(exc),
-            })
-    if time.monotonic() < deadline:
-        if not web_remote_sent:
-            commands.append(adb.sage_command("full_screen_on"))
+    if allow_command and time.monotonic() < deadline and not _is_fullscreen_playback(last):
+        commands.append(_send_playback_osd(server_api, ui_context))
     stable_since = None
-    toggle_sent = False
     while time.monotonic() < deadline:
         last = adb.player_state_snapshot()
         if _is_fullscreen_playback(last):
@@ -695,18 +826,73 @@ def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
                 return result
         else:
             stable_since = None
-        # Very old STVs may not bind Full Screen On but do bind the historical
-        # Full Screen toggle. Use it once only after the idempotent event had a
-        # bounded chance to apply.
-        if (not web_remote_sent and not toggle_sent
-                and time.monotonic() - started >= 6.0):
-            commands.append(adb.sage_command("full_screen"))
-            toggle_sent = True
         time.sleep(0.10)
     return {
         "passed": False,
-        "reason": "fullscreen_surface_not_observed",
+        "reason": ("fullscreen_surface_not_observed" if allow_command
+                   else "client_owned_fullscreen_surface_not_observed"),
         "commands": commands,
+        "state": _compact_state(last),
+    }
+
+
+def _dismiss_stale_stop_popup_after_watch(
+    media_file_id: int,
+    server_api,
+    ui_context: str,
+    timeout_s: float = 4.0,
+) -> dict:
+    """Clear a prior SageMC StopPopup only after its replacement is proven.
+
+    Short physical fixtures can end while the MCP Watch call is still proving
+    playback.  SageMC leaves its StopPopup above the next exact Watch.  Sending
+    BACK before Watch can close the MiniClient UI context; sending it after the
+    full health proof leaves the popup over most of the next short fixture.
+    This bounded hook is opt-in for test automation and sends BACK only while
+    the requested MediaFile is current, its player is active, and the old
+    popup is still visible.
+    """
+    deadline = time.monotonic() + max(0.5, min(float(timeout_s), 6.0))
+    last = {}
+    current_id = None
+    while time.monotonic() < deadline:
+        last = adb.player_state_snapshot()
+        try:
+            current_id = server_api.current_media_file_id(ui_context)
+        except Exception:
+            current_id = None
+        if current_id == int(media_file_id) and bool(last.get("playerActive")):
+            if not str(last.get("popupName") or "").strip():
+                return {
+                    "requested": False,
+                    "reason": "stale_popup_cleared_by_watch",
+                    "state": _compact_state(last),
+                }
+            command = adb.sage_command("back")
+            clear_deadline = time.monotonic() + 3.0
+            while time.monotonic() < clear_deadline:
+                last = adb.player_state_snapshot()
+                if (bool(last.get("connected"))
+                        and bool(last.get("playerActive"))
+                        and not str(last.get("popupName") or "").strip()):
+                    return {
+                        "requested": True,
+                        "reason": "stale_popup_cleared_after_replacement",
+                        "command": command,
+                        "state": _compact_state(last),
+                    }
+                time.sleep(0.10)
+            return {
+                "requested": True,
+                "reason": "stale_popup_clear_timeout",
+                "command": command,
+                "state": _compact_state(last),
+            }
+        time.sleep(0.10)
+    return {
+        "requested": False,
+        "reason": "replacement_not_proven_before_timeout",
+        "currentMediaFileId": current_id,
         "state": _compact_state(last),
     }
 
@@ -1196,6 +1382,13 @@ def dev_set_player_config(
     smb_profile_password: str = "",
     smb_profile_domain: str = "",
     smb_profile_clear_auth: bool = False,
+    smb_diagnostics_directory: str = "",
+    smb_diagnostics_mode: str = "",
+    smb_diagnostics_auth_mode: str = "",
+    smb_diagnostics_username: str = "",
+    smb_diagnostics_password: str = "",
+    smb_diagnostics_domain: str = "",
+    smb_diagnostics_clear_auth: bool = False,
     keep_session_in_background: bool | None = None,
     resume_background_playback: bool | None = None,
     background_session_timeout_seconds: int | None = None,
@@ -1250,6 +1443,13 @@ def dev_set_player_config(
         smb_profile_password=smb_profile_password,
         smb_profile_domain=smb_profile_domain,
         smb_profile_clear_auth=smb_profile_clear_auth,
+        smb_diagnostics_directory=smb_diagnostics_directory,
+        smb_diagnostics_mode=smb_diagnostics_mode,
+        smb_diagnostics_auth_mode=smb_diagnostics_auth_mode,
+        smb_diagnostics_username=smb_diagnostics_username,
+        smb_diagnostics_password=smb_diagnostics_password,
+        smb_diagnostics_domain=smb_diagnostics_domain,
+        smb_diagnostics_clear_auth=smb_diagnostics_clear_auth,
         keep_session_in_background=keep_session_in_background,
         resume_background_playback=resume_background_playback,
         background_session_timeout_seconds=background_session_timeout_seconds,
@@ -1676,11 +1876,46 @@ def dev_set_stv_caption_state(state: str) -> dict:
 
 
 @mcp.tool()
+def dev_resolve_video_names(video_names: list[str]) -> dict:
+    """Resolve multiple SageTV MediaFile titles with one index enumeration.
+
+    Matrix callers can then use ``dev_play_media_file_id`` for each row. This
+    avoids repeatedly walking thousands of MediaFiles while retaining the
+    stock-compatible Sagex/Web-Interface Watch path.
+    """
+    requested = [str(name).strip() for name in video_names if str(name).strip()]
+    if not requested:
+        raise ValueError("video_names must contain at least one title")
+    state = adb.player_state_snapshot()
+    if not bool(state.get("connected")):
+        raise RuntimeError("MiniClient must be connected before resolving videos")
+    server_address = str(state.get("serverAddress", "")).strip()
+    client_id = str(state.get("clientId", "")).strip()
+    sagex, context = _sage_control_session(server_address, client_id)
+    resolved = sagex.find_media_many(requested)
+    matches = {}
+    for name in requested:
+        found, mode = resolved.get(name, ([], "contains"))
+        matches[name] = {
+            "matchMode": mode,
+            "matches": [match.as_dict() for match in found],
+        }
+    return {
+        "serverAddress": server_address,
+        "clientId": client_id,
+        "uiContext": context,
+        "sagexBase": sagex.base_url,
+        "matches": matches,
+    }
+
+
+@mcp.tool()
 def dev_play_media_file_id(
     media_file_id: int,
     timeout_s: float = 45.0,
     verify_ms: int = 1500,
     restart_from_beginning: bool = False,
+    dismiss_stale_stop_popup: bool = False,
 ) -> dict:
     """Watch one exact SageTV MediaFile ID and verify real A/V output.
 
@@ -1698,9 +1933,17 @@ def dev_play_media_file_id(
     client_id = str(state.get("clientId", "")).strip()
     if not server_address or not client_id:
         raise RuntimeError(f"Connected MiniClient snapshot is missing server/client identity: {_compact_state(state)}")
-    sagex = SagexApiClient.discover(server_address)
-    context = sagex.resolve_context(client_id)
+    sagex, context = _sage_control_session(server_address, client_id)
     watch_reply = sagex.watch(context, media_file_id)
+    stale_popup_dismissal = (
+        _dismiss_stale_stop_popup_after_watch(media_file_id, sagex, context)
+        if bool(dismiss_stale_stop_popup) and str(state.get("popupName") or "").strip()
+        else {"requested": False, "reason": "not_requested_or_no_stale_popup"}
+    )
+    queued_fullscreen = {"requested": False, "reason": "deferred_until_active_preview"}
+    early_fullscreen = _request_fullscreen_when_player_active(
+        server_api=sagex, ui_context=context
+    )
     resume_prompt = _resolve_resume_restart_prompt(
         timeout_s=min(15.0, max(5.0, timeout_s / 3.0)),
         restart_from_beginning=restart_from_beginning,
@@ -1722,7 +1965,7 @@ def dev_play_media_file_id(
             time.sleep(0.1)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
     fullscreen = _promote_preview_to_fullscreen(
-        server_api=sagex, ui_context=context
+        server_api=sagex, ui_context=context, allow_command=False
     ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
@@ -1743,6 +1986,9 @@ def dev_play_media_file_id(
         "clientId": client_id,
         "uiContext": context,
         "watchReply": watch_reply,
+        "stalePopupDismissal": stale_popup_dismissal,
+        "queuedFullscreen": queued_fullscreen,
+        "earlyFullscreen": early_fullscreen,
         "restartFromBeginning": bool(restart_from_beginning),
         "resumePrompt": resume_prompt,
         "restartReply": restart_reply,
@@ -1755,8 +2001,20 @@ def dev_play_media_file_id(
 
 
 @mcp.tool()
-def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 1500) -> dict:
-    """Play a SageTV MediaFile on this connected MiniClient by name. The caller supplies only the video/recording name; MCP resolves the server API, this client's UI context, the unique MediaFile, invokes Watch, and verifies real A/V output."""
+def dev_play_video(
+    video_name: str,
+    timeout_s: float = 45.0,
+    verify_ms: int = 1500,
+    refresh_if_missing: bool = False,
+) -> dict:
+    """Resolve and directly play one SageTV MediaFile by name.
+
+    This is the normal stock-compatible playback-start tool. It resolves a
+    unique server MediaFile ID, targets this MiniClient's exact UI context,
+    sends Sagex Watch or the stock Web Interface WatchNow command, and verifies
+    the selected MediaFile plus real A/V output. It never navigates the STV
+    Search screen; callers may implement UI Search only as a last resort.
+    """
     requested = str(video_name).strip()
     if not requested:
         raise ValueError("video_name is required")
@@ -1770,9 +2028,24 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
     if not client_id:
         raise RuntimeError(f"Connected MiniClient snapshot has no clientId: {_compact_state(state)}")
 
-    sagex = SagexApiClient.discover(server_address)
-    context = sagex.resolve_context(client_id)
+    sagex, context = _sage_control_session(server_address, client_id)
     matches, match_mode = sagex.find_media(requested)
+    media_index_refresh = {
+        "requested": False,
+        "reason": "not_requested_or_media_already_indexed",
+    }
+    if not matches and bool(refresh_if_missing):
+        media_index_refresh = sagex.refresh_media_index(wait_until_done=False)
+        if bool(media_index_refresh.get("requested")):
+            deadline = time.monotonic() + min(30.0, max(3.0, float(timeout_s) / 2.0))
+            while time.monotonic() < deadline:
+                matches, match_mode = sagex.find_media(requested)
+                if matches:
+                    media_index_refresh["foundAfterRefresh"] = True
+                    break
+                time.sleep(0.50)
+            else:
+                media_index_refresh["foundAfterRefresh"] = False
     if not matches:
         return {
             "passed": False,
@@ -1782,6 +2055,7 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
             "serverAddress": server_address,
             "sagexBase": sagex.base_url,
             "uiContext": context,
+            "mediaIndexRefresh": media_index_refresh,
             "matches": [],
         }
     if len(matches) != 1:
@@ -1798,9 +2072,13 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
 
     match = matches[0]
     watch_reply = sagex.watch(context, match.media_file_id)
+    queued_fullscreen = {"requested": False, "reason": "deferred_until_active_preview"}
+    early_fullscreen = _request_fullscreen_when_player_active(
+        server_api=sagex, ui_context=context
+    )
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
     fullscreen = _promote_preview_to_fullscreen(
-        server_api=sagex, ui_context=context
+        server_api=sagex, ui_context=context, allow_command=False
     ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
@@ -1823,6 +2101,9 @@ def dev_play_video(video_name: str, timeout_s: float = 45.0, verify_ms: int = 15
         "clientId": client_id,
         "uiContext": context,
         "watchReply": watch_reply,
+        "mediaIndexRefresh": media_index_refresh,
+        "queuedFullscreen": queued_fullscreen,
+        "earlyFullscreen": early_fullscreen,
         "currentMediaFileId": current_id,
         "currentMediaFileIdError": current_id_error,
         "mediaVerified": media_verified,
@@ -1911,12 +2192,14 @@ def dev_play_server_path(
         server_path=requested,
         restart_from_beginning="true" if restart_from_beginning else "false",
     )
+    queued_fullscreen = {"requested": False, "reason": "deferred_until_active_preview"}
+    early_fullscreen = _request_fullscreen_when_player_active()
     resume_prompt = _resolve_resume_restart_prompt(
         timeout_s=min(8.0, timeout_s),
         restart_from_beginning=bool(restart_from_beginning),
     )
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
-    fullscreen = _promote_preview_to_fullscreen() if bool(playback.get("passed", False)) else {
+    fullscreen = _promote_preview_to_fullscreen(allow_command=False) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
     passed = bool(playback.get("passed", False)) and bool(fullscreen.get("passed", False))
@@ -1930,6 +2213,8 @@ def dev_play_server_path(
         "retainedStoppedPlayer": retained_stopped_player,
         "stopPopupDismissal": stop_popup_dismissal,
         "request": request,
+        "queuedFullscreen": queued_fullscreen,
+        "earlyFullscreen": early_fullscreen,
         "resumePrompt": resume_prompt,
         "restartFromBeginning": bool(restart_from_beginning),
         "fullscreen": fullscreen,
@@ -2720,9 +3005,28 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     if not server_address or not client_id:
         raise RuntimeError(f"Playback snapshot is missing server/client identity: {_compact_state(before)}")
 
-    # Use the same authenticated MiniClient event channel as playback.  The
-    # test server intentionally does not require Sagex/Jetty, and DVD seeking
-    # must be scoped to this exact UI connection.
+    server_config = load_test_environment().server_for_address(server_address)
+    use_vibe_event = bool(server_config.get("vibe_sage_jar", False))
+    seek_transport = "miniclient_vibe_seek_event"
+    sage_control = None
+    sage_context = ""
+    if not use_vibe_event:
+        # An unmodified SageTV server does not consume Vibe's private client
+        # event. Prefer Sagex's stock VideoFrame Seek API when it is available;
+        # this still repositions the server-owned DVD VM and outgoing Push
+        # bytes, unlike a client-local player seek.
+        sage_control, sage_context = _sage_control_session(server_address, client_id)
+        seek_transport = "stock_sagex_videoframe_seek"
+
+    def issue_server_seek(value_ms: int) -> dict:
+        if use_vibe_event:
+            return adb.server_seek_time(value_ms)
+        assert sage_control is not None
+        reply = sage_control.seek(sage_context, value_ms)
+        return reply if isinstance(reply, dict) else {
+            "accepted": True, "reply": reply,
+        }
+
     started = time.monotonic()
     deadline = started + timeout_s
     last = before
@@ -2732,7 +3036,7 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     previous_stc_count = int(before.get("dvdStcCount", -1))
     max_attempts = 3
     for attempt in range(max_attempts):
-        replies.append(adb.server_seek_time(requested_ms))
+        replies.append(issue_server_seek(requested_ms))
         anchor_ms = -1
         # DVD VM sector interpolation can land on a nearby VOBU. Observe the
         # exact STC anchor emitted for that landing, then issue at most two
@@ -2786,7 +3090,8 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
         "playback": playback,
         "before": _compact_state(before),
         "state": _compact_state(last),
-        "measurement": "sagetv_videoframe_event_seek_with_output_recovery",
+        "seekTransport": seek_transport,
+        "measurement": "sagetv_videoframe_seek_with_output_recovery",
         "verdict_basis": "server_seek_landed_and_video_audio_output_recovered",
     }
 

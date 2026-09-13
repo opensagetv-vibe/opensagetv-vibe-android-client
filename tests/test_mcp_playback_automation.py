@@ -228,6 +228,8 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
             "videoDecoder", "videoDecoderKind", "videoRendered", "videoDropped",
             "audioDecoder", "audioDecoderKind", "audioRendered", "audioTrackState", "audioTrackPlayState", "audioPlaybackHeadFrames",
             "surfaceValid", "bufferedPositionMs", "playerError", "dataSourceClass", "videoDecoderInitCount", "audioDecoderInitCount",
+            "dataSourceSessionReuseCount", "dataSourceProbeCacheHitBytes",
+            "dataSourceProbeCacheMissCount", "dataSourceProbeCacheResidentBytes",
         ):
             self.assertIn(key, probe)
         self.assertIn('"health_videoDecoder"', server)
@@ -357,6 +359,14 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('"set_live_channel".equals(op)', receiver)
         self.assertIn('getLastConnectedServer()', session_commands)
         self.assertIn('Intent.FLAG_ACTIVITY_NEW_TASK', session_commands)
+        self.assertIn('RECONNECT_ACTIVITY_TEARDOWN_MS = 750L', session_commands)
+        self.assertIn('replacingMiniClientActivity', session_commands)
+        self.assertIn('resumedActivity.finish()', session_commands)
+        self.assertIn('appContext.startActivity(delayedStart)', session_commands)
+        self.assertNotIn(
+            'start.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)',
+            session_commands,
+        )
         self.assertIn('client.closeConnection()', session_commands)
         self.assertIn('postVibeWatchFileEvent(', session_commands)
         self.assertIn('serverPath, fromBeginning', session_commands)
@@ -390,6 +400,15 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('confirmationRequired', server)
         self.assertIn('sagex.clear_watched(media_file_id)', server)
         self.assertIn('def dev_play_video(', server)
+        self.assertIn('refresh_if_missing: bool = False', server)
+        self.assertIn('sagex.refresh_media_index(wait_until_done=False)', server)
+        self.assertIn('def dev_resolve_video_names(', server)
+        self.assertIn('def _sage_control_session(', server)
+        self.assertIn('_sage_control_sessions[key] = resolved', server)
+        keymap = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/keymaps/KeyMapProcessor.java").read_text(encoding="utf-8")
+        self.assertIn('recordInputEvent(keyCode, event);', keymap)
+        self.assertIn('recordMappedCommand(command, longPress);', keymap)
+        self.assertIn(';inputLastMappedCommand=', state)
         self.assertIn('def dev_play_server_path(', server)
         self.assertIn('def dev_set_live_channel(', server)
         self.assertIn('"watch_server_file",', server)
@@ -489,7 +508,7 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('mcp-fixed-mim-test)', devsh)
 
 
-    def test_native_end_to_end_playback_start_test_uses_explicit_server_and_exact_sequence(self):
+    def test_end_to_end_playback_start_prefers_direct_mediafile_control_before_ui_search(self):
         script = (ROOT / "scripts/mcp_playback_test.py").read_text(encoding="utf-8")
         devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
         self.assertIn('default=default_server_address()', script)
@@ -506,6 +525,17 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('"save": False', script)
         self.assertIn('call_dict(client, "dev_connect_server"', script)
         self.assertIn('def start_recording_via_search(', script)
+        self.assertIn('call_dict(client, "dev_play_video", {', script)
+        self.assertIn('"--force-ui-search"', script)
+        self.assertIn('"--direct-only"', script)
+        self.assertIn('args.force_ui_search and args.direct_only', script)
+        self.assertIn('Direct-only MediaFile launch did not start playback; UI Search is disabled', script)
+        self.assertIn('PASS: exact server-path playback started', script)
+        self.assertIn('fallbackFromExactPathResult', script)
+        self.assertIn('smb_diagnostics_directory: str = ""', server)
+        self.assertIn('smb_diagnostics_mode=smb_diagnostics_mode', server)
+        self.assertIn('direct_reason == "video_not_found"', script)
+        self.assertIn('refusing to hide it with UI Search', script)
         self.assertIn('call_dict(client, "dev_open_search"', script)
         self.assertIn('"require_ime": False', script)
         self.assertIn('"suppress_ime": True', script)
@@ -526,7 +556,6 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn("stable_ms=args.ui_stable_ms", script)
         self.assertIn('--ui-stable-ms', script)
         self.assertNotIn('call_dict(client, "dev_send_sequence", {"sequence": sequence}', script)
-        self.assertNotIn('dev_play_video', script)
         self.assertIn('dev_play_server_path', script)
         self.assertNotIn('SagexApiClient', script)
         self.assertIn('mcp-playback-test)', devsh)
@@ -754,6 +783,9 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('player.seek(targetMs)', player_commands)
         self.assertIn('def dev_seek_time(target_ms: int', server)
         self.assertIn('def dev_server_seek_time(target_ms: int', server)
+        self.assertIn('seek_transport = "stock_sagex_videoframe_seek"', server)
+        self.assertIn('sage_control.seek(sage_context, value_ms)', server)
+        self.assertIn('if use_vibe_event:', server)
         self.assertIn('reached_ms = _snapshot_media_time(last)', server)
         self.assertIn('def dev_show_active_player_adjustments()', server)
         self.assertIn('adb.seek_time(target_ms)', server)

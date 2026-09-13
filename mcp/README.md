@@ -62,6 +62,16 @@ To register with Codex CLI when desired:
   never-watched/no-resume recording. The first unconfirmed call returns the
   target and warning; only `confirm=true` clears that MediaFile's server watch
   history through Sagex or the stock SageTV Web Interface.
+- Deterministic stock-server playback launch through the Web Interface's
+  context-aware `MediaFileCommand?command=WatchNow`. MCP resolves the requested
+  recording from the server-side `TVFiles` and `MediaFiles` indexes, sends the
+  MediaFile ID to the exact MiniClient UI context, and verifies that same ID is
+  active. This is the normal `mcp-playback-test --text ...` path. Native
+  on-screen Search is only a last-resort fallback or an explicit
+  `--force-ui-search` test. The Web Interface may redirect the HTTP request to
+  `Home` after accepting `WatchNow`; clients must preserve Basic authentication
+  across that redirect or treat the original accepted command response as the
+  control result instead of retrying through the UI.
 - Credential-free named profile list/save/load/delete through the same production
   SMB2/SMB3 repository used by the settings UI. Run
   `python3 scripts/mcp_smb_profile_test.py` for physical share acceptance.

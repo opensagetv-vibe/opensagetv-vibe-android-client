@@ -29,7 +29,7 @@ def digest(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
-    parser.add_argument("--output-dir", default="artifacts/test-media/kodi-codec/vc1")
+    parser.add_argument("--output-dir", default="artifacts/test-media/hardware-codec/vc1")
     parser.add_argument("--source-url", required=True,
                         help="Canonical page or download URL for provenance")
     parser.add_argument("--license-note", required=True,

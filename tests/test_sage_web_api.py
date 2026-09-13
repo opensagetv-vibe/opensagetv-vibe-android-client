@@ -54,9 +54,9 @@ class SageWebApiClientTests(unittest.TestCase):
         matches, mode = client.find_media("Aladdin")
         self.assertEqual("exact_web", mode)
         self.assertEqual([(20, "Aladdin")], [(m.media_file_id, m.title) for m in matches])
-        search = next(params for path, params in client.calls if path == "Search")
-        self.assertEqual("MediaFiles", search["searchType"])
-        self.assertEqual("on", search["DVD"])
+        searches = [params for path, params in client.calls if path == "Search"]
+        self.assertEqual(["TVFiles", "MediaFiles"], [s["searchType"] for s in searches])
+        self.assertTrue(all(s["DVD"] == "on" for s in searches))
 
     def test_watch_uses_stock_web_interface_watch_now(self):
         client = FakeSageWebApiClient()

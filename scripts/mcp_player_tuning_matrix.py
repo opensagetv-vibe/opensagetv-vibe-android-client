@@ -354,7 +354,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Sweep runtime Media3/legacy Exo2 tuning combinations through MCP")
     p.add_argument("--server", default=default_server_address())
     p.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
-    p.add_argument("--text", default="", help="SageTV Search text when --server-path is not supplied")
+    p.add_argument("--text", default="", help="SageTV Search text when neither direct media selector is supplied")
+    p.add_argument("--video-name", default="", help="Exact SageTV MediaFile name through the stock-compatible SageX watch route")
     p.add_argument("--server-path", default="", help="Exact SageTV server-side MediaFile path for deterministic fixture runs")
     p.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
     p.add_argument("--streaming", default="pull", help="Comma list: pull,push (either order accepted)")
@@ -376,6 +377,10 @@ def main() -> int:
     p.add_argument("--slow-recovery-ms", "--slow_recover_ms", dest="slow_recovery_ms", type=int, default=5000)
     p.add_argument("--health-poll-ms", type=int, default=250)
     p.add_argument("--target-ms", type=int, default=0)
+    p.add_argument("--repeat-count", type=int, default=1,
+                   help="Repeat an absolute seek to the same target in one player session")
+    p.add_argument("--repeat-away-ms", type=int, default=120000,
+                   help="Seek this far from the target between same-target repetitions")
     p.add_argument("--skip-forward-ms", type=int, default=10000)
     p.add_argument("--skip-backward-ms", type=int, default=10000)
     p.add_argument("--seek-tolerance-ms", type=int, default=10000)
@@ -393,8 +398,14 @@ def main() -> int:
     p.add_argument("--leave-running", action="store_true")
     add_fixed_encoding_args(p)
     args = p.parse_args()
-    if not args.text.strip() and not args.server_path.strip():
-        p.error("one of --text or --server-path is required")
+    if not args.text.strip() and not args.video_name.strip() and not args.server_path.strip():
+        p.error("one of --text, --video-name, or --server-path is required")
+    if args.repeat_count < 1:
+        p.error("--repeat-count must be at least 1")
+    if args.repeat_count > 1 and args.check != "absolute_seek":
+        p.error("--repeat-count greater than 1 is supported only with --check absolute_seek")
+    if args.repeat_count > 1 and args.repeat_away_ms <= 0:
+        p.error("--repeat-away-ms must be positive when repeating an absolute seek")
 
     try:
         fixed = fixed_config_from_args(args)
@@ -452,6 +463,7 @@ def main() -> int:
                             print(f"WARN: fast replay failed; falling back to full isolated startup: {fast_exc}", file=sys.stderr)
                             startup = start_case(
                                 client, case, server=args.server, port=args.port, text=args.text, server_path=args.server_path,
+                                video_name=args.video_name,
                                 text_char_delay_ms=args.text_char_delay_ms, connect_timeout_s=args.connect_timeout_s,
                                 ui_stable_ms=args.ui_stable_ms, playback_timeout_s=args.playback_timeout_s,
                                 verify_ms=args.startup_verify_ms, fixed_config=fixed, tuning_config=tuning_config,
@@ -460,6 +472,7 @@ def main() -> int:
                     else:
                         startup = start_case(
                             client, case, server=args.server, port=args.port, text=args.text, server_path=args.server_path,
+                            video_name=args.video_name,
                             text_char_delay_ms=args.text_char_delay_ms, connect_timeout_s=args.connect_timeout_s,
                             ui_stable_ms=args.ui_stable_ms, playback_timeout_s=args.playback_timeout_s,
                             verify_ms=args.startup_verify_ms, fixed_config=fixed, tuning_config=tuning_config,
@@ -481,10 +494,39 @@ def main() -> int:
                     if int(state.get("debugStatusVersion", 0) or 0) < 13:
                         raise RuntimeError(f"debugStatusVersion={state.get('debugStatusVersion')} need >=13 / v0.5.70")
                     obs = run_check(client, args, f"tuning/{streaming}/{base_label}/{args.check}")
+                    repeat_observations = [obs]
+                    repeat_preparations = []
+                    for repeat_index in range(2, args.repeat_count + 1):
+                        away_target_ms = max(0, args.target_ms + args.repeat_away_ms)
+                        away = run_absolute_seek(
+                            client,
+                            label=f"tuning/{streaming}/{base_label}/repeat_{repeat_index}_away",
+                            target_ms=away_target_ms,
+                            watchdog_ms=args.watchdog_ms,
+                            health_poll_ms=args.health_poll_ms,
+                            slow_ms=args.slow_recovery_ms,
+                            seek_tolerance_ms=args.seek_tolerance_ms,
+                            crash_probe_milestones_ms=(5000, 15000, 30000),
+                        )
+                        repeat_preparations.append(away)
+                        repeated = run_absolute_seek(
+                            client,
+                            label=f"tuning/{streaming}/{base_label}/repeat_{repeat_index}_target",
+                            target_ms=args.target_ms,
+                            watchdog_ms=args.watchdog_ms,
+                            health_poll_ms=args.health_poll_ms,
+                            slow_ms=args.slow_recovery_ms,
+                            seek_tolerance_ms=args.seek_tolerance_ms,
+                            crash_probe_milestones_ms=(5000, 15000, 30000),
+                        )
+                        repeat_observations.append(repeated)
                     item = {
                         "index": overall_index, "streaming": streaming, "label": label,
                         "tuning": combo, "effectiveState": state, "startup": startup,
                         "startupPath": startup_path, "startupMs": startup_ms, "observation": obs,
+                        "repeatObservations": repeat_observations,
+                        "repeatPreparations": repeat_preparations,
+                        "repeatRecoveryMs": [recovery_ms(value) for value in repeat_observations],
                     }
                     if obs.get("status") not in ("RECOVERED",):
                         item["checkpoint"] = safe_checkpoint(client, f"tuning_{overall_index:03d}_{args.player}_{streaming}_{args.check}_{obs.get('status','unknown').lower()}")
@@ -509,7 +551,7 @@ def main() -> int:
         } for i, x in enumerate(ranked)]
         report = {
             "schema": 1, "suite": "player_runtime_tuning_matrix", "server": args.server, "port": args.port,
-            "searchText": args.text, "serverPath": args.server_path,
+            "searchText": args.text, "videoName": args.video_name, "serverPath": args.server_path,
             "player": args.player, "streaming": args.streaming,
             "streamingModes": modes, "decoding": args.decoding, "check": args.check,
             "combinationCount": total_combinations,
@@ -518,6 +560,7 @@ def main() -> int:
                 mode: (list(PUSH_IGNORED_TUNING_KEYS) if mode == "push" else []) for mode in modes
             },
             "watchdogMs": args.watchdog_ms, "slowRecoveryMs": args.slow_recovery_ms,
+            "repeatCount": args.repeat_count, "repeatAwayMs": args.repeat_away_ms,
             "startupMode": args.startup_mode,
             "fastReplayCachedMediaFileId": cached_media_file_id,
             "fastReplayFallbackCount": fast_start_fallback_count,

@@ -77,6 +77,36 @@ configured_automated_client_id() {
   fi
 }
 
+configured_device_serial() {
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/test_environment_config.py" --get device.serial
+}
+
+run_scoped_adb() {
+  local explicit_target=false
+  local argument
+  for argument in "$@"; do
+    case "$argument" in
+      -s|--serial|-d|-e)
+        explicit_target=true
+        break
+        ;;
+    esac
+  done
+
+  if [[ "$explicit_target" == true ]]; then
+    dev_exec adb "$@"
+    return
+  fi
+
+  local serial
+  serial="$(configured_device_serial)"
+  if [[ -z "$serial" ]]; then
+    echo "ERROR: raw ADB requires an explicit target or a configured active device" >&2
+    exit 2
+  fi
+  dev_exec adb -s "$serial" "$@"
+}
+
 run_scripted_launch() {
   local client_id
   client_id="$(configured_automated_client_id)"
@@ -252,6 +282,11 @@ case "${1:-help}" in
     # Strict stock-SageTV MKV Pull/hardware gate across every selectable player/backend.
     run_automated_mcp_test mcp_stock_mkv_matrix.py "$@"
     ;;
+  mcp-fixture-matrix)
+    shift
+    # Discover every enabled TOML fixture for a mode; IDs are labels, not hard-coded selectors.
+    run_automated_mcp_test mcp_fixture_matrix.py "$@"
+    ;;
   mcp-player-tune)
     shift
     # Set/show Dev-only in-memory player tuning; requires v0.5.70 debugStatusVersion>=13.
@@ -317,10 +352,15 @@ case "${1:-help}" in
     # Physically separate decode/sink evidence from passthrough claims for AC3/EAC3/DTS.
     run_automated_mcp_test mcp_audio_capability_matrix.py "$@"
     ;;
-  mcp-kodi-codec-matrix)
+  mcp-hardware-codec-matrix)
     shift
     # Strict generated-fixture matrix on the commissioned non-Pro Fire TV.
-    run_automated_mcp_test mcp_kodi_codec_matrix.py "$@"
+    run_automated_mcp_test mcp_hardware_codec_matrix.py "$@"
+    ;;
+  mcp-stop-key-test)
+    shift
+    # Physical Android MEDIA_STOP mapping and SageTV playback teardown gate.
+    run_automated_mcp_test mcp_stop_key_test.py "$@"
     ;;
   mcp-push-telemetry-test)
     shift
@@ -358,7 +398,7 @@ case "${1:-help}" in
     shift
     # Deterministic Kodi-derived codec/profile/bitstream test matrix. Generated
     # media remains ignored test data and is never put in release archives.
-    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/generate_kodi_codec_fixtures.py" "$@"
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/generate_hardware_codec_fixtures.py" "$@"
     ;;
   mcp-frame-step-test)
     shift
@@ -407,6 +447,13 @@ case "${1:-help}" in
       esac
       dev_command install "$install_apk_path" "$@"
     fi
+    ;;
+  adb)
+    shift
+    # Never let raw ADB choose arbitrarily when several commissioned devices
+    # are connected. Respect an explicit selector; otherwise pin the active
+    # TOML/environment device.
+    run_scoped_adb "$@"
     ;;
   test)
     shift
@@ -499,6 +546,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-media3-comskip-matrix --text X [options]  Compare Media3 Push/Dynamic vs Pull direct-command Comskip recovery
   mcp-player-matrix --text X [options]  Full matrix or --issues-only focused regression rerun
   mcp-stock-mkv-matrix [--text X ...]   Strict all-player Pull/hardware MKV gate by MediaFile name on a configured stock server
+  mcp-fixture-matrix --fixture-mode MODE  Run every enabled TOML fixture advertising that test mode
   mcp-player-tune [options]            Set/show Dev runtime player tuning without rebuilding
   mcp-player-tuning-matrix --text X [options]  Sweep runtime tuning; --streaming accepts pull,push
   mcp-session-test [options]    Launch/configure/connect/play-by-name/verify/exit an end-to-end test session
@@ -510,7 +558,8 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-caption-test --server-path PATH [options]  Verify STV-driven caption discovery, selection, and rendered cues
   mcp-codec-capability-test [options] Verify MediaCodec inventory and fallback-mode playback evidence
   mcp-audio-capability-matrix [options] Characterize AC3/EAC3/DTS decode, sink, and fallback evidence
-  mcp-kodi-codec-matrix [options] Run generated codecs with strict hardware evidence on non-Pro .25
+  mcp-hardware-codec-matrix [options] Run generated codecs with strict hardware evidence on non-Pro .25
+  mcp-stop-key-test [options] Verify Android MEDIA_STOP mapping and playback teardown
   mcp-push-telemetry-test --server-path PATH      Verify detailed Push bandwidth/buffer/datasource telemetry
   mcp-live-test [options]       Verify server-driven live TV and optional channel changes
   mcp-eof-test [options]        Verify exact completed-file EOF without process death

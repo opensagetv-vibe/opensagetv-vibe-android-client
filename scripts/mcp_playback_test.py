@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Launch/configure/connect the SageTV MiniClient and start the standard test video natively.
+"""Launch/configure/connect the MiniClient and start an exact SageTV MediaFile.
 
-This intentionally does NOT use Sagex/HTTP to start playback.  It connects the Android
-MiniClient directly to the requested SageTV server, then runs the native Search sequence using direct SageTV commands plus the MiniClient native keyboard-event path
-and verifies that playback starts. Legacy sendkey/sendtext remain available for diagnostics.
+Normal automation resolves the requested MediaFile through Sagex or the stock
+SageTV Web Interface and sends its context-aware direct Watch/WatchNow command.
+The native on-screen Search workflow remains a last-resort compatibility fallback
+and an explicitly selectable UI test; it is no longer the default launch path.
 """
 from __future__ import annotations
 
@@ -183,7 +184,7 @@ def start_recording_via_search(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Launch/configure/connect MiniClient and start the standard test recording through native client input"
+        description="Launch/configure/connect MiniClient and start an exact recording through direct server control"
     )
     parser.add_argument("--server", default=default_server_address(), help="SageTV server IP/address")
     parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)), help="SageTV MiniClient port")
@@ -194,8 +195,18 @@ def main() -> int:
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="auto")
     parser.add_argument("--gsy-system-probe", action="store_true",
                         help="Debug-only: exercise Android System MediaPlayer and verify its fail-safe fallback")
-    parser.add_argument("--text", required=True, help="Required SageTV Search text used to start the test recording")
+    parser.add_argument("--text", required=True, help="Required SageTV MediaFile name; UI Search is only a fallback")
     parser.add_argument("--server-path", default="", help="Prefer an exact server-side MediaFile path through the opt-in Vibe protocol extension")
+    parser.add_argument(
+        "--force-ui-search",
+        action="store_true",
+        help="Bypass direct Watch/WatchNow and explicitly exercise the native SageTV Search UI",
+    )
+    parser.add_argument(
+        "--direct-only",
+        action="store_true",
+        help="Fail closed when direct MediaFile resolution is unavailable or not found; never open UI Search",
+    )
     parser.add_argument("--text-char-delay-ms", type=int, default=0, help="Text input mode: 0 uses MiniClient native key events; >0 enables legacy Android/ADB diagnostic pacing (ms)")
     parser.add_argument("--connect-timeout-s", type=float, default=30.0)
     parser.add_argument(
@@ -208,6 +219,8 @@ def main() -> int:
     parser.add_argument("--verify-ms", type=int, default=1500)
     parser.add_argument("--leave-running", action="store_true", help="Leave the MiniClient running after a failed test too")
     args = parser.parse_args()
+    if args.force_ui_search and args.direct_only:
+        parser.error("--force-ui-search and --direct-only are mutually exclusive")
     if args.gsy_system_probe and not (
         args.player == "gsyplayer" and args.gsy_engine == "system"
         and args.streaming == "pull"
@@ -278,29 +291,77 @@ def main() -> int:
         print(f"PASS: connected to requested server {args.server}; supported automation root ready")
         print(json.dumps(state, indent=2, sort_keys=True))
 
+        path_start = None
+        path_error = ""
         if args.server_path.strip():
             print(f"STEP: start exact server MediaFile path: {args.server_path!r}")
-            direct_start = call_dict(client, "dev_play_server_path", {
-                "server_path": args.server_path,
-                "timeout_s": args.playback_timeout_s,
-                "verify_ms": args.verify_ms,
-            }, timeout=args.playback_timeout_s + 35.0)
-            print(json.dumps(direct_start, indent=2, sort_keys=True))
-            if not direct_start.get("passed"):
-                raise RuntimeError(f"Direct server-path playback failed: {direct_start}")
-        else:
-            print("STEP: open Search, verify Android keyboard, type recording name, and start recording")
-            search_start = start_recording_via_search(client, args.text, text_char_delay_ms=args.text_char_delay_ms)
-            print(json.dumps(search_start, indent=2, sort_keys=True))
+            try:
+                path_start = call_dict(client, "dev_play_server_path", {
+                    "server_path": args.server_path,
+                    "timeout_s": args.playback_timeout_s,
+                    "verify_ms": args.verify_ms,
+                }, timeout=args.playback_timeout_s + 35.0)
+                print(json.dumps(path_start, indent=2, sort_keys=True))
+            except Exception as exc:
+                path_error = str(exc)
+                print(f"WARN: exact server-path control unavailable: {path_error}")
+            if path_start is not None and path_start.get("passed"):
+                print("PASS: exact server-path playback started")
+            elif args.direct_only:
+                raise RuntimeError(
+                    "Direct-only exact server-path launch did not start playback: "
+                    f"result={path_start} error={path_error}"
+                )
 
-            print("STEP: wait for real playback to start")
-            playback = call_dict(client, "dev_wait_for_playback_started", {
-                "timeout_s": args.playback_timeout_s,
-                "verify_ms": args.verify_ms,
-            }, timeout=args.playback_timeout_s + 15.0)
-            print(json.dumps(playback, indent=2, sort_keys=True))
-            if not playback.get("passed"):
-                raise RuntimeError(f"Playback did not become healthy: {playback}")
+        if path_start is None or not path_start.get("passed"):
+            direct_start = None
+            direct_error = ""
+            if not args.force_ui_search:
+                print("STEP: resolve exact MediaFile and send context-aware direct Watch/WatchNow")
+                try:
+                    direct_start = call_dict(client, "dev_play_video", {
+                        "video_name": args.text,
+                        "timeout_s": args.playback_timeout_s,
+                        "verify_ms": args.verify_ms,
+                    }, timeout=args.playback_timeout_s + 35.0)
+                    print(json.dumps(direct_start, indent=2, sort_keys=True))
+                except Exception as exc:
+                    direct_error = str(exc)
+                    print(f"WARN: direct MediaFile control unavailable; trying UI Search fallback: {direct_error}")
+
+            if direct_start is not None and direct_start.get("passed"):
+                print("PASS: exact MediaFile started through direct server control")
+            else:
+                direct_reason = str((direct_start or {}).get("reason", ""))
+                if args.direct_only:
+                    raise RuntimeError(
+                        "Direct-only MediaFile launch did not start playback; UI Search is disabled: "
+                        f"result={direct_start} error={direct_error}"
+                    )
+                fallback_allowed = args.force_ui_search or direct_start is None or direct_reason == "video_not_found"
+                if not fallback_allowed:
+                    raise RuntimeError(
+                        "Direct MediaFile launch resolved the request but playback failed; "
+                        f"refusing to hide it with UI Search: {direct_start}"
+                    )
+                print("STEP: last-resort UI Search fallback; verify keyboard, type name, and start recording")
+                search_start = start_recording_via_search(
+                    client, args.text, text_char_delay_ms=args.text_char_delay_ms
+                )
+                search_start["fallbackFromDirectError"] = direct_error
+                search_start["fallbackFromDirectResult"] = direct_start
+                search_start["fallbackFromExactPathError"] = path_error
+                search_start["fallbackFromExactPathResult"] = path_start
+                print(json.dumps(search_start, indent=2, sort_keys=True))
+
+                print("STEP: wait for real playback to start after UI Search fallback")
+                playback = call_dict(client, "dev_wait_for_playback_started", {
+                    "timeout_s": args.playback_timeout_s,
+                    "verify_ms": args.verify_ms,
+                }, timeout=args.playback_timeout_s + 15.0)
+                print(json.dumps(playback, indent=2, sort_keys=True))
+                if not playback.get("passed"):
+                    raise RuntimeError(f"Playback did not become healthy: {playback}")
 
         if args.gsy_system_probe:
             probe = call_dict(client, "dev_player_state", {}, timeout=30.0)

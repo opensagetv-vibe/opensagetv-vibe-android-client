@@ -21,6 +21,7 @@ model = "replace-me"
 api = 0
 enabled = true
 client_id = "44:45:56:30:30:31"
+stv_by_server = { vibe = "replace-with-stv-name", stock = "replace-with-stv-name" }
 
 [devices.secondary]
 alias = "bedroom"
@@ -30,6 +31,7 @@ model = "replace-me"
 api = 0
 enabled = false
 client_id = "44:45:56:30:30:32"
+stv_by_server = { vibe = "replace-with-stv-name", stock = "replace-with-stv-name" }
 
 [servers.vibe]
 alias = "development"
@@ -37,6 +39,14 @@ address = "192.0.2.20"
 miniclient_port = 31099
 label = "Vibe test server"
 stock = false
+server_type = "vibe"
+# auto detects capabilities; vibe_exact_path requires the modified sage.jar event.
+media_selection_mode = "auto"
+webserver_installed = false
+web_control_mode = "none"
+vibe_sage_jar = true
+vibe_mim = true
+vibe_ffmpeg = true
 web_base_url = "http://192.0.2.20:8080"
 web_remote_url = "http://192.0.2.20:8080/sage/webremote.html"
 web_username = ""
@@ -55,6 +65,14 @@ address = "192.0.2.21"
 miniclient_port = 31099
 label = "Unmodified SageTV compatibility server"
 stock = true
+server_type = "stock"
+# stock_web uses Sagex/Web MediaFile lookup plus ordinary Watch and needs no patched jar.
+media_selection_mode = "stock_web"
+webserver_installed = true
+web_control_mode = "auto"
+vibe_sage_jar = false
+vibe_mim = false
+vibe_ffmpeg = false
 web_base_url = "http://192.0.2.21:8080"
 web_remote_url = "http://192.0.2.21:8080/sage/webremote.html"
 web_username = ""
@@ -69,12 +87,128 @@ smb_mappings = [
 ]
 
 [fixtures]
-seek_server_path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-caption_server_path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-dvd_server_path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD"
-dvd_motion_server_path = "/var/media/videos/replace-with-local-dvd"
-prerecorded_search = "replace-with-safe-recording"
-mkv_searches = ["replace-with-safe-mkv-one", "replace-with-safe-mkv-two"]
+# Each fixture has a stable id, its own master switch, and independently
+# enabled test modes. A false mode is not run for that fixture. Replace only
+# the example values that refer to locally owned media.
+
+# Generated 1080i MPEG-2/AC-3: seek/skip, timeline, audio, and CEA-608 CC.
+[[fixtures.cases]]
+id = "seek_caption"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
+modes = { startup = true, seek = true, skip = true, timeline = true, audio = true, cea608 = true, comskip = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_audio_mime = "audio/ac3"
+expected_subtitle = "cea608"
+minimum_duration_seconds = 60
+
+# Authored DVD: menus/submenus, chapters, languages, timestamped subtitles, navigation, and main title.
+[[fixtures.cases]]
+id = "authored_dvd"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD"
+modes = { disc = true, startup = true, dvd_menu = true, chapter = true, audio = true, subtitle = true, seek = true }
+expected_container = "dvd_video"
+
+# Real locally owned menu DVD: physical menus/highlights, menu audio, title,
+# language selection, chapters, and teardown. Keep disabled until commissioned.
+[[fixtures.cases]]
+id = "dvd_menu_physical"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/replace-with-local-menu-dvd"
+modes = { disc = true, startup = true, dvd_menu = true, menu_audio = true, chapter = true, audio = true, subtitle = true }
+expected_container = "dvd_video"
+
+# Real locally owned DVD: prolonged native cadence, motion, A/V sync, chapters, and seek.
+[[fixtures.cases]]
+id = "dvd_motion"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/replace-with-local-dvd"
+modes = { disc = true, startup = true, dvd_motion = true, cadence = true, audio_sync = true, chapter = true, seek = true }
+expected_container = "dvd_video"
+
+# Long OTA MPEG-2 TS: cold/warm startup, 3+ hour timeline, OSD timeout, seek, and recovery.
+[[fixtures.cases]]
+id = "long_ota_mpeg2"
+enabled = false
+path_type = "search"
+path = "replace-with-safe-long-ota-recording"
+modes = { startup = true, cold_storage = true, long_timeline = true, osd_timeout = true, seek = true, recovery = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+minimum_duration_seconds = 7200
+
+# Stock-server MKV #1: duration, initial timeline, absolute/relative seek, and pause/resume.
+[[fixtures.cases]]
+id = "stock_mkv_one"
+enabled = false
+path_type = "search"
+path = "replace-with-safe-mkv-one"
+modes = { stock_mkv = true, startup = true, timeline = true, seek = true, skip = true, pause_resume = true }
+
+# Stock-server MKV #2: a second container history prevents one repaired file from masking regressions.
+[[fixtures.cases]]
+id = "stock_mkv_two"
+enabled = false
+path_type = "search"
+path = "replace-with-safe-mkv-two"
+modes = { stock_mkv = true, startup = true, timeline = true, seek = true, skip = true, pause_resume = true }
+
+# Stock-server MKV #3: another independently authored/ripped file for cross-file proof.
+[[fixtures.cases]]
+id = "stock_mkv_three"
+enabled = false
+path_type = "search"
+path = "replace-with-safe-mkv-three"
+modes = { stock_mkv = true, startup = true, timeline = true, seek = true, skip = true, pause_resume = true }
+
+# Directory of generated, visibly labeled codec/cadence/discontinuity fixtures.
+[[fixtures.cases]]
+id = "hardware_codec_matrix"
+enabled = true
+path_type = "server_root"
+path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Hardware-Codec-Test"
+modes = { hardware_codec_matrix = true, startup = true, cadence = true, discontinuity = true, malformed_input = true }
+expected_container = "fixture_manifest"
+
+# UK filtered 1080i50 H.264: primary audio plus one broadcast subtitle stream.
+[[fixtures.cases]]
+id = "uk_taskmaster"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/USER_TEST/Taskmaster-ThisIsFoodGlue-26714235-0.ts"
+modes = { uk_broadcast = true, startup = true, cadence = true, audio = true, dvb_subtitle = true }
+expected_container = "mpegts"
+expected_video_mime = "video/avc"
+expected_subtitle = "dvb"
+
+# UK 1080i50 H.264/AC-3: multi-audio plus DVB/Teletext subtitle selection.
+[[fixtures.cases]]
+id = "uk_breakfast"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/USER_TEST/Breakfast-26711345-0.ts"
+modes = { uk_broadcast = true, startup = true, cadence = true, audio = true, audio_selection = true, dvb_subtitle = true, teletext = true }
+expected_container = "mpegts"
+expected_video_mime = "video/avc"
+expected_audio_mime = "audio/ac3"
+expected_subtitle = "dvb_or_teletext"
+
+# UK 576i50 H.264: SD cadence, multi-audio, and DVB/Teletext subtitle selection.
+[[fixtures.cases]]
+id = "uk_classic_holby"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/USER_TEST/ClassicHolbyCity-SinsoftheFather-26696712-0.ts"
+modes = { uk_broadcast = true, startup = true, cadence = true, audio = true, audio_selection = true, dvb_subtitle = true, teletext = true }
+expected_container = "mpegts"
+expected_video_mime = "video/avc"
+expected_subtitle = "dvb_or_teletext"
 
 [capture]
 enabled = false
@@ -92,6 +226,9 @@ live_channels = ["2.1", "5.1"]
 startup_timeout_seconds = 45
 recovery_timeout_seconds = 20
 observation_seconds = 15
+storage_warmup_timeout_seconds = 120
+storage_slow_startup_ms = 10000
+storage_warm_cache_seconds = 600
 
 [safety]
 protected_packages = ["jvl.sage.miniclient", "jvl.sage.miniclient.dev"]

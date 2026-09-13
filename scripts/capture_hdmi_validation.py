@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture repeatable Fire TV HDMI validation evidence with VLC.
+"""Capture repeatable Android TV HDMI evidence with the Vibe FFmpeg build.
 
 This is intentionally a Python entry point so Windows PowerShell execution
 policy does not affect physical-device testing.
@@ -17,12 +17,21 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = PROJECT_ROOT / "artifacts" / "firetv" / "dvd-hdmi-validation.mp4"
-DEFAULT_VLC = Path(os.environ.get("VIBE_VLC_PATH", r"C:\Program Files\VideoLAN\VLC\vlc.exe"))
+DEFAULT_FFMPEG = Path(
+    os.environ.get(
+        "VIBE_FFMPEG_PATH",
+        PROJECT_ROOT.parent
+        / "opensagetv-vibe-ffmpeg-mim"
+        / "output"
+        / "windows-x64"
+        / "ffmpeg.real.exe",
+    )
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Capture the HDMI input to an H.264/AAC MP4 using VLC."
+        description="Capture the HDMI input to an H.264/AAC MP4 using Vibe FFmpeg."
     )
     parser.add_argument(
         "--output",
@@ -49,10 +58,10 @@ def parse_args() -> argparse.Namespace:
         help="DirectShow audio device name",
     )
     parser.add_argument(
-        "--vlc",
+        "--ffmpeg",
         type=Path,
-        default=DEFAULT_VLC,
-        help="path to vlc.exe (or set VIBE_VLC_PATH)",
+        default=DEFAULT_FFMPEG,
+        help="path to ffmpeg.real.exe (or set VIBE_FFMPEG_PATH)",
     )
     return parser.parse_args()
 
@@ -62,59 +71,91 @@ def main() -> int:
     if args.duration <= 0:
         raise SystemExit("--duration must be greater than zero")
 
-    vlc = args.vlc.expanduser().resolve()
-    if not vlc.is_file():
-        raise SystemExit(f"VLC was not found at {vlc}")
+    ffmpeg = args.ffmpeg.expanduser().resolve()
+    if not ffmpeg.is_file():
+        raise SystemExit(f"Vibe FFmpeg was not found at {ffmpeg}")
 
     output = args.output.expanduser()
     if not output.is_absolute():
         output = PROJECT_ROOT / output
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    log_path = output.with_suffix(".vlc.log")
+    log_path = output.with_suffix(".ffmpeg.log")
 
     output.unlink(missing_ok=True)
     log_path.unlink(missing_ok=True)
 
     # This inexpensive UVC bridge advertises 60 fps but alternates a valid
-    # JPEG with a non-image transport packet at that mode. Its stable decoded
-    # cadence is 30 fps, which is sufficient for detecting duplicate/frozen
-    # Fire TV output. VLC decodes MJPEG and writes timestamped H.264/AAC MP4.
-    sout = (
-        "#transcode{vcodec=h264,vb=16000,fps=30,acodec=mp4a,ab=192,"
-        f'channels=2,samplerate=48000}}:standard{{access=file,mux=mp4,dst="{output}"}}'
-    )
+    # JPEG with a non-image transport packet at that mode. Capture its stable
+    # 30 fps MJPEG mode and encode timestamped H.264/AAC evidence.
     command = [
-        str(vlc),
-        "--intf=dummy",
-        "--no-one-instance",
-        "--file-logging",
-        f"--logfile={log_path}",
-        "--verbose=2",
-        f"--run-time={args.duration}",
-        "--play-and-exit",
-        "--no-repeat",
-        "--no-loop",
-        "--no-random",
-        "dshow://",
-        f':dshow-vdev={args.video_device}',
-        f':dshow-adev={args.audio_device}',
-        ":dshow-size=1920x1080",
-        ":dshow-fps=30",
-        f"--sout={sout}",
+        str(ffmpeg),
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-thread_queue_size",
+        "1024",
+        "-rtbufsize",
+        "512M",
+        "-f",
+        "dshow",
+        "-vcodec",
+        "mjpeg",
+        "-video_size",
+        "1920x1080",
+        "-framerate",
+        "30",
+        "-i",
+        f"video={args.video_device}:audio={args.audio_device}",
+        "-t",
+        str(args.duration),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-b:v",
+        "16M",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "30",
+        "-fps_mode",
+        "cfr",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-movflags",
+        "+faststart",
+        str(output),
     ]
 
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    process = subprocess.Popen(command, creationflags=creation_flags)
-    try:
-        process.wait(timeout=args.duration + 15)
-    except subprocess.TimeoutExpired:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+    with log_path.open("wb") as log_file:
+        process = subprocess.run(
+            command,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            timeout=args.duration + 20,
+            creationflags=creation_flags,
+            check=False,
+        )
+
+    if process.returncode != 0:
+        raise SystemExit(
+            f"FFmpeg HDMI capture failed with exit code {process.returncode}. "
+            f"See {log_path}"
+        )
 
     if not output.is_file():
         raise SystemExit(f"HDMI capture did not create {output}. See {log_path}")
@@ -130,6 +171,7 @@ def main() -> int:
                 "durationSeconds": args.duration,
                 "videoDevice": args.video_device,
                 "audioDevice": args.audio_device,
+                "ffmpeg": str(ffmpeg),
                 "log": str(log_path),
             },
             indent=2,

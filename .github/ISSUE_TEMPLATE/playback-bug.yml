@@ -1,0 +1,113 @@
+name: Playback problem
+description: Report video, audio, subtitle, seek, transport, or playback-UI behavior
+title: "[Playback] "
+labels: ["playback", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please reproduce with the latest release when practical. Attach the redacted support bundle and its displayed SHA-256 when possible. Do not attach recordings you do not have permission to share.
+
+        **Capture a comparable playback report:**
+        1. While the affected video is loaded, long-press Select/OK and choose the video/pulse **Test Current Video** icon.
+        2. Select **Run test**. It briefly measures cadence, pause/resume, buffering, decoder output, and safe seek recovery, then restores playback. Its redacted result is included in the next diagnostic bundle.
+
+        ![Test Current Video icon](https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/images/test-current-video-menu.png)
+
+        ![Test Current Video confirmation](https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/images/test-current-video-dialog.png)
+
+        **Get the support bundle from a TV without email:**
+        1. Configure and test the independent destination under **Settings > SMB Direct Settings > Diagnostic export**. Choose **On request** or **Always**.
+        2. During or just after the problem, long-press Select/OK and choose the bug icon immediately beside the triangular Video Info icon.
+        3. Choose **Upload to SMB** (On request) or **Upload now** (Always).
+        4. Retrieve the named ZIP/log from that SMB directory on another computer. Attach it below with the displayed byte count and SHA-256.
+
+        ![Diagnostic icon in the long-press playback menu](https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/images/diagnostics-long-press-menu.png)
+
+        ![Export Diagnostics dialog](https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/images/diagnostics-export-dialog.png)
+
+        The screenshots are tightly cropped from the project-generated Vibe test fixture; no broadcast or movie frame is included.
+
+        Full instructions: https://opensagetv-vibe.github.io/opensagetv-vibe-android-client/PLAYBACK_DIAGNOSTICS.html#export-a-support-bundle-from-a-tv-device
+  - type: input
+    id: client_version
+    attributes:
+      label: Vibe client version
+      placeholder: 0.5.91
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Android device and OS
+      placeholder: ONN 4K model 100026240, Android 12 / API 31
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: SageTV server/core and STV
+      placeholder: Stock SageTV 9.x, stock STV or SageMC
+    validations:
+      required: true
+  - type: dropdown
+    id: player
+    attributes:
+      label: Player backend
+      options:
+        - Media3
+        - Legacy ExoPlayer
+        - IJKPlayer
+        - GSY / Media3 delegate
+        - GSY / legacy Exo delegate
+        - GSY / Android System
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Playback transport
+      options: [Push, Pull, SMB Direct, SMB Direct Auto, Fixed/MIM, Native DVD, Unknown]
+    validations:
+      required: true
+  - type: dropdown
+    id: decoding
+    attributes:
+      label: Requested decoding mode
+      options: [Hardware, Hardware with fallback, Software, Unknown]
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Media details
+      description: Container, video/audio/subtitle codecs, resolution/rate, completed versus still recording, and approximate duration. Do not paste a private full path.
+      placeholder: Completed 3h MPEG-2 TS; 1080i59.94 MPEG-2 video, AC-3 audio, CEA-608 captions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Exact reproduction steps
+      placeholder: "1. Start recording\n2. Press FF..."
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: attachment
+    attributes:
+      label: Diagnostic bundle and supporting evidence
+      description: Drag the redacted ZIP here. Include its displayed filename, byte count, SHA-256, last-update time, and SMB result. Screenshots or short HDMI captures are also useful.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I checked the attachment and removed any information I do not want to publish.
+          required: true

@@ -73,23 +73,30 @@ class SagexApiClient:
         server = load_test_environment().server_for_address(host)
         user = os.environ.get("SAGETV_SAGEX_USER", str(server.get("web_username", "")))
         password = os.environ.get("SAGETV_SAGEX_PASSWORD", str(server.get("web_password", "")))
+        control_mode = str(server.get("web_control_mode", "auto")).strip() or "auto"
+        if server.get("webserver_installed") is False or control_mode == "none":
+            raise SagexApiError(
+                f"Web control is disabled for {host} in config/firetv.toml"
+            )
         errors: list[str] = []
-        for base in cls.candidate_bases(host):
-            client = cls(base, user, password)
-            try:
-                client.call("GetUIContextNames")
-                return client
-            except Exception as exc:
-                errors.append(f"{base}: {exc}")
+        if control_mode != "web_interface":
+            for base in cls.candidate_bases(host):
+                client = cls(base, user, password)
+                try:
+                    client.call("GetUIContextNames")
+                    return client
+                except Exception as exc:
+                    errors.append(f"{base}: {exc}")
         # Many otherwise stock SageTV installations have Nielm's historical
         # Web Interface but not the separate Sagex Remote API. Its WatchNow
         # command still executes the ordinary SageTV/STV Watch operation and
         # is therefore the right commissioning fallback for an unmodified
         # server. Playback remains on the MiniClient wire protocol.
-        try:
-            return SageWebApiClient.discover(host, user, password)
-        except Exception as exc:
-            errors.append(f"SageTV Web Interface: {exc}")
+        if control_mode != "sagex":
+            try:
+                return SageWebApiClient.discover(host, user, password)
+            except Exception as exc:
+                errors.append(f"SageTV Web Interface: {exc}")
         raise SagexApiError(
             "Unable to discover Sagex Remote API or SageTV Web Interface on "
             "connected SageTV server. Set SAGETV_SAGEX_BASE or "
@@ -190,10 +197,8 @@ class SagexApiClient:
             matches.append(MediaMatch(media_id, str(title)))
         return matches
 
-    def find_media(self, video_name: str, max_items: int = 5000, page_size: int = 250) -> tuple[list[MediaMatch], str]:
-        wanted = video_name.strip()
-        if not wanted:
-            raise ValueError("video_name is required")
+    def list_media(self, max_items: int = 5000, page_size: int = 250) -> list[MediaMatch]:
+        """Enumerate the server media index once for batch test selection."""
         collected: list[MediaMatch] = []
         start = 0
         while start < max_items:
@@ -210,12 +215,41 @@ class SagexApiClient:
             if len(page) < page_size:
                 break
             start += page_size
+        return collected
+
+    @staticmethod
+    def _match_media(collected: list[MediaMatch], video_name: str) -> tuple[list[MediaMatch], str]:
+        wanted = video_name.strip()
+        if not wanted:
+            raise ValueError("video_name is required")
         wanted_fold = wanted.casefold()
         exact = [m for m in collected if m.title.strip().casefold() == wanted_fold]
         if exact:
             return exact, "exact"
         contains = [m for m in collected if wanted_fold in m.title.casefold()]
         return contains, "contains"
+
+    def find_media(self, video_name: str, max_items: int = 5000, page_size: int = 250) -> tuple[list[MediaMatch], str]:
+        return self._match_media(self.list_media(max_items, page_size), video_name)
+
+    def find_media_many(self, video_names: Iterable[str], max_items: int = 5000,
+                        page_size: int = 250) -> dict[str, tuple[list[MediaMatch], str]]:
+        """Resolve multiple titles from one snapshot of the media index."""
+        collected = self.list_media(max_items, page_size)
+        return {name: self._match_media(collected, name) for name in video_names}
+
+    def refresh_media_index(self, wait_until_done: bool = False) -> dict[str, Any]:
+        """Request SageTV's ordinary library import scan through Sagex."""
+        payload = self.call(
+            "RunLibraryImportScan",
+            "true" if bool(wait_until_done) else "false",
+        )
+        return {
+            "requested": True,
+            "transport": "sagex_run_library_import_scan",
+            "waitUntilDone": bool(wait_until_done),
+            "reply": payload,
+        }
 
     def watch(self, context: str, media_file_id: int) -> Any:
         try:
@@ -410,20 +444,25 @@ class SageWebApiClient:
         wanted = video_name.strip()
         if not wanted:
             raise ValueError("video_name is required")
-        body = self._request("Search", {
-            "SearchString": wanted,
-            "searchType": "MediaFiles",
-            "DVD": "on",
-            "Video": "on",
-            "Music": "on",
-            "Picture": "on",
-            "pagelen": 500,
-        })
+        # Nielm's stock-era Web Interface separates recordings (TVFiles) from
+        # imported videos/DVDs (MediaFiles). Query both server-side indexes and
+        # deduplicate the IDs. This is not on-screen STV Search and does not
+        # inject remote keys into the client UI.
         ids = []
-        for raw_id in re.findall(r"DetailedInfo\?MediaFileId=(\d+)", body):
-            media_id = int(raw_id)
-            if media_id not in ids:
-                ids.append(media_id)
+        for search_type in ("TVFiles", "MediaFiles"):
+            body = self._request("Search", {
+                "SearchString": wanted,
+                "searchType": search_type,
+                "DVD": "on",
+                "Video": "on",
+                "Music": "on",
+                "Picture": "on",
+                "pagelen": 500,
+            })
+            for raw_id in re.findall(r"DetailedInfo\?MediaFileId=(\d+)", body):
+                media_id = int(raw_id)
+                if media_id not in ids:
+                    ids.append(media_id)
         matches = []
         for media_id in ids:
             detail = self._request("DetailedInfo", {"MediaFileId": media_id})
@@ -438,6 +477,25 @@ class SageWebApiClient:
         if exact:
             return exact, "exact_web"
         return [m for m in matches if wanted_fold in m.title.casefold()], "contains_web"
+
+    def find_media_many(self, video_names: Iterable[str], max_items: int = 5000,
+                        page_size: int = 250) -> dict[str, tuple[list[MediaMatch], str]]:
+        # The historical Web Interface has only server-side text Search, not a
+        # pageable media-index API. Preserve compatibility by using its exact
+        # search path when Sagex is not installed.
+        return {
+            name: self.find_media(name, max_items=max_items, page_size=page_size)
+            for name in video_names
+        }
+
+    def refresh_media_index(self, wait_until_done: bool = False) -> dict[str, Any]:
+        """The historical Web Interface does not expose library-import scan."""
+        return {
+            "requested": False,
+            "transport": "sage_web_interface",
+            "waitUntilDone": bool(wait_until_done),
+            "reason": "run_library_import_scan_unavailable",
+        }
 
     def watch(self, context: str, media_file_id: int) -> Any:
         self._request("MediaFileCommand", {

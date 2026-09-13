@@ -233,6 +233,15 @@ def main() -> int:
             # loaded playback generation so a retained SEEK/PLAY reaches the
             # backend; MEDIACMD_DEINIT/FREE remains the invalidation boundary.
             "a24f1d8c24b921de8d98962d7a018fbf235b6533405a5b9aab356cf004232bd7",
+            # Reviewed diagnostic-spool checkpoint. The only change from the
+            # lifecycle form above is a nonblocking Always-mode diagnostic
+            # checkpoint at STOP; playback/session behavior is unchanged.
+            "dc7a77d1ec8cf323e6ea2b5ae9380fdc26a078574416725c7cc13593de4fc12e",
+            # Reviewed bounded fullscreen retry. PLAY/SETVIDEORECT can precede
+            # decoder readiness on slower devices; one serialized check is
+            # retried within the same generation and still emits at most one
+            # TV toggle for an actual embedded preview.
+            "1fe3cbea3cf8d22e9a473d1e1f3df6f3676947a4ae24e6c125dada888c17bba3",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")
@@ -243,9 +252,13 @@ def main() -> int:
     exo_text = (SRC / exo_rel).read_text(errors="ignore")
     ijk_text = (SRC / ijk_rel).read_text(errors="ignore")
     gsy_text = (SRC / gsy_rel).read_text(errors="ignore")
+    prohibited_continuous_telemetry = (
+        "PlayerTelemetry", "telemetryProcessedFrames", "telemetrySnapshotDue",
+        "telemetryLoadStartMonoMs", "telemetrySeekRequestMonoMs",
+    )
     for rel, text in ((exo_rel, exo_text), (ijk_rel, ijk_text), (gsy_rel, gsy_text)):
-        if "PlayerTelemetry" in text or "telemetry." in text:
-            fail(f"playback runtime contains internal telemetry hooks: {rel}")
+        if any(marker in text for marker in prohibited_continuous_telemetry):
+            fail(f"playback runtime contains prohibited continuous telemetry hooks: {rel}")
 
     player_backend = (SRC / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/PlayerBackend.java").read_text(errors="ignore")
     player_factory = (SRC / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/PlayerFactory.java").read_text(errors="ignore")
@@ -272,10 +285,23 @@ def main() -> int:
         fail("Media3 backend does not use AndroidX Media3")
     if "com.google.android.exoplayer2" in media3_text:
         fail("Media3 backend is source-coupled to legacy ExoPlayer")
-    if "PlayerTelemetry" in media3_text or "telemetry." in media3_text:
-        fail("Media3 backend contains prohibited internal telemetry hooks")
-    if "extension-ffmpeg" in media3_text.lower() or "FfmpegLibrary" in media3_text:
-        fail("Media3 backend is coupled to the legacy ExoPlayer FFmpeg extension")
+    if any(marker in media3_text for marker in prohibited_continuous_telemetry):
+        fail("Media3 backend contains prohibited continuous telemetry hooks")
+    for required in ("DecoderAttemptTelemetry", "MAX_EVENTS = 12"):
+        source = media3_text if required == "DecoderAttemptTelemetry" else (
+            SRC / "core/src/main/java/opensagetv/vibe/miniclient/video/DecoderAttemptTelemetry.java"
+        ).resolve().read_text(errors="ignore")
+        if required not in source:
+            fail(f"bounded decoder telemetry contract missing: {required}")
+    if 'setLibraries("ffmpegJNI")' in media3_text or 'loadLibrary("ffmpegJNI")' in media3_text:
+        fail("Media3 backend is coupled to the legacy ExoPlayer FFmpeg JNI name")
+    if "FfmpegLibrary" in media3_text:
+        media3_ffmpeg = (media3_dir / "Media3FfmpegAudioSupport.java").read_text(errors="ignore")
+        media3_factory = (media3_dir / "Media3AudioExtensionRenderersFactory.java").read_text(errors="ignore")
+        if ('NATIVE_LIBRARY = "media3ffmpegJNI"' not in media3_ffmpeg
+                or "FfmpegAudioRenderer" not in media3_factory
+                or "EXTENSION_RENDERER_MODE_OFF" not in media3_factory):
+            fail("Media3 FFmpeg extension is not isolated to its audited audio fallback")
 
     media3_player = (media3_dir / "Media3MediaPlayerImpl.java").read_text(errors="ignore")
     if "player.setVideoSurfaceView((SurfaceView) context.getVideoView())" not in media3_player:
@@ -505,7 +531,7 @@ def main() -> int:
     print("PASS: shared BaseMediaPlayerImpl is pinned to a reviewed known-good form")
     print("PASS: legacy ExoPlayer modules strictly aligned to 2.18.1; obsolete Exo wrappers/testutils removed")
     print("PASS: four-backend PlayerFactory configured for both GDX and OpenGL renderers")
-    print("PASS: Media3 1.11.0 backend isolated from legacy ExoPlayer/FFmpeg and telemetry")
+    print("PASS: Media3 1.11.0 backend isolated from legacy ExoPlayer/FFmpeg; bounded decoder telemetry verified")
     print("PASS: IJK codec selection decoupled from legacy ExoPlayer utility classes")
     print("PASS: shared Decoding Method configured: Hardware / Software / Fallback (Hardware default)")
     print("PASS: GSYVideoPlayer 13.1.0 selector is isolated from legacy IJK and offers Auto/Media3/System/Legacy Exo")

@@ -1,10 +1,15 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from sagetv_dev_mcp.sagex_api import MediaMatch, SagexApiClient, SagexApiError
+from sagetv_dev_mcp.sagex_api import (
+    MediaMatch,
+    SageWebApiClient,
+    SagexApiClient,
+    SagexApiError,
+)
 
 
 class SagexApiTests(unittest.TestCase):
@@ -28,11 +33,37 @@ class SagexApiTests(unittest.TestCase):
         self.assertEqual(mode, "exact")
         self.assertEqual([m.media_file_id for m in matches], [1])
 
+    def test_find_media_many_enumerates_index_once(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        payload = {"Result": [
+            {"MediaFileID": 1, "MediaTitle": "One"},
+            {"MediaFileID": 2, "MediaTitle": "Two"},
+        ]}
+        with patch.object(c, "call", side_effect=[payload, {"Result": []}]) as call:
+            found = c.find_media_many(["One", "Two"], page_size=2)
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(found["One"][0], [MediaMatch(1, "One")])
+        self.assertEqual(found["Two"][0], [MediaMatch(2, "Two")])
+
     def test_watch_uses_mediafile_reference_and_context(self):
         c = SagexApiClient("http://server:8080/sagex/api")
         with patch.object(c, "call", return_value={"Result": "OK"}) as call:
             c.watch("444556303031", 123)
         call.assert_called_once_with("Watch", "mediafile:123", context="444556303031")
+
+    def test_refresh_media_index_uses_stock_sagex_scan(self):
+        c = SagexApiClient("http://server:8080/sagex/api")
+        with patch.object(c, "call", return_value={}) as call:
+            result = c.refresh_media_index(wait_until_done=False)
+        call.assert_called_once_with("RunLibraryImportScan", "false")
+        self.assertTrue(result["requested"])
+        self.assertEqual(result["transport"], "sagex_run_library_import_scan")
+
+    def test_web_fallback_reports_scan_unavailable_without_mutation(self):
+        c = SageWebApiClient("http://server:8080/sage")
+        result = c.refresh_media_index(wait_until_done=False)
+        self.assertFalse(result["requested"])
+        self.assertEqual(result["reason"], "run_library_import_scan_unavailable")
 
     def test_watch_accepts_older_sagex_async_task_serialization_failure(self):
         c = SagexApiClient("http://server:8080/sagex/api")
@@ -50,6 +81,29 @@ class SagexApiTests(unittest.TestCase):
         with patch.object(c, "call", side_effect=SagexApiError("authentication failed")):
             with self.assertRaisesRegex(SagexApiError, "authentication failed"):
                 c.watch("444556303031", 123)
+
+    def test_discovery_respects_web_control_disabled_server(self):
+        environment = Mock()
+        environment.server_for_address.return_value = {
+            "webserver_installed": False,
+            "web_control_mode": "none",
+        }
+        with patch("sagetv_dev_mcp.sagex_api.load_test_environment", return_value=environment):
+            with self.assertRaisesRegex(SagexApiError, "Web control is disabled"):
+                SagexApiClient.discover("192.0.2.20")
+
+    def test_web_interface_mode_skips_sagex_probe(self):
+        environment = Mock()
+        environment.server_for_address.return_value = {
+            "webserver_installed": True,
+            "web_control_mode": "web_interface",
+        }
+        expected = SageWebApiClient("http://server:8080/sage")
+        with patch("sagetv_dev_mcp.sagex_api.load_test_environment", return_value=environment), \
+                patch.object(SagexApiClient, "candidate_bases") as candidates, \
+                patch.object(SageWebApiClient, "discover", return_value=expected):
+            self.assertIs(SagexApiClient.discover("192.0.2.20"), expected)
+        candidates.assert_not_called()
 
     def test_seek_uses_server_video_frame_context(self):
         c = SagexApiClient("http://server:8080/sagex/api")

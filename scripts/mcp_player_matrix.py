@@ -16,7 +16,11 @@ That expands to 63 configuration cases: 27 non-GSY + 36 GSY.
 """
 from __future__ import annotations
 
-from sagetv_dev_mcp.config import default_server_address, default_server_value
+from sagetv_dev_mcp.config import (
+    default_server_address,
+    default_server_value,
+    default_test_value,
+)
 
 import argparse
 import json
@@ -31,6 +35,7 @@ from typing import Any, Iterable
 from mcp_media3_matrix import MCPProcess, call_dict, initialize, safe_checkpoint
 from mcp_playback_test import start_recording_via_search
 from mcp_ui_roots import wait_automation_root
+from media_warm_cache import mark_recent, media_identity, recent_entry
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -423,6 +428,10 @@ def _compact_milestone_state(state: dict[str, Any]) -> dict[str, Any]:
         'health_dataSourceOpenCount', 'health_dataSourceOpenWaitMs',
         'health_dataSourceNetworkReadCount', 'health_dataSourceNetworkReadBytes',
         'health_dataSourceNetworkReadWaitMs', 'health_dataSourceNetworkReadErrors',
+        'health_dataSourceSessionReuseCount',
+        'health_dataSourceProbeCacheHitBytes',
+        'health_dataSourceProbeCacheMissCount',
+        'health_dataSourceProbeCacheResidentBytes',
         'health_dataSourceNetworkLastReadPosition', 'trapSequence', 'trapLastEvent',
         'trapLastEventMonotonicMs', 'trapLastVideoRendered', 'trapLastAudioRendered',
         'trapLastAudioHeadFrames',
@@ -679,6 +688,8 @@ def start_case(
     text: str,
     video_name: str,
     server_path: str,
+    media_selection_mode: str,
+    webserver_installed: bool,
     text_char_delay_ms: int,
     connect_timeout_s: float,
     ui_stable_ms: int,
@@ -686,8 +697,9 @@ def start_case(
     verify_ms: int,
     fixed_config: dict[str, Any],
     tuning_config: dict[str, Any] | None = None,
+    phase_label: str = "CASE",
 ) -> dict[str, Any]:
-    print(f"\n=== CASE {case.id} ===")
+    print(f"\n=== {phase_label} {case.id} ===")
     config_request = {
         "player": case.player,
         "streaming": streaming_preference(case.streaming),
@@ -764,10 +776,14 @@ def start_case(
             + ", ".join(activation_mismatches)
         )
 
-    if server_path.strip():
+    playback_request_started = time.monotonic()
+    if server_path.strip() and (
+        media_selection_mode == "vibe_exact_path"
+        or (media_selection_mode == "auto" and not webserver_installed)
+    ):
         search = {
             "skipped": True,
-            "reason": "exact_server_path_requested",
+            "reason": "vibe_exact_server_path_requested",
             "serverPath": server_path,
         }
         playback = call_dict(client, "dev_play_server_path", {
@@ -775,6 +791,36 @@ def start_case(
             "timeout_s": playback_timeout_s,
             "verify_ms": verify_ms,
         }, timeout=playback_timeout_s + 35.0)
+        if not playback.get("passed") and webserver_installed:
+            direct_result = playback
+            playback = call_dict(client, "dev_play_video", {
+                "video_name": Path(server_path).stem,
+                "timeout_s": playback_timeout_s,
+                "verify_ms": verify_ms,
+                "refresh_if_missing": True,
+            }, timeout=playback_timeout_s + 35.0)
+            playback["vibeExactPathResult"] = direct_result
+    elif server_path.strip():
+        search = {
+            "skipped": True,
+            "reason": "stock_web_path_stem_lookup",
+            "serverPath": server_path,
+            "videoName": Path(server_path).stem,
+        }
+        playback = call_dict(client, "dev_play_video", {
+            "video_name": Path(server_path).stem,
+            "timeout_s": playback_timeout_s,
+            "verify_ms": verify_ms,
+            "refresh_if_missing": True,
+        }, timeout=playback_timeout_s + 35.0)
+        if not playback.get("passed") and media_selection_mode == "auto":
+            indexed_result = playback
+            playback = call_dict(client, "dev_play_server_path", {
+                "server_path": server_path,
+                "timeout_s": playback_timeout_s,
+                "verify_ms": verify_ms,
+            }, timeout=playback_timeout_s + 35.0)
+            playback["stockWebResult"] = indexed_result
     elif video_name.strip():
         search = {
             "skipped": True,
@@ -785,6 +831,7 @@ def start_case(
             "video_name": video_name,
             "timeout_s": playback_timeout_s,
             "verify_ms": verify_ms,
+            "refresh_if_missing": True,
         }, timeout=playback_timeout_s + 35.0)
     else:
         search = start_recording_via_search(client, text, text_char_delay_ms=text_char_delay_ms)
@@ -794,6 +841,7 @@ def start_case(
         }, timeout=playback_timeout_s + 15.0)
     if not playback.get("passed"):
         raise PlaybackStartupError(playback)
+    playback_request_elapsed_ms = int(round((time.monotonic() - playback_request_started) * 1000.0))
 
     state = call_dict(client, "dev_player_state")
     status_version = _int_value(state.get("debugStatusVersion"), 0)
@@ -832,6 +880,7 @@ def start_case(
         "ready": ready,
         "search": search,
         "playback": playback,
+        "playbackRequestElapsedMs": playback_request_elapsed_ms,
         "state": state,
     }
 
@@ -1027,6 +1076,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the complete SageTV MiniClient player/backend MCP regression matrix")
     parser.add_argument("--server", default=default_server_address())
     parser.add_argument("--port", type=int, default=int(default_server_value("miniclient_port", 31099)))
+    parser.add_argument(
+        "--media-selection-mode", choices=("auto", "stock_web", "vibe_exact_path"),
+        default=str(default_server_value("media_selection_mode", "auto")),
+        help="How the selected server resolves configured media paths",
+    )
+    parser.add_argument(
+        "--webserver-installed", action=argparse.BooleanOptionalAction,
+        default=bool(default_server_value("webserver_installed", False)),
+        help="Whether Sagex/stock Web MediaFile lookup is available",
+    )
     parser.add_argument("--text", default="", help="SageTV Search text; required unless --video-name or --server-path is supplied")
     parser.add_argument("--video-name", default="", help="Exact or uniquely matching stock SageTV MediaFile name through Sagex Watch")
     parser.add_argument("--server-path", default="", help="Exact SageTV-server MediaFile path through the Vibe test-control extension")
@@ -1038,6 +1097,7 @@ def main() -> int:
     add_fixed_encoding_args(parser)
     parser.add_argument("--gsy-engines", default=",".join(GSY_ENGINES))
     parser.add_argument("--checks", default=",".join(CHECKS))
+    parser.add_argument("--startup-only", action="store_true", help="Validate playback startup without media-control operations")
     parser.add_argument("--case-id", default="", help="Comma-separated exact generated case IDs to run")
     parser.add_argument("--exclude-players", default="", help="Comma-separated player families to omit from this run (exoplayer,media3,ijkplayer,gsyplayer). Useful with --issues-only when that player code was not changed.")
     parser.add_argument("--exclude-gsy-engines", default="", help="Comma-separated GSY engines to omit (auto,media3,system,legacy_exo). Example: --exclude-gsy-engines system")
@@ -1058,6 +1118,10 @@ def main() -> int:
     parser.add_argument("--connect-timeout-s", type=float, default=30.0)
     parser.add_argument("--ui-stable-ms", type=int, default=2000)
     parser.add_argument("--playback-timeout-s", type=float, default=45.0)
+    parser.add_argument("--storage-warmup-timeout-s", type=float, default=float(default_test_value("storage_warmup_timeout_seconds", 120)), help="Extended first-use playback allowance from test config")
+    parser.add_argument("--slow-startup-ms", type=int, default=int(default_test_value("storage_slow_startup_ms", 10000)), help="Discard/retry only a first startup above this configured duration")
+    parser.add_argument("--storage-warm-cache-s", type=float, default=float(default_test_value("storage_warm_cache_seconds", 600)), help="Configured sliding recent-use interval for this server/media")
+    parser.add_argument("--skip-storage-warmup", action="store_true", help="Disable adaptive cold-storage detection when intentionally measuring cold startup")
     parser.add_argument("--startup-verify-ms", type=int, default=1500)
     parser.add_argument("--report", default="")
     parser.add_argument("--stop-on-infra-error", action="store_true", help="Stop instead of continuing to later configurations after an automation/infrastructure error")
@@ -1066,6 +1130,8 @@ def main() -> int:
 
     if not args.text.strip() and not args.video_name.strip() and not args.server_path.strip():
         parser.error("one of --text, --video-name, or --server-path is required")
+    if args.media_selection_mode == "stock_web" and not args.webserver_installed:
+        parser.error("stock_web requires --webserver-installed/config true")
 
     try:
         players = _csv(args.players, PLAYERS, "players")
@@ -1074,7 +1140,7 @@ def main() -> int:
         fixed_config = fixed_config_from_args(args)
         validate_fixed_config(fixed_config)
         gsy_engines = _csv(args.gsy_engines, GSY_ENGINES, "GSY engines")
-        checks = _csv(args.checks, CHECKS, "checks")
+        checks = [] if args.startup_only else _csv(args.checks, CHECKS, "checks")
         excluded_players = _csv(args.exclude_players, PLAYERS, "excluded players") if str(args.exclude_players).strip() else []
         excluded_gsy_engines = _csv(args.exclude_gsy_engines, GSY_ENGINES, "excluded GSY engines") if str(args.exclude_gsy_engines).strip() else []
         crash_probe_milestones_ms = _parse_milestones_ms(args.crash_probe_ms)
@@ -1102,6 +1168,12 @@ def main() -> int:
             raise ValueError("--start-ms must be >= 0")
         if args.text_char_delay_ms < 0 or args.text_char_delay_ms > 2000:
             raise ValueError("--text-char-delay-ms must be between 0 and 2000")
+        if args.storage_warmup_timeout_s < 15.0 or args.storage_warmup_timeout_s > 300.0:
+            raise ValueError("--storage-warmup-timeout-s must be between 15 and 300 seconds")
+        if args.slow_startup_ms < 1000 or args.slow_startup_ms > 120000:
+            raise ValueError("--slow-startup-ms must be between 1000 and 120000")
+        if args.storage_warm_cache_s < 0 or args.storage_warm_cache_s > 3600:
+            raise ValueError("--storage-warm-cache-s must be between 0 and 3600 seconds")
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -1125,19 +1197,87 @@ def main() -> int:
     infra_failures = 0
     startup_media_failures = 0
     observations = {"RECOVERED": 0, "SLOW_RECOVERY": 0, "PLAYER_CRASHED": 0, "WATCHDOG_EXPIRED": 0, "MEDIA_NOT_RECOVERED": 0}
+    warm_cache_path = Path(os.environ.get("SAGETV_ARTIFACT_DIR", "artifacts/firetv")) / ".media-warm-cache.json"
+    warm_identity = media_identity(
+        server=args.server, port=args.port, video_name=args.video_name,
+        server_path=args.server_path, search_text=args.text,
+    )
+    recent_warm = None if args.skip_storage_warmup else recent_entry(
+        warm_cache_path, warm_identity, args.storage_warm_cache_s
+    )
+    storage_warmup: dict[str, Any] = {
+        "enabled": not args.skip_storage_warmup,
+        "timeoutSeconds": args.storage_warmup_timeout_s,
+        "slowStartupThresholdMs": args.slow_startup_ms,
+        "recentWarmTtlSeconds": args.storage_warm_cache_s,
+        "recentWarmHit": recent_warm is not None,
+        "recentWarmAgeSeconds": recent_warm.get("ageSeconds") if recent_warm else None,
+        "outcome": "disabled_for_intentional_cold_start_test" if args.skip_storage_warmup
+                   else "recent_media_uses_normal_gates" if recent_warm else "pending_first_start",
+    }
+    adaptive_probe_pending = bool(not args.skip_storage_warmup and recent_warm is None)
 
-    def start_for_case(case: PlayerCase) -> dict[str, Any]:
+    def start_for_case(case: PlayerCase, playback_timeout_s: float | None = None) -> dict[str, Any]:
         return start_case(
             client, case,
             server=args.server, port=args.port, text=args.text,
             video_name=args.video_name, server_path=args.server_path,
+            media_selection_mode=args.media_selection_mode,
+            webserver_installed=args.webserver_installed,
             text_char_delay_ms=args.text_char_delay_ms,
             connect_timeout_s=args.connect_timeout_s,
             ui_stable_ms=args.ui_stable_ms,
-            playback_timeout_s=args.playback_timeout_s,
+            playback_timeout_s=args.playback_timeout_s if playback_timeout_s is None else playback_timeout_s,
             verify_ms=args.startup_verify_ms,
             fixed_config=fixed_config,
         )
+
+    def start_with_adaptive_storage_gate(case: PlayerCase) -> dict[str, Any]:
+        nonlocal adaptive_probe_pending
+        if not adaptive_probe_pending:
+            measured = start_for_case(case)
+            if not args.skip_storage_warmup:
+                elapsed_ms = int(measured.get("playbackRequestElapsedMs") or 0)
+                mark_recent(warm_cache_path, warm_identity, startup_ms=elapsed_ms)
+                storage_warmup["slidingTtlRefreshCount"] = int(
+                    storage_warmup.get("slidingTtlRefreshCount") or 0
+                ) + 1
+            return measured
+
+        adaptive_probe_pending = False
+        first = start_for_case(
+            case, playback_timeout_s=max(args.playback_timeout_s, args.storage_warmup_timeout_s)
+        )
+        elapsed_ms = int(first.get("playbackRequestElapsedMs") or 0)
+        storage_warmup["firstStartupMs"] = elapsed_ms
+        storage_warmup["firstStartupPlayer"] = case.player
+        storage_warmup["firstStartupPassed"] = True
+        storage_warmup["cacheEntry"] = mark_recent(
+            warm_cache_path, warm_identity, startup_ms=elapsed_ms
+        )
+        storage_warmup["slidingTtlRefreshCount"] = 1
+        if elapsed_ms <= args.slow_startup_ms:
+            storage_warmup["outcome"] = "normal_start_used_as_measured_result"
+            return first
+
+        storage_warmup["outcome"] = "slow_start_discarded_and_retried"
+        storage_warmup["discardedStartupMs"] = elapsed_ms
+        call_dict(client, "dev_player_control", {"action": "stop"}, timeout=30.0)
+        cleanup = call_dict(
+            client, "dev_prepare_clean_start",
+            {"wake": False, "graceful_timeout_s": 3.0}, timeout=30.0,
+        )
+        storage_warmup["cleanupReadyToLaunch"] = bool(cleanup.get("readyToLaunch"))
+        measured = start_for_case(case)
+        storage_warmup["measuredRetryStartupMs"] = int(
+            measured.get("playbackRequestElapsedMs") or 0
+        )
+        storage_warmup["cacheEntry"] = mark_recent(
+            warm_cache_path, warm_identity,
+            startup_ms=storage_warmup["measuredRetryStartupMs"],
+        )
+        storage_warmup["slidingTtlRefreshCount"] = 2
+        return measured
 
     try:
         negotiated, _ = initialize(client)
@@ -1150,6 +1290,10 @@ def main() -> int:
             f"active={adb_session.get('persistentShell')} "
             f"pid={adb_session.get('persistentShellPid')} "
             f"restarts={adb_session.get('persistentShellRestarts')}",
+            flush=True,
+        )
+        print(
+            "ADAPTIVE STORAGE GATE: " + storage_warmup["outcome"],
             flush=True,
         )
         print(f"PLAYER MATRIX: {len(cases)} configuration cases; watchdog={args.watchdog_ms} ms; textCharDelay={args.text_char_delay_ms} ms", flush=True)
@@ -1181,7 +1325,7 @@ def main() -> int:
                 case_result["checkStartups"] = {}
             else:
                 try:
-                    case_result["startup"] = start_for_case(case)
+                    case_result["startup"] = start_with_adaptive_storage_gate(case)
                     case_result["startupStatus"] = "RECOVERED"
                 except PlaybackStartupError as exc:
                     startup_media_failures += 1
@@ -1205,7 +1349,7 @@ def main() -> int:
             for check_name in case_checks:
                 if isolated_issue_checks:
                     try:
-                        case_result["checkStartups"][check_name] = start_for_case(case)
+                        case_result["checkStartups"][check_name] = start_with_adaptive_storage_gate(case)
                     except PlaybackStartupError as exc:
                         startup_media_failures += 1
                         crashed = bool(exc.playback.get("crashDetected"))
@@ -1235,7 +1379,7 @@ def main() -> int:
                         continue
                 elif restart_required:
                     try:
-                        case_result.setdefault("restarts", []).append(start_for_case(case))
+                        case_result.setdefault("restarts", []).append(start_with_adaptive_storage_gate(case))
                         restart_required = False
                     except PlaybackStartupError as exc:
                         startup_media_failures += 1
@@ -1339,6 +1483,8 @@ def main() -> int:
             "searchText": args.text,
             "videoName": args.video_name,
             "serverPath": args.server_path,
+            "mediaSelectionMode": args.media_selection_mode,
+            "webserverInstalled": args.webserver_installed,
             "watchdogMs": args.watchdog_ms,
             "watchdogSeconds": args.watchdog_ms / 1000.0,
             "slowRecoveryMs": args.slow_recovery_ms,
@@ -1357,6 +1503,7 @@ def main() -> int:
                 "excludedCaseCount": len(excluded_case_ids),
             },
             "hardwareOnly": bool(args.hardware_only),
+            "storageWarmup": storage_warmup,
             "watchdogExpiryIsFailure": False,
             "causeAttribution": "undetermined_unless_evidence_proves_android_sagetv_server_or_ffmpeg",
             "players": players,
@@ -1365,6 +1512,7 @@ def main() -> int:
             "fixedEncoding": fixed_config,
             "gsyEngines": gsy_engines,
             "checks": checks,
+            "startupOnly": bool(args.startup_only),
             "configurationCaseCount": len(cases),
             "expectedFullMatrixCaseCount": 63,
             "infrastructureFailures": infra_failures,
