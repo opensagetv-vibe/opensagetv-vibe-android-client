@@ -298,7 +298,7 @@ explicitly approves publication after the active hardware phases.
 - [x] **GH-003 - Approved GitHub publication.** After explicit approval only, create logical commits, push `main`, create
   the release tag, attach the versioned APK/source artifacts, and verify the
   public download hashes and GitHub Pages latest-APK redirect.
-- [ ] **GH-004 - Temporary forum migration post.** After GH-003 and the updated
+- [x] **GH-004 - Temporary forum migration post.** After GH-003 and the updated
   GitHub issue workflow are publicly verified, create a ready-to-paste Markdown
   post explaining that playback discussion and issue submission should move to
   GitHub Issues. Include the Test Current Video and diagnostic-export process
@@ -361,6 +361,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 19 | 2026-09-13 | Completed GH-004: created the excluded temporary ready-to-paste forum announcement under workspace `artifacts/temp`, directing playback reports to the GitHub issue form and documenting Test Current Video plus no-email SMB diagnostic export. All four tightly cropped generated-fixture screenshot URLs returned HTTP 200. Also published a separate tested New feature request form and provisioned the playback labels referenced by the existing issue form. |
 | 18 | 2026-09-13 | Completed GH-003: published three logical commits through `71401a4`, observed successful repository source-contract, build, status, and Pages checks, created the public `v0.5.91` release with bullet-formatted notes and five APK/source/hash/manifest assets, downloaded and re-hashed the public APK, and verified that the Pages endpoint returns HTTP 200 and resolves `v0.5.91`. |
 | 17 | 2026-09-13 | Completed GH-002: the primary tree passed full validation, a clean 60-task APK build, strict APK inspection, and handoff/GitHub bundle creation. A fresh Windows-extracted, Git-less source archive then passed its 1,423-file manifest, 537 scaffold/static tests (one Git-metadata-only skip), 84 MCP tests, Core JUnit, full validation, and an independent clean 60-task APK build. The gate also fixed parent-Git index inheritance in extracted manifest checks. |
 | 16 | 2026-09-13 | Completed GH-001: consolidated the Unreleased changelog, recorded ONN/DVD and exact-path evidence, published cropped generated-fixture diagnostic screenshots and GitHub issue instructions, verified `VERSION=0.5.91`/`REQUIRES_BUILD=true`, scoped raw ADB to the selected device, and regenerated the complete 1,423-file manifest after 536 static/scaffold, 84 MCP, and Core JUnit tests passed. |
