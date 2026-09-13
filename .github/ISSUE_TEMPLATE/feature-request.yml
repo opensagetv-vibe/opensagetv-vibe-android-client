@@ -1,0 +1,64 @@
+name: New feature request
+description: Suggest a new capability or improvement for OpenSageTV Vibe
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve OpenSageTV Vibe. Describe the user problem first, then the behavior you would like. A diagnostic bundle is not required unless the request depends on current playback behavior.
+  - type: checkboxes
+    id: existing
+    attributes:
+      label: Existing requests
+      options:
+        - label: I searched open and closed issues and did not find the same request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain the current limitation and who is affected.
+      placeholder: When I use Vibe on..., I cannot..., which means...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe what Vibe should do from the user's point of view.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - Playback or player controls
+        - Live TV or recordings
+        - DVD or disc playback
+        - Captions, subtitles, or audio
+        - SMB or datasource
+        - Settings or user interface
+        - Diagnostics or test automation
+        - Server compatibility
+        - Installation or updates
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Devices and compatibility
+      description: List relevant Android/Fire TV devices, SageTV server type, STV, or player. State "all" or "not device-specific" when appropriate.
+      placeholder: Fire TV and Android TV; stock SageTV server compatibility preferred
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: Describe anything you currently do instead, if applicable.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add mockups, links, protocol details, or a redacted diagnostic bundle when useful. Do not attach media you lack permission to share.

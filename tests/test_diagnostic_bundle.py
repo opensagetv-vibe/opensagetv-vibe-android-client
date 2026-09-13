@@ -126,6 +126,17 @@ class DiagnosticBundleContracts(unittest.TestCase):
         self.assertTrue((ROOT / "docs/images/diagnostics-long-press-menu.png").is_file())
         self.assertTrue((ROOT / "docs/images/diagnostics-export-dialog.png").is_file())
 
+    def test_feature_request_form_collects_problem_and_compatibility(self):
+        form = (ROOT / ".github/ISSUE_TEMPLATE/feature-request.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("name: New feature request", form)
+        self.assertIn('labels: ["enhancement"]', form)
+        for field in ("existing", "problem", "proposal", "area", "compatibility", "alternatives", "additional"):
+            self.assertIn(f"id: {field}", form)
+        self.assertIn("stock SageTV server compatibility preferred", form)
+        self.assertIn("A diagnostic bundle is not required", form)
+
 
 if __name__ == "__main__":
     unittest.main()
