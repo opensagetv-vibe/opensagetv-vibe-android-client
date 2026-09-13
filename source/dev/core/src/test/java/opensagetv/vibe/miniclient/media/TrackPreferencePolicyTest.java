@@ -47,4 +47,19 @@ public class TrackPreferencePolicyTest
         assertTrue(TrackPreferencePolicy.isValidCaptionStandard("CEA-708"));
         assertFalse(TrackPreferencePolicy.isValidCaptionStandard("bogus"));
     }
+
+    @Test
+    public void automaticPreferenceUsesDescribedDvbTrackBeforeInjectedCeaTracks()
+    {
+        SubtitleTrack[] tracks = new SubtitleTrack[] {
+                new SubtitleTrack(0, SubtitleCodec.CEA608, "eng", "", true, 1),
+                new SubtitleTrack(1, SubtitleCodec.CEA708, "eng", "", true, 1),
+                new SubtitleTrack(2, SubtitleCodec.DVB, "eng", "", true)
+        };
+
+        assertEquals(2, TrackPreferencePolicy.findPreferredSubtitleTrack(
+                tracks, "eng", "auto", 1));
+        assertEquals(0, TrackPreferencePolicy.findPreferredSubtitleTrack(
+                tracks, "eng", "cea608", 1));
+    }
 }

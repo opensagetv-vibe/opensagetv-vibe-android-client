@@ -51,6 +51,13 @@ class PlaybackSessionControllerTests(unittest.TestCase):
             self.assertIn("player != flushPlayer", source)
             self.assertIn("PlaybackSessionController.Operation.RECOVERY", source)
 
+    def test_media3_listener_uses_its_captured_player_during_teardown(self):
+        source = BACKENDS[0].read_text(encoding="utf-8")
+        self.assertIn("positionMs=\" + listenerPlayer.getCurrentPosition()", source)
+        self.assertIn("bufferedPositionMs=\" + listenerPlayer.getBufferedPosition()", source)
+        self.assertIn("long recoveryPositionMs = Math.max(0L, listenerPlayer.getCurrentPosition())", source)
+        self.assertNotIn("positionMs=\" + player.getCurrentPosition()", source)
+
 
 if __name__ == "__main__":
     unittest.main()

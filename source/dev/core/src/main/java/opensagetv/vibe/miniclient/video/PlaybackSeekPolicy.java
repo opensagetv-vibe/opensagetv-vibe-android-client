@@ -32,4 +32,20 @@ public final class PlaybackSeekPolicy
         return Math.min(requestedPositionMs, latestSafePositionMs);
     }
 
+    /**
+     * Returns whether an initial server seek is already satisfied by the
+     * source that is being opened. Stock SageTV can send SEEK 0 immediately
+     * after OPENURL/PLAY. Rebinding a still-sniffing progressive source for
+     * that no-op request can discard the extractor's partial probe and make a
+     * valid transport stream temporarily look unsupported.
+     */
+    public static boolean isInitialZeroSeekNoOp(long currentPositionMs,
+                                                 long requestedPositionMs,
+                                                 boolean firstVideoFrameRendered)
+    {
+        return !firstVideoFrameRendered
+                && currentPositionMs == 0L
+                && requestedPositionMs == 0L;
+    }
+
 }

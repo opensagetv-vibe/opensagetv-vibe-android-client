@@ -24,6 +24,7 @@ import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.MiniClientOptions;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.video.PlayerBackend;
+import opensagetv.vibe.miniclient.android.video.media3.Media3FfmpegAudioSupport;
 import opensagetv.vibe.miniclient.android.video.DeviceAudioCapabilityProfile;
 //import opensagetv.vibe.miniclient.prefs.ConnectionPrefStore;
 import opensagetv.vibe.miniclient.media.AudioCodec;
@@ -173,12 +174,17 @@ public class AndroidMiniClientOptions implements MiniClientOptions {
     {
         List<Container> supportedContainers = new ArrayList<Container>();
         Container [] allContainers = Container.values();
+        PlayerBackend backend = getPlayerBackend();
 
         for(int i = 0; i < allContainers.length; i++)
         {
-            if (allContainers[i] == MPEG1PS || allContainers[i] == MPEG2TS || allContainers[i] == MPEG2PS)
+            if (allContainers[i] == MPEG1PS || allContainers[i] == MPEG2PS
+                    || (allContainers[i] == MPEG2TS && backend != PlayerBackend.MEDIA3))
             {
-                //These codecs are not support for pull at this time.  They are push only formats.
+                // Preserve the established Push paths for program streams and older
+                // backends. Media3's MPEG-2 TS Pull path is physically verified below;
+                // the forced-Pull compatibility option remains available for explicit
+                // testing of another backend without changing its automatic behavior.
             }
             else
             {
@@ -226,7 +232,10 @@ public class AndroidMiniClientOptions implements MiniClientOptions {
                 {
                     boolean supported = false;
 
-                    //If ffmpeg is available an enabled than check that first
+                    // If an optional backend-matched FFmpeg audio renderer is
+                    // present, it can decode to PCM without changing the
+                    // hardware video path. Capability negotiation must include
+                    // that fallback or stock SageTV will transcode needlessly.
                     if(backend.usesLegacyExoFfmpeg()
                             && FfmpegLibrary.isAvailable()
                             && !getPrefs().getString(PrefStore.Keys.exoplayer_ffmpeg_extension_setting, "1").equalsIgnoreCase("0"))
@@ -237,6 +246,16 @@ public class AndroidMiniClientOptions implements MiniClientOptions {
                             supportedCodecs.add(allCodecs[i]);
                             supported = true;
                         }
+                    }
+                    else if(backend == PlayerBackend.MEDIA3
+                            && Media3FfmpegAudioSupport.isAvailable()
+                            && Media3FfmpegAudioSupport.supportsFormat(
+                                    allCodecs[i].getAndroidMimeType()))
+                    {
+                        log.debug("Audio codec added because it is supported by Media3 FFmpeg ext: "
+                                + allCodecs[i].getName());
+                        supportedCodecs.add(allCodecs[i]);
+                        supported = true;
                     }
 
                     if(!supported)

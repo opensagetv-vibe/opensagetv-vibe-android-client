@@ -2,6 +2,7 @@ from argparse import Namespace
 import importlib.util
 from pathlib import Path
 import sys
+import tomllib
 import unittest
 
 
@@ -76,10 +77,17 @@ class StockMkvMatrixTests(unittest.TestCase):
 
     def test_workflow_and_example_configuration_expose_stock_mkv_gate(self):
         dev = (ROOT / "dev.sh").read_text(encoding="utf-8")
-        example = (ROOT / "config" / "firetv.example.toml").read_text(encoding="utf-8")
+        example = tomllib.loads(
+            (ROOT / "config" / "firetv.example.toml").read_text(encoding="utf-8")
+        )
         self.assertIn("mcp-stock-mkv-matrix)", dev)
         self.assertIn("mcp_stock_mkv_matrix.py", dev)
-        self.assertIn("mkv_searches = [", example)
+        stock_mkv = [
+            case for case in example["fixtures"]["cases"]
+            if case.get("path_type") == "search"
+            and case.get("modes", {}).get("stock_mkv")
+        ]
+        self.assertGreaterEqual(len(stock_mkv), 3)
 
 
 if __name__ == "__main__":

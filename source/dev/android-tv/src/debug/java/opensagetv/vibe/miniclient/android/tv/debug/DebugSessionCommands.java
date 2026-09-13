@@ -6,8 +6,11 @@ import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.parse
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.safe;
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.text;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 
 import opensagetv.vibe.miniclient.MenuHint;
 import opensagetv.vibe.miniclient.MiniClient;
@@ -27,6 +30,8 @@ import opensagetv.vibe.miniclient.uibridge.Keys;
 /** Debug-only connection, Sage command, native-text, and IME operations. */
 final class DebugSessionCommands
 {
+    private static final long RECONNECT_ACTIVITY_TEARDOWN_MS = 750L;
+
     private DebugSessionCommands()
     {
     }
@@ -71,6 +76,9 @@ final class DebugSessionCommands
             source = "last_connected";
         }
 
+        Activity resumedActivity = UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        boolean replacingMiniClientActivity = resumedActivity instanceof MiniClientOpenGLActivity
+                || resumedActivity instanceof MiniClientGDXActivity;
         if (client.isConnected())
             client.closeConnection();
 
@@ -86,8 +94,28 @@ final class DebugSessionCommands
 
         Intent start = new Intent(context, activityClass);
         start.putExtra(UIActivityLifeCycleHandler.ARG_SERVER_INFO, server);
-        start.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        context.startActivity(start);
+        start.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (replacingMiniClientActivity)
+        {
+            // Closing one debug session can deliver Activity.onPause/onDestroy after the
+            // replacement connection has already published itself.  That stale teardown
+            // then closes the new global MiniClient connection.  Retire the old Activity
+            // first and launch after its lifecycle callbacks have completed.
+            resumedActivity.finish();
+            final Context appContext = context.getApplicationContext();
+            final Intent delayedStart = new Intent(start);
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable()
+            {
+                @Override public void run()
+                {
+                    appContext.startActivity(delayedStart);
+                }
+            }, RECONNECT_ACTIVITY_TEARDOWN_MS);
+        }
+        else
+        {
+            context.startActivity(start);
+        }
 
         return "op=connect;source=" + safe(source)
                 + ";serverName=" + safe(server.name)
@@ -95,6 +123,9 @@ final class DebugSessionCommands
                 + ";serverPort=" + server.port
                 + ";renderer=" + safe(renderer)
                 + ";launchActivity=" + safe(activityClass.getName())
+                + ";launchDelayed=" + replacingMiniClientActivity
+                + ";teardownDelayMs="
+                + (replacingMiniClientActivity ? RECONNECT_ACTIVITY_TEARDOWN_MS : 0L)
                 + ";save=" + save;
     }
 

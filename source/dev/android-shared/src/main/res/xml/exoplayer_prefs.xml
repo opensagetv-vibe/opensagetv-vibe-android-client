@@ -9,6 +9,12 @@
         android:summary="@string/summary_list_decoding_method"
         android:title="@string/title_list_decoding_method"/>
 
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="disable_audio_passthrough"
+        android:summary="Recommended for TV speakers and HDMI capture. Encoded audio is decoded to PCM while video remains hardware decoded. Turn off only for a verified external receiver passthrough setup."
+        android:title="Decode encoded audio to PCM"/>
+
 
     <ListPreference
         android:defaultValue="sync"

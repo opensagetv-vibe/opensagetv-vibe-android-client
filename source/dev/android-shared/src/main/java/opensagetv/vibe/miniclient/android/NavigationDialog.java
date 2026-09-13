@@ -27,6 +27,7 @@ import opensagetv.vibe.miniclient.android.events.CloseAppEvent;
 import opensagetv.vibe.miniclient.android.events.HideNavigationEvent;
 import opensagetv.vibe.miniclient.android.events.HideSystemUIEvent;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticExportController;
 import opensagetv.vibe.miniclient.android.preferences.MediaMappingPreferences;
 import opensagetv.vibe.miniclient.android.video.PlayerBackend;
 import opensagetv.vibe.miniclient.events.ShowKeyboardEvent;
@@ -163,6 +164,31 @@ public class NavigationDialog extends Dialog
                     }
                 });
         }
+
+        View exportDiagnostics = navView.findViewById(R.id.nav_export_diagnostics);
+        if (exportDiagnostics != null)
+            exportDiagnostics.setOnClickListener(new View.OnClickListener()
+            {
+                @Override public void onClick(View v)
+                {
+                    MediaCmd currentMedia = client == null || client.getCurrentConnection() == null
+                            ? null : client.getCurrentConnection().getMediaCmd();
+                    dismiss();
+                    DiagnosticExportController.show(activity,
+                            ActivePlayerAdjustmentsDialog.diagnosticsTextForExport(activity, currentMedia));
+                }
+            });
+
+        View testCurrentVideo = navView.findViewById(R.id.nav_test_current_video);
+        if (testCurrentVideo != null)
+            testCurrentVideo.setOnClickListener(new View.OnClickListener()
+            {
+                @Override public void onClick(View v)
+                {
+                    dismiss();
+                    ActivePlayerAdjustmentsDialog.testCurrentVideo(activity);
+                }
+            });
 
         navView.findViewById(R.id.nav_video_info).setOnClickListener(new View.OnClickListener()
         {

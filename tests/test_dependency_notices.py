@@ -29,6 +29,7 @@ class DependencyNoticeTest(unittest.TestCase):
             "JZlib",
             "NanoHTTPD",
             "extension-ffmpeg-2.18.0.aar",
+            "extension-media3-ffmpeg-1.11.0.aar",
             "ijkplayer-java-0.8.8-SNAPSHOT.aar",
         ):
             self.assertIn(required, text)
@@ -94,6 +95,7 @@ class DependencyNoticeTest(unittest.TestCase):
         offer = (ROOT / "third_party/source-offers/README.md").read_text(encoding="utf-8")
         for archive in (
             "extension-ffmpeg-2.18.0.aar",
+            "extension-media3-ffmpeg-1.11.0.aar",
             "ijkplayer-java-0.8.8-SNAPSHOT.aar",
             "ijkplayer-armv7a-0.8.8-SNAPSHOT.aar",
             "ijkplayer-arm64-0.8.8-SNAPSHOT.aar",
@@ -104,8 +106,12 @@ class DependencyNoticeTest(unittest.TestCase):
 
     def test_native_rebuild_scripts_pin_evidenced_source_versions(self):
         exo = (ROOT / "source/dev/exoplayer/buildffmpegext.sh").read_text(encoding="utf-8")
+        media3 = (ROOT / "source/dev/media3/buildffmpegext.sh").read_text(encoding="utf-8")
         ijk = (ROOT / "source/dev/ijkplayer/init-sources.sh").read_text(encoding="utf-8")
         self.assertIn("839f98ff6719cf2db0cbd88cd787a1b19b9cbf47", exo)
+        self.assertIn("2bc207851df311340767e913931ca7b28cab1794", media3)
+        self.assertIn("ba69be84a1ceabfb39127831ad8da0fd7cb471f3", media3)
+        self.assertIn("libmedia3ffmpegJNI.so", media3)
         self.assertIn("checkout --detach k0.8.8", ijk)
 
     def test_ijk_ffmpeg_notice_matches_embedded_non_gpl_configuration(self):
@@ -148,6 +154,19 @@ class DependencyNoticeTest(unittest.TestCase):
             all(alignment >= 16384 for alignment in load_alignments),
             f"ARM64 LOAD alignments are not 16 KB compatible: {load_alignments}",
         )
+
+    def test_media3_ffmpeg_is_audio_only_and_uses_a_distinct_jni_name(self):
+        archive = LIBS / "extension-media3-ffmpeg-1.11.0.aar"
+        with zipfile.ZipFile(archive) as package:
+            names = set(package.namelist())
+            binary = package.read("jni/arm64-v8a/libmedia3ffmpegJNI.so")
+            classes = package.read("classes.jar")
+        self.assertNotIn("jni/arm64-v8a/libffmpegJNI.so", names)
+        self.assertIn(b"ff_ac3_decoder", binary)
+        self.assertIn(b"ff_mp3_decoder", binary)
+        self.assertNotIn(b"ff_h264_decoder", binary)
+        self.assertNotIn(b"ff_mpeg2video_decoder", binary)
+        self.assertIn(b"FfmpegAudioRenderer", classes)
 
 
 if __name__ == "__main__":

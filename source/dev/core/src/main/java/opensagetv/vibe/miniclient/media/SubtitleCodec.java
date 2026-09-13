@@ -7,6 +7,7 @@ public enum SubtitleCodec
 {
     SUBRIP("SUBRIP", "SubRip Subtitles", new String[]{"SRT"}, "application/x-subrip"),
     PGS("PGSSUB", "PGS Subtitle", new String[]{"PGSSUB"}, "application/pgs"),
+    DVB("DVBSUB", "DVB Subtitles", new String[]{"DVBSUB", "DVB_SUBTITLE"}, "application/dvbsubs"),
     CEA608("CEA-608", "cea-608 Closed Captions", new String[]{""}, "application/cea-608"),
     CEA708("CEA-708", "cea-708 Closed Captions", new String[]{""}, "application/cea-708");
 
@@ -45,13 +46,7 @@ public enum SubtitleCodec
 
     public boolean hasAndroidMimeType(String mime_type)
     {
-
-        if(this.androidMimeType.equalsIgnoreCase(mime_type))
-        {
-            return true;
-        }
-
-        return false;
+        return mime_type != null && this.androidMimeType.equalsIgnoreCase(mime_type);
     }
 
     public static String getAllSageTVNamesString()
@@ -91,21 +86,17 @@ public enum SubtitleCodec
 
     public static SubtitleCodec parse(String mimeType)
     {
-        if(mimeType.equalsIgnoreCase(SubtitleCodec.SUBRIP.getAndroidMimeType()))
+        if (mimeType == null)
         {
-            return SubtitleCodec.SUBRIP;
+            return null;
         }
-        else if(mimeType.equalsIgnoreCase(SubtitleCodec.PGS.getAndroidMimeType()))
+
+        for (SubtitleCodec codec : SubtitleCodec.values())
         {
-            return SubtitleCodec.PGS;
-        }
-        else if(mimeType.equalsIgnoreCase(SubtitleCodec.CEA608.getAndroidMimeType()))
-        {
-            return SubtitleCodec.CEA608;
-        }
-        else if(mimeType.equalsIgnoreCase(SubtitleCodec.CEA708.getAndroidMimeType()))
-        {
-            return SubtitleCodec.CEA708;
+            if (codec.hasAndroidMimeType(mimeType))
+            {
+                return codec;
+            }
         }
 
         return null;

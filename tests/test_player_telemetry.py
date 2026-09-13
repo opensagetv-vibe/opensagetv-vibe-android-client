@@ -20,11 +20,11 @@ class PlayerTelemetryRollbackTests(unittest.TestCase):
         self.assertNotIn("telemetryLoadStartMonoMs", text)
         self.assertNotIn("telemetrySeekRequestMonoMs", text)
 
-    def test_exoplayer_has_no_runtime_telemetry_hooks(self):
+    def test_exoplayer_has_only_bounded_decoder_event_telemetry(self):
         text = EXO.read_text(encoding="utf-8")
         self.assertNotIn("PlayerTelemetry", text)
-        self.assertNotIn("telemetry.", text)
-        self.assertNotIn("import com.google.android.exoplayer2.analytics.AnalyticsListener;", text)
+        self.assertIn("DecoderAttemptTelemetry", text)
+        self.assertIn("import com.google.android.exoplayer2.analytics.AnalyticsListener;", text)
         self.assertNotIn("telemetryProcessedFrames", text)
 
     def test_ijk_has_no_runtime_telemetry_hooks(self):

@@ -47,19 +47,32 @@ class CodecCapabilityProfileTest(unittest.TestCase):
         self.assertIn("initCount", text)
         self.assertIn("releaseCount", text)
 
-    def test_profile_adds_no_continuous_player_analytics_callbacks(self):
+    def test_player_analytics_is_limited_to_bounded_diagnostic_events(self):
         for relative in (
             "media3/Media3MediaPlayerImpl.java",
             "exoplayer2/Exo2MediaPlayerImpl.java",
         ):
             text = (SHARED / relative).read_text(encoding="utf-8")
-            self.assertNotIn("import androidx.media3.exoplayer.analytics.AnalyticsListener", text)
-            self.assertNotIn("import com.google.android.exoplayer2.analytics.AnalyticsListener", text)
             active_lines = [
                 line.strip() for line in text.splitlines()
                 if "addAnalyticsListener(" in line and not line.strip().startswith("//")
             ]
-            self.assertEqual([], active_lines)
+            self.assertEqual(["player.addAnalyticsListener(new AnalyticsListener()"], active_lines)
+            for callback in (
+                "onVideoDecoderInitialized",
+                "onAudioDecoderInitialized",
+                "onAudioUnderrun",
+                "onAudioSinkError",
+                "onVideoCodecError",
+                "onDownstreamFormatChanged",
+            ):
+                self.assertIn(callback, text, relative)
+            active_event_loggers = [
+                line.strip() for line in text.splitlines()
+                if "new EventLogger(trackSelector)" in line
+                and not line.strip().startswith("//")
+            ]
+            self.assertEqual([], active_event_loggers)
             self.assertNotIn("CodecRuntimeObservations", text)
 
     def test_both_selectors_use_platform_profile_and_preserve_explicit_fallback(self):

@@ -4,9 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,6 +11,7 @@ import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticExportController;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
 import opensagetv.vibe.miniclient.android.video.DisplayRefreshController;
@@ -39,6 +37,12 @@ public final class ActivePlayerAdjustmentsDialog
     public static void show(Activity activity)
     {
         new ActivePlayerAdjustmentsDialog(activity).showMain();
+    }
+
+    public static void testCurrentVideo(Activity activity)
+    {
+        ActivePlayerAdjustmentsDialog dialog = new ActivePlayerAdjustmentsDialog(activity);
+        dialog.testCurrentVideo(dialog.media());
     }
 
     private MediaCmd media()
@@ -69,6 +73,8 @@ public final class ActivePlayerAdjustmentsDialog
                 "Restart decoder at this position",
                 "Reset current-session overrides",
                 "Playback Stats overlay (" + ActivePlayerProcessOverlay.visibleMode() + ")",
+                CurrentVideoDiagnosticTest.isRunning()
+                        ? "Test Current Video (running)" : "Test Current Video",
                 "Live playback diagnostics"
         };
         new AlertDialog.Builder(activity)
@@ -127,7 +133,8 @@ public final class ActivePlayerAdjustmentsDialog
                                 showMain();
                                 break;
                             case 17: choosePlaybackStats(media); break;
-                            case 18: showDiagnostics(media); break;
+                            case 18: testCurrentVideo(media); break;
+                            case 19: showDiagnostics(media); break;
                             default: break;
                         }
                     }
@@ -753,6 +760,54 @@ public final class ActivePlayerAdjustmentsDialog
                 .show();
     }
 
+    private void testCurrentVideo(final MediaCmd media)
+    {
+        CurrentVideoDiagnosticTest.confirmAndRun(activity, client, media,
+                new CurrentVideoDiagnosticTest.Completion()
+                {
+                    @Override public void complete(final String summary, final String report)
+                    {
+                        new AlertDialog.Builder(activity)
+                                .setTitle("Current Video Test")
+                                .setMessage(summary)
+                                .setPositiveButton("Export diagnostics",
+                                        new DialogInterface.OnClickListener()
+                                        {
+                                            @Override public void onClick(DialogInterface dialog,
+                                                    int which)
+                                            {
+                                                exportDiagnostics(diagnosticsText(media())
+                                                        + "\n\n" + summary);
+                                            }
+                                        })
+                                .setNeutralButton("View report",
+                                        new DialogInterface.OnClickListener()
+                                        {
+                                            @Override public void onClick(DialogInterface dialog,
+                                                    int which)
+                                            { showCurrentVideoReport(report); }
+                                        })
+                                .setNegativeButton(android.R.string.ok, null)
+                                .show();
+                    }
+                });
+    }
+
+    private void showCurrentVideoReport(final String report)
+    {
+        new AlertDialog.Builder(activity)
+                .setTitle("Current Video Test Report")
+                .setMessage(report)
+                .setPositiveButton("Export diagnostics",
+                        new DialogInterface.OnClickListener()
+                        {
+                            @Override public void onClick(DialogInterface dialog, int which)
+                            { exportDiagnostics(diagnosticsText(media())); }
+                        })
+                .setNegativeButton(android.R.string.ok, null)
+                .show();
+    }
+
     private String diagnosticsText(MediaCmd media)
     {
         MiniPlayerPlugin player = media == null ? null : media.getPlaya();
@@ -779,30 +834,14 @@ public final class ActivePlayerAdjustmentsDialog
                 + "\nSession overrides: " + ActivePlayerSessionOverrides.compactSummary();
     }
 
+    public static String diagnosticsTextForExport(Activity activity, MediaCmd media)
+    {
+        return new ActivePlayerAdjustmentsDialog(activity).diagnosticsText(media);
+    }
+
     private void exportDiagnostics(String text)
     {
-        try
-        {
-            File directory = activity.getExternalFilesDir("diagnostics");
-            if (directory == null || (!directory.isDirectory() && !directory.mkdirs()))
-                throw new IllegalStateException("diagnostics directory unavailable");
-            File output = new File(directory,
-                    "active-player-" + System.currentTimeMillis() + ".txt");
-            FileOutputStream stream = new FileOutputStream(output);
-            try
-            {
-                stream.write((text + "\n").getBytes(StandardCharsets.UTF_8));
-            }
-            finally
-            {
-                stream.close();
-            }
-            AppUtil.message("Diagnostics exported: " + output.getAbsolutePath());
-        }
-        catch (Exception e)
-        {
-            AppUtil.message("Unable to export diagnostics: " + e.getMessage());
-        }
+        DiagnosticExportController.show(activity, text);
     }
 
     private String resolvedBackend()

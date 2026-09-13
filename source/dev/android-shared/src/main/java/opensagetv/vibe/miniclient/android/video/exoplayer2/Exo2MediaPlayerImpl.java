@@ -36,11 +36,13 @@ import com.google.android.exoplayer2.extractor.ts.PsExtractor;
 import com.google.android.exoplayer2.extractor.ts.DefaultTsPayloadReaderFactory;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.source.MediaLoadData;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
+import com.google.android.exoplayer2.analytics.AnalyticsListener;
 import com.google.android.exoplayer2.ui.SubtitleView;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.TimestampAdjuster;
@@ -77,13 +79,15 @@ import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.util.Utils;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
-import opensagetv.vibe.miniclient.video.PlaybackErrorPresentationPolicy;
+import opensagetv.vibe.miniclient.video.PlaybackFailureClassifier;
+import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
 import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSeekPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.PlaybackSyncPointPolicy;
+import opensagetv.vibe.miniclient.video.PullSeekRecoveryPolicy;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 
 import java.util.Set;
@@ -101,7 +105,9 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         implements PlaybackHealthSource
 {
     static final Logger log = Logger.getLogger(Exo2MediaPlayerImpl.class);
-    static final int MAX_PLAYBACK_RETRY_COUNT = 12;
+    private final DecoderAttemptTelemetry decoderAttemptTelemetry =
+            new DecoderAttemptTelemetry();
+    private final Set<String> sessionDecoderExclusions = new HashSet<>();
 
     private final LegacyExtenderCaptionBridge legacyCaptionBridge =
             new LegacyExtenderCaptionBridge(new LegacyExtenderCaptionBridge.Sink()
@@ -125,6 +131,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     protected void onPlaybackLoadStarted()
     {
         firstVideoFrameRendered = false;
+        decoderAttemptTelemetry.reset();
+        sessionDecoderExclusions.clear();
         resetLegacyCaptionsForDiscontinuity();
         mpeg2InterlaceObserver.reset();
     }
@@ -329,6 +337,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
     private static final long GROWING_PULL_SEEK_COALESCE_MS = 300L;
+    private static final long ACTIVE_PULL_IO_RECOVERY_GRACE_MS = 2500L;
     private long pendingGrowingPullSeekTargetMs = -1L;
     private ExoPlayer pendingGrowingPullSeekPlayer;
     private PlaybackSessionController.Token pendingGrowingPullSeekSession;
@@ -428,6 +437,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     private volatile SubtitleView subView;
     private volatile long subtitleCueUpdateCount;
     private volatile long subtitleNonEmptyCueCount;
+    private volatile long subtitleBitmapCueCount;
+    private volatile int currentSubtitleCueCount;
     private volatile String lastSubtitleCueText = "";
     private volatile String currentSubtitleCueText = "";
     private volatile boolean subtitleOverlayAttached;
@@ -466,6 +477,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         playRequested = true;
         subtitleCueUpdateCount = 0;
         subtitleNonEmptyCueCount = 0;
+        subtitleBitmapCueCount = 0;
+        currentSubtitleCueCount = 0;
         lastSubtitleCueText = "";
         currentSubtitleCueText = "";
         subtitleOverlayAttached = false;
@@ -902,6 +915,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
         final PlaybackSessionController.Token session = currentPlaybackSession();
         final boolean resumeWhenReady = player.getPlayWhenReady();
+        final long networkReadCountAtArm = dataSource instanceof Exo2PullDataSource
+                ? ((Exo2PullDataSource) dataSource).getNetworkReadCount() : -1L;
         PlaybackDebugTrap.record("pull_seek_recovery_armed", Exo2MediaPlayerImpl.this);
 
         pullSeekRecoveryMonitor.arm(progressHandler, runtimeConfig.getSeekRecoveryDelayMs(),
@@ -922,6 +937,26 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     {
                         try
                         {
+                            if (dataSource instanceof Exo2PullDataSource)
+                            {
+                                Exo2PullDataSource pull = (Exo2PullDataSource) dataSource;
+                                long lastReadMs = pull.getLastPhysicalReadMonotonicMs();
+                                long nowMs = android.os.SystemClock.elapsedRealtime();
+                                long readAgeMs = lastReadMs < 0L ? Long.MAX_VALUE
+                                        : nowMs - lastReadMs;
+                                if (PullSeekRecoveryPolicy.shouldDeferForActiveIo(
+                                        networkReadCountAtArm, pull.getNetworkReadCount(),
+                                        lastReadMs, nowMs, ACTIVE_PULL_IO_RECOVERY_GRACE_MS))
+                                {
+                                    PlaybackDebugTrap.recordDetailed(
+                                            "pull_seek_recovery_deferred_active_io",
+                                            Exo2MediaPlayerImpl.this,
+                                            "readAgeMs=" + readAgeMs + ";reads="
+                                                    + pull.getNetworkReadCount());
+                                    armPullSeekRecovery(targetPositionMs);
+                                    return;
+                                }
+                            }
                             beginPlaybackOperation(PlaybackSessionController.Operation.RECOVERY);
                             seekPending = true;
                             PlaybackDebugTrap.record("pull_seek_reprepare_before", Exo2MediaPlayerImpl.this);
@@ -1003,15 +1038,30 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                                 ? (Exo2PullDataSource) dataSource : null;
                         boolean smbDirectSeek = pullDataSource != null
                                 && pullDataSource.isSmbModeConfigured();
+                        // Use the completed SIZE-growth probe, not the legacy
+                        // OPENURL hint. Stock SageTV marks recordings as
+                        // potentially growing even after they are complete.
+                        // Treating that hint as proof forced every seek through
+                        // a full source reprepare and could interrupt TS sniffing.
                         boolean growingPullSeek = pullDataSource != null
-                                && (mediaContext.isTimeshifted()
-                                || mediaContext.getBufferSize() > 0L);
+                                && pullDataSource.isEffectivelyGrowing();
                         boolean repreparePullSeek = smbDirectSeek || growingPullSeek;
                         PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
                                 Exo2MediaPlayerImpl.this,
                                 "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
                                         + ";durationMs=" + durationMs
                                         + ";bufferedMs=" + bufferedPositionMs);
+                        if (PlaybackSeekPolicy.isInitialZeroSeekNoOp(currentPositionMs,
+                                safePositionMs, firstVideoFrameRendered))
+                        {
+                            cancelPullSeekRecovery();
+                            cancelGrowingPullSeek();
+                            PlaybackDebugTrap.record("initial_zero_seek_source_retained",
+                                    Exo2MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("backend_seek_return",
+                                    Exo2MediaPlayerImpl.this);
+                            return;
+                        }
                         if (growingPullSeek)
                         {
                             cancelPullSeekRecovery();
@@ -1394,13 +1444,27 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             }
         }
 
-        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(context.getContext());
+        boolean disableAudioPassthrough = prefs.getBoolean(
+                PrefStore.Keys.disable_audio_passthrough, true);
+        DefaultRenderersFactory renderersFactory =
+                new Exo2AudioExtensionRenderersFactory(
+                        context.getContext(), !disableAudioPassthrough);
         String codecMode = runtimeConfig.getCodecMode();
         if ("async".equals(codecMode)) renderersFactory.forceEnableMediaCodecAsynchronousQueueing();
         else if ("sync".equals(codecMode)) renderersFactory.forceDisableMediaCodecAsynchronousQueueing();
         log.logDebug("Legacy Exo codec adapter mode: " + codecMode);
 
-        if (FfmpegLibrary.isAvailable())
+        if (FfmpegLibrary.isAvailable() && disableAudioPassthrough)
+        {
+            // Prefer the isolated FFmpeg audio extension when encoded
+            // passthrough is disabled. Video still uses the selected
+            // MediaCodec path because this module contains audio renderers.
+            renderersFactory.setExtensionRendererMode(
+                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
+            log.logDebug("Legacy Exo audio policy: encoded passthrough disabled; "
+                    + "prefer decoded PCM output");
+        }
+        else if (FfmpegLibrary.isAvailable())
         {
             final int preferExtensionDecoders = MiniclientApplication.get().getClient().properties().getInt(PrefStore.Keys.exoplayer_ffmpeg_extension_setting, 1);
 
@@ -1423,13 +1487,25 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     renderersFactory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
             }
         }
+        else
+        {
+            log.logDebug("Legacy Exo audio policy: "
+                    + (disableAudioPassthrough
+                    ? "encoded passthrough disabled; platform PCM decode required"
+                    : "encoded passthrough allowed"));
+        }
 
         DecodingMethod decodingMethod = DecodingMethod.fromPreference(
                 ActivePlayerSessionOverrides.resolveDecodingMethod(prefs.getString(
                         PrefStore.Keys.decoding_method, DecodingMethod.DEFAULT_PREFERENCE)));
-        CustomMediaCodecSelector mediaCodecSelector = new CustomMediaCodecSelector(decodingMethod);
+        CustomMediaCodecSelector mediaCodecSelector = new CustomMediaCodecSelector(decodingMethod,
+                decoderAttemptTelemetry, sessionDecoderExclusions);
         renderersFactory.setMediaCodecSelector(mediaCodecSelector);
-        renderersFactory.setEnableDecoderFallback(decodingMethod.hardwarePreferred());
+        // The selector has already constrained this ordered list to the chosen
+        // policy. Let Exo try the next candidate when codec initialization
+        // fails: Hardware stays hardware-only, Software stays software-only,
+        // and Fallback remains hardware-then-software.
+        renderersFactory.setEnableDecoderFallback(true);
         log.logDebug("Legacy Exo Decoding Method: " + decodingMethod.displayName());
 
         trackSelector = new DefaultTrackSelector(context.getContext());
@@ -1469,8 +1545,71 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         final ExoPlayer listenerPlayer = player;
         //player.addAnalyticsListener(new EventLogger(trackSelector));
 
+        player.addAnalyticsListener(new AnalyticsListener()
+        {
+            @Override
+            public void onVideoDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordSelectedVideo(decoderName);
+            }
+
+            @Override
+            public void onAudioDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordSelectedAudio(decoderName);
+            }
+
+            @Override
+            public void onAudioUnderrun(EventTime eventTime, int bufferSize,
+                    long bufferSizeMs, long elapsedSinceLastFeedMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordAudioUnderrun();
+            }
+
+            @Override
+            public void onAudioSinkError(EventTime eventTime, Exception audioSinkError)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordAudioOutputError(
+                            audioSinkError.getClass().getSimpleName());
+            }
+
+            @Override
+            public void onVideoCodecError(EventTime eventTime, Exception videoCodecError)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordCodecError(
+                            videoCodecError.getClass().getSimpleName());
+            }
+
+            @Override
+            public void onDownstreamFormatChanged(EventTime eventTime,
+                    MediaLoadData mediaLoadData)
+            {
+                if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                    return;
+                Format format = mediaLoadData.trackFormat;
+                decoderAttemptTelemetry.recordFormatChange(format == null
+                        ? Integer.toString(mediaLoadData.trackType)
+                        : mediaLoadData.trackType + ":" + format.sampleMimeType
+                        + ":" + format.width + "x" + format.height);
+            }
+        });
+
         player.addListener(new Player.Listener()
         {
+            @Override
+            public void onTracksChanged(Tracks tracks)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordTrackChange();
+            }
+
             @Override
             public void onPlayerError(PlaybackException error)
             {
@@ -1480,8 +1619,30 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
                 error.printStackTrace();
 
-                if (retryCount == 0 && PlaybackErrorPresentationPolicy.shouldShowFirstError(
-                        error.getErrorCodeName(), firstVideoFrameRendered))
+                Throwable failureCause = error.getCause();
+                PlaybackFailureClassifier.Decision failure =
+                        PlaybackFailureClassifier.classify(
+                                error.getErrorCodeName(),
+                                failureCause == null ? "" : failureCause.getClass().getName(),
+                                failureCause == null ? "" : failureCause.getMessage(),
+                                firstVideoFrameRendered, seekPending, flushed, false);
+                PlaybackDebugTrap.record("player_error_class_" + failure.kind.name()
+                        + "_recovery_" + failure.recovery.name(), Exo2MediaPlayerImpl.this);
+                if (failure.transitionStale)
+                    PlaybackDebugTrap.record("player_error_transition_stale",
+                            Exo2MediaPlayerImpl.this);
+                log.logDebug("PLAYER ERROR CLASS: " + failure.kind
+                        + ", recovery=" + failure.recovery
+                        + ", maxAttempts=" + failure.maxAutomaticAttempts);
+                if (failure.kind == PlaybackFailureClassifier.Kind.DECODER_INITIALIZATION
+                        || failure.kind == PlaybackFailureClassifier.Kind.DECODER_RUNTIME)
+                    decoderAttemptTelemetry.recordCodecError(error.getErrorCodeName());
+                else if (failure.kind == PlaybackFailureClassifier.Kind.AUDIO_OUTPUT)
+                    decoderAttemptTelemetry.recordAudioOutputError(error.getErrorCodeName());
+                decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                        failure.recovery.name());
+
+                if (retryCount == 0 && failure.showToUser)
                 {
                     //Show toast on first error
                     context.showErrorMessage(error.getErrorCodeName(), "Exo2MediaPlayer");
@@ -1494,9 +1655,38 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                             + error.getErrorCodeName());
                 }
 
-                if (retryCount <= MAX_PLAYBACK_RETRY_COUNT)
+                if (failure.recovery == PlaybackFailureClassifier.Recovery.NONE)
                 {
+                    errorState = true;
+                    PlaybackDebugTrap.record("player_error_no_automatic_recovery",
+                            Exo2MediaPlayerImpl.this);
+                    return;
+                }
 
+                if (failure.recovery == PlaybackFailureClassifier.Recovery
+                        .REBUILD_PLAYER_WITH_DECODER_EXCLUSION)
+                {
+                    String failedDecoder = decoderAttemptTelemetry.selectedVideo();
+                    if (failedDecoder.length() == 0
+                            || !sessionDecoderExclusions.add(failedDecoder))
+                    {
+                        errorState = true;
+                        decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                                failedDecoder.length() == 0
+                                        ? "no-selected-decoder" : "decoder-already-excluded");
+                        PlaybackDebugTrap.record("decoder_quarantine_not_available",
+                                Exo2MediaPlayerImpl.this);
+                        return;
+                    }
+                    decoderAttemptTelemetry.recordExclusion(failedDecoder);
+                    decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                            "decoder-excluded-reprepare-started");
+                    PlaybackDebugTrap.record("decoder_session_excluded_" + failedDecoder,
+                            Exo2MediaPlayerImpl.this);
+                }
+
+                if (retryCount < failure.maxAutomaticAttempts)
+                {
                     errorState = true;
                     retryCount++;
                     long recoveryPositionMs = Math.max(0L, player.getCurrentPosition());
@@ -1518,9 +1708,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 }
                 else
                 {
+                    decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                            "recovery-limit-reached");
                     log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
                     log.logError("Playback Exception: " + error.getErrorCodeName(), error);
-                    context.showErrorMessage("Max playback retry reached!", "Exo2MediaPlayer");
+                    context.showErrorMessage("Playback recovery limit reached ("
+                            + failure.kind.name() + ")", "Exo2MediaPlayer");
                 }
             }
 
@@ -1551,6 +1744,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     log.logDebug("Player.STATE_READY - Media loaded and ready for playback");
                     if (errorState)
                     {
+                        decoderAttemptTelemetry.recordFallback(
+                                decoderAttemptTelemetry.fallbackReason(), "ready");
                         errorState = false;
                         retryCount = 0;
                     }
@@ -1678,6 +1873,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 subtitleCueUpdateCount++;
                 StringBuilder text = new StringBuilder();
+                int bitmapCues = 0;
                 for (Cue cue : cues)
                 {
                     if (cue.text != null && cue.text.length() > 0)
@@ -1686,12 +1882,17 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                             text.append(' ');
                         text.append(cue.text);
                     }
+                    if (cue.bitmap != null)
+                        bitmapCues++;
                 }
+                currentSubtitleCueCount = cues.size();
                 currentSubtitleCueText = text.toString();
-                if (text.length() > 0)
+                if (text.length() > 0 || bitmapCues > 0)
                 {
                     subtitleNonEmptyCueCount++;
-                    lastSubtitleCueText = text.toString();
+                    subtitleBitmapCueCount += bitmapCues;
+                    if (text.length() > 0)
+                        lastSubtitleCueText = text.toString();
                 }
                 MiniClientConnection subtitleConnection = MiniclientApplication.get()
                         .getClient().getCurrentConnection();
@@ -1862,6 +2063,16 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     public long getSubtitleNonEmptyCueCountForDebug()
     {
         return subtitleNonEmptyCueCount;
+    }
+
+    public long getSubtitleBitmapCueCountForDebug()
+    {
+        return subtitleBitmapCueCount;
+    }
+
+    public int getCurrentSubtitleCueCountForDebug()
+    {
+        return currentSubtitleCueCount;
     }
 
     public String getLastSubtitleCueTextForDebug()
@@ -2355,6 +2566,19 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
         return actions;
     }
+
+    public String getDecoderCandidatesForDebug() { return decoderAttemptTelemetry.candidates(); }
+    public String getDecoderEventsForDebug() { return decoderAttemptTelemetry.events(); }
+    public String getSelectedVideoDecoderForDebug() { return decoderAttemptTelemetry.selectedVideo(); }
+    public String getSelectedAudioDecoderForDebug() { return decoderAttemptTelemetry.selectedAudio(); }
+    public String getSessionDecoderExclusionsForDebug() { return decoderAttemptTelemetry.exclusions(); }
+    public String getDecoderFallbackReasonForDebug() { return decoderAttemptTelemetry.fallbackReason(); }
+    public String getDecoderRecoveryResultForDebug() { return decoderAttemptTelemetry.recoveryResult(); }
+    public int getDecoderCodecErrorCountForDebug() { return decoderAttemptTelemetry.codecErrorCount(); }
+    public int getAudioUnderrunCountForDebug() { return decoderAttemptTelemetry.audioUnderrunCount(); }
+    public int getAudioOutputErrorCountForDebug() { return decoderAttemptTelemetry.audioOutputErrorCount(); }
+    public int getDecoderFormatChangeCountForDebug() { return decoderAttemptTelemetry.formatChangeCount(); }
+    public int getDecoderTrackChangeCountForDebug() { return decoderAttemptTelemetry.trackChangeCount(); }
 
     private void setMediaSessionMetadata(String displayTitle, long duration)
     {

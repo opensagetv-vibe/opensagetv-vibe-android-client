@@ -31,6 +31,23 @@ public class AndroidPrefStore implements PrefStore
     public static final String SMB_PROFILE_USERNAME = "smb_profiles/auth/username";
     public static final String SMB_PROFILE_PASSWORD = "smb_profiles/auth/password";
     public static final String SMB_PROFILE_DOMAIN = "smb_profiles/auth/domain";
+    public static final String SMB_DIAGNOSTICS_DIRECTORY = "smb_diagnostics/directory";
+    public static final String SMB_DIAGNOSTICS_MODE = "smb_diagnostics/mode";
+    public static final String SMB_DIAGNOSTICS_AUTH_MODE = "smb_diagnostics/auth/mode";
+    public static final String SMB_DIAGNOSTICS_USERNAME = "smb_diagnostics/auth/username";
+    public static final String SMB_DIAGNOSTICS_PASSWORD = "smb_diagnostics/auth/password";
+    public static final String SMB_DIAGNOSTICS_DOMAIN = "smb_diagnostics/auth/domain";
+    public static final String SMB_DIAGNOSTICS_LAST_STATUS = "smb_diagnostics/last/status";
+    public static final String SMB_DIAGNOSTICS_LAST_FILE = "smb_diagnostics/last/file";
+    public static final String SMB_DIAGNOSTICS_LAST_SHA256 = "smb_diagnostics/last/sha256";
+    public static final String SMB_DIAGNOSTICS_LAST_BYTES = "smb_diagnostics/last/bytes";
+    public static final String SMB_DIAGNOSTICS_LAST_TIME = "smb_diagnostics/last/time";
+
+    public static final String DIAGNOSTICS_MODE_OFF = "off";
+    public static final String DIAGNOSTICS_MODE_ON_REQUEST = "on_request";
+    public static final String DIAGNOSTICS_MODE_ALWAYS = "always";
+    public static final String SMB_AUTH_ANONYMOUS = "anonymous";
+    public static final String SMB_AUTH_CREDENTIALS = "credentials";
 
     public static boolean isSmbStreamingMode(String mode)
     {

@@ -163,6 +163,19 @@ public class SimplePullDataSource implements ISageTVDataSource, GrowingDataSourc
         return size;
     }
 
+    /** Refresh the exact MediaServer SIZE on an already-open file session. */
+    public synchronized long refreshSize() throws IOException {
+        if (!opened) return size;
+        String strSize = sendStringCommandWithReply("SIZE");
+        if (strSize == null) return size;
+        try {
+            size = Long.parseLong(strSize.split(" ")[0]);
+            return size;
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid SIZE reply: " + strSize, e);
+        }
+    }
+
     /**
      * Recheck SageTV's file size while positioned at a possible live edge.
      * Completed files return their stable size; an active recording can grow
@@ -172,15 +185,7 @@ public class SimplePullDataSource implements ISageTVDataSource, GrowingDataSourc
         if (!opened) return size;
         long deadlineNanos = System.nanoTime() + Math.max(0, timeoutMs) * 1000000L;
         do {
-            String strSize = sendStringCommandWithReply("SIZE");
-            if (strSize != null) {
-                try {
-                    long refreshedSize = Long.parseLong(strSize.split(" ")[0]);
-                    if (refreshedSize > size) size = refreshedSize;
-                } catch (NumberFormatException e) {
-                    throw new IOException("Invalid SIZE reply: " + strSize, e);
-                }
-            }
+            refreshSize();
             if (size > position || System.nanoTime() >= deadlineNanos) return size;
             try {
                 TimeUnit.MILLISECONDS.sleep(100);

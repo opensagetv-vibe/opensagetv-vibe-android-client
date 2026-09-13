@@ -85,6 +85,12 @@ class BackgroundSessionTests(unittest.TestCase):
 
     def test_physical_gate_requires_same_generation_without_replay_fallback(self):
         text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--video-name"', text)
+        self.assertIn('parser.add_argument("--gsy-engine"', text)
+        self.assertIn('parser.add_argument("--report"', text)
+        self.assertIn('"video_name": args.video_name', text)
+        self.assertIn('player_config["gsy_engine"] = args.gsy_engine', text)
+        self.assertIn('evidence["status"] = "PASS"', text)
         self.assertIn('"keep_session_in_background": True', text)
         self.assertIn('"resume_background_playback": args.resume_background_playback', text)
         self.assertIn("--no-resume-background-playback", text)

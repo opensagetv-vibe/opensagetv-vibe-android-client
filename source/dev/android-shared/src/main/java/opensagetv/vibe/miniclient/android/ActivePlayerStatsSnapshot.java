@@ -49,6 +49,9 @@ final class ActivePlayerStatsSnapshot
     long readCount = -1L;
     long readWaitMs = -1L;
     long readErrors = -1L;
+    long pullSessionReuses = -1L;
+    long pullProbeCacheHitBytes = -1L;
+    long pullProbeCacheMisses = -1L;
     long reportedActivityKbps = -1L;
     long connectionCapacityKbps = -1L;
     boolean connectionCapacityFromServer;
@@ -66,6 +69,8 @@ final class ActivePlayerStatsSnapshot
     long videoRendered = -1L;
     long videoSkipped = -1L;
     long videoDropped = -1L;
+    long videoDecoderInitCount = -1L;
+    long videoDecoderReleaseCount = -1L;
 
     String audioMime = "";
     String audioCodec = "";
@@ -73,7 +78,19 @@ final class ActivePlayerStatsSnapshot
     int audioChannels = -1;
     int audioSampleRate = -1;
     long audioDropped = -1L;
+    long audioDecoderInitCount = -1L;
+    long audioDecoderReleaseCount = -1L;
     String audioOutput = "";
+    String decoderCandidates = "";
+    String decoderEvents = "";
+    String decoderExclusions = "";
+    String decoderFallbackReason = "";
+    String decoderRecoveryResult = "";
+    long decoderCodecErrors = -1L;
+    long audioUnderruns = -1L;
+    long audioOutputErrors = -1L;
+    long decoderFormatChanges = -1L;
+    long decoderTrackChanges = -1L;
 
     int surfaceWidth = -1;
     int surfaceHeight = -1;
@@ -167,6 +184,7 @@ final class ActivePlayerStatsSnapshot
         }
 
         capturePlayer(backendPlayer, out);
+        captureDecoderTelemetry(effective, out);
         captureDataSource(dataSource, out);
         captureSurface(effective, out);
         out.interlace = invokeStringOptional(effective,
@@ -266,6 +284,28 @@ final class ActivePlayerStatsSnapshot
                     + (dvdSubtitleStream >= 0 ? "  DVD stream=" + dvdSubtitleStream : ""));
         if (interlace.length() > 0 && !"unknown".equalsIgnoreCase(interlace))
             line(text, "Scan  " + displayToken(interlace));
+        if (videoDecoderInitCount >= 0 || videoDecoderReleaseCount >= 0)
+            line(text, "Video decoder lifecycle  init=" + number(videoDecoderInitCount)
+                    + "  release=" + number(videoDecoderReleaseCount));
+        if (audioDecoderInitCount >= 0 || audioDecoderReleaseCount >= 0)
+            line(text, "Audio decoder lifecycle  init=" + number(audioDecoderInitCount)
+                    + "  release=" + number(audioDecoderReleaseCount));
+        if (decoderCandidates.length() > 0)
+            line(text, "Decoder candidates  " + decoderCandidates);
+        if (decoderCodecErrors >= 0 || audioUnderruns >= 0 || audioOutputErrors >= 0)
+            line(text, "Decoder events  codec errors=" + number(decoderCodecErrors)
+                    + "  audio underruns=" + number(audioUnderruns)
+                    + "  output errors=" + number(audioOutputErrors));
+        if (decoderFormatChanges >= 0 || decoderTrackChanges >= 0)
+            line(text, "Stream changes  format=" + number(decoderFormatChanges)
+                    + "  tracks=" + number(decoderTrackChanges));
+        if (decoderExclusions.length() > 0)
+            line(text, "Session decoder exclusions  " + decoderExclusions);
+        if (decoderFallbackReason.length() > 0 || decoderRecoveryResult.length() > 0)
+            line(text, "Decoder fallback  " + value(decoderFallbackReason, "unknown")
+                    + " -> " + value(decoderRecoveryResult, "unknown"));
+        if (decoderEvents.length() > 0)
+            line(text, "Decoder event trace  " + decoderEvents);
         appendTransport(text, activityKbps, true);
         return trim(text);
     }
@@ -322,6 +362,10 @@ final class ActivePlayerStatsSnapshot
         {
             line(text, "Source  " + number(readCount) + " reads  |  wait "
                     + durationValue(readWaitMs) + "  |  errors " + number(readErrors));
+            if (detailed && (pullSessionReuses >= 0 || pullProbeCacheHitBytes >= 0))
+                line(text, "Pull reuse  " + number(pullSessionReuses)
+                        + " ranges  |  probe cache " + bytes(pullProbeCacheHitBytes)
+                        + " hit / " + number(pullProbeCacheMisses) + " misses");
         }
 
         if (dvd)
@@ -400,6 +444,9 @@ final class ActivePlayerStatsSnapshot
             out.readWaitMs = telemetry.getNetworkReadWaitMs();
             out.readErrors = telemetry.getNetworkReadErrors();
             out.mediaBytes = telemetry.getNetworkReadBytes();
+            out.pullSessionReuses = telemetry.getPullSessionReuseCount();
+            out.pullProbeCacheHitBytes = telemetry.getPullProbeCacheHitBytes();
+            out.pullProbeCacheMisses = telemetry.getPullProbeCacheMissCount();
             String playbackSource = clean(telemetry.getPlaybackSource());
             out.smb = "SMB_DIRECT".equalsIgnoreCase(playbackSource);
             if (out.smb)
@@ -428,6 +475,30 @@ final class ActivePlayerStatsSnapshot
             if (pushed >= 0) out.mediaBytes = pushed;
             out.reportedActivityKbps = invokeLongOptional(source, "getReadRateKbps", -1L);
         }
+    }
+
+    private static void captureDecoderTelemetry(Object effective, ActivePlayerStatsSnapshot out)
+    {
+        out.decoderCandidates = invokeStringOptional(effective,
+                "getDecoderCandidatesForDebug", "");
+        out.decoderEvents = invokeStringOptional(effective,
+                "getDecoderEventsForDebug", "");
+        out.decoderExclusions = invokeStringOptional(effective,
+                "getSessionDecoderExclusionsForDebug", "");
+        out.decoderFallbackReason = invokeStringOptional(effective,
+                "getDecoderFallbackReasonForDebug", "");
+        out.decoderRecoveryResult = invokeStringOptional(effective,
+                "getDecoderRecoveryResultForDebug", "");
+        out.decoderCodecErrors = invokeLongOptional(effective,
+                "getDecoderCodecErrorCountForDebug", -1L);
+        out.audioUnderruns = invokeLongOptional(effective,
+                "getAudioUnderrunCountForDebug", -1L);
+        out.audioOutputErrors = invokeLongOptional(effective,
+                "getAudioOutputErrorCountForDebug", -1L);
+        out.decoderFormatChanges = invokeLongOptional(effective,
+                "getDecoderFormatChangeCountForDebug", -1L);
+        out.decoderTrackChanges = invokeLongOptional(effective,
+                "getDecoderTrackChangeCountForDebug", -1L);
     }
 
     private static void capturePlayer(Object player, ActivePlayerStatsSnapshot out)
@@ -500,11 +571,15 @@ final class ActivePlayerStatsSnapshot
             out.videoRendered = readLongField(counters, "renderedOutputBufferCount", -1L);
             out.videoSkipped = readLongField(counters, "skippedOutputBufferCount", -1L);
             out.videoDropped = readLongField(counters, "droppedBufferCount", -1L);
+            out.videoDecoderInitCount = readLongField(counters, "decoderInitCount", -1L);
+            out.videoDecoderReleaseCount = readLongField(counters, "decoderReleaseCount", -1L);
         }
         else
         {
             out.audioDecoder = decoder;
             out.audioDropped = readLongField(counters, "droppedBufferCount", -1L);
+            out.audioDecoderInitCount = readLongField(counters, "decoderInitCount", -1L);
+            out.audioDecoderReleaseCount = readLongField(counters, "decoderReleaseCount", -1L);
         }
     }
 

@@ -13,14 +13,21 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import java.io.IOException;
+import java.text.DateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import opensagetv.vibe.miniclient.android.R;
+import opensagetv.vibe.miniclient.android.ActivePlayerAdjustmentsDialog;
+import opensagetv.vibe.miniclient.android.MiniclientApplication;
+import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.android.config.MiniClientProfilePreferences;
 import opensagetv.vibe.miniclient.android.config.SmbProfileRepository;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticExportController;
+import opensagetv.vibe.miniclient.android.diagnostics.SmbDiagnosticsRepository;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.config.MiniClientProfile;
 
@@ -34,6 +41,11 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
     private Preference refresh;
     private Preference save;
     private Preference load;
+    private Preference diagnosticsTest;
+    private Preference diagnosticsExport;
+    private Preference diagnosticsStatus;
+    private Preference mediaTest;
+    private Preference configurationTest;
     private volatile boolean destroyed;
 
     @Override public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
@@ -44,6 +56,11 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
         refresh = findPreference("smb_profiles/refresh");
         save = findPreference("smb_profiles/save");
         load = findPreference("smb_profiles/load");
+        diagnosticsTest = findPreference("smb_diagnostics/test");
+        diagnosticsExport = findPreference("smb_diagnostics/export");
+        diagnosticsStatus = findPreference("smb_diagnostics/status");
+        mediaTest = findPreference("smb_direct/test");
+        configurationTest = findPreference("smb_profiles/test");
 
         refresh.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
         {
@@ -69,7 +86,191 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
                 return true;
             }
         });
+        diagnosticsTest.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
+        {
+            @Override public boolean onPreferenceClick(Preference preference)
+            {
+                testDiagnosticsSmb();
+                return true;
+            }
+        });
+        diagnosticsExport.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
+        {
+            @Override public boolean onPreferenceClick(Preference preference)
+            {
+                MediaCmd media = MiniclientApplication.get().getClient().getCurrentConnection() == null
+                        ? null : MiniclientApplication.get().getClient().getCurrentConnection().getMediaCmd();
+                DiagnosticExportController.show(requireActivity(),
+                        ActivePlayerAdjustmentsDialog.diagnosticsTextForExport(requireActivity(), media));
+                return true;
+            }
+        });
+        mediaTest.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
+        {
+            @Override public boolean onPreferenceClick(Preference preference)
+            {
+                testMediaSmb();
+                return true;
+            }
+        });
+        configurationTest.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
+        {
+            @Override public boolean onPreferenceClick(Preference preference)
+            {
+                testConfigurationSmb();
+                return true;
+            }
+        });
+        preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
+        updateDiagnosticsState();
         refreshProfiles();
+    }
+
+    private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener =
+            new SharedPreferences.OnSharedPreferenceChangeListener()
+            {
+                @Override public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key)
+                {
+                    if (key != null && key.startsWith("smb_diagnostics/")) updateDiagnosticsState();
+                }
+            };
+
+    private void testDiagnosticsSmb()
+    {
+        diagnosticsTest.setEnabled(false);
+        diagnosticsTest.setSummary("Testing DNS, connect, authentication, share, write, read, hash, and cleanup...");
+        DiagnosticExportController.testDiagnosticsSmb(requireActivity(),
+                new DiagnosticExportController.Completion()
+                {
+                    @Override public void done(String success, String failure)
+                    {
+                        if (!isAdded()) return;
+                        diagnosticsTest.setEnabled(true);
+                        String value = success != null ? success : "Failed: " + failure;
+                        diagnosticsTest.setSummary(value);
+                        Toast.makeText(requireContext(), value, Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
+    private void testMediaSmb()
+    {
+        mediaTest.setEnabled(false);
+        mediaTest.setSummary("Testing configured mappings with read-only SMB operations...");
+        io.execute(new Runnable()
+        {
+            @Override public void run()
+            {
+                String mappings = preferences.getString(AndroidPrefStore.SMB_MAPPINGS, "");
+                String[] lines = mappings.split("[\\r\\n]+");
+                int tested = 0;
+                long latency = 0;
+                String failure = null;
+                StringBuilder stages = new StringBuilder();
+                for (String line : lines)
+                {
+                    int arrow = line.indexOf("=>");
+                    if (arrow < 0) continue;
+                    String url = line.substring(arrow + 2).trim();
+                    if (url.isEmpty()) continue;
+                    char[] password = preferences.getString(AndroidPrefStore.SMB_PASSWORD, "").toCharArray();
+                    SmbDiagnosticsRepository repository = new SmbDiagnosticsRepository(url,
+                            preferences.getString(AndroidPrefStore.SMB_USERNAME, "").trim().isEmpty(),
+                            preferences.getString(AndroidPrefStore.SMB_USERNAME, ""), password,
+                            preferences.getString(AndroidPrefStore.SMB_DOMAIN, ""));
+                    java.util.Arrays.fill(password, '\0');
+                    try
+                    {
+                        SmbDiagnosticsRepository.TestResult test = repository.testReadOnly();
+                        latency += test.latencyMs;
+                        if (stages.length() > 0) stages.append("\n");
+                        stages.append("Mapping ").append(tested + 1).append(": ")
+                                .append(test.stageSummary);
+                        tested++;
+                    }
+                    catch (Exception e) { failure = safeError(e); break; }
+                    finally { repository.clear(); }
+                }
+                final String result = failure != null ? "Failed: " + failure
+                        : tested == 0 ? "Failed: no valid SMB media mappings"
+                        : "Media SMB passed: " + tested + " mapping(s), read-only, " + latency
+                        + " ms total\n" + stages;
+                post(new Runnable()
+                {
+                    @Override public void run()
+                    {
+                        mediaTest.setEnabled(true); mediaTest.setSummary(result);
+                        Toast.makeText(requireContext(), result, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        });
+    }
+
+    private void testConfigurationSmb()
+    {
+        configurationTest.setEnabled(false);
+        configurationTest.setSummary("Testing write, read, hash, and immediate cleanup...");
+        io.execute(new Runnable()
+        {
+            @Override public void run()
+            {
+                char[] password = preferences.getString(AndroidPrefStore.SMB_PROFILE_PASSWORD, "").toCharArray();
+                SmbDiagnosticsRepository repository = new SmbDiagnosticsRepository(
+                        preferences.getString(AndroidPrefStore.SMB_PROFILE_DIRECTORY, ""),
+                        preferences.getString(AndroidPrefStore.SMB_PROFILE_USERNAME, "").trim().isEmpty(),
+                        preferences.getString(AndroidPrefStore.SMB_PROFILE_USERNAME, ""), password,
+                        preferences.getString(AndroidPrefStore.SMB_PROFILE_DOMAIN, ""));
+                java.util.Arrays.fill(password, '\0');
+                String value;
+                try
+                {
+                    SmbDiagnosticsRepository.TestResult result = repository.testConnection();
+                    value = "Configuration SMB passed; write/read/hash/delete verified\n"
+                            + result.stageSummary;
+                }
+                catch (Exception e) { value = "Failed: " + safeError(e); }
+                finally { repository.clear(); }
+                final String resultText = value;
+                post(new Runnable()
+                {
+                    @Override public void run()
+                    {
+                        configurationTest.setEnabled(true); configurationTest.setSummary(resultText);
+                        Toast.makeText(requireContext(), resultText, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        });
+    }
+
+    private void updateDiagnosticsState()
+    {
+        if (preferences == null) return;
+        String mode = preferences.getString(AndroidPrefStore.SMB_DIAGNOSTICS_MODE,
+                AndroidPrefStore.DIAGNOSTICS_MODE_OFF);
+        boolean enabled = !AndroidPrefStore.DIAGNOSTICS_MODE_OFF.equals(mode);
+        if (diagnosticsTest != null) diagnosticsTest.setEnabled(enabled);
+        boolean credentials = AndroidPrefStore.SMB_AUTH_CREDENTIALS.equals(preferences.getString(
+                AndroidPrefStore.SMB_DIAGNOSTICS_AUTH_MODE, AndroidPrefStore.SMB_AUTH_ANONYMOUS));
+        Preference username = findPreference(AndroidPrefStore.SMB_DIAGNOSTICS_USERNAME);
+        Preference password = findPreference(AndroidPrefStore.SMB_DIAGNOSTICS_PASSWORD);
+        Preference domain = findPreference(AndroidPrefStore.SMB_DIAGNOSTICS_DOMAIN);
+        if (username != null) username.setEnabled(credentials);
+        if (password != null) password.setEnabled(credentials);
+        if (domain != null) domain.setEnabled(credentials);
+        String status = preferences.getString(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_STATUS,
+                "No diagnostic bundle has been exported");
+        String filename = preferences.getString(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_FILE, "");
+        String sha256 = preferences.getString(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_SHA256, "");
+        long bytes = preferences.getLong(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_BYTES, 0);
+        long time = preferences.getLong(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_TIME, 0);
+        String when = time <= 0 ? "" : DateFormat.getDateTimeInstance(
+                DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date(time));
+        if (diagnosticsStatus != null) diagnosticsStatus.setSummary(status
+                + (when.isEmpty() ? "" : "\nLast update: " + when)
+                + (filename.isEmpty() ? "" : "\n" + filename + " (" + bytes + " bytes)"
+                + (sha256.isEmpty() ? "" : "\nSHA-256: " + sha256)));
     }
 
     private void refreshProfiles()
@@ -286,6 +487,7 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
     @Override public void onDestroy()
     {
         destroyed = true;
+        if (preferences != null) preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
         main.removeCallbacksAndMessages(null);
         io.shutdownNow();
         super.onDestroy();

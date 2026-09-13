@@ -17,8 +17,8 @@ import opensagetv.vibe.miniclient.media.VideoCodec;
 /**
  * Settings and decoder information for the isolated Media3 backend.
  *
- * Media3 intentionally uses Android platform MediaCodec decoders only in v0.4.0.
- * The legacy ExoPlayer FFmpeg extension is not shared across the backend boundary.
+ * Media3 uses Android platform MediaCodec for video and keeps its exact-version
+ * FFmpeg audio fallback isolated from the legacy ExoPlayer JNI library.
  */
 public class Media3PlayerSettingsFragment extends PreferenceFragmentCompat
 {
@@ -64,7 +64,7 @@ public class Media3PlayerSettingsFragment extends PreferenceFragmentCompat
                     .append("<br/>\n");
         }
 
-        sb.append("<br/><i>Media3 v0.4 backend uses Android platform decoders only.</i>");
+        sb.append("<br/><i>Media3 keeps platform video decoding and can use its isolated FFmpeg audio decoder when the platform cannot decode a selected audio track.</i>");
         builder.setMessage(Html.fromHtml(sb.toString()));
         builder.setCancelable(true);
         builder.show();

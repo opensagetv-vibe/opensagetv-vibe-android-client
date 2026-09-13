@@ -3,6 +3,8 @@ package opensagetv.vibe.miniclient.video;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class PlaybackSeekPolicyTest
 {
@@ -35,5 +37,14 @@ public class PlaybackSeekPolicyTest
     public void growingUnknownDurationPreservesServerTarget()
     {
         assertEquals(120_000, PlaybackSeekPolicy.clamp(120_000, -1, true));
+    }
+
+    @Test
+    public void initialZeroSeekKeepsSourceOpenUntilFirstFrame()
+    {
+        assertTrue(PlaybackSeekPolicy.isInitialZeroSeekNoOp(0, 0, false));
+        assertFalse(PlaybackSeekPolicy.isInitialZeroSeekNoOp(0, 0, true));
+        assertFalse(PlaybackSeekPolicy.isInitialZeroSeekNoOp(1, 0, false));
+        assertFalse(PlaybackSeekPolicy.isInitialZeroSeekNoOp(0, 1, false));
     }
 }

@@ -227,6 +227,10 @@ final class PlaybackHealthProbe
         out.dataSourceNetworkReadMaxRequestedBytes = source.getNetworkReadMaxRequestedBytes();
         out.dataSourceNetworkReadErrors = source.getNetworkReadErrors();
         out.dataSourceNetworkLastReadPosition = source.getNetworkLastReadPosition();
+        out.dataSourceSessionReuseCount = source.getPullSessionReuseCount();
+        out.dataSourceProbeCacheHitBytes = source.getPullProbeCacheHitBytes();
+        out.dataSourceProbeCacheMissCount = source.getPullProbeCacheMissCount();
+        out.dataSourceProbeCacheResidentBytes = source.getPullProbeCacheResidentBytes();
     }
 
     private static void captureLegacyDataSource(Object source, Snapshot out)
@@ -246,6 +250,10 @@ final class PlaybackHealthProbe
         out.dataSourceNetworkReadMaxRequestedBytes = invokeLongOptional(source, "getNetworkReadMaxRequestedBytes", -1);
         out.dataSourceNetworkReadErrors = invokeLongOptional(source, "getNetworkReadErrors", -1);
         out.dataSourceNetworkLastReadPosition = invokeLongOptional(source, "getNetworkLastReadPosition", -1);
+        out.dataSourceSessionReuseCount = invokeLongOptional(source, "getPullSessionReuseCount", -1);
+        out.dataSourceProbeCacheHitBytes = invokeLongOptional(source, "getPullProbeCacheHitBytes", -1);
+        out.dataSourceProbeCacheMissCount = invokeLongOptional(source, "getPullProbeCacheMissCount", -1);
+        out.dataSourceProbeCacheResidentBytes = invokeLongOptional(source, "getPullProbeCacheResidentBytes", -1);
     }
 
     private static void captureSmbDataSource(PlaybackDataSourceTelemetry source, Snapshot out)
@@ -336,6 +344,16 @@ final class PlaybackHealthProbe
             if (renderer == null)
                 continue;
 
+            // Media3 may install both the platform MediaCodec renderer and an
+            // extension renderer for the same track type. Inspecting every
+            // renderer in declaration order let a later, disabled FFmpeg
+            // renderer overwrite the active renderer's valid counters with
+            // null/-1 values. Only an enabled or started renderer represents
+            // the output path selected for this playback session.
+            int rendererState = invokeIntOptional(renderer, "getState", -1);
+            if (rendererState == 0)
+                continue;
+
             if (type == TRACK_TYPE_VIDEO)
             {
                 out.videoRendererPresent = true;
@@ -376,6 +394,15 @@ final class PlaybackHealthProbe
     {
         Object codecInfo = readField(renderer, "codecInfo");
         String decoderName = codecInfo == null ? "" : readStringField(codecInfo, "name");
+        if (decoderName.isEmpty())
+        {
+            // DecoderAudioRenderer (used by Media3's FFmpeg extension) has no
+            // MediaCodecInfo. Its live decoder object still identifies the
+            // selected implementation without adding continuous telemetry.
+            Object decoder = readField(renderer, "decoder");
+            if (decoder != null)
+                decoderName = decoder.getClass().getName();
+        }
         Object counters = readField(renderer, "decoderCounters");
         if (counters != null)
             invokeOptional(counters, "ensureUpdated");
@@ -553,6 +580,10 @@ final class PlaybackHealthProbe
         long dataSourceNetworkReadMaxRequestedBytes = -1;
         long dataSourceNetworkReadErrors = -1;
         long dataSourceNetworkLastReadPosition = -1;
+        long dataSourceSessionReuseCount = -1;
+        long dataSourceProbeCacheHitBytes = -1;
+        long dataSourceProbeCacheMissCount = -1;
+        long dataSourceProbeCacheResidentBytes = -1;
         long dataSourceLastOpenMonotonicMs = -1;
         long dataSourceFirstReadAfterOpenMonotonicMs = -1;
         long dataSourceFirstReadAfterOpenPosition = -1;
@@ -694,6 +725,10 @@ final class PlaybackHealthProbe
             append(out, p + "dataSourceNetworkReadMaxRequestedBytes", dataSourceNetworkReadMaxRequestedBytes);
             append(out, p + "dataSourceNetworkReadErrors", dataSourceNetworkReadErrors);
             append(out, p + "dataSourceNetworkLastReadPosition", dataSourceNetworkLastReadPosition);
+            append(out, p + "dataSourceSessionReuseCount", dataSourceSessionReuseCount);
+            append(out, p + "dataSourceProbeCacheHitBytes", dataSourceProbeCacheHitBytes);
+            append(out, p + "dataSourceProbeCacheMissCount", dataSourceProbeCacheMissCount);
+            append(out, p + "dataSourceProbeCacheResidentBytes", dataSourceProbeCacheResidentBytes);
             append(out, p + "dataSourceReadCount", dataSourceReadCount);
             append(out, p + "dataSourceReadRequestedBytes", dataSourceReadRequestedBytes);
             append(out, p + "dataSourceReadBytes", dataSourceReadBytes);

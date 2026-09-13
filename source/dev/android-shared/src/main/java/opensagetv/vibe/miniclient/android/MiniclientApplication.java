@@ -22,6 +22,7 @@ import java.io.IOException;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
 
 /**
  * Created by seans on 12/10/15.
@@ -63,6 +64,7 @@ public class MiniclientApplication extends Application
 
         MiniclientApplication.INSTANCE = this;
         registerActivityLifecycleCallbacks(backgroundSessionOwner);
+        DiagnosticSessionSpool.start(this);
         AndroidMiniClientOptions options = new AndroidMiniClientOptions(this);
 
 
@@ -112,6 +114,7 @@ public class MiniclientApplication extends Application
     public void onTerminate()
     {
         log.logDebug("Destroying MiniClient");
+        DiagnosticSessionSpool.shutdown();
         if (client != null)
         {
             client.shutdown();

@@ -94,6 +94,14 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # STOP so a later SEEK/PLAY restart reaches the retained backend.
         # DEINIT/FREE remains the stale-callback invalidation boundary.
         reviewed_stock_stop_restart_hash = "a24f1d8c24b921de8d98962d7a018fbf235b6533405a5b9aab356cf004232bd7"
+        # Adds only the nonblocking Always-mode diagnostic checkpoint at the
+        # established SageTV STOP boundary. The retained-player/session logic
+        # above is unchanged; the spool coalesces work on its own I/O owner.
+        reviewed_diagnostic_stop_checkpoint_hash = "dc7a77d1ec8cf323e6ea2b5ae9380fdc26a078574416725c7cc13593de4fc12e"
+        # Serializes and bounds stock-STV preview promotion retries when PLAY
+        # and SETVIDEORECT arrive before a slower device's decoder is ready.
+        # The playback-generation guard still permits exactly one TV toggle.
+        reviewed_bounded_fullscreen_retry_hash = "1fe3cbea3cf8d22e9a473d1e1f3df6f3676947a4ae24e6c125dada888c17bba3"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -109,6 +117,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_legacy_caption_bridge_hash,
             reviewed_load_transition_time_guard_hash,
             reviewed_stock_stop_restart_hash,
+            reviewed_diagnostic_stop_checkpoint_hash,
+            reviewed_bounded_fullscreen_retry_hash,
         }, rel)
 
     def test_four_backends_have_stable_preference_values(self):
@@ -162,25 +172,45 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn('@array/entries_list_decoding_method', text, filename)
             self.assertIn('@array/entryvalues_list_decoding_method', text, filename)
 
-    def test_legacy_exoplayer_uses_shared_decoding_policy_without_telemetry(self):
+    def test_legacy_exoplayer_uses_shared_decoding_policy_with_bounded_telemetry(self):
         player = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         selector = (SHARED / "video/exoplayer2/CustomMediaCodecSelector.java").read_text(encoding="utf-8")
         self.assertIn("PrefStore.Keys.decoding_method", player)
-        self.assertIn("new CustomMediaCodecSelector(decodingMethod)", player)
-        self.assertIn("setEnableDecoderFallback(decodingMethod.hardwarePreferred())", player)
+        self.assertIn("new CustomMediaCodecSelector(decodingMethod,", player)
+        self.assertIn("decoderAttemptTelemetry", player)
+        self.assertIn("sessionDecoderExclusions", player)
+        self.assertIn("getDecoderCandidatesForDebug", player)
+        self.assertIn("decoder-excluded-reprepare-started", player)
+        self.assertIn("sessionDecoderExclusions.add(failedDecoder)", player)
+        self.assertIn("onAudioUnderrun", player)
+        self.assertIn("onAudioSinkError", player)
+        self.assertIn("onDownstreamFormatChanged", player)
+        self.assertIn("recordTrackChange", player)
+        self.assertIn("setEnableDecoderFallback(true)", player)
+        self.assertIn("Hardware stays hardware-only", player)
         self.assertIn("case SOFTWARE:", selector)
         self.assertIn("case HARDWARE_PREFERRED:", selector)
         self.assertIn("case HARDWARE:", selector)
         self.assertNotIn("PlayerTelemetry", player)
 
-    def test_media3_backend_uses_shared_decoding_policy_and_no_internal_telemetry(self):
+    def test_media3_backend_uses_shared_decoding_policy_and_bounded_telemetry(self):
         player = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
         selector = (SHARED / "video/media3/Media3CodecSelector.java").read_text(encoding="utf-8")
         self.assertIn("androidx.media3.exoplayer.ExoPlayer", player)
         self.assertIn("Media3PushDataSource", player)
         self.assertIn("Media3PullDataSource", player)
-        self.assertIn("new Media3CodecSelector(decodingMethod)", player)
-        self.assertIn("setEnableDecoderFallback(decodingMethod.hardwarePreferred())", player)
+        self.assertIn("new Media3CodecSelector(decodingMethod,", player)
+        self.assertIn("decoderAttemptTelemetry", player)
+        self.assertIn("sessionDecoderExclusions", player)
+        self.assertIn("getDecoderCandidatesForDebug", player)
+        self.assertIn("decoder-excluded-reprepare-started", player)
+        self.assertIn("sessionDecoderExclusions.add(failedDecoder)", player)
+        self.assertIn("onAudioUnderrun", player)
+        self.assertIn("onAudioSinkError", player)
+        self.assertIn("onDownstreamFormatChanged", player)
+        self.assertIn("recordTrackChange", player)
+        self.assertIn("setEnableDecoderFallback(true)", player)
+        self.assertIn("Hardware stays hardware-only", player)
         self.assertIn("case SOFTWARE:", selector)
         self.assertIn("case HARDWARE_PREFERRED:", selector)
         self.assertNotIn("PlayerTelemetry", player)
@@ -318,7 +348,17 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         ):
             text = (SHARED / rel).read_text(encoding="utf-8")
             self.assertIn("private final int pullReadBytes;", text, rel)
-            self.assertIn("new BufferedPullDataSource(host, pullReadBytes)", text, rel)
+            self.assertIn("new RetainedBufferedPullDataSource(host, pullReadBytes)", text, rel)
+            self.assertIn("setProbeCacheEnabled(!effectivelyGrowing)", text, rel)
+
+        retained = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/RetainedBufferedPullDataSource.java").read_text(encoding="utf-8")
+        cache = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/BoundedReadCache.java").read_text(encoding="utf-8")
+        self.assertIn("MAXIMUM_CACHE_BYTES = 8L * 1024L * 1024L", retained)
+        self.assertIn("long refreshedSize = refreshSize();", retained)
+        self.assertIn("if (refreshedSize != observedSize)", retained)
+        self.assertIn("public synchronized void close() { flush(); }", retained)
+        self.assertIn("public synchronized void release()", retained)
+        self.assertIn("new LinkedHashMap<Long, byte[]>(16, 0.75f, true)", cache)
 
         media3_pull = (SHARED / "video/media3/Media3PullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("v0.5.32 1 MiB experiment did not", media3_pull)
@@ -408,6 +448,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("runtimeConfig.getDirectionalSyncMinDeltaMs()", exo2)
         self.assertIn("runtimeConfig.getSeekRecoveryDelayMs()", exo2)
         self.assertIn("pull_seek_recovery_armed", exo2)
+        self.assertIn("pull_seek_recovery_deferred_active_io", exo2)
+        self.assertIn("getLastPhysicalReadMonotonicMs()", exo2)
+        self.assertIn("PullSeekRecoveryPolicy.shouldDeferForActiveIo(", exo2)
         self.assertIn("pull_seek_reprepare_before", exo2)
         self.assertIn("player.setMediaSource(mediaSource, targetPositionMs);", exo2)
 
@@ -420,6 +463,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("return SeekParameters.CLOSEST_SYNC;", choose_media3)
         arm_media3 = media3.split("private void armPullSeekRecovery", 1)[1].split("private void seekToImpl", 1)[0]
         self.assertIn("if (!runtimeConfig.isSeekRecoveryEnabled()", arm_media3)
+        self.assertIn("pull_seek_recovery_deferred_active_io", arm_media3)
+        self.assertIn("getLastPhysicalReadMonotonicMs()", arm_media3)
+        self.assertIn("PullSeekRecoveryPolicy.shouldDeferForActiveIo(", arm_media3)
 
     def test_pull_ts_extractors_declare_broadcast_caption_services(self):
         exo2 = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")

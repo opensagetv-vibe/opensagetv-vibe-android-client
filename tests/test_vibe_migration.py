@@ -252,7 +252,7 @@ class VibeMigrationTests(unittest.TestCase):
 
         self.assertIn("only authoritative task backlog", tasks)
         self.assertIn("- [ ]", tasks)
-        self.assertNotIn("- [x]", tasks.lower())
+        self.assertIn("- [x]", tasks.lower())
         self.assertFalse((ROOT / "TASK_CODEX.md").exists())
         self.assertIn("TASKS.md` is the only authoritative", agents)
         self.assertNotIn("- [ ]", diagnostics)

@@ -3,6 +3,7 @@ package opensagetv.vibe.miniclient.android.video;
 import java.lang.reflect.Method;
 
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
 
 /**
  * Optional bridge into the debug APK's exact-event playback trap recorder.
@@ -25,6 +26,7 @@ public final class PlaybackDebugTrap
 
     public static void record(String event, MiniPlayerPlugin player)
     {
+        checkpointOnFailure(event);
         Method method = resolveRecordMethod();
         if (method == null)
             return;
@@ -40,6 +42,7 @@ public final class PlaybackDebugTrap
 
     public static void recordDetailed(String event, MiniPlayerPlugin player, String detail)
     {
+        checkpointOnFailure(event);
         resolveRecordMethod();
         Method method = recordDetailedMethod;
         if (method == null)
@@ -55,6 +58,14 @@ public final class PlaybackDebugTrap
         {
             // Diagnostics must never alter normal playback behavior.
         }
+    }
+
+    private static void checkpointOnFailure(String event)
+    {
+        if (event == null) return;
+        String value = event.toLowerCase(java.util.Locale.US);
+        if (value.contains("error") || value.contains("timeout") || value.contains("fatal"))
+            DiagnosticSessionSpool.checkpoint("playback-" + event);
     }
 
     private static Method resolveRecordMethod()

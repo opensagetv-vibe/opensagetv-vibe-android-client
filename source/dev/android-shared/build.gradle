@@ -148,6 +148,10 @@ dependencies {
     api 'com.google.guava:guava:31.0-jre' //This appears to be required for Exoplayer
 
     api(name: "extension-ffmpeg-${exoVersionCustomExt}", ext: 'aar') // audio decoder extension only; no legacy Exo core classes are bundled
+    // Exact-version Media3 FFmpeg audio fallback. Platform MediaCodec and encoded
+    // passthrough remain first; this renderer supplies PCM only when neither can
+    // handle the active audio format (for example AC-3 with a stereo HDMI sink).
+    api(name: "extension-media3-ffmpeg-${media3Version}", ext: 'aar')
 
     // AndroidX Media3 / current Google ExoPlayer. Keep all Media3 modules on exactly one version.
     api "androidx.media3:media3-common:${media3Version}"

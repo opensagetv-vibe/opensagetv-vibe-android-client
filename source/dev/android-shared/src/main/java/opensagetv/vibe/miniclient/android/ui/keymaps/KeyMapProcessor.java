@@ -58,6 +58,16 @@ public class KeyMapProcessor {
     private final Handler longPressHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingLongPressTask;
     private int pendingLongPressKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+    private static volatile long inputEventSequence;
+    private static volatile int inputLastKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+    private static volatile int inputLastScanCode;
+    private static volatile int inputLastAction = -1;
+    private static volatile int inputLastRepeatCount;
+    private static volatile int inputLastSource;
+    private static volatile int inputLastDeviceId = -1;
+    private static volatile boolean inputLastLongPress;
+    private static volatile String inputLastKeyName = "KEYCODE_UNKNOWN";
+    private static volatile String inputLastMappedCommand = "";
 
     public KeyMapProcessor(MiniClient client, MediaMappingPreferences prefs, AudioManager am, UIActivityLifeCycleHandler uiHandler)
     {
@@ -71,6 +81,7 @@ public class KeyMapProcessor {
 
     public boolean onKey(KeyMap keyMap, int keyCode, KeyEvent event)
     {
+        recordInputEvent(keyCode, event);
         if(!longPress && getDvdMenuCommand(keyCode) == null
                 && keyMap.getNormalPressCommand(keyCode) == SageCommand.NONE)
         {
@@ -289,6 +300,7 @@ public class KeyMapProcessor {
         {
             if (VerboseLogging.LOG_KEYS)
                 log.debug("Sending DVD menu command {} for Event {}", dvdMenuCommand, event);
+            recordMappedCommand(dvdMenuCommand, false);
             EventRouter.postCommand(client, dvdMenuCommand);
             return;
         }
@@ -297,6 +309,7 @@ public class KeyMapProcessor {
 
         if (keyMap.hasSageCommandOverride(keyCode, longPress))
         {
+            recordMappedCommandName("CLIENT_OVERRIDE", longPress);
             keyMap.performSageCommandOverride(keyCode, client, longPress);
             return;
         }
@@ -318,11 +331,13 @@ public class KeyMapProcessor {
             // deterministic foreground UI path.
             if (longPress && command == SageCommand.NAV_OSD)
             {
+                recordMappedCommand(command, true);
                 uiHandler.showHideSoftRemote(true);
                 return;
             }
             if (VerboseLogging.LOG_KEYS)
                 log.debug("Sending Sage Command {} for Event {}", command, event);
+            recordMappedCommand(command, longPress);
             EventRouter.postCommand(client, command);
             return;
         }
@@ -330,6 +345,42 @@ public class KeyMapProcessor {
         // this is normal keys like a,b,c, etc.
         handleDefaultEvent(keyCode, event);
     }
+
+    private static synchronized void recordInputEvent(int keyCode, KeyEvent event)
+    {
+        inputEventSequence++;
+        inputLastKeyCode = keyCode;
+        inputLastKeyName = KeyEvent.keyCodeToString(keyCode);
+        inputLastScanCode = event == null ? 0 : event.getScanCode();
+        inputLastAction = event == null ? -1 : event.getAction();
+        inputLastRepeatCount = event == null ? 0 : event.getRepeatCount();
+        inputLastSource = event == null ? 0 : event.getSource();
+        inputLastDeviceId = event == null ? -1 : event.getDeviceId();
+        inputLastLongPress = false;
+        inputLastMappedCommand = "";
+    }
+
+    private static void recordMappedCommand(SageCommand command, boolean longPress)
+    {
+        recordMappedCommandName(command == null ? "" : command.name(), longPress);
+    }
+
+    private static synchronized void recordMappedCommandName(String command, boolean longPress)
+    {
+        inputLastMappedCommand = command == null ? "" : command;
+        inputLastLongPress = longPress;
+    }
+
+    public static long getInputEventSequenceForDebug() { return inputEventSequence; }
+    public static int getInputLastKeyCodeForDebug() { return inputLastKeyCode; }
+    public static String getInputLastKeyNameForDebug() { return inputLastKeyName; }
+    public static int getInputLastScanCodeForDebug() { return inputLastScanCode; }
+    public static int getInputLastActionForDebug() { return inputLastAction; }
+    public static int getInputLastRepeatCountForDebug() { return inputLastRepeatCount; }
+    public static int getInputLastSourceForDebug() { return inputLastSource; }
+    public static int getInputLastDeviceIdForDebug() { return inputLastDeviceId; }
+    public static boolean isInputLastLongPressForDebug() { return inputLastLongPress; }
+    public static String getInputLastMappedCommandForDebug() { return inputLastMappedCommand; }
 
     private SageCommand getDvdMenuCommand(int keyCode)
     {

@@ -9,9 +9,9 @@ SageTV MiniClient is an HD Extender (ie, HD300) for Android devices. Using this 
 This client supports the playback of many different Media Formats, and, if hardware decoding is available on the device, then it will be used.
 
 ## Supported Hardware
-* Android Phones/Tablets running Android 4.4 and higher
-* Android TV running Android 5.0 and higher
-* FireTV running Android 5.0 and higher
+* Android phones/tablets running Android 6.0 (API 23) and higher
+* Android TV running Android 6.0 (API 23) and higher
+* Fire TV devices based on Android 6.0 (API 23) and higher
 
 ## Installing
 SageTV MiniClient for Android is available on the [Google Play Store]("https://play.google.com/store/apps/details?id=jvl.sage.miniclient.android.tv.debug") and from the releases on this GitHub repository.  

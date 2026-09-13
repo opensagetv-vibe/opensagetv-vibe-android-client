@@ -33,12 +33,14 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.exoplayer.source.TrackGroupArray;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.text.Cue;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.trackselection.MappingTrackSelector;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener;
 import androidx.media3.ui.SubtitleView;
 import androidx.media3.common.VideoSize;
@@ -75,7 +77,8 @@ import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.util.Utils;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
-import opensagetv.vibe.miniclient.video.PlaybackErrorPresentationPolicy;
+import opensagetv.vibe.miniclient.video.PlaybackFailureClassifier;
+import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.MediaReplacementPolicy;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
@@ -83,6 +86,7 @@ import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSeekPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.PlaybackSyncPointPolicy;
+import opensagetv.vibe.miniclient.video.PullSeekRecoveryPolicy;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 import opensagetv.vibe.miniclient.net.PushBufferDataSource;
 
@@ -92,7 +96,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.CRC32;
 import android.support.v4.media.session.MediaSessionCompat;
 
@@ -104,8 +110,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         implements PlaybackHealthSource, TransientPushSegmentPlayer
 {
     static final Logger log = Logger.getLogger(Media3MediaPlayerImpl.class);
-    static final int MAX_PLAYBACK_RETRY_COUNT = 12;
     static final long FAST_SWITCH_FIRST_FRAME_TIMEOUT_MS = 8_000L;
+    private final DecoderAttemptTelemetry decoderAttemptTelemetry =
+            new DecoderAttemptTelemetry();
+    private final Set<String> sessionDecoderExclusions = new LinkedHashSet<>();
 
     @Override
     protected void releaseDataSource()
@@ -137,6 +145,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     protected void onPlaybackLoadStarted()
     {
         firstVideoFrameRendered = false;
+        decoderAttemptTelemetry.reset();
+        sessionDecoderExclusions.clear();
         resetLegacyCaptionsForDiscontinuity();
         mpeg2InterlaceObserver.reset();
     }
@@ -272,6 +282,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private boolean showCaptions = false;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
     private static final long GROWING_PULL_SEEK_COALESCE_MS = 300L;
+    private static final long ACTIVE_PULL_IO_RECOVERY_GRACE_MS = 2500L;
     private long pendingGrowingPullSeekTargetMs = -1L;
     private ExoPlayer pendingGrowingPullSeekPlayer;
     private PlaybackSessionController.Token pendingGrowingPullSeekSession;
@@ -424,6 +435,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private volatile SubtitleView subView;
     private volatile long subtitleCueUpdateCount;
     private volatile long subtitleNonEmptyCueCount;
+    private volatile long subtitleBitmapCueCount;
+    private volatile int currentSubtitleCueCount;
     private volatile String lastSubtitleCueText = "";
     private volatile String currentSubtitleCueText = "";
     private volatile boolean subtitleOverlayAttached;
@@ -468,6 +481,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         playRequested = true;
         subtitleCueUpdateCount = 0;
         subtitleNonEmptyCueCount = 0;
+        subtitleBitmapCueCount = 0;
+        currentSubtitleCueCount = 0;
         lastSubtitleCueText = "";
         currentSubtitleCueText = "";
         subtitleOverlayAttached = false;
@@ -1273,6 +1288,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
         final PlaybackSessionController.Token session = currentPlaybackSession();
         final boolean resumeWhenReady = player.getPlayWhenReady();
+        final long networkReadCountAtArm = dataSource instanceof Media3PullDataSource
+                ? ((Media3PullDataSource) dataSource).getNetworkReadCount() : -1L;
         PlaybackDebugTrap.record("pull_seek_recovery_armed", Media3MediaPlayerImpl.this);
 
         pullSeekRecoveryMonitor.arm(progressHandler, runtimeConfig.getSeekRecoveryDelayMs(),
@@ -1293,6 +1310,26 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     {
                         try
                         {
+                            if (dataSource instanceof Media3PullDataSource)
+                            {
+                                Media3PullDataSource pull = (Media3PullDataSource) dataSource;
+                                long lastReadMs = pull.getLastPhysicalReadMonotonicMs();
+                                long nowMs = android.os.SystemClock.elapsedRealtime();
+                                long readAgeMs = lastReadMs < 0L ? Long.MAX_VALUE
+                                        : nowMs - lastReadMs;
+                                if (PullSeekRecoveryPolicy.shouldDeferForActiveIo(
+                                        networkReadCountAtArm, pull.getNetworkReadCount(),
+                                        lastReadMs, nowMs, ACTIVE_PULL_IO_RECOVERY_GRACE_MS))
+                                {
+                                    PlaybackDebugTrap.recordDetailed(
+                                            "pull_seek_recovery_deferred_active_io",
+                                            Media3MediaPlayerImpl.this,
+                                            "readAgeMs=" + readAgeMs + ";reads="
+                                                    + pull.getNetworkReadCount());
+                                    armPullSeekRecovery(targetPositionMs);
+                                    return;
+                                }
+                            }
                             beginPlaybackOperation(PlaybackSessionController.Operation.RECOVERY);
                             seekPending = true;
                             PlaybackDebugTrap.record("pull_seek_reprepare_before", Media3MediaPlayerImpl.this);
@@ -1371,15 +1408,30 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                                 ? (Media3PullDataSource) dataSource : null;
                         boolean smbDirectSeek = pullDataSource != null
                                 && pullDataSource.isSmbModeConfigured();
+                        // Use the completed SIZE-growth probe, not the legacy
+                        // OPENURL hint. Stock SageTV marks recordings as
+                        // potentially growing even after they are complete.
+                        // Treating that hint as proof forced every seek through
+                        // a full source reprepare and could interrupt TS sniffing.
                         boolean growingPullSeek = pullDataSource != null
-                                && (mediaContext.isTimeshifted()
-                                || mediaContext.getBufferSize() > 0L);
+                                && pullDataSource.isEffectivelyGrowing();
                         boolean repreparePullSeek = smbDirectSeek || growingPullSeek;
                         PlaybackDebugTrap.recordDetailed("backend_seek_invoke",
                                 Media3MediaPlayerImpl.this,
                                 "requestedMs=" + timeInMillis + ";appliedMs=" + safePositionMs
                                         + ";durationMs=" + durationMs
                                         + ";bufferedMs=" + bufferedPositionMs);
+                        if (PlaybackSeekPolicy.isInitialZeroSeekNoOp(currentPositionMs,
+                                safePositionMs, firstVideoFrameRendered))
+                        {
+                            cancelPullSeekRecovery();
+                            cancelGrowingPullSeek();
+                            PlaybackDebugTrap.record("initial_zero_seek_source_retained",
+                                    Media3MediaPlayerImpl.this);
+                            PlaybackDebugTrap.record("backend_seek_return",
+                                    Media3MediaPlayerImpl.this);
+                            return;
+                        }
                         if (growingPullSeek)
                         {
                             cancelPullSeekRecovery();
@@ -1889,21 +1941,42 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
         }
 
-        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(context.getContext());
+        Media3FfmpegAudioSupport.configure();
+        boolean disableAudioPassthrough = prefs.getBoolean(
+                PrefStore.Keys.disable_audio_passthrough, true);
+        DefaultRenderersFactory renderersFactory =
+                new Media3AudioExtensionRenderersFactory(
+                        context.getContext(), !disableAudioPassthrough);
+        // Keep MediaCodec priority. The exact-version Media3 FFmpeg extension
+        // is selected only when Android cannot decode the active audio format.
+        // Encoded passthrough is opt-in because several Android TV devices
+        // advertise a raw HDMI path that accepts writes but produces silence.
+        renderersFactory.setExtensionRendererMode(disableAudioPassthrough
+                ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
+        log.logDebug("Media3 encoded audio passthrough: "
+                + (disableAudioPassthrough
+                ? "disabled; FFmpeg audio decode to PCM preferred"
+                : "enabled by user; platform decoder retained before fallback"));
         String codecMode = runtimeConfig.getCodecMode();
         if ("async".equals(codecMode)) renderersFactory.forceEnableMediaCodecAsynchronousQueueing();
         else if ("sync".equals(codecMode)) renderersFactory.forceDisableMediaCodecAsynchronousQueueing();
         log.logDebug("Media3 codec adapter mode: " + codecMode);
 
-        // Media3 uses platform MediaCodec decoders in this first isolated backend.
-        // The legacy ExoPlayer FFmpeg extension is intentionally not loaded here.
+        // The legacy ExoPlayer FFmpeg extension is intentionally not loaded
+        // here; Media3 uses its own ABI- and API-compatible audio extension.
 
         DecodingMethod decodingMethod = DecodingMethod.fromPreference(
                 ActivePlayerSessionOverrides.resolveDecodingMethod(prefs.getString(
                         PrefStore.Keys.decoding_method, DecodingMethod.DEFAULT_PREFERENCE)));
-        Media3CodecSelector mediaCodecSelector = new Media3CodecSelector(decodingMethod);
+        Media3CodecSelector mediaCodecSelector = new Media3CodecSelector(decodingMethod,
+                decoderAttemptTelemetry, sessionDecoderExclusions);
         renderersFactory.setMediaCodecSelector(mediaCodecSelector);
-        renderersFactory.setEnableDecoderFallback(decodingMethod.hardwarePreferred());
+        // The selector has already constrained this ordered list to the chosen
+        // policy. Let Media3 try the next candidate when codec initialization
+        // fails: Hardware stays hardware-only, Software stays software-only,
+        // and Fallback remains hardware-then-software.
+        renderersFactory.setEnableDecoderFallback(true);
         log.logDebug("Media3 Decoding Method: " + decodingMethod.displayName());
 
         trackSelector = new DefaultTrackSelector(context.getContext());
@@ -2057,12 +2130,69 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         final ExoPlayer listenerPlayer = player;
         //player.addAnalyticsListener(new EventLogger(trackSelector));
 
+        player.addAnalyticsListener(new AnalyticsListener()
+        {
+            @Override
+            public void onVideoDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordSelectedVideo(decoderName);
+            }
+
+            @Override
+            public void onAudioDecoderInitialized(EventTime eventTime, String decoderName,
+                    long initializedTimestampMs, long initializationDurationMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordSelectedAudio(decoderName);
+            }
+
+            @Override
+            public void onAudioUnderrun(EventTime eventTime, int bufferSize,
+                    long bufferSizeMs, long elapsedSinceLastFeedMs)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordAudioUnderrun();
+            }
+
+            @Override
+            public void onAudioSinkError(EventTime eventTime, Exception audioSinkError)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordAudioOutputError(
+                            audioSinkError.getClass().getSimpleName());
+            }
+
+            @Override
+            public void onVideoCodecError(EventTime eventTime, Exception videoCodecError)
+            {
+                if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                    decoderAttemptTelemetry.recordCodecError(
+                            videoCodecError.getClass().getSimpleName());
+            }
+
+            @Override
+            public void onDownstreamFormatChanged(EventTime eventTime,
+                    MediaLoadData mediaLoadData)
+            {
+                if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                    return;
+                Format format = mediaLoadData.trackFormat;
+                decoderAttemptTelemetry.recordFormatChange(format == null
+                        ? Integer.toString(mediaLoadData.trackType)
+                        : mediaLoadData.trackType + ":" + format.sampleMimeType
+                        + ":" + format.width + "x" + format.height);
+            }
+        });
+
         player.addListener(new Player.Listener()
         {
             @Override
             public void onTracksChanged(Tracks tracks)
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                decoderAttemptTelemetry.recordTrackChange();
                 // Track discovery is incremental for DVD private_stream_1.
                 // Retry here because STATE_READY may precede the requested
                 // AC-3 substream becoming visible to the selector.
@@ -2078,14 +2208,36 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
                 error.printStackTrace();
 
+                Throwable failureCause = error.getCause();
+                PlaybackFailureClassifier.Decision failure =
+                        PlaybackFailureClassifier.classify(
+                                error.getErrorCodeName(),
+                                failureCause == null ? "" : failureCause.getClass().getName(),
+                                failureCause == null ? "" : failureCause.getMessage(),
+                                firstVideoFrameRendered, seekPending, flushed, false);
+                PlaybackDebugTrap.record("player_error_class_" + failure.kind.name()
+                        + "_recovery_" + failure.recovery.name(), Media3MediaPlayerImpl.this);
+                if (failure.transitionStale)
+                    PlaybackDebugTrap.record("player_error_transition_stale",
+                            Media3MediaPlayerImpl.this);
+                log.logDebug("PLAYER ERROR CLASS: " + failure.kind
+                        + ", recovery=" + failure.recovery
+                        + ", maxAttempts=" + failure.maxAutomaticAttempts);
+                if (failure.kind == PlaybackFailureClassifier.Kind.DECODER_INITIALIZATION
+                        || failure.kind == PlaybackFailureClassifier.Kind.DECODER_RUNTIME)
+                    decoderAttemptTelemetry.recordCodecError(error.getErrorCodeName());
+                else if (failure.kind == PlaybackFailureClassifier.Kind.AUDIO_OUTPUT)
+                    decoderAttemptTelemetry.recordAudioOutputError(error.getErrorCodeName());
+                decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                        failure.recovery.name());
+
                 if (fastSwitchFallbackPending)
                 {
                     fallbackFromFastSwitch("asynchronous_" + error.getErrorCodeName());
                     return;
                 }
 
-                if (retryCount == 0 && PlaybackErrorPresentationPolicy.shouldShowFirstError(
-                        error.getErrorCodeName(), firstVideoFrameRendered))
+                if (retryCount == 0 && failure.showToUser)
                 {
                     //Show toast on first error
                     context.showErrorMessage(error.getErrorCodeName(), "Media3MediaPlayer");
@@ -2098,37 +2250,74 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             + error.getErrorCodeName());
                 }
 
-                if (retryCount <= MAX_PLAYBACK_RETRY_COUNT)
+                if (failure.recovery == PlaybackFailureClassifier.Recovery.NONE)
                 {
+                    errorState = true;
+                    PlaybackDebugTrap.record("player_error_no_automatic_recovery",
+                            Media3MediaPlayerImpl.this);
+                    return;
+                }
 
+                if (failure.recovery == PlaybackFailureClassifier.Recovery
+                        .REBUILD_PLAYER_WITH_DECODER_EXCLUSION)
+                {
+                    String failedDecoder = decoderAttemptTelemetry.selectedVideo();
+                    if (failedDecoder.length() == 0
+                            || !sessionDecoderExclusions.add(failedDecoder))
+                    {
+                        errorState = true;
+                        decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                                failedDecoder.length() == 0
+                                        ? "no-selected-decoder" : "decoder-already-excluded");
+                        PlaybackDebugTrap.record("decoder_quarantine_not_available",
+                                Media3MediaPlayerImpl.this);
+                        return;
+                    }
+                    decoderAttemptTelemetry.recordExclusion(failedDecoder);
+                    decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                            "decoder-excluded-reprepare-started");
+                    PlaybackDebugTrap.record("decoder_session_excluded_" + failedDecoder,
+                            Media3MediaPlayerImpl.this);
+                }
+
+                if (retryCount < failure.maxAutomaticAttempts)
+                {
                     errorState = true;
                     retryCount++;
-                    long recoveryPositionMs = Math.max(0L, player.getCurrentPosition());
-                    boolean resumePlayback = player.getPlayWhenReady();
+                    // The field is cleared during teardown before Media3 has
+                    // finished delivering all queued listener callbacks. Use
+                    // the non-null player that owns this listener after the
+                    // session/identity guard above; re-reading the field here
+                    // can race to null and crash the whole MiniClient.
+                    long recoveryPositionMs = Math.max(0L, listenerPlayer.getCurrentPosition());
+                    boolean resumePlayback = listenerPlayer.getPlayWhenReady();
                     if (!pushMode && mediaSource != null)
                     {
                         // Reattach the Pull/SMB source at the position captured
                         // by the error callback. Calling seekTo() on an errored
                         // player followed by prepare() allowed Media3 to restart
                         // growing live TV at zero after a stale-end timeout.
-                        player.setMediaSource(mediaSource, recoveryPositionMs);
-                        player.prepare();
-                        player.setPlayWhenReady(resumePlayback);
+                        listenerPlayer.setMediaSource(mediaSource, recoveryPositionMs);
+                        listenerPlayer.prepare();
+                        listenerPlayer.setPlayWhenReady(resumePlayback);
                         PlaybackDebugTrap.record("player_error_recovery_position_preserved",
                                 Media3MediaPlayerImpl.this);
                     }
                     else
                     {
                         // PUSH/FIXED transport position remains server-owned.
-                        player.seekTo(recoveryPositionMs + 100L);
-                        player.prepare();
+                        listenerPlayer.seekTo(recoveryPositionMs + 100L);
+                        listenerPlayer.prepare();
                     }
                 }
                 else
                 {
+                    decoderAttemptTelemetry.recordFallback(failure.kind.name(),
+                            "recovery-limit-reached");
                     log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
                     log.logError("Playback Exception: " + error.getErrorCodeName(), error);
-                    context.showErrorMessage("Max playback retry reached!", "Media3MediaPlayer");
+                    context.showErrorMessage("Playback recovery limit reached ("
+                            + failure.kind.name() + ")", "Media3MediaPlayer");
                 }
             }
 
@@ -2137,12 +2326,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record("playback_state_" + playbackState, Media3MediaPlayerImpl.this);
-                if (!pushMode && player != null)
+                if (!pushMode)
                 {
                     log.logDebug("Pull playback state=" + playbackState
-                            + ", positionMs=" + player.getCurrentPosition()
-                            + ", bufferedPositionMs=" + player.getBufferedPosition()
-                            + ", playWhenReady=" + player.getPlayWhenReady());
+                            + ", positionMs=" + listenerPlayer.getCurrentPosition()
+                            + ", bufferedPositionMs=" + listenerPlayer.getBufferedPosition()
+                            + ", playWhenReady=" + listenerPlayer.getPlayWhenReady());
                 }
                 if (playbackState == Player.STATE_ENDED)
                 {
@@ -2177,6 +2366,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     log.logDebug("Player.STATE_READY - Media loaded and ready for playback");
                     if (errorState)
                     {
+                        decoderAttemptTelemetry.recordFallback(
+                                decoderAttemptTelemetry.fallbackReason(), "ready");
                         errorState = false;
                         retryCount = 0;
                     }
@@ -2327,6 +2518,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 subtitleCueUpdateCount++;
                 StringBuilder text = new StringBuilder();
+                int bitmapCues = 0;
                 for (Cue cue : cueGroup.cues)
                 {
                     if (cue.text != null && cue.text.length() > 0)
@@ -2335,12 +2527,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             text.append(' ');
                         text.append(cue.text);
                     }
+                    if (cue.bitmap != null)
+                        bitmapCues++;
                 }
+                currentSubtitleCueCount = cueGroup.cues.size();
                 currentSubtitleCueText = text.toString();
-                if (text.length() > 0)
+                if (text.length() > 0 || bitmapCues > 0)
                 {
                     subtitleNonEmptyCueCount++;
-                    lastSubtitleCueText = text.toString();
+                    subtitleBitmapCueCount += bitmapCues;
+                    if (text.length() > 0)
+                        lastSubtitleCueText = text.toString();
                 }
                 MiniClientConnection subtitleConnection = MiniclientApplication.get()
                         .getClient().getCurrentConnection();
@@ -2906,6 +3103,16 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         return subtitleNonEmptyCueCount;
     }
 
+    public long getSubtitleBitmapCueCountForDebug()
+    {
+        return subtitleBitmapCueCount;
+    }
+
+    public int getCurrentSubtitleCueCountForDebug()
+    {
+        return currentSubtitleCueCount;
+    }
+
     public String getLastSubtitleCueTextForDebug()
     {
         return lastSubtitleCueText;
@@ -3136,10 +3343,16 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 TrackGroup trackGroup = trackGroups.get(i);
 
-                SubtitleCodec codec = SubtitleCodec.parse(trackGroup.getFormat(0).sampleMimeType);
-                String langugae = trackGroup.getFormat(0).language;
-                String label = trackGroup.getFormat(0).label;
-                int accessibilityChannel = trackGroup.getFormat(0).accessibilityChannel;
+                Format format = trackGroup.getFormat(0);
+                SubtitleCodec codec = SubtitleCodec.parse(format.sampleMimeType);
+                // Media3 1.11 decodes bitmap subtitles before the text renderer and
+                // exposes them as application/x-media3-cues. It retains the original
+                // codec MIME (for example application/dvbsubs) in Format.codecs.
+                if (codec == null)
+                    codec = SubtitleCodec.parse(format.codecs);
+                String langugae = format.language;
+                String label = format.label;
+                int accessibilityChannel = format.accessibilityChannel;
                 boolean supported = (mappedTrackInfo.getTrackSupport(rendererIndex, i, 0) == C.FORMAT_HANDLED);
 
                 SubtitleTrack track = new SubtitleTrack(i, codec, langugae, label, supported,
@@ -3457,6 +3670,19 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
         return actions;
     }
+
+    public String getDecoderCandidatesForDebug() { return decoderAttemptTelemetry.candidates(); }
+    public String getDecoderEventsForDebug() { return decoderAttemptTelemetry.events(); }
+    public String getSelectedVideoDecoderForDebug() { return decoderAttemptTelemetry.selectedVideo(); }
+    public String getSelectedAudioDecoderForDebug() { return decoderAttemptTelemetry.selectedAudio(); }
+    public String getSessionDecoderExclusionsForDebug() { return decoderAttemptTelemetry.exclusions(); }
+    public String getDecoderFallbackReasonForDebug() { return decoderAttemptTelemetry.fallbackReason(); }
+    public String getDecoderRecoveryResultForDebug() { return decoderAttemptTelemetry.recoveryResult(); }
+    public int getDecoderCodecErrorCountForDebug() { return decoderAttemptTelemetry.codecErrorCount(); }
+    public int getAudioUnderrunCountForDebug() { return decoderAttemptTelemetry.audioUnderrunCount(); }
+    public int getAudioOutputErrorCountForDebug() { return decoderAttemptTelemetry.audioOutputErrorCount(); }
+    public int getDecoderFormatChangeCountForDebug() { return decoderAttemptTelemetry.formatChangeCount(); }
+    public int getDecoderTrackChangeCountForDebug() { return decoderAttemptTelemetry.trackChangeCount(); }
 
     private void setMediaSessionMetadata(String displayTitle, long duration)
     {

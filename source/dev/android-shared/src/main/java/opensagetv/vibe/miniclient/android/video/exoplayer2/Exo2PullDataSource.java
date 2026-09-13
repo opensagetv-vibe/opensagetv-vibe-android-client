@@ -22,6 +22,7 @@ import opensagetv.vibe.miniclient.net.BufferedPullDataSource;
 import opensagetv.vibe.miniclient.net.GrowingDataSource;
 import opensagetv.vibe.miniclient.net.HasClose;
 import opensagetv.vibe.miniclient.net.ISageTVDataSource;
+import opensagetv.vibe.miniclient.net.RetainedBufferedPullDataSource;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
@@ -41,6 +42,7 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     ISageTVDataSource dataSource = null;
     private final SmbDirectConfig smbConfig;
     private final int pullReadBytes;
+    private RetainedBufferedPullDataSource retainedPullSource;
     private SmbSourceSelector smbSource;
     private long startPos;
     private long bytesRemaining = C.LENGTH_UNSET;
@@ -116,7 +118,9 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
         }
         if (smbConfig == null)
         {
-            dataSource = new BufferedPullDataSource(host, pullReadBytes);
+            if (retainedPullSource == null)
+                retainedPullSource = new RetainedBufferedPullDataSource(host, pullReadBytes);
+            dataSource = retainedPullSource;
         }
         else
         {
@@ -139,6 +143,8 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
         }
         this.startPos = dataSpec.position;
         effectivelyGrowing = growthPolicy.resolve(dataSource, size);
+        if (retainedPullSource != null)
+            retainedPullSource.setProbeCacheEnabled(!effectivelyGrowing);
         log.debug("Open: Offset: {}, Requested Length: {}, Size: {}", startPos, dataSpec.length, size);
 
         if (size >= 0 && dataSpec.position > size)
@@ -202,6 +208,12 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     {
         ISageTVDataSource current = dataSource;
         if (current == null) return;
+        if (current == retainedPullSource)
+        {
+            current.close();
+            dataSource = null;
+            return;
+        }
         if (current instanceof BufferedPullDataSource)
         {
             BufferedPullDataSource pull = (BufferedPullDataSource) current;
@@ -232,7 +244,11 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     public long getNetworkReadMaxRequestedBytes() { return Math.max(networkReadMaxRequestedBytes, smbSource == null ? activePullMaxRequested() : smbSource.getFallbackNetworkReadMaxRequestedBytes()); }
     public long getNetworkLastReadPosition() { return smbSource == null ? activePullLastPosition() : smbSource.getFallbackNetworkLastReadPosition(); }
 
-    private BufferedPullDataSource activePull() { return dataSource instanceof BufferedPullDataSource ? (BufferedPullDataSource) dataSource : null; }
+    private BufferedPullDataSource activePull()
+    {
+        if (dataSource instanceof BufferedPullDataSource) return (BufferedPullDataSource) dataSource;
+        return retainedPullSource;
+    }
     private long activePullReadCount() { BufferedPullDataSource p = activePull(); return p == null ? 0 : p.getNetworkReadCount(); }
     private long activePullRequestedBytes() { BufferedPullDataSource p = activePull(); return p == null ? 0 : p.getNetworkReadRequestedBytes(); }
     private long activePullBytes() { BufferedPullDataSource p = activePull(); return p == null ? 0 : p.getNetworkReadBytes(); }
@@ -349,6 +365,7 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     {
         try { close(); }
         catch (IOException ignored) { }
+        if (retainedPullSource != null) retainedPullSource.release();
         if (smbSource != null) smbSource.release();
     }
 
@@ -358,6 +375,12 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     public void beginSeekableSnapshotPreparation()
     {
         seekableSnapshotPreparation = true;
+    }
+
+    /** The SIZE-growth probe result used for seek/reprepare policy. */
+    public boolean isEffectivelyGrowing()
+    {
+        return effectivelyGrowing;
     }
 
     /** Restores the normal unknown-length contract after the first post-seek frame. */
@@ -390,6 +413,10 @@ public class Exo2PullDataSource implements DataSource, HasClose, SessionOwnedDat
     @Override public int getSmbReadAheadBytes() { return smbSource == null ? 0 : smbSource.getSmbReadAheadBytes(); }
     @Override public long getSmbFallbackCount() { return smbSource == null ? 0 : smbSource.getSmbFallbackCount(); }
     @Override public String getSmbFallbackReason() { return smbSource == null ? "" : smbSource.getSmbFallbackReason(); }
+    @Override public long getPullSessionReuseCount() { return retainedPullSource == null ? 0 : retainedPullSource.getSessionReuseCount(); }
+    @Override public long getPullProbeCacheHitBytes() { return retainedPullSource == null ? 0 : retainedPullSource.getProbeCacheHitBytes(); }
+    @Override public long getPullProbeCacheMissCount() { return retainedPullSource == null ? 0 : retainedPullSource.getProbeCacheMissCount(); }
+    @Override public long getPullProbeCacheResidentBytes() { return retainedPullSource == null ? 0 : retainedPullSource.getProbeCacheResidentBytes(); }
 
 
 //    @Override

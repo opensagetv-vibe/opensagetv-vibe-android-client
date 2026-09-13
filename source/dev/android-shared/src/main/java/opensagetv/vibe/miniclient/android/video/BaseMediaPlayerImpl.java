@@ -18,6 +18,7 @@ import opensagetv.vibe.miniclient.android.AppUtil;
 import opensagetv.vibe.miniclient.android.R;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.dvd.DvdDiagnostics;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
 import opensagetv.vibe.miniclient.events.VideoInfoRefresh;
 import opensagetv.vibe.miniclient.events.VideoInfoShow;
 import opensagetv.vibe.miniclient.net.HasPushBuffer;
@@ -89,11 +90,23 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
      * paints the timeline at the end before the first frame resets it to zero.</p>
      */
     private volatile PlaybackSessionController.Token loadTransitionToken;
-    private boolean fullscreenPromotionSent;
+    private volatile boolean fullscreenPromotionSent;
+    private volatile boolean fullscreenPromotionCheckScheduled;
+    private volatile int fullscreenPromotionCheckCount;
+    private volatile int fullscreenPromotionStablePreviewCount;
+    private volatile int fullscreenPromotionStableFullscreenCount;
+    private volatile int fullscreenPromotionCommandCount;
+    private volatile String fullscreenPromotionLastDecision = "not_started";
     // Give the STV/Core time to perform its normal asynchronous transition.
     // TV is a toggle; an eager fallback can undo that transition and leave
     // playback on Main Menu in the embedded preview.
-    private static final long FULLSCREEN_PROMOTION_DELAY_MS = 2500;
+    // The TV event is guarded by an active player, an embedded destination,
+    // no popup and a non-OSD menu. A long delay only exposes SageMC's preview
+    // during normal playback startup; re-check shortly after the ready/rect
+    // callbacks instead.
+    private static final long FULLSCREEN_PROMOTION_DELAY_MS = 350;
+    private static final int FULLSCREEN_PROMOTION_MAX_CHECKS = 24;
+    private static final int FULLSCREEN_PROMOTION_STABLE_CHECKS = 6;
     private volatile DvdHighlightOverlay dvdHighlightOverlay;
     protected final DvdSubpictureDecoder dvdSubpictureDecoder;
     private volatile int dvdStc;
@@ -216,6 +229,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         onPlaybackLoadStarted();
         lastPlaybackOperation = loadSession;
         fullscreenPromotionSent = false;
+        fullscreenPromotionCheckScheduled = false;
+        fullscreenPromotionCheckCount = 0;
+        fullscreenPromotionStablePreviewCount = 0;
+        fullscreenPromotionStableFullscreenCount = 0;
+        fullscreenPromotionCommandCount = 0;
+        fullscreenPromotionLastDecision = "load_reset";
+        // Readiness belongs to the player being opened, never the retained
+        // value from the player this LOAD is about to release. Otherwise a
+        // replacement can promote/accept the previous file's rectangle.
+        playerReady = false;
         final String finalUrl;
 
         lastUri = urlString;
@@ -445,6 +468,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void stop()
     {
+        DiagnosticSessionSpool.checkpoint("playback-stop");
         loadTransitionToken = null;
         // SageTV STOP is not necessarily terminal. Stock servers legitimately
         // retain the loaded MiniPlayer and later issue SEEK/PLAY without a new
@@ -705,6 +729,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         dvdHighlightOverlay = null;
         dvdSubpictureDecoder.reset();
         player = null;
+        playerReady = false;
         videoInfo.reset();
         releaseDataSource();
         dataSource = null;
@@ -914,26 +939,53 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
      */
     private void scheduleFullscreenPromotionCheck()
     {
-        if (fullscreenPromotionSent || state != PLAY_STATE || context.getVideoView() == null)
+        if (fullscreenPromotionSent || fullscreenPromotionCheckScheduled
+                || fullscreenPromotionCheckCount >= FULLSCREEN_PROMOTION_MAX_CHECKS
+                || state != PLAY_STATE || context.getVideoView() == null)
         {
             return;
         }
 
         final PlaybackSessionController.Token session = playbackSessions.currentSessionToken();
+        fullscreenPromotionCheckScheduled = true;
         context.getVideoView().postDelayed(new Runnable()
         {
             @Override
             public void run()
             {
+                fullscreenPromotionCheckScheduled = false;
+                fullscreenPromotionCheckCount++;
                 if (!playbackSessions.isCurrentSession(session) || fullscreenPromotionSent
-                        || state != PLAY_STATE || !playerReady || player == null)
+                        || state != PLAY_STATE)
                 {
+                    fullscreenPromotionLastDecision = !playbackSessions.isCurrentSession(session)
+                            ? "stale_generation" : fullscreenPromotionSent
+                            ? "already_sent_or_fullscreen" : "not_playing";
+                    return;
+                }
+                if (!playerReady || player == null)
+                {
+                    // PLAY and the first SETVIDEORECT can both arrive before
+                    // a slower device has created its decoder. Re-check the
+                    // same playback generation instead of permanently losing
+                    // the one guarded preview promotion opportunity.
+                    fullscreenPromotionLastDecision = "waiting_for_player_ready";
+                    scheduleFullscreenPromotionCheck();
                     return;
                 }
 
                 Dimension screen = context.getClient().getUIRenderer().getMaxScreenSize();
-                int width = context.getVideoView().getWidth();
-                int height = context.getVideoView().getHeight();
+                // SageTV's SETVIDEORECT destination is authoritative. On
+                // Shield firmware the SurfaceView itself can remain 1920x1080
+                // while the server asks video to render in a 408x322 preview;
+                // using view bounds therefore misclassifies that preview as
+                // fullscreen. Fall back only before a destination arrives.
+                int width = videoInfo != null && videoInfo.destRect.width > 0
+                        ? Math.round(videoInfo.destRect.width)
+                        : context.getVideoView().getWidth();
+                int height = videoInfo != null && videoInfo.destRect.height > 0
+                        ? Math.round(videoInfo.destRect.height)
+                        : context.getVideoView().getHeight();
                 MenuHint menuHint = null;
                 if (context.getClient().getCurrentConnection() != null)
                 {
@@ -941,23 +993,94 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 }
                 String menuName = menuHint == null ? null : menuHint.menuName;
                 String popupName = menuHint == null ? null : menuHint.popupName;
+                boolean embeddedPreview = FullscreenPlaybackPolicy.isEmbeddedPreview(
+                        width, height, screen.width, screen.height);
+                if (FullscreenPlaybackPolicy.isPlaybackMenu(menuName) && !embeddedPreview)
+                {
+                    fullscreenPromotionStableFullscreenCount++;
+                    if (fullscreenPromotionStableFullscreenCount
+                            < FULLSCREEN_PROMOTION_STABLE_CHECKS)
+                    {
+                        fullscreenPromotionLastDecision = "waiting_for_stable_fullscreen";
+                        scheduleFullscreenPromotionCheck();
+                        return;
+                    }
+                    fullscreenPromotionSent = true;
+                    fullscreenPromotionLastDecision = "fullscreen_observed";
+                    log.debug("Skipping preview promotion because SageTV already entered {}", menuName);
+                    return;
+                }
                 if (FullscreenPlaybackPolicy.isPlaybackMenu(menuName))
                 {
-                    fullscreenPromotionSent = true;
-                    log.debug("Skipping preview promotion because SageTV already entered {}", menuName);
+                    // During file replacement the old MediaPlayer OSD can be
+                    // visible briefly while the new destination is already a
+                    // preview. Do not let that transient menu suppress the
+                    // new playback generation's only promotion opportunity.
+                    fullscreenPromotionLastDecision = "transient_osd_preview";
+                    scheduleFullscreenPromotionCheck();
                     return;
                 }
 
                 if (FullscreenPlaybackPolicy.shouldPromote(menuName, popupName,
                         width, height, screen.width, screen.height))
                 {
+                    fullscreenPromotionStableFullscreenCount = 0;
+                    fullscreenPromotionStablePreviewCount++;
+                    if (fullscreenPromotionStablePreviewCount
+                            < FULLSCREEN_PROMOTION_STABLE_CHECKS)
+                    {
+                        fullscreenPromotionLastDecision = "waiting_for_stable_preview";
+                        scheduleFullscreenPromotionCheck();
+                        return;
+                    }
                     fullscreenPromotionSent = true;
+                    fullscreenPromotionCommandCount++;
+                    fullscreenPromotionLastDecision = "promotion_command_sent";
                     log.info("Promoting stable SageTV embedded preview ({}x{} on {}x{}, menu={}) to fullscreen",
                             width, height, screen.width, screen.height, menuName);
                     EventRouter.postCommand(context.getClient(), SageCommand.TV);
                 }
+                else
+                {
+                    fullscreenPromotionLastDecision = "not_embedded_or_popup_present";
+                }
             }
         }, FULLSCREEN_PROMOTION_DELAY_MS);
+    }
+
+    public final boolean isFullscreenPromotionSentForDebug()
+    {
+        return fullscreenPromotionSent;
+    }
+
+    public final boolean isFullscreenPromotionCheckScheduledForDebug()
+    {
+        return fullscreenPromotionCheckScheduled;
+    }
+
+    public final int getFullscreenPromotionCheckCountForDebug()
+    {
+        return fullscreenPromotionCheckCount;
+    }
+
+    public final int getFullscreenPromotionCommandCountForDebug()
+    {
+        return fullscreenPromotionCommandCount;
+    }
+
+    public final int getFullscreenPromotionStablePreviewCountForDebug()
+    {
+        return fullscreenPromotionStablePreviewCount;
+    }
+
+    public final int getFullscreenPromotionStableFullscreenCountForDebug()
+    {
+        return fullscreenPromotionStableFullscreenCount;
+    }
+
+    public final String getFullscreenPromotionLastDecisionForDebug()
+    {
+        return fullscreenPromotionLastDecision;
     }
 
     protected final PlaybackSessionController.Token currentPlaybackSession()

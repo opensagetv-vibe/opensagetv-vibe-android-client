@@ -124,6 +124,11 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugSessionCommands.setActivePlayerOverlay(context, intent));
             }
+            else if ("diagnostics".equals(op))
+            {
+                DebugDiagnosticCommands.execute(context, intent, goAsync());
+                return;
+            }
             else if ("watch_server_file".equals(op))
             {
                 ok(DebugSessionCommands.watchServerFile(context, intent));

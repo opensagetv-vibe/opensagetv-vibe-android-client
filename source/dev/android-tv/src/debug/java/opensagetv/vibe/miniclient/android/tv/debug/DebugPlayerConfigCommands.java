@@ -3,6 +3,7 @@ package opensagetv.vibe.miniclient.android.tv.debug;
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.clean;
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.parseBoolean;
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.parseBoundedInt;
+import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.safe;
 import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.text;
 
 import android.content.Context;
@@ -62,6 +63,12 @@ final class DebugPlayerConfigCommands
         String smbProfileUsername = clean(intent.getStringExtra("smb_profile_username"));
         String smbProfilePassword = intent.getStringExtra("smb_profile_password");
         String smbProfileDomain = clean(intent.getStringExtra("smb_profile_domain"));
+        String smbDiagnosticsDirectory = text(intent.getStringExtra("smb_diagnostics_directory"));
+        String smbDiagnosticsMode = clean(intent.getStringExtra("smb_diagnostics_mode"));
+        String smbDiagnosticsAuthMode = clean(intent.getStringExtra("smb_diagnostics_auth_mode"));
+        String smbDiagnosticsUsername = clean(intent.getStringExtra("smb_diagnostics_username"));
+        String smbDiagnosticsPassword = intent.getStringExtra("smb_diagnostics_password");
+        String smbDiagnosticsDomain = clean(intent.getStringExtra("smb_diagnostics_domain"));
         String keepSessionInBackground = clean(intent.getStringExtra("keep_session_in_background"));
         String resumeBackgroundPlayback = clean(intent.getStringExtra("resume_background_playback"));
         String backgroundSessionTimeoutSeconds = clean(
@@ -77,6 +84,8 @@ final class DebugPlayerConfigCommands
                 intent.getStringExtra("wait_for_playback_before_first_osd"));
         boolean clearSmbProfileAuth = parseBoolean(
                 clean(intent.getStringExtra("smb_profile_clear_auth")), false);
+        boolean clearSmbDiagnosticsAuth = parseBoolean(
+                clean(intent.getStringExtra("smb_diagnostics_clear_auth")), false);
 
         if (!keepSessionInBackground.isEmpty())
             prefs.setBoolean(PrefStore.Keys.keep_session_in_background,
@@ -311,6 +320,44 @@ final class DebugPlayerConfigCommands
                 prefs.setString(AndroidPrefStore.SMB_PROFILE_DOMAIN, smbProfileDomain);
         }
 
+        if (!smbDiagnosticsDirectory.isEmpty())
+        {
+            SmbPathMapper.parse("/ => " + smbDiagnosticsDirectory).map("/");
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_DIRECTORY, smbDiagnosticsDirectory);
+        }
+        if (!smbDiagnosticsMode.isEmpty())
+        {
+            String value = smbDiagnosticsMode.toLowerCase();
+            if (!(AndroidPrefStore.DIAGNOSTICS_MODE_OFF.equals(value)
+                    || AndroidPrefStore.DIAGNOSTICS_MODE_ON_REQUEST.equals(value)
+                    || AndroidPrefStore.DIAGNOSTICS_MODE_ALWAYS.equals(value)))
+                throw new IllegalArgumentException("invalid diagnostics SMB mode");
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_MODE, value);
+        }
+        if (!smbDiagnosticsAuthMode.isEmpty())
+        {
+            String value = smbDiagnosticsAuthMode.toLowerCase();
+            if (!(AndroidPrefStore.SMB_AUTH_ANONYMOUS.equals(value)
+                    || AndroidPrefStore.SMB_AUTH_CREDENTIALS.equals(value)))
+                throw new IllegalArgumentException("invalid diagnostics SMB authentication mode");
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_AUTH_MODE, value);
+        }
+        if (clearSmbDiagnosticsAuth)
+        {
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_USERNAME, "");
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_PASSWORD, "");
+            prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_DOMAIN, "");
+        }
+        else
+        {
+            if (!smbDiagnosticsUsername.isEmpty())
+                prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_USERNAME, smbDiagnosticsUsername);
+            if (smbDiagnosticsPassword != null && !smbDiagnosticsPassword.isEmpty())
+                prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_PASSWORD, smbDiagnosticsPassword);
+            if (!smbDiagnosticsDomain.isEmpty())
+                prefs.setString(AndroidPrefStore.SMB_DIAGNOSTICS_DOMAIN, smbDiagnosticsDomain);
+        }
+
         return "op=config;" + DebugStateProvider.configuredValues(prefs)
                 + ";smbAuthConfigured="
                 + !prefs.getString(AndroidPrefStore.SMB_USERNAME, "").isEmpty()
@@ -318,6 +365,15 @@ final class DebugPlayerConfigCommands
                 + !prefs.getString(AndroidPrefStore.SMB_PROFILE_DIRECTORY, "").isEmpty()
                 + ";smbProfileAuthConfigured="
                 + !prefs.getString(AndroidPrefStore.SMB_PROFILE_USERNAME, "").isEmpty()
+                + ";smbDiagnosticsMode="
+                + safe(prefs.getString(AndroidPrefStore.SMB_DIAGNOSTICS_MODE,
+                        AndroidPrefStore.DIAGNOSTICS_MODE_OFF))
+                + ";smbDiagnosticsDirectoryConfigured="
+                + !prefs.getString(AndroidPrefStore.SMB_DIAGNOSTICS_DIRECTORY, "").isEmpty()
+                + ";smbDiagnosticsCredentialAuth="
+                + AndroidPrefStore.SMB_AUTH_CREDENTIALS.equals(prefs.getString(
+                        AndroidPrefStore.SMB_DIAGNOSTICS_AUTH_MODE,
+                        AndroidPrefStore.SMB_AUTH_ANONYMOUS))
                 + ";appliesNextPlayback=true";
     }
 

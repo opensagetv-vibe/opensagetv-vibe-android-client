@@ -18,6 +18,12 @@
         android:summary="%s"
         android:title="MediaCodec Queueing Mode"/>
 
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="disable_audio_passthrough"
+        android:summary="Recommended for TV speakers and HDMI capture. Disable only when an external receiver is known to accept the source encoded audio."
+        android:title="Decode encoded audio to PCM"/>
+
     <Preference
         android:key="show_media3_decoders"
         android:summary="Show the Android MediaCodecs visible to the Media3 backend"
@@ -28,6 +34,6 @@
         android:title="Media3 Version"/>
     <Preference
         android:key="media3_decoder_policy"
-        android:summary="Platform MediaCodec with decoder fallback; no legacy ExoPlayer FFmpeg extension"
+        android:summary="Platform MediaCodec video with an isolated FFmpeg audio fallback when Android cannot decode the selected track"
         android:title="Decoder Policy"/>
 </PreferenceScreen>

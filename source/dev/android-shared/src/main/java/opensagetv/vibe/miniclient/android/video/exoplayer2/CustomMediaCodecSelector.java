@@ -8,19 +8,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
 import opensagetv.vibe.miniclient.android.video.DeviceCodecCapabilityProfile;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
+import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
 
 /** Applies the shared video-decoding policy to legacy ExoPlayer MediaCodec selection. */
 public class CustomMediaCodecSelector implements MediaCodecSelector
 {
     protected final Logger log = LoggerFactory.getLogger(this.getClass());
     private final DecodingMethod decodingMethod;
+    private final DecoderAttemptTelemetry telemetry;
+    private final Set<String> sessionExclusions;
 
     public CustomMediaCodecSelector()
     {
@@ -29,7 +35,16 @@ public class CustomMediaCodecSelector implements MediaCodecSelector
 
     public CustomMediaCodecSelector(DecodingMethod decodingMethod)
     {
+        this(decodingMethod, null, Collections.<String>emptySet());
+    }
+
+    public CustomMediaCodecSelector(DecodingMethod decodingMethod,
+            DecoderAttemptTelemetry telemetry, Set<String> sessionExclusions)
+    {
         this.decodingMethod = decodingMethod == null ? DecodingMethod.HARDWARE : decodingMethod;
+        this.telemetry = telemetry;
+        this.sessionExclusions = sessionExclusions == null
+                ? Collections.<String>emptySet() : new HashSet<>(sessionExclusions);
     }
 
     @Override
@@ -53,6 +68,11 @@ public class CustomMediaCodecSelector implements MediaCodecSelector
             if (AndroidCodecPolicy.isCodecDisabled(prefs, codec.name))
             {
                 log.info("Legacy Exo decoder disabled by user rule: {} for {}", codec.name, mimeType);
+                continue;
+            }
+            if (sessionExclusions.contains(codec.name))
+            {
+                log.info("Legacy Exo decoder excluded for current session: {} for {}", codec.name, mimeType);
                 continue;
             }
             if (DeviceCodecCapabilityProfile.current().isSoftwareDecoder(codec.name, mimeType))
@@ -83,6 +103,12 @@ public class CustomMediaCodecSelector implements MediaCodecSelector
 
         log.info("Legacy Exo Decoding Method={} mime={} hardwareCandidates={} softwareCandidates={} selected={}",
                 decodingMethod.displayName(), mimeType, hardware.size(), software.size(), selected.size());
+        if (telemetry != null)
+        {
+            ArrayList<String> names = new ArrayList<>();
+            for (MediaCodecInfo codec : selected) names.add(codec.name);
+            telemetry.recordCandidates(mimeType, names);
+        }
         return selected;
     }
 }

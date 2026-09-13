@@ -28,6 +28,7 @@ public final class AndroidCodecPolicy
                 || lower.startsWith("c2.android.")
                 || lower.startsWith("omx.ffmpeg.")
                 || lower.startsWith("ffmpeg")
+                || lower.contains(".ffmpeg.")
                 || lower.contains(".sw.")
                 || lower.contains("software");
     }

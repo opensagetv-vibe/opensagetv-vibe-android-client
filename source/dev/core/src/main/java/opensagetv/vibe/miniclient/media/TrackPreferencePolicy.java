@@ -123,6 +123,15 @@ public final class TrackPreferencePolicy
             if (!normalizeLanguage(preferredLanguage).isEmpty())
                 score += languageMatches(preferredLanguage, track.getLanguage()) ? 20 : -20;
 
+            // Auto must favor a subtitle stream that the container actually
+            // describes over the compatibility CEA tracks injected into every
+            // transport-stream extractor. UK DVB recordings commonly expose
+            // those synthetic CEA tracks first even though all real captions
+            // are carried as DVB bitmaps. An explicit CEA-608/708 preference
+            // below remains authoritative.
+            if (preferredCodec == null)
+                score += automaticCodecScore(track.getSubtitleCodec());
+
             if (preferredCodec != null)
             {
                 if (preferredCodec == track.getSubtitleCodec())
@@ -146,6 +155,27 @@ public final class TrackPreferencePolicy
             }
         }
         return bestIndex;
+    }
+
+    private static int automaticCodecScore(SubtitleCodec codec)
+    {
+        if (codec == null)
+            return 0;
+        switch (codec)
+        {
+            case DVB:
+                return 30;
+            case PGS:
+                return 25;
+            case SUBRIP:
+                return 20;
+            case CEA708:
+                return 10;
+            case CEA608:
+                return 5;
+            default:
+                return 0;
+        }
     }
 
     private static String primaryLanguage(String language)

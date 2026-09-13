@@ -27,4 +27,8 @@ public interface PlaybackDataSourceTelemetry extends SmbTelemetrySource
     long getNetworkReadMaxRequestedBytes();
     long getNetworkReadErrors();
     long getNetworkLastReadPosition();
+    long getPullSessionReuseCount();
+    long getPullProbeCacheHitBytes();
+    long getPullProbeCacheMissCount();
+    long getPullProbeCacheResidentBytes();
 }

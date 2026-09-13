@@ -25,6 +25,13 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn("and not args.server_path", matrix)
         self.assertIn("exact server path will be replayed", matrix)
 
+    def test_matrix_supports_stock_compatible_direct_video_name(self):
+        matrix = (SCRIPTS / "mcp_player_tuning_matrix.py").read_text()
+        self.assertIn('p.add_argument("--video-name"', matrix)
+        self.assertEqual(matrix.count("video_name=args.video_name"), 2)
+        self.assertIn('"videoName": args.video_name', matrix)
+        self.assertIn("not args.video_name.strip()", matrix)
+
     def test_grid_expands_cartesian_values(self):
         args = Namespace(
             player="media3", profiles="", ts_search="4,8", seek_policy="closest,next",
@@ -136,7 +143,7 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
             self.assertNotIn("PlayerRuntimeTuning.getExo2PullMinBufferMs()", player)
         for source in (media3_source, exo2_source):
             self.assertIn("private final int pullReadBytes;", source)
-            self.assertIn("new BufferedPullDataSource(host, pullReadBytes)", source)
+            self.assertIn("new RetainedBufferedPullDataSource(host, pullReadBytes)", source)
 
 
     def test_codec_mode_is_persisted_in_player_settings_with_sync_default(self):
@@ -174,6 +181,7 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn('"dev_current_media_file"', matrix)
         self.assertIn('"dev_play_media_file_id"', matrix)
         self.assertIn('falling back to full isolated startup', matrix)
+        self.assertEqual(matrix.count('video_name=args.video_name,'), 2)
         self.assertIn('"freshPlayerPerCombination": True', matrix)
         self.assertIn('"fullAppRestartPerCombination": args.startup_mode == "isolated"', matrix)
         self.assertIn('def dev_current_media_file()', server)
@@ -190,6 +198,15 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         matrix = (SCRIPTS / "mcp_player_tuning_matrix.py").read_text()
         self.assertIn('"slowRecoveryMs": args.slow_recovery_ms', matrix)
         self.assertIn('compiledDefaultsResetBeforeEachCombination', matrix)
+
+    def test_tuning_matrix_can_measure_repeated_same_target_seeks(self):
+        matrix = (SCRIPTS / "mcp_player_tuning_matrix.py").read_text()
+        self.assertIn('--repeat-count', matrix)
+        self.assertIn('--repeat-away-ms', matrix)
+        self.assertIn('repeat_observations = [obs]', matrix)
+        self.assertIn('repeatPreparations', matrix)
+        self.assertIn('repeatRecoveryMs', matrix)
+        self.assertIn('args.target_ms + args.repeat_away_ms', matrix)
 
 
 if __name__ == "__main__":

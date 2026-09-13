@@ -19,6 +19,7 @@ import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.UIActivityLifeCycleHandler;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
+import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.ActivePlayerProcessOverlay;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
 import opensagetv.vibe.miniclient.android.video.DisplayRefreshController;
@@ -28,6 +29,7 @@ import opensagetv.vibe.miniclient.android.video.gsy.GSYMediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.video.gsy.GSYPlayerEngine;
 import opensagetv.vibe.miniclient.android.video.exoplayer2.Exo2MediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.video.media3.Media3MediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.ui.keymaps.KeyMapProcessor;
 import opensagetv.vibe.miniclient.media.SubtitleTrack;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
@@ -140,6 +142,17 @@ final class DebugStateProvider
         out.append(";imeSuppressedForDebug=").append(UIActivityLifeCycleHandler.isKeyboardSuppressedForDebug());
         out.append(";imeVisibleKnown=").append(imeVisibility >= 0);
         out.append(";imeVisible=").append(imeVisibility > 0);
+        out.append(";inputEventSequence=").append(KeyMapProcessor.getInputEventSequenceForDebug());
+        out.append(";inputLastKeyCode=").append(KeyMapProcessor.getInputLastKeyCodeForDebug());
+        out.append(";inputLastKeyName=").append(safe(KeyMapProcessor.getInputLastKeyNameForDebug()));
+        out.append(";inputLastScanCode=").append(KeyMapProcessor.getInputLastScanCodeForDebug());
+        out.append(";inputLastAction=").append(KeyMapProcessor.getInputLastActionForDebug());
+        out.append(";inputLastRepeatCount=").append(KeyMapProcessor.getInputLastRepeatCountForDebug());
+        out.append(";inputLastSource=").append(KeyMapProcessor.getInputLastSourceForDebug());
+        out.append(";inputLastDeviceId=").append(KeyMapProcessor.getInputLastDeviceIdForDebug());
+        out.append(";inputLastLongPress=").append(KeyMapProcessor.isInputLastLongPressForDebug());
+        out.append(";inputLastMappedCommand=")
+                .append(safe(KeyMapProcessor.getInputLastMappedCommandForDebug()));
         out.append(';').append(PlayerRuntimeTuning.compactWire());
         out.append(";activePlayerOverrides=")
                 .append(safe(ActivePlayerSessionOverrides.compactSummary()));
@@ -272,10 +285,13 @@ final class DebugStateProvider
         out.append(";vibeChannelAckSequence=").append(
                 client.getCurrentConnection() == null ? 0L :
                         client.getCurrentConnection().getVibeChannelAckSequence());
+        appendAudioState(out, player);
         appendSubtitleState(out, player);
         appendVideoLayoutState(out, player);
+        appendFullscreenPromotionState(out, player);
         appendFastSwitchState(out, player);
         appendDvdTimestampState(out, player);
+        appendDecoderAttemptState(out, player);
         if (player instanceof GSYMediaPlayerImpl)
         {
             GSYMediaPlayerImpl gsy = (GSYMediaPlayerImpl) player;
@@ -354,6 +370,95 @@ final class DebugStateProvider
         {
             out.append(";videoLayoutStateError=").append(safe(t.getClass().getSimpleName()));
         }
+    }
+
+    private static void appendFullscreenPromotionState(StringBuilder out, MiniPlayerPlugin player)
+    {
+        MiniPlayerPlugin inspected = player;
+        if (player instanceof GSYMediaPlayerImpl)
+        {
+            MiniPlayerPlugin delegate = ((GSYMediaPlayerImpl) player).getDelegateForDebug();
+            if (delegate != null)
+                inspected = delegate;
+        }
+        if (!(inspected instanceof BaseMediaPlayerImpl))
+            return;
+        BaseMediaPlayerImpl<?, ?> base = (BaseMediaPlayerImpl<?, ?>) inspected;
+        out.append(";fullscreenPromotionSent=").append(base.isFullscreenPromotionSentForDebug());
+        out.append(";fullscreenPromotionCheckScheduled=")
+                .append(base.isFullscreenPromotionCheckScheduledForDebug());
+        out.append(";fullscreenPromotionCheckCount=")
+                .append(base.getFullscreenPromotionCheckCountForDebug());
+        out.append(";fullscreenPromotionStablePreviewCount=")
+                .append(base.getFullscreenPromotionStablePreviewCountForDebug());
+        out.append(";fullscreenPromotionStableFullscreenCount=")
+                .append(base.getFullscreenPromotionStableFullscreenCountForDebug());
+        out.append(";fullscreenPromotionCommandCount=")
+                .append(base.getFullscreenPromotionCommandCountForDebug());
+        out.append(";fullscreenPromotionLastDecision=")
+                .append(safe(base.getFullscreenPromotionLastDecisionForDebug()));
+    }
+
+    private static void appendDecoderAttemptState(StringBuilder out, MiniPlayerPlugin player)
+    {
+        MiniPlayerPlugin telemetryPlayer = player;
+        if (player instanceof GSYMediaPlayerImpl)
+        {
+            MiniPlayerPlugin delegate = ((GSYMediaPlayerImpl) player).getDelegateForDebug();
+            if (delegate != null) telemetryPlayer = delegate;
+        }
+        if (telemetryPlayer instanceof Media3MediaPlayerImpl)
+        {
+            Media3MediaPlayerImpl media3 = (Media3MediaPlayerImpl) telemetryPlayer;
+            appendDecoderAttemptState(out, media3.getDecoderCandidatesForDebug(),
+                    media3.getDecoderEventsForDebug(),
+                    media3.getSelectedVideoDecoderForDebug(),
+                    media3.getSelectedAudioDecoderForDebug(),
+                    media3.getSessionDecoderExclusionsForDebug(),
+                    media3.getDecoderFallbackReasonForDebug(),
+                    media3.getDecoderRecoveryResultForDebug(),
+                    media3.getDecoderCodecErrorCountForDebug(),
+                    media3.getAudioUnderrunCountForDebug(),
+                    media3.getAudioOutputErrorCountForDebug(),
+                    media3.getDecoderFormatChangeCountForDebug(),
+                    media3.getDecoderTrackChangeCountForDebug());
+        }
+        else if (telemetryPlayer instanceof Exo2MediaPlayerImpl)
+        {
+            Exo2MediaPlayerImpl exo = (Exo2MediaPlayerImpl) telemetryPlayer;
+            appendDecoderAttemptState(out, exo.getDecoderCandidatesForDebug(),
+                    exo.getDecoderEventsForDebug(),
+                    exo.getSelectedVideoDecoderForDebug(),
+                    exo.getSelectedAudioDecoderForDebug(),
+                    exo.getSessionDecoderExclusionsForDebug(),
+                    exo.getDecoderFallbackReasonForDebug(),
+                    exo.getDecoderRecoveryResultForDebug(),
+                    exo.getDecoderCodecErrorCountForDebug(),
+                    exo.getAudioUnderrunCountForDebug(),
+                    exo.getAudioOutputErrorCountForDebug(),
+                    exo.getDecoderFormatChangeCountForDebug(),
+                    exo.getDecoderTrackChangeCountForDebug());
+        }
+    }
+
+    private static void appendDecoderAttemptState(StringBuilder out, String candidates,
+            String events, String selectedVideo, String selectedAudio, String exclusions,
+            String fallbackReason, String recoveryResult, int codecErrors,
+            int audioUnderruns, int audioOutputErrors, int formatChanges,
+            int trackChanges)
+    {
+        out.append(";decoderCandidates=").append(safe(candidates));
+        out.append(";decoderEvents=").append(safe(events));
+        out.append(";selectedVideoDecoder=").append(safe(selectedVideo));
+        out.append(";selectedAudioDecoder=").append(safe(selectedAudio));
+        out.append(";sessionDecoderExclusions=").append(safe(exclusions));
+        out.append(";decoderFallbackReason=").append(safe(fallbackReason));
+        out.append(";decoderRecoveryResult=").append(safe(recoveryResult));
+        out.append(";decoderCodecErrorCount=").append(codecErrors);
+        out.append(";audioUnderrunCount=").append(audioUnderruns);
+        out.append(";audioOutputErrorCount=").append(audioOutputErrors);
+        out.append(";decoderFormatChangeCount=").append(formatChanges);
+        out.append(";decoderTrackChangeCount=").append(trackChanges);
     }
 
     private static void appendFastSwitchState(StringBuilder out, MiniPlayerPlugin player)
@@ -509,6 +614,8 @@ final class DebugStateProvider
                 Media3MediaPlayerImpl media3 = (Media3MediaPlayerImpl) telemetryPlayer;
                 out.append(";subtitleCueUpdateCount=").append(media3.getSubtitleCueUpdateCountForDebug());
                 out.append(";subtitleNonEmptyCueCount=").append(media3.getSubtitleNonEmptyCueCountForDebug());
+                out.append(";subtitleBitmapCueCount=").append(media3.getSubtitleBitmapCueCountForDebug());
+                out.append(";currentSubtitleCueCount=").append(media3.getCurrentSubtitleCueCountForDebug());
                 out.append(";lastSubtitleCueText=").append(safe(media3.getLastSubtitleCueTextForDebug()));
                 out.append(";currentSubtitleCueText=").append(safe(media3.getCurrentSubtitleCueTextForDebug()));
                 out.append(";subtitleOverlayAttached=").append(media3.isSubtitleOverlayAttachedForDebug());
@@ -521,6 +628,8 @@ final class DebugStateProvider
                 Exo2MediaPlayerImpl exo2 = (Exo2MediaPlayerImpl) telemetryPlayer;
                 out.append(";subtitleCueUpdateCount=").append(exo2.getSubtitleCueUpdateCountForDebug());
                 out.append(";subtitleNonEmptyCueCount=").append(exo2.getSubtitleNonEmptyCueCountForDebug());
+                out.append(";subtitleBitmapCueCount=").append(exo2.getSubtitleBitmapCueCountForDebug());
+                out.append(";currentSubtitleCueCount=").append(exo2.getCurrentSubtitleCueCountForDebug());
                 out.append(";lastSubtitleCueText=").append(safe(exo2.getLastSubtitleCueTextForDebug()));
                 out.append(";currentSubtitleCueText=").append(safe(exo2.getCurrentSubtitleCueTextForDebug()));
                 out.append(";subtitleOverlayAttached=").append(exo2.isSubtitleOverlayAttachedForDebug());
@@ -532,6 +641,34 @@ final class DebugStateProvider
         catch (Throwable t)
         {
             out.append(";subtitleStateError=").append(safe(t.getClass().getSimpleName()));
+        }
+    }
+
+    private static void appendAudioState(StringBuilder out, MiniPlayerPlugin player)
+    {
+        try
+        {
+            int[] ids = player.getAudioTrackIds();
+            String[] labels = player.getAudioTrackLabels();
+            out.append(";selectedAudioTrack=").append(player.getSelectedAudioTrack());
+            out.append(";audioTrackCount=").append(ids == null ? 0 : ids.length);
+            StringBuilder compactTracks = new StringBuilder();
+            if (ids != null)
+            {
+                for (int i = 0; i < ids.length; i++)
+                {
+                    if (compactTracks.length() > 0)
+                        compactTracks.append('|');
+                    compactTracks.append(ids[i]).append(':');
+                    if (labels != null && i < labels.length)
+                        compactTracks.append(labels[i]);
+                }
+            }
+            out.append(";audioTracks=").append(safe(compactTracks.toString()));
+        }
+        catch (Throwable t)
+        {
+            out.append(";audioStateError=").append(safe(t.getClass().getSimpleName()));
         }
     }
 

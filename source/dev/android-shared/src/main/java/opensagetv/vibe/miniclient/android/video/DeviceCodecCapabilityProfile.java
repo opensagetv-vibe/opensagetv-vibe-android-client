@@ -62,7 +62,15 @@ public final class DeviceCodecCapabilityProfile
                 : entry.softwareOnly;
     }
 
-    /** Kodi preserves DTS for intermittent missing PTS on MediaTek and NVIDIA decoders. */
+    /**
+     * Returns whether the discovered MPEG-2 decoder needs the missing-PTS repair.
+     *
+     * <p>Physical HDMI validation shows that both MediaTek and NVIDIA hardware need authored
+     * 2/3-field timing restored for DVD film streams. Media3 otherwise extrapolates missing PTS
+     * from the MPEG-2 sequence rate and produces periodic 112-200 ms release gaps. Match the
+     * decoder implementation, not an Android device model, and leave the explicit on/off setting
+     * available for unusual firmware.</p>
+     */
     public boolean hasMpeg2HardwareDecoderNeedingMissingPtsRepair()
     {
         for (Entry entry : videoDecoders)
@@ -71,7 +79,7 @@ public final class DeviceCodecCapabilityProfile
             if ("video/mpeg2".equalsIgnoreCase(entry.mimeType)
                     && entry.hardwareAccelerated
                     && (name.startsWith("omx.mtk") || name.startsWith("c2.mtk")
-                    || name.startsWith("omx.nvidia")))
+                            || name.startsWith("omx.nvidia") || name.startsWith("c2.nvidia")))
                 return true;
         }
         return false;

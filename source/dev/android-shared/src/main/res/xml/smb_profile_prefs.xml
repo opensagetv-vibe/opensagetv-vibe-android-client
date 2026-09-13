@@ -27,6 +27,10 @@
             android:title="SMB read-ahead (KiB)"
             android:summary="Batches small player reads; valid range 32-8192 KiB"
             android:inputType="number" />
+        <Preference
+            android:key="smb_direct/test"
+            android:title="Test media SMB connection"
+            android:summary="Read-only test of every configured SMB Direct mapping" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="Configuration share">
@@ -48,6 +52,56 @@
             android:key="smb_profiles/auth/domain"
             android:title="Configuration share domain"
             android:summary="Optional SMB authentication domain" />
+        <Preference
+            android:key="smb_profiles/test"
+            android:title="Test configuration SMB connection"
+            android:summary="Write, hash-check, and immediately remove a unique tiny test file" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Diagnostics share">
+        <ListPreference
+            android:key="smb_diagnostics/mode"
+            android:defaultValue="off"
+            android:title="Diagnostic SMB export"
+            android:entries="@array/entries_diagnostics_smb_mode"
+            android:entryValues="@array/entryvalues_diagnostics_smb_mode"
+            android:summary="Off, upload only when requested, or maintain a bounded session log" />
+        <EditTextPreference
+            android:key="smb_diagnostics/directory"
+            android:defaultValue=""
+            android:title="Diagnostics SMB directory"
+            android:summary="Independent SMB2/SMB3 destination, for example smb://nas/support/vibe/" />
+        <ListPreference
+            android:key="smb_diagnostics/auth/mode"
+            android:defaultValue="anonymous"
+            android:title="Diagnostics authentication"
+            android:entries="@array/entries_smb_auth_mode"
+            android:entryValues="@array/entryvalues_smb_auth_mode" />
+        <EditTextPreference
+            android:key="smb_diagnostics/auth/username"
+            android:title="Diagnostics username"
+            android:summary="Used only when Credentials authentication is selected" />
+        <EditTextPreference
+            android:key="smb_diagnostics/auth/password"
+            android:title="Diagnostics password"
+            android:summary="Stored only on this device and never included in a bundle"
+            android:inputType="textPassword" />
+        <EditTextPreference
+            android:key="smb_diagnostics/auth/domain"
+            android:title="Diagnostics domain"
+            android:summary="Optional domain used only for this diagnostics destination" />
+        <Preference
+            android:key="smb_diagnostics/test"
+            android:title="Test diagnostics SMB connection"
+            android:summary="Write, hash-check, and immediately remove a unique tiny test file" />
+        <Preference
+            android:key="smb_diagnostics/export"
+            android:title="Export Diagnostics"
+            android:summary="Create a redacted bundle; share it or upload it to the diagnostics destination" />
+        <Preference
+            android:key="smb_diagnostics/status"
+            android:title="Last diagnostics export"
+            android:summary="No diagnostic bundle has been exported" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="Named profiles">

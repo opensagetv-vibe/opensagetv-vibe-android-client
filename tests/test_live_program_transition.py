@@ -48,13 +48,19 @@ class LiveProgramTransitionTest(unittest.TestCase):
             self.assertIn(f"(({pull_type}) dataSource).endSeekableSnapshotPreparation();", source, relative)
 
     def test_exo_error_recovery_keeps_the_pre_error_position(self):
-        for relative in (
-            "media3/Media3MediaPlayerImpl.java",
-            "exoplayer2/Exo2MediaPlayerImpl.java",
+        for relative, player_variable in (
+            ("media3/Media3MediaPlayerImpl.java", "listenerPlayer"),
+            ("exoplayer2/Exo2MediaPlayerImpl.java", "player"),
         ):
             source = self.read(relative)
-            self.assertIn("long recoveryPositionMs = Math.max(0L, player.getCurrentPosition());", source)
-            self.assertIn("player.setMediaSource(mediaSource, recoveryPositionMs);", source)
+            self.assertIn(
+                f"long recoveryPositionMs = Math.max(0L, {player_variable}.getCurrentPosition());",
+                source,
+            )
+            self.assertIn(
+                f"{player_variable}.setMediaSource(mediaSource, recoveryPositionMs);",
+                source,
+            )
             self.assertIn('"player_error_recovery_position_preserved"', source)
 
     def test_exo_play_reprepares_a_server_stopped_player(self):
