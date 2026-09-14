@@ -102,17 +102,17 @@ public final class SmbDirectSession implements ISageTVDataSource, GrowingDataSou
                     .build();
             client = new SMBClient(smbConfig);
             connection = client.connect(mapped.getServer(), mapped.getPort());
-            char[] password = config.copyPassword();
+            SmbDirectConfig.Credentials credentials = config.credentialsFor(mapped);
             try
             {
-                AuthenticationContext authentication = config.getUsername().isEmpty()
+                AuthenticationContext authentication = credentials.username.isEmpty()
                         ? AuthenticationContext.guest()
-                        : new AuthenticationContext(config.getUsername(), password, config.getDomain());
+                        : new AuthenticationContext(credentials.username, credentials.password, credentials.domain);
                 session = connection.authenticate(authentication);
             }
             finally
             {
-                java.util.Arrays.fill(password, '\0');
+                credentials.clear();
             }
             share = (DiskShare) session.connectShare(mapped.getShare());
             file = share.openFile(

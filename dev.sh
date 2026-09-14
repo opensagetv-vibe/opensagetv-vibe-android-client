@@ -448,6 +448,20 @@ case "${1:-help}" in
       dev_command install "$install_apk_path" "$@"
     fi
     ;;
+  install-clean)
+    shift
+    if [ "$#" -eq 0 ]; then
+      dev_command install --clean
+    else
+      install_apk_path="$1"
+      shift
+      case "$install_apk_path" in
+        /*) ;;
+        *) install_apk_path="$CONTAINER_WORKSPACE/$install_apk_path" ;;
+      esac
+      dev_command install "$install_apk_path" --clean "$@"
+    fi
+    ;;
   adb)
     shift
     # Never let raw ADB choose arbitrarily when several commissioned devices
@@ -525,7 +539,8 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   all                           Test, validate, build, then guarded install of the Dev APK
   preflight                     Check Docker toolchain + Fire TV connection
   connect                       Connect/report Fire TV through container ADB
-  install [apk]                 Safe package-verified Dev client APK install
+  install [apk]                 Update verified Dev APK and preserve app settings
+  install-clean [apk]           Explicitly reset and freshly install the Dev APK
   launch [--client-id ID]       Launch the Vibe app; default identity is DEV001
   stop|uninstall                Control isolated Dev app only
   device-info                   Print Fire TV model/API/fingerprint

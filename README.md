@@ -326,6 +326,14 @@ filename, byte count, SHA-256, time, and SMB stage result so the file can be
 retrieved from another computer without email on the TV. See
 `docs/PLAYBACK_DIAGNOSTICS.md` and the GitHub playback issue form.
 
+SMB setup is server-first. Open **Settings > SMB Direct Settings > Manage SMB
+servers**, add a friendly server/share connection, and optionally enable
+authentication. A plain host uses SMB port 445; use `host:port` only for a
+custom port. Media mappings and configuration/diagnostic destinations each
+open their own saved-server chooser and folder browser. The normal UI does not
+require users to construct SMB URLs or edit credentials repeatedly. See
+`docs/SMB_SERVER_SETUP.md`.
+
 Exercise an explicit service without bypassing STV authority:
 
 ```powershell

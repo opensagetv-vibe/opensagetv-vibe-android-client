@@ -154,10 +154,10 @@ def main() -> int:
 
     adb_py = (WORKSPACE / "mcp/src/sagetv_dev_mcp/adb.py").read_text(errors="ignore")
     install_block = adb_py.split("def install_dev_apk", 1)[-1].split("\n    def ", 1)[0]
-    if '["uninstall", self.dev_package]' not in install_block:
-        fail("Dev APK installer does not uninstall the Dev package before install")
-    if '["install", "-r", str(apk)]' in install_block:
-        fail("Dev APK installer still uses replacement install instead of clean install")
+    if '["install", "-r", str(apk)]' not in install_block:
+        fail("Dev APK installer does not preserve settings during ordinary updates")
+    if "if clean:" not in install_block or '["uninstall", self.dev_package]' not in install_block:
+        fail("Dev APK installer lacks an explicit clean-install reset path")
 
     # Keep the shared SageTV player lifecycle frozen while allowing backend-specific
     # codec selector/refactor work. Both GDX and OpenGL renderers must route through
@@ -542,7 +542,7 @@ def main() -> int:
     print("PASS: android-tv explicitly references android-shared drawables through the shared R class")
     print("PASS: original generated/persisted SageTV client ID behavior configured; CLI override supported")
     print("PASS: fresh Dev installs default to dynamic streaming mode")
-    print("PASS: Dev APK install is clean uninstall-then-install")
+    print("PASS: Dev APK updates preserve settings; clean reset is explicit")
     print("PASS: clean deterministic Dev APK build configured")
     print("PASS: legacy Exo remains the default known-good playback backend")
     print("PASS: local SLF4J exception logging retained")

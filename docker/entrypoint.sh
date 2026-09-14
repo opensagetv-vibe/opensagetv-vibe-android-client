@@ -80,7 +80,7 @@ Commands:
   test                   Run scaffold unit/static tests
   preflight              Verify toolchain/workspace/config/Fire TV connectivity
   connect                Connect configured Fire TV through container ADB
-  install [apk]          Safely verify and install Dev APK only
+  install [apk]          Safely verify/update Dev APK; --clean explicitly resets data
   launch                 Launch the Vibe client APK
   stop|uninstall         Control isolated Dev app only
   device-info            Print Fire TV identity/build information

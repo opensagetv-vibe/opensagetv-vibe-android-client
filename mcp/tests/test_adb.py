@@ -229,7 +229,7 @@ exit 2
         self.assertFalse(result["stopped"]["running"])
         self.assertTrue(result["readyToLaunch"])
 
-    def test_install_dev_apk_uninstalls_before_clean_install(self):
+    def test_install_dev_apk_preserves_settings_by_default(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with tempfile.TemporaryDirectory() as td:
             apk = Path(td) / "dev.apk"
@@ -239,8 +239,6 @@ exit 2
             def fake_run(args, **kwargs):
                 args = list(args)
                 calls.append(args)
-                if args[0] == "uninstall":
-                    return subprocess.CompletedProcess(args, 0, stdout="Success\n", stderr="")
                 if args[0] == "install":
                     return subprocess.CompletedProcess(args, 0, stdout="Success\n", stderr="")
                 raise AssertionError(args)
@@ -249,11 +247,27 @@ exit 2
                  patch.object(c, "run", side_effect=fake_run):
                 result = c.install_dev_apk(apk)
 
+            self.assertEqual(calls, [["install", "-r", str(apk)]])
+            self.assertIn("settings preserved", result)
+
+    def test_install_dev_apk_clean_is_explicit(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with tempfile.TemporaryDirectory() as td:
+            apk = Path(td) / "dev.apk"
+            apk.write_bytes(b"apk")
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(list(args))
+                return subprocess.CompletedProcess(args, 0, stdout="Success\n", stderr="")
+
+            with patch.object(c, "detect_apk_package", return_value="opensagetv.vibe.miniclient.debug"), \
+                 patch.object(c, "run", side_effect=fake_run):
+                result = c.install_dev_apk(apk, clean=True)
+
             self.assertEqual(calls[0], ["uninstall", "opensagetv.vibe.miniclient.debug"])
             self.assertEqual(calls[1], ["install", str(apk)])
-            self.assertNotIn("-r", calls[1])
             self.assertIn("uninstall: Success", result)
-            self.assertIn("install: Success", result)
 
     def test_client_id_debug_controls_use_explicit_receiver_ops(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")

@@ -102,6 +102,7 @@ def retainedNonCastVersions = [
 ]
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
 
     constraints {
         retainedNonCastVersions.each { coordinate, version ->

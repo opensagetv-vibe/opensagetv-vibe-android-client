@@ -1,6 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <PreferenceCategory android:title="SMB Direct playback">
+    <PreferenceCategory android:title="SMB servers">
+        <Preference
+            android:key="smb_servers/manage"
+            android:title="Manage SMB servers"
+            android:summary="Add, edit, test, or remove reusable SMB server/share connections" />
+        <ListPreference
+            android:key="smb_servers/selected"
+            android:title="SMB server / share to edit"
+            android:summary="Create or edit reusable servers; each folder browser asks which server to use" />
+        <EditTextPreference
+            android:key="smb_servers/edit/name"
+            android:title="Server name"
+            android:summary="Friendly name, for example Living room NAS"
+            android:inputType="textCapWords|textNoSuggestions" />
+        <EditTextPreference
+            android:key="smb_servers/edit/host"
+            android:title="Hostname or IP address"
+            android:summary="Server only; do not enter smb:// or a folder"
+            android:inputType="textNoSuggestions" />
+        <EditTextPreference
+            android:key="smb_servers/edit/share"
+            android:title="Share name"
+            android:summary="One SMB share, for example sagemedia"
+            android:inputType="textNoSuggestions" />
+        <EditTextPreference
+            android:key="smb_servers/edit/port"
+            android:defaultValue="445"
+            android:title="SMB port"
+            android:summary="Default is 445"
+            android:inputType="number" />
+        <ListPreference
+            android:key="smb_servers/edit/auth/mode"
+            android:defaultValue="anonymous"
+            android:title="Authentication"
+            android:entries="@array/entries_smb_auth_mode"
+            android:entryValues="@array/entryvalues_smb_auth_mode" />
+        <EditTextPreference
+            android:key="smb_servers/edit/username"
+            android:title="Username"
+            android:summary="Used only for Credentials authentication"
+            android:inputType="textNoSuggestions" />
+        <EditTextPreference
+            android:key="smb_servers/edit/password"
+            android:title="Password"
+            android:summary="Stored only on this Android device"
+            android:inputType="textPassword" />
+        <EditTextPreference
+            android:key="smb_servers/edit/domain"
+            android:title="Domain"
+            android:summary="Optional workgroup or domain"
+            android:inputType="textCapCharacters|textNoSuggestions" />
+        <Preference
+            android:key="smb_servers/save"
+            android:title="Save server"
+            android:summary="Create a new server or update the selected server" />
+        <Preference
+            android:key="smb_servers/test"
+            android:title="Test selected server"
+            android:summary="Authenticate and list the root of the configured share" />
+        <Preference
+            android:key="smb_servers/delete"
+            android:title="Delete selected server"
+            android:summary="Folder selections using it keep their current compatibility URL" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Media folder">
+        <EditTextPreference
+            android:key="smb_direct/source_prefix"
+            android:title="SageTV path prefix"
+            android:summary="Server path that maps to the folder, for example D:\Media\"
+            android:inputType="textNoSuggestions" />
+        <Preference
+            android:key="smb_direct/browse"
+            android:title="Media path mappings"
+            android:summary="Add, change, test, or remove SageTV-to-SMB folder mappings" />
         <EditTextPreference
             android:key="smb_direct/mappings"
             android:title="@string/smb_mappings_title"
@@ -33,7 +107,11 @@
             android:summary="Read-only test of every configured SMB Direct mapping" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="Configuration share">
+    <PreferenceCategory android:title="Configuration folder">
+        <Preference
+            android:key="smb_profiles/browse"
+            android:title="Configuration folder"
+            android:summary="Browse, change, or test the configuration folder" />
         <EditTextPreference
             android:key="smb_profiles/directory"
             android:defaultValue=""
@@ -58,7 +136,7 @@
             android:summary="Write, hash-check, and immediately remove a unique tiny test file" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="Diagnostics share">
+    <PreferenceCategory android:title="Diagnostics folder">
         <ListPreference
             android:key="smb_diagnostics/mode"
             android:defaultValue="off"
@@ -71,6 +149,10 @@
             android:defaultValue=""
             android:title="Diagnostics SMB directory"
             android:summary="Independent SMB2/SMB3 destination, for example smb://nas/support/vibe/" />
+        <Preference
+            android:key="smb_diagnostics/browse"
+            android:title="Diagnostics folder"
+            android:summary="Browse, change, or test the diagnostics folder" />
         <ListPreference
             android:key="smb_diagnostics/auth/mode"
             android:defaultValue="anonymous"

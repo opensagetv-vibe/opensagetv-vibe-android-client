@@ -163,7 +163,9 @@ public final class MiniClientProfile
                 || lower.contains("token")
                 || "smb_direct/username".equals(lower)
                 || "smb_direct/domain".equals(lower)
-                || lower.startsWith("smb_profiles/auth/");
+                || lower.startsWith("smb_profiles/auth/")
+                || lower.startsWith("smb_diagnostics/auth/")
+                || lower.startsWith("smb_servers/");
     }
 
     public static String fileName(String name)

@@ -23,6 +23,8 @@ def main() -> int:
     sub.add_parser("connect")
     p_install = sub.add_parser("install")
     p_install.add_argument("apk", nargs="?", default="")
+    p_install.add_argument("--clean", action="store_true",
+                           help="reset the Dev app before installing; ordinary installs preserve settings")
     sub.add_parser("launch")
     sub.add_parser("stop")
     sub.add_parser("uninstall")
@@ -48,7 +50,7 @@ def main() -> int:
         apk = (Path(args.apk).expanduser().resolve() if args.apk else cfg.artifact_dir / "OpenSageTV-Vibe-Android-Client-debug.apk")
         detected = adb.detect_apk_package(apk)
         print(f"Verified APK package: {detected}")
-        print(adb.install_dev_apk(apk))
+        print(adb.install_dev_apk(apk, clean=args.clean))
     elif args.command == "launch":
         print(adb.launch())
     elif args.command == "stop":

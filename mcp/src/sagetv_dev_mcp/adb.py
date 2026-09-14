@@ -1336,15 +1336,20 @@ class AdbClient:
                     return m.group(1)
         raise RuntimeError("Cannot verify APK package. Configure SAGETV_AAPT to an Android SDK aapt executable; unverified APK installs are intentionally refused.")
 
-    def install_dev_apk(self, apk: Path) -> str:
+    def install_dev_apk(self, apk: Path, *, clean: bool = False) -> str:
         package = self.detect_apk_package(apk)
         self._ensure_dev_package(package)
 
-        # Always perform a clean Dev-app install. This intentionally clears the
-        # Dev package data so each test run starts from a known APK state. The
-        # Dev client ID is compiled in and therefore remains stable for SageTV.
-        uninstall = self.run(["uninstall", self.dev_package], timeout=60, check=False)
-        uninstall_text = (uninstall.stdout + uninstall.stderr).strip()
-        install = self.run(["install", str(apk)], timeout=180)
+        # Ordinary development updates must preserve commissioned servers,
+        # per-device identity and player/SMB settings. A clean install remains
+        # available only when the caller explicitly requests a reset.
+        uninstall_text = ""
+        if clean:
+            uninstall = self.run(["uninstall", self.dev_package], timeout=60, check=False)
+            uninstall_text = (uninstall.stdout + uninstall.stderr).strip()
+        install_args = ["install", str(apk)] if clean else ["install", "-r", str(apk)]
+        install = self.run(install_args, timeout=180)
         install_text = install.stdout.strip()
-        return f"uninstall: {uninstall_text or 'not installed'}\ninstall: {install_text}"
+        if clean:
+            return f"uninstall: {uninstall_text or 'not installed'}\ninstall: {install_text}"
+        return f"update (settings preserved): {install_text}"
