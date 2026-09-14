@@ -28,8 +28,17 @@ APK update all passed. The final primary gate passed 543 project/static tests,
 60-task Android build, strict APK inspection, and the complete 1,431-file
 manifest. The `0.5.92-DEV-DEBUG` APK SHA-256 is
 `dbceca2d0fd03e9f5eb5de81f55c4a1fd65144eb8c7eb5ad2fa28f2cb8872ba5`.
-GH-005 owns the remaining independent package verification, push, tag, public
-release, public hash, CI, and latest-APK Pages verification.
+GH-005 is complete. The fresh Git-less source extraction passed its 1,431-file
+manifest, 543 project/static tests with the expected Git-metadata-only skip,
+85 MCP/workflow tests, Core JUnit, full validation, and a clean 60-task Android
+build. Commits `d7dda33` and `8a3def2` were pushed to `main`; the public
+[`v0.5.92` release](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.92)
+contains the APK, source ZIP, combined review bundle, release manifest, and
+checksums with grouped bullet-point notes. The downloaded public APK matches
+SHA-256 `dbceca2d0fd03e9f5eb5de81f55c4a1fd65144eb8c7eb5ad2fa28f2cb8872ba5`.
+GitHub source contracts passed, the latest-release API returns `v0.5.92`, and
+the permanent Pages downloader returns HTTP 200 and queries that latest API.
+Phase #5 remains stopped by user direction.
 
 ## Release-candidate checkpoint (2026-09-13)
 

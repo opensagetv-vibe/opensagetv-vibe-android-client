@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **22** (2026-09-13)
+Checklist revision: **23** (2026-09-13)
 
 ## Stable checklist rules
 
@@ -317,7 +317,7 @@ explicitly approves publication after the active hardware phases.
   existing media, configuration, and diagnostic SMB implementations. Complete
   unit/static/build gates and physical non-Pro `.25` acceptance against the
   stock `.175` share. Phase #5 remains stopped by user direction.
-- [ ] **GH-005 - Publish v0.5.92 SMB release.** Synchronize release metadata,
+- [x] **GH-005 - Publish v0.5.92 SMB release.** Synchronize release metadata,
   changelog, handoff, task state, and complete manifest; run full and
   independent source/APK gates; create logical commits; push `main`; publish
   the versioned APK/source/checksum/manifest assets with bullet-formatted
@@ -379,6 +379,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 23 | 2026-09-13 | Completed GH-005: committed the SMB implementation and v0.5.92 release state as `d7dda33` and `8a3def2`, passed the primary and fresh Git-less source test/validation/clean-build gates, published five bullet-documented assets at `v0.5.92`, re-downloaded and verified the public APK SHA-256, confirmed successful GitHub source contracts, and verified the Pages latest-release endpoint. Phase #5 remains stopped. |
 | 22 | 2026-09-13 | Added GH-005 after explicit user approval to publish the completed SMB-001 work as GitHub source/APK release v0.5.92; phase #5 remains stopped. |
 | 21 | 2026-09-13 | Completed SMB-001: added reusable authenticated/anonymous server-share profiles, compact labeled server editor, separate server and folder chooser dialogs, folder and parent icons, root-parent return to server selection, mapping-local edit resolution, port-445 default/custom-port parsing, compatibility materialization for all SMB consumers, and settings-preserving APK updates. Static validation, 51 focused Linux tests, Core/Android JUnit, a 63-task Android build, physical `.25` browsing/Test/Apply against stock `.175`, and preserved-settings reinstall all passed. |
 | 20 | 2026-09-13 | Added SMB-001 at user direction after the published GitHub release while keeping phase #5 stopped: redesign normal SMB setup around reusable servers, separate mapping/folder dialogs, and compatibility-preserving derived values. |
