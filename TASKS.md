@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **17** (2026-09-13)
+Checklist revision: **22** (2026-09-13)
 
 ## Stable checklist rules
 
@@ -306,6 +306,24 @@ explicitly approves publication after the active hardware phases.
   directory so it is excluded from project source/releases and can be deleted
   after use.
 
+## 4A. Active post-release feature work
+
+- [x] **SMB-001 - Server-first SMB setup and folder browser.** Replace normal
+  raw URL/credential/mapping entry with reusable device-local SMB server/share
+  profiles. Provide separate server management, media-mapping, server-choice,
+  and remote-folder dialogs; persistent folder and parent icons; implicit port
+  445 with optional `host:port`; authentication-controlled credential fields;
+  per-profile playback credentials; and compatibility materialization for the
+  existing media, configuration, and diagnostic SMB implementations. Complete
+  unit/static/build gates and physical non-Pro `.25` acceptance against the
+  stock `.175` share. Phase #5 remains stopped by user direction.
+- [ ] **GH-005 - Publish v0.5.92 SMB release.** Synchronize release metadata,
+  changelog, handoff, task state, and complete manifest; run full and
+  independent source/APK gates; create logical commits; push `main`; publish
+  the versioned APK/source/checksum/manifest assets with bullet-formatted
+  notes; and verify public hashes, GitHub checks, and the Pages latest-APK
+  redirect. Do not start the stopped phase #5 matrix as part of this release.
+
 ## 5. Deferred cross-device matrix after GitHub release publication
 
 - [ ] **MATRIX-003 - Cross-device affected matrix.** Do not start until GH-001,
@@ -361,6 +379,9 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 22 | 2026-09-13 | Added GH-005 after explicit user approval to publish the completed SMB-001 work as GitHub source/APK release v0.5.92; phase #5 remains stopped. |
+| 21 | 2026-09-13 | Completed SMB-001: added reusable authenticated/anonymous server-share profiles, compact labeled server editor, separate server and folder chooser dialogs, folder and parent icons, root-parent return to server selection, mapping-local edit resolution, port-445 default/custom-port parsing, compatibility materialization for all SMB consumers, and settings-preserving APK updates. Static validation, 51 focused Linux tests, Core/Android JUnit, a 63-task Android build, physical `.25` browsing/Test/Apply against stock `.175`, and preserved-settings reinstall all passed. |
+| 20 | 2026-09-13 | Added SMB-001 at user direction after the published GitHub release while keeping phase #5 stopped: redesign normal SMB setup around reusable servers, separate mapping/folder dialogs, and compatibility-preserving derived values. |
 | 19 | 2026-09-13 | Completed GH-004: created the excluded temporary ready-to-paste forum announcement under workspace `artifacts/temp`, directing playback reports to the GitHub issue form and documenting Test Current Video plus no-email SMB diagnostic export. All four tightly cropped generated-fixture screenshot URLs returned HTTP 200. Also published a separate tested New feature request form and provisioned the playback labels referenced by the existing issue form. |
 | 18 | 2026-09-13 | Completed GH-003: published three logical commits through `71401a4`, observed successful repository source-contract, build, status, and Pages checks, created the public `v0.5.91` release with bullet-formatted notes and five APK/source/hash/manifest assets, downloaded and re-hashed the public APK, and verified that the Pages endpoint returns HTTP 200 and resolves `v0.5.91`. |
 | 17 | 2026-09-13 | Completed GH-002: the primary tree passed full validation, a clean 60-task APK build, strict APK inspection, and handoff/GitHub bundle creation. A fresh Windows-extracted, Git-less source archive then passed its 1,423-file manifest, 537 scaffold/static tests (one Git-metadata-only skip), 84 MCP tests, Core JUnit, full validation, and an independent clean 60-task APK build. The gate also fixed parent-Git index inheritance in extracted manifest checks. |

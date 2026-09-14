@@ -1,5 +1,36 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.92 SMB release checkpoint (2026-09-13)
+
+The completed SMB-001 implementation replaces normal raw URL and repeated
+credential entry with reusable device-local SMB server/share profiles. Media
+mapping, configuration-profile, and diagnostic destinations each use a saved
+server chooser and read-only remote folder browser. The media editor keeps the
+typed SageTV path, selected server, selected folder, Test, and Apply controls
+together; editing resolves its own mapping target rather than inheriting the
+last mapping. Folder rows have real folder icons and a persistent `..` entry;
+at share root, `..` returns to the separate server chooser.
+
+Server endpoints default to SMB port 445 and accept an explicit `host:port`.
+Anonymous and credential authentication remain per profile; username,
+password, and domain controls are enabled only when authentication is selected.
+The UI materializes the established internal media, configuration, and
+diagnostic settings so existing SMB consumers retain their behavior. Normal
+guarded APK installation now uses an in-place update and preserves commissioned
+servers, client identity, player preferences, and SMB configuration;
+`install-clean` is the explicit destructive reset.
+
+Physical acceptance passed on the non-Pro Fire TV `.25` against the stock
+`.175` `sagemedia` share: server selection, root/nested browsing, parent
+navigation, selected-folder Test, Apply, mapping reopen, and settings-preserving
+APK update all passed. The final primary gate passed 543 project/static tests,
+85 MCP/workflow tests, Core and Android JUnit, the full validator, a clean
+60-task Android build, strict APK inspection, and the complete 1,431-file
+manifest. The `0.5.92-DEV-DEBUG` APK SHA-256 is
+`dbceca2d0fd03e9f5eb5de81f55c4a1fd65144eb8c7eb5ad2fa28f2cb8872ba5`.
+GH-005 owns the remaining independent package verification, push, tag, public
+release, public hash, CI, and latest-APK Pages verification.
+
 ## Release-candidate checkpoint (2026-09-13)
 
 ONN `MATRIX-002` is complete against stock SageTV `.175`. Applicable Media3,

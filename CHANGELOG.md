@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## v0.5.92 - 2026-09-13
+
+- Changed the normal verified development APK installer to use an in-place
+  update that preserves commissioned servers, device identity, player options,
+  and SMB settings. A destructive reset now requires the explicitly named
+  `install-clean` command.
+
+- Redesigned normal SMB setup around reusable device-local server/share
+  profiles. Server management and remote folder browsing use separate
+  TV-friendly dialogs, while each media mapping editor keeps its typed SageTV
+  folder, selected SMB server, browsed SMB folder, Test, and Apply actions
+  together. Folder rows use real
+  icons and a persistent `..` parent entry; server addresses default to port
+  445 and accept an optional `host:port`; and a Use authentication checkbox
+  controls username, password, and domain fields. Raw URLs, credential copies,
+  and `source => smb://...` mappings remain internal compatibility values for
+  the existing playback, configuration-profile, and diagnostic exporters.
+
+- Verified the release candidate with 543 project/static tests, 85 MCP and
+  workflow tests, Core and Android JUnit, the full project validator, a clean
+  60-task Android build, strict APK inspection, and the complete 1,431-file
+  source manifest. The development APK identifies as `0.5.92-DEV-DEBUG` and
+  preserves the established isolated Vibe debug package and signing identity.
+
+## v0.5.91 - 2026-09-13
+
 - Completed the ONN v1 native-hardware release matrix against the unmodified
   SageTV server. Media3, legacy ExoPlayer, IJK, and both GSY delegates passed
   applicable MPEG-2/AC-3 startup, audio, seek, pause/resume, STOP, and recovery
@@ -235,7 +261,7 @@
   GitHub Pages is enabled for `main:/docs`; the public HTTPS page built
   successfully, returned HTTP 200, and resolved the current `v0.5.90` APK.
 
-## v0.5.91 - 2026-09-09
+### Directed-broadcast discovery update (2026-09-09)
 
 - Made SageTV server auto-discovery reliable on networks where Android/Fire OS
   does not route the IPv4 limited broadcast. Discovery now retains the stock
