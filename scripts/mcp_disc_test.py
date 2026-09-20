@@ -196,6 +196,7 @@ def compact_state(state: dict) -> dict:
         "dvdHighlightVisible", "dvdHighlightX1", "dvdHighlightY1",
         "dvdHighlightX2", "dvdHighlightY2", "dvdHighlightPaletteWord",
         "discPlaybackPolicy", "discCompatibilityFallback",
+        "discMimTransport",
         "discOldServerNativeFallback", "discMimRuntimeFallback",
         "discCompatibilityReason",
     )
@@ -678,13 +679,20 @@ def main() -> int:
                 require(not str(state.get("playerError", "")).strip(),
                         f"DVD player error: {state.get('playerError')}")
                 if args.player in ("media3", "exoplayer"):
-                    require(str(state.get("health_videoMime", "")).lower() == "video/mpeg2",
-                            f"DVD did not resolve an MPEG-2 video track: {state}")
-                    require(state.get("health_mpeg2SequenceExtensionSeen") in (True, "true"),
-                            f"DVD MPEG-2 sequence extension was not observed: {state}")
-                    require(str(state.get("health_mpeg2InterlaceObservation", "unknown"))
-                            != "unknown",
-                            f"DVD MPEG-2 interlace state remained unknown: {state}")
+                    mim_transport = state.get("discMimTransport") in (True, "true")
+                    if mim_transport:
+                        require(str(state.get("health_videoMime", "")).lower() == "video/avc",
+                                f"DVD MIM did not resolve the negotiated AVC track: {state}")
+                        require(state.get("discMimRuntimeFallback") not in (True, "true"),
+                                f"DVD MIM unexpectedly fell back to Native: {state}")
+                    else:
+                        require(str(state.get("health_videoMime", "")).lower() == "video/mpeg2",
+                                f"DVD did not resolve an MPEG-2 video track: {state}")
+                        require(state.get("health_mpeg2SequenceExtensionSeen") in (True, "true"),
+                                f"DVD MPEG-2 sequence extension was not observed: {state}")
+                        require(str(state.get("health_mpeg2InterlaceObservation", "unknown"))
+                                != "unknown",
+                                f"DVD MPEG-2 interlace state remained unknown: {state}")
                 if args.expect_audio_selector is not None:
                     require(int(state.get("dvdRequestedAudioStream", -1))
                             == args.expect_audio_selector,

@@ -302,6 +302,10 @@ def main() -> int:
             # the explicit local DVB mode or the original STV Subtitles PID
             # command. Video/audio transport and lifecycle remain unchanged.
             "6ac992f59c957abb50aba034ceeea9aec808c27a9f2127ea6689e7f6aacbfe68",
+            # Reviewed read-only DVD MIM diagnostics getter. It exposes the
+            # transport flag already selected from OPENURL and changes no
+            # playback, datasource, scheduling, or decoder behavior.
+            "44e6f299820e26debf4e892eb1b99ad93f9a1aefb4a797901a16ccd4c2765bd3",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

@@ -1,12 +1,19 @@
 # Server-controlled DVD and Blu-ray playback proposal
 
-Status: active. The Native Media3/hardware DVD path is physically commissioned;
-Hybrid/MIM policies, old-component fallback, non-Media3 commissioning, and
-physical Blu-ray remain incomplete. Blu-ray main-title support remains the existing SageTV path;
+Status: active. Native Media3/hardware DVD and explicit MIM main-feature
+playback are physically commissioned. Old-component fallback and non-Media3
+Native commissioning are complete; physical Blu-ray remains incomplete.
+Blu-ray main-title support remains the existing SageTV path;
 physical BDMV commissioning is SKIPPED because the supplied private share has
 no lawful BDMV/ISO fixture. BD-J and full HDMV menu execution remain deferred.
 
 ## DVD implementation
+
+- Explicit MIM main-feature playback uses updated Vibe Core's DVD transform and
+  SageTV's stock `FFMPEGTranscoder.getTranscoderPath()` precedence to reach the
+  optional FFmpeg plugin bridge. The plugin does not replace stock `ffmpeg`.
+  This DVD integration needs updated Vibe Core; ordinary recorded/live plugin
+  playback remains compatible with an unmodified stock `Sage.jar`.
 
 - Supporting Android clients advertise `DVD_REMOTE_NAV=TRUE`; updated Core
   selects `MiniDVDPlayer` only for that negotiated remote client. Windows local

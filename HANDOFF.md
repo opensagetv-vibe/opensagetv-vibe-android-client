@@ -1,5 +1,29 @@
 # OpenSageTV Vibe Android Client handoff
 
+## DVD MIM plugin integration checkpoint (2026-09-20)
+
+Explicit `mim_main_feature` now passes on non-Pro Fire TV `.25` against
+isolated Vibe server `.232`. Updated Core resolves the DVD transcoder through
+SageTV's stock `FFMPEGTranscoder.getTranscoderPath()` precedence, so the
+installed FFmpeg plugin's `SageTVTranscoder` bridge receives the job without
+replacing stock `ffmpeg`. MIM reported VAAPI `h264_vaapi`; Android reported
+`video/avc` through `OMX.MTK.VIDEO.DECODER.AVC`, 92,659,936 pushed bytes,
+1.002x cadence, 675 video outputs, 704 audio outputs, zero dropped video
+frames, and no runtime/native fallback. Pause/play, FF, REW, chapter-up, STOP,
+and teardown all recovered.
+
+Debug state now reports `discMimTransport`, Playback Stats labels the transport
+`DVD Fixed / MIM`, and `mcp_disc_test.py` applies the correct transport-specific
+gate: hardware AVC/no runtime fallback for MIM versus MPEG-2 sequence and
+interlace evidence for Native. Final evidence is
+`artifacts/firetv/ffmpeg-plugin-dvd-mim-main-feature-20260920.json`; independent
+generated-content HDMI evidence is
+`artifacts/firetv/ffmpeg-plugin-dvd-mim-hdmi-20260920.mp4`.
+
+Stock `.175` was not changed. Ordinary Fixed/MIM plugin playback remains
+compatible with stock SageTV, but DVD MIM needs the optional updated Vibe Core
+because unmodified stock Core does not invoke the plugin for DVD transport.
+
 ## v0.5.93 release checkpoint (2026-09-19)
 
 The accumulated stock-server playback, captions, unified graphics, growing-

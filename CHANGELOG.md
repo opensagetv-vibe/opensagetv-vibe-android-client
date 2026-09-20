@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Commissioned explicit DVD MIM main-feature playback on isolated Vibe server
+  `.232` with the OpenSageTV Vibe FFmpeg Plugin and updated Core transcoder
+  resolver. The generated authored DVD produced VAAPI `h264_vaapi` on the
+  server and hardware AVC decoding on non-Pro Fire TV `.25`, measured 1.002x
+  real-time cadence with zero dropped frames, and recovered after pause/play,
+  FF, REW, chapter-up, STOP, and teardown. Stock `.175` remained untouched;
+  ordinary plugin playback remains stock-server compatible, but DVD MIM needs
+  the optional updated Vibe Core transform path.
+- Made DVD diagnostics and the DISC harness distinguish a truly negotiated MIM
+  transport from Native Push. Debug/MCP state now exposes
+  `discMimTransport`, the overlay labels it `DVD Fixed / MIM`, and the physical
+  gate requires hardware AVC plus no runtime fallback for MIM while retaining
+  MPEG-2 sequence/interlace checks for Native. This prevents a successful MIM
+  session from being falsely reported as old-server Native fallback.
+
 ## v0.5.93 - 2026-09-19
 
 - Consolidated the playback long-press controls into adjacent **Video**,

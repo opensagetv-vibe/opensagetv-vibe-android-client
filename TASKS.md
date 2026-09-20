@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **58** (2026-09-19)
+Checklist revision: **59** (2026-09-20)
 
 ## Stable checklist rules
 
@@ -70,6 +70,12 @@ separately and must not block available work.
   Discover enabled tests by mode rather than hard-coded fixture IDs; record
   server stock/Vibe selection, Web-control capability, expected extensions,
   device/server STV, and adaptive storage defaults.
+- [x] **FOUND-012 - DVD MIM plugin integration.** Route the updated Core DVD
+  transform through SageTV's stock transcoder-path precedence, expose the real
+  negotiated MIM transport in Android diagnostics, apply transport-specific
+  DISC gates, and physically prove the generated authored DVD through the
+  optional FFmpeg plugin on isolated `.232` / non-Pro `.25` without replacing
+  stock `ffmpeg` or modifying stock `.175`.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
 
@@ -701,6 +707,7 @@ explicitly approves publication after the active hardware phases.
 | 38 | 2026-09-19 | Completed CC-006. Explicit local CC1/CC2/DVB now has exclusive renderer ownership and sends a one-time legacy CC reset, preventing simultaneous STV Teletext and Android DVB captions. Stock `.175` / non-Pro `.25` Media3 Pull selected DVB track 2 and rendered one caption surface. APK SHA-256 `b8dc2dd5a16e900dba06086b9b5e221c6fe8ebe83323bcadda1b8b12241249f4`. |
 | 37 | 2026-09-19 | Completed CC-005. Broadcast CC and SRT/DVD subtitle selection are now independent; Auto ignores synthetic CEA tracks until real CEA samples are observed, allowing stock UK DVB/Teletext streams to resolve correctly. Full 552 Python, 86 MCP, 238 Core, static validation, clean build, settings-preserving install, and stock `.175`/non-Pro `.25` Media3 Pull hardware caption-cycle gate passed. APK SHA-256 `c51ce222718d4f44694c05db3ac81c5416c8d3c1666065e32ff4a3445533b6a5`. |
 | 36 | 2026-09-19 | Added CC-005: separate STV broadcast CC1/CC2 resolution from the ordinary SRT/PGS/DVD subtitle preference, remove subtitle-language fallback from CC slots, and clarify the long-press/settings labels. Physical stock `.175` / non-Pro `.25` validation remains pending. |
+| 59 | 2026-09-20 | Completed FOUND-012: fixed updated Core DVD transcoder resolution to honor the stock `SageTVTranscoder`-first path, made Android diagnostics/harness distinguish real MIM from Native fallback, and passed the generated authored DVD on `.232` / `.25` through VAAPI `h264_vaapi` and hardware AVC at 1.002x with zero drops plus control/STOP recovery. Stock `.175` and stock `ffmpeg` remained untouched. |
 | 35 | 2026-09-16 | Completed UNIFIED-001: regenerated the 1,449-file manifest, rebuilt/installed APK `0f827b7b3955594e67fef4a763b5644c8fca5a555bfc81b63262b7bfe2769489`, passed 552 static tests, 86 MCP tests, Core/Android tests, and physical unified-graphics OFF/ON stock `.175` sessions on non-Pro `.25`; fixed subsequent format-256 GDX texture rows and documented the HD300 video-plane fallback. |
 | 34 | 2026-09-16 | Added UNIFIED-001: opt-in stock HD200/HD300 unified graphics capability, format-256 Y/UV image bridge, safe video-plane fallback, Playback Settings switch, and MCP A/B control. |
 | 33 | 2026-09-16 | Fixed CC-004 startup timing: Media3 and legacy Exo reapply the persisted caption slot when asynchronous subtitle tracks are discovered, so DVB captions activate automatically on a new playback session without reselecting the menu item. |

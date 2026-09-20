@@ -193,10 +193,14 @@ final class ActivePlayerStatsSnapshot
                 "getMpeg2InterlaceObservationForDebug", "");
 
         out.dvd = media.isDvdSessionPending();
+        boolean dvdMimTransport = effective instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl
+                && ((opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl<?, ?>) effective)
+                        .isDvdMimTransportForDebug();
         String configured = client == null ? "unknown" : clean(client.properties().getStreamingMode());
         if (out.dvd)
             out.transport = media.isDvdMimRuntimeFallback()
-                    ? "DVD Native (MIM fallback)" : "DVD Native Push";
+                    ? "DVD Native (MIM fallback)"
+                    : dvdMimTransport ? "DVD Fixed / MIM" : "DVD Native Push";
         else if (out.smb)
             out.transport = "SMB Direct";
         else if (out.push)

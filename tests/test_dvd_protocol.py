@@ -228,6 +228,7 @@ class DvdProtocolTests(unittest.TestCase):
             "discSkipMenus",
             "discSkipPreviews",
             "discCompatibilityFallback",
+            "discMimTransport",
             "discOldServerNativeFallback",
             "discMimRuntimeFallback",
             "discCompatibilityReason",
@@ -241,6 +242,8 @@ class DvdProtocolTests(unittest.TestCase):
             self.assertIn(option, harness)
         self.assertIn('"discOldServerNativeFallback"', harness)
         self.assertIn('"discMimRuntimeFallback"', harness)
+        self.assertIn('"discMimTransport"', harness)
+        self.assertIn('"video/avc"', harness)
         self.assertIn('"discCompatibilityReason"', harness)
 
     def test_complete_server_dvd_command_family_is_bounded(self):

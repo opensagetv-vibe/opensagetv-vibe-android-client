@@ -205,15 +205,27 @@ final class DebugStateProvider
                     .append(mediaCmd.getDvdLastSubtitleStreamPosition());
             out.append(";dvdFormatCount=").append(mediaCmd.getDvdFormatCount());
             out.append(";dvdTransientEosCount=").append(mediaCmd.getDvdTransientEosCount());
+            MiniPlayerPlugin transportPlayer = player;
+            if (transportPlayer instanceof GSYMediaPlayerImpl)
+            {
+                MiniPlayerPlugin delegate =
+                        ((GSYMediaPlayerImpl) transportPlayer).getDelegateForDebug();
+                if (delegate != null)
+                    transportPlayer = delegate;
+            }
+            boolean mimTransport = transportPlayer instanceof BaseMediaPlayerImpl
+                    && ((BaseMediaPlayerImpl<?, ?>) transportPlayer)
+                            .isDvdMimTransportForDebug();
             DiscPlaybackPolicy.Resolution disc = DiscPlaybackPolicy.resolve(
                     prefs.getString(PrefStore.Keys.disc_playback_policy, "auto"),
                     prefs.getBoolean(PrefStore.Keys.disc_compatibility_fallback, true),
-                    false);
+                    mimTransport);
             boolean oldServerNativeFallback = disc.effective
                     == DiscPlaybackPolicy.Effective.UNAVAILABLE
                     && (mediaCmd.getDvdPushMediaCount() > 0
                             || mediaCmd.getDvdNewCellCount() > 0);
             boolean mimRuntimeFallback = mediaCmd.isDvdMimRuntimeFallback();
+            out.append(";discMimTransport=").append(mimTransport);
             out.append(";discOldServerNativeFallback=").append(oldServerNativeFallback);
             out.append(";discMimRuntimeFallback=").append(mimRuntimeFallback);
             out.append(";discCompatibilityReason=").append(safe(

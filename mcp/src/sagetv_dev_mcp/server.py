@@ -202,7 +202,7 @@ def _compact_state(state: dict) -> dict:
         "dvdStcCount", "dvdStreamCount", "dvdLastStreamType",
         "dvdLastStreamPosition", "dvdLastAudioStreamPosition",
         "dvdLastSubtitleStreamPosition", "dvdFormatCount", "dvdTransientEosCount",
-        "discOldServerNativeFallback", "discMimRuntimeFallback",
+        "discMimTransport", "discOldServerNativeFallback", "discMimRuntimeFallback",
         "discCompatibilityReason",
         "dvdRequestedAudioStream", "dvdAppliedAudioStream",
         "dvdSelectedAudioFormatId", "dvdAvailableAudioFormatIds",

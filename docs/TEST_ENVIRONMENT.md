@@ -59,6 +59,14 @@ stock SageTV Web Interface used for MediaFile lookup/Watch control. A
 `stock_web` selection requires it. A modified server using
 `vibe_exact_path` can be tested with it false.
 
+An isolated container-backed server may also define `unraid_host`,
+`unraid_ssh_port`, `unraid_ssh_username`, `unraid_ssh_password`,
+`unraid_container_name`, and `unraid_appdata_path`. These values let local
+commissioning tools address the host that owns the selected SageTV server
+without confusing that host with the server's own MiniClient/Web address.
+Real credentials belong only in the ignored `firetv.toml`; tools must redact
+them from output and diagnostic bundles.
+
 When a fixture supplies a `server_path`, playback automation always tries that
 exact path before title lookup. If exact-path control is unavailable, it may
 fall back to an indexed MediaFile Watch and finally to the legacy STV Search
@@ -73,7 +81,8 @@ The schema records:
 
 - multiple ADB devices/clients with aliases, model/API notes, and test IDs;
 - multiple SageTV servers with aliases, MiniClient port, stock/Vibe status,
-  Web/Sagex endpoints, Web Remote context, and local credentials;
+  Web/Sagex endpoints, Web Remote context, optional Unraid host-management
+  details, and local credentials;
 - per-server SMB shares, credentials, configuration directory, and path maps;
 - multiple named media fixtures with one generic `path`, a `path_type`, a
   master `enabled` switch, and independently enabled test modes;

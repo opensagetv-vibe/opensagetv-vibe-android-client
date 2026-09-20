@@ -1394,6 +1394,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         return dvdSubpictureDecoder.isHighlightActive();
     }
 
+    /** True only when OPENURL selected the negotiated server MIM DVD transport. */
+    public boolean isDvdMimTransportForDebug()
+    {
+        return dvdMimTransport;
+    }
+
     @Override
     public void dvdSetStc(int stc)
     {

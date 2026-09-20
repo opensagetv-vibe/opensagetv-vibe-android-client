@@ -38,6 +38,14 @@ alias = "development"
 address = "192.0.2.20"
 miniclient_port = 31099
 label = "Vibe test server"
+# Optional host-management connection for container commissioning. Keep real
+# credentials only in the Git-ignored firetv.toml, never in this example.
+unraid_host = "192.0.2.10"
+unraid_ssh_port = 22
+unraid_ssh_username = ""
+unraid_ssh_password = ""
+unraid_container_name = "sagetv-vibe-server-u26-gpu-j11"
+unraid_appdata_path = "/mnt/user/appdata/sagetv-vibe-server-u26-gpu-j11"
 stock = false
 server_type = "vibe"
 # auto detects capabilities; vibe_exact_path requires the modified sage.jar event.

@@ -135,6 +135,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # was physically gated on stock .175/non-Pro .25 before the audio
         # output work and does not alter player audio/video transport.
         reviewed_explicit_dvb_caption_owner_hash = "6ac992f59c957abb50aba034ceeea9aec808c27a9f2127ea6689e7f6aacbfe68"
+        # Exposes the already-selected negotiated DVD MIM transport to bounded
+        # diagnostics. Playback, datasource ownership, and decoder behavior are
+        # unchanged; this is a read-only getter over the OPENURL-derived flag.
+        reviewed_dvd_mim_diagnostics_hash = "44e6f299820e26debf4e892eb1b99ad93f9a1aefb4a797901a16ccd4c2765bd3"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -160,6 +164,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_broadcast_cc_separation_hash,
             reviewed_broadcast_cc_evidence_fallback_hash,
             reviewed_explicit_dvb_caption_owner_hash,
+            reviewed_dvd_mim_diagnostics_hash,
         }, rel)
 
     def test_four_backends_have_stable_preference_values(self):
