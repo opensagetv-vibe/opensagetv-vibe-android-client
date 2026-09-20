@@ -31,6 +31,8 @@ import opensagetv.vibe.miniclient.android.video.exoplayer2.Exo2MediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.video.media3.Media3MediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.ui.keymaps.KeyMapProcessor;
 import opensagetv.vibe.miniclient.media.SubtitleTrack;
+import opensagetv.vibe.miniclient.media.CaptionSlotPolicy;
+import opensagetv.vibe.miniclient.media.TeletextSubtitleEngine;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.uibridge.RectangleF;
@@ -233,6 +235,25 @@ final class DebugStateProvider
         out.append(";mediaTimeMs=").append(sageTimelineMs);
         out.append(";sageTimelineMs=").append(sageTimelineMs);
         out.append(";playbackRate=").append(player.getPlaybackRate());
+        out.append(";audioPassthroughControlSupported=")
+                .append(player.supportsAudioPassthroughControl());
+        out.append(";audioPassthroughEnabled=")
+                .append(player.isAudioPassthroughEnabled());
+        out.append(";audioOutputSummary=").append(safe(player.getAudioOutputSummary()));
+        out.append(";audioOffsetSupported=").append(player.supportsAudioOffset());
+        out.append(";audioOffsetMs=").append(player.getAudioOffsetMillis());
+        out.append(";passthroughAudioOffsetSupported=")
+                .append(player.supportsPassthroughAudioOffset());
+        out.append(";passthroughAudioOffsetEnabled=")
+                .append(player.isPassthroughAudioOffsetEnabled());
+        out.append(";audioOffsetPath=").append(player.getAudioOffsetSummary());
+        Integer audioOffsetOverride = ActivePlayerSessionOverrides.getAudioOffsetMs();
+        Boolean audioPassthroughOverride =
+                ActivePlayerSessionOverrides.getAudioPassthroughEnabled();
+        out.append(";audioOffsetSessionOverrideMs=").append(audioOffsetOverride == null
+                ? "default" : audioOffsetOverride);
+        out.append(";audioPassthroughSessionOverride=").append(
+                audioPassthroughOverride == null ? "default" : audioPassthroughOverride);
         out.append(";textSubtitlePresentationSupported=")
                 .append(player.supportsTextSubtitlePresentation());
         out.append(";textSubtitleSafeAreaPercent=")
@@ -602,12 +623,28 @@ final class DebugStateProvider
                         .append(track.isSupported());
             }
             out.append(";subtitleTracks=").append(safe(compactTracks.toString()));
+            out.append(";teletextDecoder=").append(safe(
+                    TeletextSubtitleEngine.diagnostics()));
             MiniPlayerPlugin telemetryPlayer = player;
             if (player instanceof GSYMediaPlayerImpl)
             {
                 MiniPlayerPlugin delegate = ((GSYMediaPlayerImpl) player).getDelegateForDebug();
                 if (delegate != null)
                     telemetryPlayer = delegate;
+            }
+            if (telemetryPlayer instanceof BaseMediaPlayerImpl)
+            {
+                BaseMediaPlayerImpl base = (BaseMediaPlayerImpl) telemetryPlayer;
+                out.append(";teletextCueUpdateCount=")
+                        .append(base.getTeletextCueUpdateCountForDebug());
+                out.append(";currentTeletextCueText=")
+                        .append(safe(base.getCurrentTeletextCueTextForDebug()));
+                out.append(";teletextOverlayVisible=")
+                        .append(base.isTeletextOverlayVisibleForDebug());
+                out.append(";teletextClockDrainCount=")
+                        .append(base.getTeletextClockDrainCountForDebug());
+                out.append(";teletextClockLastMediaTimeMs=")
+                        .append(base.getTeletextClockLastMediaTimeMsForDebug());
             }
             if (telemetryPlayer instanceof Media3MediaPlayerImpl)
             {
@@ -689,6 +726,14 @@ final class DebugStateProvider
                 + ";preferredCaptionService=" + safe(prefs.getString(PrefStore.Keys.preferred_caption_service, "1"))
                 + ";legacyServerCaptionMode="
                 + safe(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                + ";captionCc1Type=" + safe(captionSlotType(prefs.getString(
+                        PrefStore.Keys.caption_cc1_type, "auto")))
+                + ";captionCc1Language=" + safe(prefs.getString(
+                        PrefStore.Keys.caption_cc1_language, ""))
+                + ";captionCc2Type=" + safe(captionSlotType(prefs.getString(
+                        PrefStore.Keys.caption_cc2_type, "auto")))
+                + ";captionCc2Language=" + safe(prefs.getString(
+                        PrefStore.Keys.caption_cc2_language, ""))
                 + ";fixedEncodingPreference=" + safe(prefs.getFixedEncodingPreference())
                 + ";fixedEncodingFormat=" + safe(prefs.getFixedEncodingContainerFormat())
                 + ";fixedVideoBitrateKbps=" + prefs.getFixedEncodingVideoBitrateKBPS()
@@ -718,7 +763,17 @@ final class DebugStateProvider
                 + ";discMpeg2TimestampRepair="
                 + safe(prefs.getString(PrefStore.Keys.disc_mpeg2_timestamp_repair, "auto"))
                 + ";waitForPlaybackBeforeFirstOsd="
-                + prefs.getBoolean(PrefStore.Keys.wait_for_playback_before_first_osd, false);
+                + prefs.getBoolean(PrefStore.Keys.wait_for_playback_before_first_osd, false)
+                + ";unifiedGraphicsSurfaces="
+                + prefs.getBoolean(PrefStore.Keys.unified_graphics_surfaces, false)
+                + ";unifiedGraphicsAppliesNextConnection=true";
+    }
+
+    private static String captionSlotType(String value)
+    {
+        String normalized = CaptionSlotPolicy.normalizeType(value);
+        return CaptionSlotPolicy.TYPE_DVB.equals(normalized)
+                ? CaptionSlotPolicy.TYPE_AUTO : normalized;
     }
 
     private static MiniClient requireClient(Context context)

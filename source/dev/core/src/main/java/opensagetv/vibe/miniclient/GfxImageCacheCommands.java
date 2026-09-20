@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import opensagetv.vibe.miniclient.uibridge.UIRenderer;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 
 /** Owns image/cache protocol state and executes the image command family. */
@@ -40,11 +41,27 @@ final class GfxImageCacheCommands {
                     int imghandle = handles.next();
                     width = GFXCMD2.readInt(0, cmddata);
                     height = GFXCMD2.readInt(4, cmddata);
+                    int imageFormat = UnifiedGraphicsCapability.optionalImageFormat(
+                            cmddata, 8, len);
                     if (!client.getImageCache().canCache(width, height)) {
                         imghandle = 0;
+                    } else if (!renderer.supportsImageFormat(imageFormat)) {
+                        // SageTV may optimistically send the optional HD300
+                        // YUV image format after the UNIFIED handshake.  A
+                        // renderer that cannot compose it must fail this image
+                        // allocation only; returning zero keeps playback and
+                        // the rest of the UI on the ordinary path.
+                        log.warn("Unsupported GFX image format {} for {}x{}; using server fallback",
+                                imageFormat, width, height);
+                        imghandle = 0;
                     } else {
-                        opensagetv.vibe.miniclient.uibridge.ImageHolder<?> img = loadImageWithRecovery(width, height);
-                        client.getImageCache().put(imghandle, img, width, height);
+                        opensagetv.vibe.miniclient.uibridge.ImageHolder<?> img =
+                                loadImageWithRecovery(width, height, imageFormat);
+                        if (img == null) {
+                            imghandle = 0;
+                        } else {
+                            client.getImageCache().put(imghandle, img, width, height);
+                        }
                     }
                     hasret[0] = 1;
                     return imghandle;
@@ -60,6 +77,14 @@ final class GfxImageCacheCommands {
                     int imghandle = GFXCMD2.readInt(0, cmddata);
                     width = GFXCMD2.readInt(4, cmddata);
                     height = GFXCMD2.readInt(8, cmddata);
+                    int imageFormat = UnifiedGraphicsCapability.optionalImageFormat(
+                            cmddata, 12, len);
+                    if (!renderer.supportsImageFormat(imageFormat)) {
+                        log.warn("Unsupported targeted GFX image format {} for {}x{}; using server fallback",
+                                imageFormat, width, height);
+                        hasret[0] = 0;
+                        break;
+                    }
                     if (!client.getImageCache().makeRoom(width, height))
                     {
                         log.error("Unable to make room for targeted image {} ({}x{})",
@@ -67,8 +92,10 @@ final class GfxImageCacheCommands {
                         hasret[0] = 0;
                         break;
                     }
-                    opensagetv.vibe.miniclient.uibridge.ImageHolder<?> img = loadImageWithRecovery(width, height);
-                    client.getImageCache().put(imghandle, img, width, height);
+                    opensagetv.vibe.miniclient.uibridge.ImageHolder<?> img =
+                            loadImageWithRecovery(width, height, imageFormat);
+                    if (img != null)
+                        client.getImageCache().put(imghandle, img, width, height);
                     client.getImageCache().registerImageAccess(imghandle);
                     hasret[0] = 0;
                 } else {
@@ -355,7 +382,7 @@ final class GfxImageCacheCommands {
     }
 
     private opensagetv.vibe.miniclient.uibridge.ImageHolder<?> loadImageWithRecovery(
-            final int width, final int height)
+            final int width, final int height, final int imageFormat)
     {
         return allocationRecovery.allocate(
                 new GfxImageAllocationRecovery.Allocation<opensagetv.vibe.miniclient.uibridge.ImageHolder<?>>()
@@ -363,7 +390,7 @@ final class GfxImageCacheCommands {
                     @Override
                     public opensagetv.vibe.miniclient.uibridge.ImageHolder<?> allocate()
                     {
-                        return renderer.loadImage(width, height);
+                        return renderer.loadImage(width, height, imageFormat);
                     }
                 },
                 new GfxImageAllocationRecovery.Evictor()

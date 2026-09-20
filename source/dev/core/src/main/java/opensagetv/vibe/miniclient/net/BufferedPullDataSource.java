@@ -2,6 +2,8 @@ package opensagetv.vibe.miniclient.net;
 
 import java.io.IOException;
 
+import opensagetv.vibe.miniclient.media.TeletextPesProbe;
+import opensagetv.vibe.miniclient.media.TeletextSubtitleEngine;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 
 /**
@@ -67,6 +69,9 @@ public class BufferedPullDataSource extends SimplePullDataSource {
                 throw new IOException("Invalid buffer fill request: len: " + len + "; total: " + total);
             }
         }
+        if (total > 0)
+            TeletextPesProbe.observe("pull", position, buffer, offset, total);
+            TeletextSubtitleEngine.observe("pull", position, buffer, offset, total);
         return total;
     }
 

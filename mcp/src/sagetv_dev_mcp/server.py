@@ -238,6 +238,10 @@ def _compact_state(state: dict) -> dict:
         "fastSwitchFallbackCount", "fastSwitchAwaitingFirstFrame",
         "fastSwitchLastReason", "fastSwitchTargetUrl",
         "subtitleTrackCount", "selectedSubtitleTrack", "selectedSubtitleTrackRaw", "subtitleTracks",
+        "teletextDecoder", "teletextCueUpdateCount",
+        "teletextClockDrainCount", "teletextClockLastMediaTimeMs",
+        "currentTeletextCueText",
+        "teletextOverlayVisible",
         "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "subtitleBitmapCueCount",
         "currentSubtitleCueCount", "lastSubtitleCueText", "currentSubtitleCueText",
         "subtitleOverlayAttached", "subtitleStateError",
@@ -1349,6 +1353,17 @@ def dev_set_datasource_capture(enabled: bool = True) -> dict:
     """Enable/disable a bounded raw Push-byte capture for the next playback."""
     return adb.set_datasource_capture(enabled)
 
+
+@mcp.tool()
+def dev_set_unified_graphics(enabled: bool = True) -> dict:
+    """Enable or disable the opt-in HD200/HD300 unified graphics capability.
+
+    The preference is applied on the next SageTV connection.  Disabled keeps
+    the existing Android negotiation; enabled advertises GFX_YUV_IMAGE_CACHE
+    as UNIFIED and enables the bounded Y/UV image bridge in the UI renderers.
+    """
+    return adb.set_unified_graphics(enabled)
+
 @mcp.tool()
 def dev_set_player_config(
     player: str = "",
@@ -1360,6 +1375,11 @@ def dev_set_player_config(
     preferred_subtitle_language: str = "",
     preferred_caption_standard: str = "",
     preferred_caption_service: int = 0,
+    legacy_server_caption_mode: str = "",
+    caption_cc1_type: str = "",
+    caption_cc1_language: str = "",
+    caption_cc2_type: str = "",
+    caption_cc2_language: str = "",
     fixed_encoding_preference: str = "",
     fixed_encoding_format: str = "",
     fixed_video_bitrate_kbps: int = 0,
@@ -1398,6 +1418,7 @@ def dev_set_player_config(
     disc_compatibility_fallback: bool | None = None,
     disc_mpeg2_timestamp_repair: str = "",
     wait_for_playback_before_first_osd: bool | None = None,
+    unified_graphics_surfaces: bool | None = None,
 ) -> dict:
     """Set all debug APK playback preferences for the next playback.
 
@@ -1406,8 +1427,10 @@ def dev_set_player_config(
     CEA-608/708 service selection apply on the next playback without changing
     SageTV STV caption Off/On authority. SMB credentials are accepted only by the Dev
     control path and are never returned by this tool.
-    Disc/DVD policy, menu/preview skipping, and compatibility fallback are also
-    configurable and are reported in every snapshot. The optional first-OSD
+    Disc/DVD policy, menu/preview skipping, compatibility fallback, and the
+    opt-in stock HD200/HD300 unified graphics capability are configurable and
+    are reported in every snapshot. The latter applies on the next connection;
+    the optional first-OSD
     switch waits for playback to advance before presenting the initial player OSD.
     Fixed encoding parameters may
     also be supplied: encoding preference needed/always,
@@ -1421,6 +1444,11 @@ def dev_set_player_config(
         preferred_subtitle_language=preferred_subtitle_language,
         preferred_caption_standard=preferred_caption_standard,
         preferred_caption_service=preferred_caption_service or "",
+        legacy_server_caption_mode=legacy_server_caption_mode,
+        caption_cc1_type=caption_cc1_type,
+        caption_cc1_language=caption_cc1_language,
+        caption_cc2_type=caption_cc2_type,
+        caption_cc2_language=caption_cc2_language,
         fixed_encoding_preference=fixed_encoding_preference,
         fixed_encoding_format=fixed_encoding_format,
         fixed_video_bitrate_kbps=fixed_video_bitrate_kbps or "",
@@ -1459,6 +1487,7 @@ def dev_set_player_config(
         disc_compatibility_fallback=disc_compatibility_fallback,
         disc_mpeg2_timestamp_repair=disc_mpeg2_timestamp_repair,
         wait_for_playback_before_first_osd=wait_for_playback_before_first_osd,
+        unified_graphics_surfaces=unified_graphics_surfaces,
     )
 
 @mcp.tool()
@@ -2448,6 +2477,16 @@ def dev_set_ime_suppression(enabled: bool) -> dict:
 def dev_player_control(action: str) -> dict:
     """Call the active Android MiniPlayerPlugin directly: play, pause, or stop."""
     return adb.player_control(action)
+
+
+@mcp.tool()
+def dev_set_active_audio(
+    output: str | None = None,
+    passthrough_offset_enabled: bool | None = None,
+    offset_ms: int | None = None,
+) -> dict:
+    """Debug-only live audio output/offset control for repeatable physical A/V tests."""
+    return adb.set_active_audio(output, passthrough_offset_enabled, offset_ms)
 
 
 @mcp.tool()

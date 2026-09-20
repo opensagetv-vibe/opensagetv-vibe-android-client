@@ -115,6 +115,33 @@ class DiagnosticBundleContracts(unittest.TestCase):
         self.assertIn("addCurrentVideoTests(app, entries)", bundle)
         self.assertIn('"current-video-tests/test-"', bundle)
 
+    def test_current_video_test_has_bounded_teletext_pes_preservation_probe(self):
+        runner = self.read(
+            "java/opensagetv/vibe/miniclient/android/CurrentVideoDiagnosticTest.java"
+        )
+        probe = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/media/TeletextPesProbe.java").read_text(encoding="utf-8")
+        pull = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/net/BufferedPullDataSource.java").read_text(encoding="utf-8")
+        push = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/net/PushBufferDataSource.java").read_text(encoding="utf-8")
+        smb = self.read(
+            "java/opensagetv/vibe/miniclient/android/video/smb/SmbDirectSession.java"
+        )
+        self.assertIn("MAX_ANALYZED_BYTES = 64L * 1024L * 1024L", probe)
+        self.assertIn("AtomicReference<Session>", probe)
+        self.assertIn("tag == 0x56", probe)
+        self.assertIn("unit == 0x02 || unit == 0x03", probe)
+        self.assertIn("TeletextPesProbe.begin()", runner)
+        self.assertIn("TeletextPesProbe.finish()", runner)
+        self.assertIn('report.append("\\n[teletextPesPreservation]\\n")', runner)
+        self.assertIn('TeletextPesProbe.observe("pull"', pull)
+        self.assertIn('TeletextPesProbe.observe("push"', push)
+        self.assertIn('TeletextPesProbe.observe("smb-direct"', smb)
+        self.assertNotIn("payload=", probe)
+        self.assertNotIn("subtitleText", probe)
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        commands = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugSessionCommands.java").read_text(encoding="utf-8")
+        self.assertIn('"test_current_video".equals(op)', receiver)
+        self.assertIn("ActivePlayerAdjustmentsDialog.testCurrentVideo(activity)", commands)
+
     def test_issue_form_requests_reproduction_and_redacted_bundle(self):
         form = (ROOT / ".github/ISSUE_TEMPLATE/playback-bug.yml").read_text(encoding="utf-8")
         for field in ("client_version", "device", "server", "player", "transport", "decoding", "media", "steps", "result"):

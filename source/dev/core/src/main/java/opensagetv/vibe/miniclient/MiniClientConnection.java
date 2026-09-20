@@ -18,6 +18,7 @@ package opensagetv.vibe.miniclient;
 import java.nio.charset.StandardCharsets;
 
 import opensagetv.vibe.miniclient.events.ConnectionLost;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
 import opensagetv.vibe.miniclient.logging.ILogger;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
@@ -469,6 +470,35 @@ public class MiniClientConnection implements SageTVInputCallback
         }
     }
 
+    /**
+     * A stock server can briefly reject connection type 5 while it is still
+     * retiring the failed graphics socket.  Retry only this reconnect
+     * handshake, with short fixed delays, rather than turning one transient
+     * reply into a complete client teardown.
+     */
+    private java.net.Socket establishGfxReconnectSocket() throws java.io.IOException {
+        final long[] delaysMs = { 0L, 150L, 350L };
+        for (int attempt = 0; attempt < delaysMs.length; attempt++) {
+            if (!alive)
+                return null;
+            if (delaysMs[attempt] > 0L) {
+                log.logWarning("Graphics reconnect was not yet accepted; retrying in "
+                        + delaysMs[attempt] + " ms (attempt " + (attempt + 1)
+                        + " of " + delaysMs.length + ")");
+                try {
+                    Thread.sleep(delaysMs[attempt]);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new java.io.IOException("Graphics reconnect interrupted", interrupted);
+                }
+            }
+            java.net.Socket socket = EstablishServerConnection(5);
+            if (socket != null)
+                return socket;
+        }
+        return null;
+    }
+
     public void connect() throws java.io.IOException {
         connectionDiagnostics.lifecycle("connect_started");
         discoverCodecSupport();
@@ -742,7 +772,7 @@ public class MiniClientConnection implements SageTVInputCallback
 
                                 try
                                 {
-                                    java.net.Socket reconnectSocket = EstablishServerConnection(5);
+                                    java.net.Socket reconnectSocket = establishGfxReconnectSocket();
                                     if (reconnectSocket == null || !installGfxReconnectSocket(reconnectSocket))
                                         throw new Exception("Failed to reconnect to server.  Unable to establish Graphics Socket.");
                                     ConnectionProtocolStreams.OpenStreams reconnectedStreams =
@@ -971,6 +1001,16 @@ public class MiniClientConnection implements SageTVInputCallback
                     else if ("GFX_SURFACES".equals(propName) || "GFX_HIRES_SURFACES".equals(propName))
                     {
                         propVal = "TRUE";
+                    }
+                    else if (UnifiedGraphicsCapability.PROPERTY.equals(propName))
+                    {
+                        // Empty is intentional when disabled: SageTV then
+                        // retains its historical SEPARATE high-resolution
+                        // surface default.  UNIFIED is negotiated only when
+                        // the user explicitly enables it in Playback Settings.
+                        propVal = UnifiedGraphicsCapability.propertyValue(client.properties());
+                        log.logDebug("GetProperty: GFX_YUV_IMAGE_CACHE='" + propVal
+                                + "' (optIn=" + !propVal.isEmpty() + ")");
                     }
                     else if ("GFX_DIFFUSE_TEXTURES".equals(propName))
                     {
@@ -2395,38 +2435,52 @@ public class MiniClientConnection implements SageTVInputCallback
     public void postSubtitleInfo(long pts, long duration, byte[] data, int flags) {
         if (!subSupport)
             return; // don't send events if the other end doesn't support it
-        if (reconnectState.isReconnecting())
+        if (eventChannel == null || reconnectState.isReconnecting()
+                || eventRouterThread == null || eventRouterThread.queue == null)
             return;
-        synchronized (eventChannel) {
-            try {
-                eventChannel.write(SUBTITLE_UPDATE_REPLY_TYPE); // subtitle
-                // update event
-                // code
-                eventChannel.write(0);
-                eventChannel.writeShort((short) (14 + ((data == null) ? 0 : data.length)));// 3
-                // byte
-                // length
-                // of
-                // 0
-                eventChannel.writeInt(0); // timestamp
-                eventChannel.writeInt(replyCount++);
-                eventChannel.writeInt(0); // pad
-                eventChannel.writeInt(flags);
-                eventChannel.writeInt((int) pts);
-                eventChannel.writeInt((int) duration);
-                if (data != null) {
-                    eventChannel.writeShort((short) data.length);
-                    eventChannel.write(data);
-                } else
-                    eventChannel.writeShort(0);
-                eventChannel.flush();
-                subtitleCallbackEventCount++;
-                subtitleCallbackByteCount += data == null ? 0 : data.length;
-            } catch (Exception e) {
-                log.logError("Error w/ event thread", e);
-                eventChannelError();
+        final long eventPts = pts;
+        final long eventDuration = duration;
+        final int eventFlags = flags;
+        final byte[] eventData = data == null ? null : data.clone();
+
+        // Subtitle callbacks can originate from Android player/UI callbacks.
+        // Serialize them with input and all other event-channel traffic instead
+        // of performing socket I/O on the caller. Besides violating Android's
+        // main-thread network policy, a synchronous failure tears down the GFX
+        // socket and leaves the STV image/font cache partially reconstructed.
+        eventRouterThread.enqueue(new Runnable() {
+            @Override
+            public void run() {
+                if (eventChannel == null || reconnectState.isReconnecting())
+                    return;
+                synchronized (eventChannel) {
+                    try {
+                        eventChannel.write(SUBTITLE_UPDATE_REPLY_TYPE);
+                        eventChannel.write(0);
+                        eventChannel.writeShort((short) (14
+                                + ((eventData == null) ? 0 : eventData.length)));
+                        eventChannel.writeInt(0); // timestamp
+                        eventChannel.writeInt(replyCount++);
+                        eventChannel.writeInt(0); // pad
+                        eventChannel.writeInt(eventFlags);
+                        eventChannel.writeInt((int) eventPts);
+                        eventChannel.writeInt((int) eventDuration);
+                        if (eventData != null) {
+                            eventChannel.writeShort((short) eventData.length);
+                            eventChannel.write(eventData);
+                        } else {
+                            eventChannel.writeShort(0);
+                        }
+                        eventChannel.flush();
+                        subtitleCallbackEventCount++;
+                        subtitleCallbackByteCount += eventData == null ? 0 : eventData.length;
+                    } catch (Exception e) {
+                        log.logError("Error sending subtitle callback event", e);
+                        eventChannelError();
+                    }
+                }
             }
-        }
+        });
     }
 
     /** Whether SageTV accepted the negotiated legacy subtitle callback path. */

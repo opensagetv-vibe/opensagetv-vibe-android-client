@@ -20,4 +20,15 @@ public class SubtitleTrackTest
         assertEquals("eng (CEA708) Service 3", track.toString());
         assertEquals(3, track.getAccessibilityChannel());
     }
+
+    @Test
+    public void sourceStreamIdsAreParsedWithoutGuessingFromLabels()
+    {
+        assertEquals(5503, SubtitleTrack.parseSourceStreamId("1/5503"));
+        assertEquals(0x157f, SubtitleTrack.parseSourceStreamId("pid=0x157f"));
+        assertEquals(-1, SubtitleTrack.parseSourceStreamId("English 888"));
+        SubtitleTrack track = new SubtitleTrack(4, SubtitleCodec.DVB, "eng", "DVB",
+                true, -1, 0x120);
+        assertEquals(0x120, track.getSourceStreamId());
+    }
 }

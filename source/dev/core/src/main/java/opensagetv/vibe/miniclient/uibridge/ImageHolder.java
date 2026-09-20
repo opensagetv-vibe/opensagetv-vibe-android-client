@@ -4,6 +4,8 @@ public class ImageHolder<T extends Texture> extends Holder<T> {
     private int handle=-1;
     private int width;
     private int height;
+    /** GFX image format; zero is the ordinary Android/RGBA path. */
+    private int imageFormat;
 
     public ImageHolder() {
     }
@@ -13,6 +15,7 @@ public class ImageHolder<T extends Texture> extends Holder<T> {
         this.width = width;
         this.height = height;
         this.handle = -1;
+        this.imageFormat = 0;
     }
 
     public int getWidth() {
@@ -39,9 +42,18 @@ public class ImageHolder<T extends Texture> extends Holder<T> {
         this.handle=-1;
         this.width=0;
         this.height=0;
+        this.imageFormat=0;
     }
 
     public void setHandle(int handle) {
         this.handle = handle;
+    }
+
+    public int getImageFormat() {
+        return imageFormat;
+    }
+
+    public void setImageFormat(int imageFormat) {
+        this.imageFormat = imageFormat;
     }
 }

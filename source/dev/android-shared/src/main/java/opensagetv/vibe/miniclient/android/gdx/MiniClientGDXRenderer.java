@@ -50,6 +50,7 @@ import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
 import opensagetv.vibe.miniclient.android.video.PlayerFactory;
 import opensagetv.vibe.miniclient.android.video.media3.Media3MediaPlayerImpl;
 import opensagetv.vibe.miniclient.android.video.exlink.ExternalLinkPlayerImpl;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.uibridge.ImageHolder;
@@ -586,6 +587,23 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
     }
 
     @Override
+    public ImageHolder<GdxTexture> loadImage(int width, int height, int imageFormat) {
+        if (imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_DEFAULT)
+            return loadImage(width, height);
+        if (!supportsImageFormat(imageFormat)) return null;
+        GdxTexture t = new GdxTexture(width, height, imageFormat);
+        ImageHolder<GdxTexture> holder = new ImageHolder<>(t, width, height);
+        holder.setImageFormat(imageFormat);
+        return holder;
+    }
+
+    @Override
+    public boolean supportsImageFormat(int imageFormat) {
+        return imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_DEFAULT
+                || imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_HIRESYUV;
+    }
+
+    @Override
     public void unloadImage(final int handle, final ImageHolder<GdxTexture> bi) {
         if (bi == null || bi.get() == null) return;
 
@@ -825,6 +843,17 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
 
     @Override
     public void loadImageLine(int handle, ImageHolder<GdxTexture> image, int line, int len2, byte[] b) {
+        if (image != null && image.get() != null
+                && image.getImageFormat() == UnifiedGraphicsCapability.IMAGE_FORMAT_HIRESYUV
+                && b != null && len2 > 0 && b.length >= 12 + len2) {
+            final GdxTexture texture = image.get();
+            final byte[] lineData = java.util.Arrays.copyOfRange(b, 12, 12 + len2);
+            invokeLater(new Runnable() {
+                @Override
+                public void run() { texture.loadUnifiedYuvLine(line, lineData, 0, lineData.length); }
+            });
+            return;
+        }
         Bitmap bm = image.get().bitmap;
         int datapos, x;
         for (datapos = 12, x = 0; x < len2 / 4; x++, datapos += 4) {

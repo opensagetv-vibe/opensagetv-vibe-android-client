@@ -34,6 +34,7 @@ try {
 
     if (-not $SkipFixtures) {
         $seek = Join-Path $projectRoot 'artifacts\test-media\VibeSeekTest-1080i-MPEG2-AC3-CC.ts'
+        $avSync = Join-Path $projectRoot 'source\dev\android-shared\src\main\assets\vibe_av_sync_ball.ts'
         $codec = Join-Path $projectRoot 'artifacts\test-media\kodi-codec\fixture-manifest.json'
         $dvd = Join-Path $projectRoot 'artifacts\test-media\VIBE_AUTHORED_DVD\VIBE_DVD_TEST_MANIFEST.json'
 
@@ -41,6 +42,11 @@ try {
             Invoke-Dev seek-fixture artifacts/test-media/VibeSeekTest-1080i-MPEG2-AC3-CC.ts 900
         } else {
             Write-Host "REUSE: $seek"
+        }
+        if ($Regenerate -or -not (Test-Path -LiteralPath $avSync -PathType Leaf)) {
+            Invoke-Dev av-sync-fixture
+        } else {
+            Write-Host "REUSE: $avSync"
         }
         if ($Regenerate -or -not (Test-Path -LiteralPath $codec -PathType Leaf)) {
             Invoke-Dev codec-fixtures --duration 6 --output-dir artifacts/test-media/kodi-codec

@@ -111,23 +111,14 @@ public class NavigationDialog extends Dialog
             }
         }
 
-        navView.findViewById(R.id.nav_switch_player).setOnClickListener(new View.OnClickListener()
-        {
-            @Override
-            public void onClick(View v)
+        // Player selection now lives under the dedicated Video settings icon.
+        // Aspect ratio remains available as a separate quick action.
+        View aspectRatio = navView.findViewById(R.id.nav_toggle_ar);
+        if (aspectRatio != null)
+            aspectRatio.setOnClickListener(new View.OnClickListener()
             {
-                onSwitchPlayer();
-            }
-        });
-
-        navView.findViewById(R.id.nav_toggle_ar).setOnClickListener(new View.OnClickListener()
-        {
-            @Override
-            public void onClick(View v)
-            {
-                onToggleAspectRatio();
-            }
-        });
+                @Override public void onClick(View v) { onToggleAspectRatio(); }
+            });
 
         navView.findViewById(R.id.nav_closed_captions).setOnClickListener(new View.OnClickListener()
         {
@@ -146,6 +137,17 @@ public class NavigationDialog extends Dialog
                     {
                         dismiss();
                         ActivePlayerAdjustmentsDialog.show(activity);
+                    }
+                });
+
+        View audioOutput = navView.findViewById(R.id.nav_audio_output);
+        if (audioOutput != null)
+            audioOutput.setOnClickListener(new View.OnClickListener()
+                {
+                    @Override public void onClick(View v)
+                    {
+                        dismiss();
+                        ActivePlayerAdjustmentsDialog.showAudio(activity);
                     }
                 });
 
@@ -201,14 +203,8 @@ public class NavigationDialog extends Dialog
         });
 
 
-        navView.findViewById(R.id.nav_remote_mode).setOnClickListener(new View.OnClickListener()
-        {
-            @Override
-            public void onClick(View v)
-            {
-                onToggleSmartRemote();
-            }
-        });
+        // Smart Remote remains a normal Settings preference. Its ambiguous
+        // four-arrow shortcut is intentionally absent from the playback menu.
 
         navView.findViewById(R.id.nav_help).setOnClickListener(new View.OnClickListener()
         {
@@ -251,7 +247,8 @@ public class NavigationDialog extends Dialog
 
     private void onVideoInfo()
     {
-        log.debug("Showing Video Info View");
+        dismiss();
+        log.debug("Showing combined SageTV video information and Vibe diagnostics");
         client.eventbus().post(new VideoInfoShow());
     }
 
@@ -341,61 +338,8 @@ public class NavigationDialog extends Dialog
     /** Shows the caption compatibility selector from the long-press overlay. */
     public void onClosedCaptions()
     {
-        final MediaCmd mediaCmd = client == null || client.getCurrentConnection() == null
-                ? null : client.getCurrentConnection().getMediaCmd();
-        if (mediaCmd == null)
-        {
-            AppUtil.message(activity.getString(R.string.caption_control_player_unavailable));
-            return;
-        }
-
-        final String[] values = activity.getResources().getStringArray(
-                R.array.entryvalues_legacy_server_caption_mode);
-        String selectedMode = mediaCmd.getLegacyServerCaptionMode();
-        int checkedItem = 0;
-        for (int i = 0; i < values.length; i++)
-        {
-            if (values[i].equals(selectedMode))
-            {
-                checkedItem = i;
-                break;
-            }
-        }
-
         dismiss();
-        new AlertDialog.Builder(activity)
-                .setTitle(R.string.caption_control_title)
-                .setSingleChoiceItems(R.array.entries_legacy_server_caption_mode, checkedItem,
-                        new DialogInterface.OnClickListener()
-                        {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which)
-                            {
-                                if (which < 0 || which >= values.length)
-                                    return;
-                                mediaCmd.setLegacyServerCaptionMode(values[which]);
-                                if (mediaCmd.hasSageTvClosedCaptionState()
-                                        || (client.getCurrentConnection() != null
-                                        && client.getCurrentConnection().isSubtitleCallbackEnabled()))
-                                {
-                                    AppUtil.message(activity.getString(
-                                            R.string.caption_control_stv_authoritative));
-                                }
-                                else if ("stv".equals(values[which]))
-                                {
-                                    AppUtil.message(activity.getString(
-                                            R.string.caption_control_legacy_stv_unavailable));
-                                }
-                                else
-                                {
-                                    AppUtil.message(activity.getString(
-                                            R.string.caption_control_applied, values[which].toUpperCase()));
-                                }
-                                dialog.dismiss();
-                            }
-                        })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+        ActivePlayerAdjustmentsDialog.showCaptions(activity);
     }
 
     // @OnClick(R.id.nav_remote_mode)
@@ -407,6 +351,7 @@ public class NavigationDialog extends Dialog
 
     private void updateSmartRemoteToggle()
     {
+        if (navSmartRemote == null) return;
         if (prefs.isSmartRemoteEnabled())
         {
             navSmartRemote.setImageResource(R.drawable.ic_open_with_white_24dp);

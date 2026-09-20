@@ -10,8 +10,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import opensagetv.vibe.miniclient.MenuHint;
+import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.SageCommand;
 import opensagetv.vibe.miniclient.android.AppUtil;
@@ -23,6 +25,11 @@ import opensagetv.vibe.miniclient.events.VideoInfoRefresh;
 import opensagetv.vibe.miniclient.events.VideoInfoShow;
 import opensagetv.vibe.miniclient.net.HasPushBuffer;
 import opensagetv.vibe.miniclient.net.PushBufferDataSource;
+import opensagetv.vibe.miniclient.media.SubtitleCodec;
+import opensagetv.vibe.miniclient.media.SubtitleTrack;
+import opensagetv.vibe.miniclient.media.CaptionSlotPolicy;
+import opensagetv.vibe.miniclient.media.LegacyExtenderSubpictureCommand;
+import opensagetv.vibe.miniclient.media.TeletextSubtitleEngine;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.uibridge.EventRouter;
@@ -33,6 +40,7 @@ import opensagetv.vibe.miniclient.util.Utils;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 import opensagetv.vibe.miniclient.util.VideoInfo;
 import opensagetv.vibe.miniclient.video.HasVideoInfo;
+import opensagetv.vibe.miniclient.video.TeletextCea608Bridge;
 import opensagetv.vibe.miniclient.video.FullscreenPlaybackPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.VideoInfoResponse;
@@ -63,6 +71,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected String lastUri;
     /** Server DVD VM is pushing a MIM-produced MPEG-TS representation. */
     protected boolean dvdMimTransport;
+    private static final int NO_SERVER_SUBPICTURE_COMMAND = Integer.MIN_VALUE;
+    private volatile int pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
     protected long lastMediaTime = -1;
     protected boolean flushed = false;
     protected VideoInfo videoInfo = null;
@@ -114,6 +124,59 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     private volatile int dvdFormat;
     private volatile long dvdPtsOffset90Khz;
     private volatile int subtitleOffsetMs;
+    private volatile TeletextSubtitleEngine.Service[] teletextServices =
+            new TeletextSubtitleEngine.Service[0];
+    private volatile int selectedTeletextTrack = DISABLE_TRACK;
+    private volatile TeletextSubtitleOverlay teletextOverlay;
+    private volatile long teletextCueUpdateCount;
+    private volatile String currentTeletextCueText = "";
+    private volatile long teletextOverlayGeneration;
+    private volatile boolean teletextClockScheduled;
+    private volatile long teletextClockServerBaseMs;
+    private volatile long teletextClockDrainCount;
+    private volatile long teletextClockLastMediaTimeMs = -1L;
+    /** True while Teletext cues are being returned to SageTV through event 225. */
+    private volatile boolean teletextLegacyBridgeEnabled = true;
+    private static final long TELETEXT_CLOCK_INTERVAL_MS = 100L;
+    private final TeletextCea608Bridge teletextLegacyBridge =
+            new TeletextCea608Bridge(new TeletextCea608Bridge.Sink()
+            {
+                @Override public void postSubtitleInfo(long pts45Khz, long duration45Khz,
+                        byte[] data, int flags)
+                {
+                    MiniClientConnection connection = BaseMediaPlayerImpl.this.context
+                            .getClient().getCurrentConnection();
+                    if (connection != null)
+                        connection.postSubtitleInfo(pts45Khz, duration45Khz, data, flags);
+                }
+            });
+    private final TeletextSubtitleEngine.Listener teletextListener =
+            new TeletextSubtitleEngine.Listener()
+            {
+                @Override public void onTeletextServicesChanged(
+                        TeletextSubtitleEngine.Service[] services)
+                {
+                    teletextServices = services == null
+                            ? new TeletextSubtitleEngine.Service[0] : services.clone();
+                    applyTeletextCcMappings();
+                    scheduleTeletextClock();
+                    log.info("Discovered {} DVB Teletext subtitle service(s)",
+                            teletextServices.length);
+                }
+
+                @Override public void onTeletextCue(TeletextSubtitleEngine.Cue cue)
+                {
+                    // Teletext discovery can precede Media3/Exo native track
+                    // publication. Re-resolve the two virtual slots when a
+                    // cue arrives so a later DVB track changes the callback
+                    // mapping from the provisional Teletext CC1 assignment
+                    // to the final DVB CC1 / Teletext CC2 assignment.
+                    applyTeletextCcMappings();
+                    teletextLegacyBridge.enqueue(cue);
+                    if (cue != null && cue.trackId == selectedTeletextTrack)
+                        scheduleTeletextCue(cue);
+                }
+            };
 
     public BaseMediaPlayerImpl(AndroidUIController activity, boolean createPlayerOnUI, boolean waitForPlayer)
     {
@@ -252,6 +315,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
         dvdMimTransport = urlString != null && urlString.startsWith("push:dvd")
                 && urlString.contains("vibe_transport=mim_ts_v1");
+        pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
         lastMediaTime = -1;
         eos = false;
         seekPending = false;
@@ -297,6 +361,11 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                         state = LOADED_STATE;
                         context.setupVideoFrame();
                         setupPlayer(finalUrl);
+                        // Some backends release an asynchronously-owned prior
+                        // player once more during setup. Activate only after
+                        // that replacement step so the new subtitle session
+                        // cannot be torn down by the old player.
+                        startTeletextSession();
 
                         if (dataSource == null && !httpls)
                         {
@@ -327,6 +396,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 state = LOADED_STATE;
                 log.debug("JVL - Creating player on thread ->", Thread.currentThread().getName());
                 setupPlayer(finalUrl);
+                startTeletextSession();
 
                 if (dataSource == null && !httpls)
                 {
@@ -349,6 +419,487 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** Optional backend hook for clearing per-stream extractor state. */
     protected void onPlaybackLoadStarted()
     {
+    }
+
+    private void startTeletextSession()
+    {
+        teletextOverlayGeneration++;
+        teletextServices = new TeletextSubtitleEngine.Service[0];
+        selectedTeletextTrack = DISABLE_TRACK;
+        teletextCueUpdateCount = 0L;
+        currentTeletextCueText = "";
+        teletextClockScheduled = false;
+        teletextClockServerBaseMs = 0L;
+        teletextClockDrainCount = 0L;
+        teletextClockLastMediaTimeMs = -1L;
+        teletextLegacyBridgeEnabled = true;
+        teletextLegacyBridge.clearPending();
+        TeletextSubtitleEngine.activate(teletextListener);
+    }
+
+    /** Add decoder-owned Teletext services without changing native track ids. */
+    protected SubtitleTrack[] appendTeletextSubtitleTracks(SubtitleTrack[] nativeTracks)
+    {
+        SubtitleTrack[] safe = nativeTracks == null ? new SubtitleTrack[0] : nativeTracks;
+        TeletextSubtitleEngine.Service[] services = teletextServices;
+        SubtitleTrack[] combined = Arrays.copyOf(safe, safe.length + services.length);
+        for (int i = 0; i < services.length; i++)
+        {
+            TeletextSubtitleEngine.Service service = services[i];
+            combined[safe.length + i] = new SubtitleTrack(service.trackId,
+                    SubtitleCodec.TELETEXT, service.language, service.label(), true,
+                    -1, service.pid);
+        }
+        return combined;
+    }
+
+    /**
+     * Intercept decoder-owned track ids. A false result means the backend must
+     * continue with its native subtitle selection.
+     */
+    protected boolean handleTeletextSubtitleSelection(int streamPos)
+    {
+        if (streamPos == DISABLE_TRACK)
+        {
+            selectedTeletextTrack = DISABLE_TRACK;
+            TeletextSubtitleEngine.disable();
+            clearTeletextOverlay();
+            return false;
+        }
+        if (!TeletextSubtitleEngine.isTeletextTrack(streamPos))
+        {
+            selectedTeletextTrack = DISABLE_TRACK;
+            TeletextSubtitleEngine.disable();
+            clearTeletextOverlay();
+            return false;
+        }
+        if (!TeletextSubtitleEngine.selectTrack(streamPos)) return true;
+        selectedTeletextTrack = streamPos;
+        ensureTeletextOverlay();
+        return true;
+    }
+
+    protected int selectedTeletextTrackOr(int nativeTrack)
+    {
+        return selectedTeletextTrack != DISABLE_TRACK ? selectedTeletextTrack : nativeTrack;
+    }
+
+    protected int teletextTrackCount()
+    {
+        return teletextServices.length;
+    }
+
+    @Override
+    public boolean mapSubtitleTrackToClosedCaptionChannel(int channel, int trackId)
+    {
+        if ((channel != 1 && channel != 2)
+                || !TeletextSubtitleEngine.isTeletextTrack(trackId)) return false;
+        TeletextSubtitleEngine.Service target = null;
+        for (TeletextSubtitleEngine.Service service : teletextServices)
+            if (service.trackId == trackId) { target = service; break; }
+        if (target == null) return false;
+        context.getClient().properties().setString(channel == 1
+                        ? PrefStore.Keys.teletext_cc1_mapping
+                        : PrefStore.Keys.teletext_cc2_mapping,
+                teletextServiceSpec(target));
+        applyTeletextCcMappings();
+        return true;
+    }
+
+    @Override
+    public int getMappedSubtitleTrackForClosedCaptionChannel(int channel)
+    {
+        if (channel != 1 && channel != 2) return DISABLE_TRACK;
+        String spec = context.getClient().properties().getString(channel == 1
+                ? PrefStore.Keys.teletext_cc1_mapping
+                : PrefStore.Keys.teletext_cc2_mapping, "");
+        int fallback = channel - 1;
+        TeletextSubtitleEngine.Service[] services = teletextServices;
+        if (!spec.isEmpty())
+            for (TeletextSubtitleEngine.Service service : services)
+                if (spec.equals(teletextServiceSpec(service))
+                        || spec.equals(legacyTeletextServiceSpec(service)))
+                    return service.trackId;
+        return fallback < services.length ? services[fallback].trackId : DISABLE_TRACK;
+    }
+
+    @Override
+    public boolean applyClosedCaptionSlot(int channel, String type, String language)
+    {
+        if (channel != 1 && channel != 2) return false;
+        // A mode change can happen after the bridge has already painted a
+        // caption through SageTV. Establish the new single-renderer owner and
+        // flush that old screen before selecting the requested local track.
+        applyTeletextCcMappings();
+        SubtitleTrack track = resolveCaptionSlotTrack(channel, type, language);
+        if (track == null) return false;
+        if (track.getSubtitleCodec() == SubtitleCodec.TELETEXT)
+        {
+            if (!mapSubtitleTrackToClosedCaptionChannel(channel, track.getIndex())) return false;
+            MiniClientConnection connection = context.getClient().getCurrentConnection();
+            if (!isExplicitLocalCaptionAuthority(connection)
+                    && connection != null && connection.isSubtitleCallbackEnabled()) return true;
+        }
+        setSubtitleTrack(track.getIndex());
+        return true;
+    }
+
+    /**
+     * Auto is evidence-based: extractor-advertised CEA compatibility tracks
+     * are not selected until the decoder has observed actual CEA samples.
+     * This keeps UK DVB/Teletext streams on their real broadcast service while
+     * preserving explicit CEA selections and real ATSC CEA data.
+     */
+    private SubtitleTrack resolveCaptionSlotTrack(int channel, String type, String language)
+    {
+        SubtitleTrack[] tracks = getSubtitleTracks();
+        String slotType = CaptionSlotPolicy.TYPE_DVB.equals(
+                CaptionSlotPolicy.normalizeType(type))
+                ? CaptionSlotPolicy.TYPE_AUTO : type;
+        // CC1/CC2 are text-caption callback slots. DVB bitmap selection is a
+        // separate top-level mode, matching the original extender's separate
+        // STV Subtitles command rather than pretending DVB is a CC channel.
+        SubtitleTrack track = CaptionSlotPolicy.findTrack(
+                tracks, channel, slotType, language, true, false);
+        if (track != null && CaptionSlotPolicy.TYPE_AUTO.equals(
+                CaptionSlotPolicy.normalizeType(slotType))
+                && !hasObservedCeaCaptionData()
+                && (track.getSubtitleCodec() == SubtitleCodec.CEA608
+                || track.getSubtitleCodec() == SubtitleCodec.CEA708))
+        {
+            SubtitleTrack broadcastFallback = CaptionSlotPolicy.findTrack(
+                    tracks, channel, slotType, language, false, false);
+            if (broadcastFallback != null)
+                track = broadcastFallback;
+        }
+        return track;
+    }
+
+    @Override
+    public boolean applyDvbCaptionTrack()
+    {
+        applyTeletextCcMappings();
+        SubtitleTrack track = CaptionSlotPolicy.findTrack(getSubtitleTracks(), 1,
+                CaptionSlotPolicy.TYPE_DVB, "");
+        if (track == null)
+        {
+            setSubtitleTrack(DISABLE_TRACK);
+            return false;
+        }
+        setSubtitleTrack(track.getIndex());
+        return true;
+    }
+
+    /** Apply a persisted virtual CC slot after asynchronous track discovery. */
+    protected boolean applyConfiguredClosedCaptionSlot()
+    {
+        MiniClientConnection connection = context.getClient().getCurrentConnection();
+        if (connection == null || connection.getMediaCmd() == null) return false;
+        PrefStore prefs = context.getClient().properties();
+        String mode = prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv");
+        if ("dvb".equals(mode))
+        {
+            // Keep generic preferred-track resolution from accidentally
+            // selecting Teletext while DVB tracks are still being discovered.
+            applyDvbCaptionTrack();
+            return true;
+        }
+        int channel = "cc1".equals(mode) ? 1 : "cc2".equals(mode) ? 2 : 0;
+        if (connection.getMediaCmd().hasSageTvClosedCaptionState())
+        {
+            // STV owns the enabled/disabled state. Resolve every enabled
+            // virtual slot (including Auto) only against broadcast caption
+            // services. Do not fall through to the generic subtitle resolver;
+            // SRT/PGS/DVD subtitle selection is a separate path.
+            int serverState = connection.getMediaCmd().getSageTvClosedCaptionState();
+            if (serverState == 1 || serverState == 2)
+            {
+                int serverChannel = serverState;
+                String serverType = prefs.getString(serverChannel == 1
+                        ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
+                        CaptionSlotPolicy.TYPE_AUTO);
+                channel = serverChannel;
+                String serverLanguage = captionSlotLanguage(prefs, serverChannel);
+                boolean applied = applyClosedCaptionSlot(channel, serverType, serverLanguage);
+                if (!applied) setSubtitleTrack(DISABLE_TRACK);
+                // Track publication is asynchronous. onTracksChanged() will
+                // retry the same broadcast slot; returning true prevents a
+                // temporary empty inventory from selecting an SRT/PGS track.
+                return true;
+            }
+            return false;
+        }
+        if (channel == 0) return false;
+        return applyClosedCaptionSlot(channel, prefs.getString(channel == 1
+                        ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
+                        CaptionSlotPolicy.TYPE_AUTO), captionSlotLanguage(prefs, channel));
+    }
+
+    private static String captionSlotLanguage(PrefStore prefs, int channel)
+    {
+        String language = prefs.getString(channel == 1 ? PrefStore.Keys.caption_cc1_language
+                : PrefStore.Keys.caption_cc2_language, "");
+        return language;
+    }
+
+    @Override
+    public void setPreferredSubtitleTrack()
+    {
+        if (applyPendingServerSubpictureStream()) return;
+        if (!applyConfiguredClosedCaptionSlot()) setSubtitleTrack(0);
+    }
+
+    /**
+     * Applies the stock HD-extender MPEG-TS subpicture command. SageTV sends
+     * command 36/type 1 with a 13-bit PID and bit 0x2000 as the disable flag.
+     * The original HD300 selected its local DVB decoder with this command;
+     * DVB pixels did not travel through the event-225 CC callback.
+     */
+    protected boolean applyPendingServerSubpictureStream()
+    {
+        MiniClientConnection connection = context.getClient().getCurrentConnection();
+        if (connection != null && connection.getMediaCmd() != null)
+        {
+            String captionMode = connection.getMediaCmd().getLegacyServerCaptionMode();
+            if ("cc1".equals(captionMode) || "cc2".equals(captionMode)
+                    || "dvb".equals(captionMode))
+            {
+                // CC1/CC2/DVB are explicit Android-local modes on a stock
+                // server. Do not let SageTV's independent Subtitles-off
+                // command (normally 0x2000) erase that local virtual-slot
+                // choice when tracks are published asynchronously. STV mode
+                // still follows the original HD200/HD300 subpicture command.
+                return false;
+            }
+        }
+        int command = pendingServerSubpictureCommand;
+        if (command == NO_SERVER_SUBPICTURE_COMMAND) return false;
+        SubtitleTrack[] tracks = getSubtitleTracks();
+        int trackId = LegacyExtenderSubpictureCommand.resolveTrackId(command, tracks);
+        if (trackId != LegacyExtenderSubpictureCommand.NO_MATCH)
+        {
+            setSubtitleTrack(trackId);
+            return true;
+        }
+        if (tracks == null || tracks.length == 0) return true;
+        log.warn("No local subtitle track matches server subpicture PID/index {}",
+                LegacyExtenderSubpictureCommand.sourcePid(command));
+        setSubtitleTrack(DISABLE_TRACK);
+        return true;
+    }
+
+    private void applyTeletextCcMappings()
+    {
+        /*
+         * CC1 and CC2 are virtual caption slots, not Teletext slot numbers.
+         * Resolve each slot against the complete stream inventory before
+         * assigning a Teletext bridge channel. Otherwise a stream containing
+         * one DVB service and one Teletext service implicitly maps that sole
+         * Teletext service to CC1 as well as the requested CC2 slot. The
+         * bridge then removes CC2 as a duplicate and SageTV never receives
+         * field-one/channel-two records.
+         */
+        MiniClientConnection connection = context.getClient().getCurrentConnection();
+        String mode = connection != null && connection.getMediaCmd() != null
+                ? connection.getMediaCmd().getLegacyServerCaptionMode() : "stv";
+        if ("off".equals(mode) || isExplicitLocalCaptionAuthority(connection))
+        {
+            if (teletextLegacyBridgeEnabled)
+            {
+                teletextLegacyBridgeEnabled = false;
+                teletextLegacyBridge.clearPending();
+                // Reset any caption already painted by SageTV before local
+                // Teletext/DVB rendering takes ownership. Without this flush,
+                // both the old STV caption and the local bitmap/text overlay
+                // remain visible until SageTV happens to clear its screen.
+                postTeletextFlush();
+            }
+            teletextLegacyBridge.setTrackMappings(DISABLE_TRACK, DISABLE_TRACK);
+            return;
+        }
+        teletextLegacyBridgeEnabled = true;
+        teletextLegacyBridge.setTrackMappings(
+                resolvedTeletextTrackForSlot(1), resolvedTeletextTrackForSlot(2));
+    }
+
+    /**
+     * Stock SageTV cannot publish the STV's current CC1/CC2 state. Therefore
+     * an explicit Android CC1, CC2, or DVB choice must render locally and must
+     * not simultaneously feed the legacy event-225 renderer. A compatible
+     * server that publishes VIDEO_CC_STATE remains authoritative in STV mode.
+     */
+    private boolean isExplicitLocalCaptionAuthority(MiniClientConnection connection)
+    {
+        if (connection == null || connection.getMediaCmd() == null) return false;
+        if (connection.getMediaCmd().hasSageTvClosedCaptionState()) return false;
+        String mode = connection.getMediaCmd().getLegacyServerCaptionMode();
+        return "cc1".equals(mode) || "cc2".equals(mode) || "dvb".equals(mode);
+    }
+
+    private int resolvedTeletextTrackForSlot(int channel)
+    {
+        PrefStore prefs = context.getClient().properties();
+        SubtitleTrack track = resolveCaptionSlotTrack(channel,
+                prefs.getString(channel == 1 ? PrefStore.Keys.caption_cc1_type
+                                : PrefStore.Keys.caption_cc2_type,
+                        CaptionSlotPolicy.TYPE_AUTO),
+                prefs.getString(channel == 1 ? PrefStore.Keys.caption_cc1_language
+                        : PrefStore.Keys.caption_cc2_language, ""));
+        // Only Teletext can be emitted through the legacy CEA callback. Never
+        // relabel an Auto/DVB bitmap selection as Teletext; explicit Android
+        // DVB mode handles bitmap rendering locally.
+        return track != null && track.getSubtitleCodec() == SubtitleCodec.TELETEXT
+                ? track.getIndex() : DISABLE_TRACK;
+    }
+
+    private static String teletextServiceSpec(TeletextSubtitleEngine.Service service)
+    {
+        return service.pid + ":" + service.language.toLowerCase() + ":"
+                + service.type + ":" + service.page;
+    }
+
+    private static String legacyTeletextServiceSpec(TeletextSubtitleEngine.Service service)
+    {
+        return service.language.toLowerCase() + ":" + service.type + ":" + service.page;
+    }
+
+    /** Select locally only when the negotiated stock callback cannot render CC1. */
+    protected boolean selectPreferredTeletextWhenCallbackUnavailable()
+    {
+        MiniClientConnection connection = context.getClient().getCurrentConnection();
+        if (connection != null && connection.isSubtitleCallbackEnabled()) return false;
+        TeletextSubtitleEngine.Service[] services = teletextServices;
+        return services.length > 0 && handleTeletextSubtitleSelection(services[0].trackId);
+    }
+
+    private void ensureTeletextOverlay()
+    {
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (teletextOverlay == null)
+                    teletextOverlay = new TeletextSubtitleOverlay(context.getContext());
+                TeletextSubtitleOverlay.attach(context, teletextOverlay);
+            }
+        });
+    }
+
+    private void clearTeletextOverlay()
+    {
+        currentTeletextCueText = "";
+        final TeletextSubtitleOverlay overlay = teletextOverlay;
+        if (overlay == null) return;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run() { overlay.setText(""); }
+        });
+    }
+
+    /** Remove client-rendered subtitle state before SageTV exposes its menus. */
+    protected final void endTeletextPresentation()
+    {
+        teletextOverlayGeneration++;
+        teletextClockScheduled = false;
+        selectedTeletextTrack = DISABLE_TRACK;
+        currentTeletextCueText = "";
+        teletextLegacyBridge.clearPending();
+        TeletextSubtitleEngine.deactivate(teletextListener);
+        final TeletextSubtitleOverlay overlay = teletextOverlay;
+        teletextOverlay = null;
+        if (overlay != null)
+            TeletextSubtitleOverlay.detach(context, overlay);
+    }
+
+    private void scheduleTeletextCue(final TeletextSubtitleEngine.Cue cue)
+    {
+        final long overlayGeneration = teletextOverlayGeneration;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (overlayGeneration != teletextOverlayGeneration
+                        || cue.trackId != selectedTeletextTrack
+                        || player == null || eos || state == EOS_STATE
+                        || state == STOPPED_STATE) return;
+                long targetMs = cue.presentationTimeMs + subtitleOffsetMs;
+                long clockMs = Math.max(0L, getPlayerMediaTimeMillis(0L));
+                long remaining = targetMs - clockMs;
+                if (remaining > 40L)
+                {
+                    context.getVideoView().postDelayed(this, Math.max(10L,
+                            Math.min(250L, remaining)));
+                    return;
+                }
+                ensureTeletextOverlay();
+                if (teletextOverlay != null)
+                {
+                    currentTeletextCueText = cue.text;
+                    teletextCueUpdateCount++;
+                    teletextOverlay.setText(cue.text);
+                }
+            }
+        });
+    }
+
+    public final long getTeletextCueUpdateCountForDebug()
+    {
+        return teletextCueUpdateCount;
+    }
+
+    public final String getCurrentTeletextCueTextForDebug()
+    {
+        return currentTeletextCueText;
+    }
+
+    public final boolean isTeletextOverlayVisibleForDebug()
+    {
+        return teletextOverlay != null && !currentTeletextCueText.isEmpty();
+    }
+
+    public final long getTeletextClockDrainCountForDebug()
+    {
+        return teletextClockDrainCount;
+    }
+
+    public final long getTeletextClockLastMediaTimeMsForDebug()
+    {
+        return teletextClockLastMediaTimeMs;
+    }
+
+    /**
+     * Drive queued Teletext independently of SageTV's GETMEDIATIME cadence.
+     *
+     * <p>Stock STVs stop polling media time once their OSD is hidden. Using
+     * that request as the only caption clock therefore freezes Teletext until
+     * another UI action wakes the OSD. The decoder's own player clock remains
+     * authoritative and advances without an on-screen timeline.</p>
+     */
+    private synchronized void scheduleTeletextClock()
+    {
+        if (teletextClockScheduled || state != PLAY_STATE
+                || teletextServices.length == 0 || context.getVideoView() == null)
+            return;
+        final long generation = teletextOverlayGeneration;
+        teletextClockScheduled = true;
+        context.getVideoView().postDelayed(new Runnable()
+        {
+            @Override public void run()
+            {
+                teletextClockScheduled = false;
+                if (generation != teletextOverlayGeneration || state != PLAY_STATE
+                        || player == null || eos || teletextServices.length == 0)
+                    return;
+                long mediaTimeMs = getPlayerMediaTimeMillis(teletextClockServerBaseMs);
+                if (mediaTimeMs >= 0L)
+                {
+                    teletextLegacyBridge.drainTo(mediaTimeMs);
+                    teletextClockDrainCount++;
+                    teletextClockLastMediaTimeMs = mediaTimeMs;
+                }
+                scheduleTeletextClock();
+            }
+        }, TELETEXT_CLOCK_INTERVAL_MS);
     }
 
     protected abstract void setupPlayer(String sageTVurl);
@@ -387,11 +938,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public long getMediaTimeMillis(long lastServerTime)
     {
+        if (lastServerTime >= 0L)
+            teletextClockServerBaseMs = lastServerTime;
         // OPENURL owns a new logical playback session before its UI-thread
         // player replacement completes. Never expose the old player's EOS
         // sentinel during that interval.
         if (loadTransitionToken != null)
             return 0;
+
+        if (player != null)
+            TeletextSubtitleEngine.activate(teletextListener);
 
         if (lastMediaTime == -1) lastMediaTime = lastServerTime;
 
@@ -449,6 +1005,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
         // we have some data, so we are not flushing/seeking
         lastMediaTime = mt;
+        teletextLegacyBridge.drainTo(mt);
+        teletextClockLastMediaTimeMs = mt;
         return mt;
     }
 
@@ -477,6 +1035,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         // MEDIACMD_DEINIT -> free() remains the true session boundary.
         beginPlaybackOperation(PlaybackSessionController.Operation.STOP);
         state = STOPPED_STATE;
+        endTeletextPresentation();
         context.removeVideoFrame();
     }
 
@@ -515,6 +1074,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     {
         beginPlaybackOperation(PlaybackSessionController.Operation.PLAY);
         state = PLAY_STATE;
+        scheduleTeletextClock();
         scheduleFullscreenPromotionCheck();
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
@@ -526,6 +1086,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     public void seek(long timeInMS)
     {
         beginPlaybackOperation(PlaybackSessionController.Operation.SEEK);
+        TeletextSubtitleEngine.setPlaybackAnchor(timeInMS);
+        teletextLegacyBridge.clearPending();
+        postTeletextFlush();
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.debug("SEEK: {}", timeInMS);
@@ -679,6 +1242,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
 
         flushed = true;
+        TeletextSubtitleEngine.discontinuity("player-flush");
+        teletextLegacyBridge.clearPending();
+        postTeletextFlush();
     }
 
     @Override
@@ -722,6 +1288,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected void releasePlayer()
     {
         log.debug("Releasing Player");
+        endTeletextPresentation();
         if (context.getContext() instanceof Activity)
             DisplayRefreshController.apply((Activity) context.getContext(), this,
                     DisplayRefreshController.OFF);
@@ -740,6 +1307,21 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
         uiAspectChanged = true;
         context.removeVideoFrame();
+    }
+
+    private void postTeletextFlush()
+    {
+        try
+        {
+            context.getClient().getBackgroundService().execute(new Runnable()
+            {
+                @Override public void run() { teletextLegacyBridge.postFlush(); }
+            });
+        }
+        catch (RuntimeException ignored)
+        {
+            // Connection shutdown owns the event channel; there is nothing to flush.
+        }
     }
 
     private void finishLoadTransition(PlaybackSessionController.Token loadSession)
@@ -857,7 +1439,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         // Audio stream selection continues through setAudioTrack().
         if (streamType == 1)
         {
-            if (dvdMimTransport)
+            boolean dvdTransport = lastUri != null && lastUri.startsWith("push:dvd");
+            if (!dvdTransport)
+            {
+                pendingServerSubpictureCommand = streamPosition;
+                applyPendingServerSubpictureStream();
+            }
+            else if (dvdMimTransport)
                 setSubtitleTrack(streamPosition == 62 || (streamPosition & 0x80) != 0
                         ? DISABLE_TRACK : (streamPosition & 0x1f));
             else

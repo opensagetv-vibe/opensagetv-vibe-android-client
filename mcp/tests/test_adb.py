@@ -326,6 +326,17 @@ exit 2
         self.assertIn("--es gsy_system_probe true", command)
         self.assertEqual(result["player"], "media3")
 
+    def test_unified_graphics_toggle_is_forwarded_as_an_opt_in_next_connection_setting(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;op=config;'
+                  'unifiedGraphicsSurfaces=true;unifiedGraphicsAppliesNextConnection=true"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.set_unified_graphics(True)
+        command = shell.call_args.args[0]
+        self.assertIn("--es unified_graphics_surfaces true", command)
+        self.assertTrue(result["unifiedGraphicsSurfaces"])
+        self.assertTrue(result["unifiedGraphicsAppliesNextConnection"])
+
     def test_background_recovery_options_are_forwarded_independently(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=config;'
@@ -374,6 +385,27 @@ exit 2
         self.assertEqual(control.call_args.kwargs, {"foreground": False, "index": 0})
         with self.assertRaisesRegex(ValueError, "-1 \\(off\\) or >= 0"):
             c.set_subtitle_track(-2)
+
+    def test_active_audio_control_validates_and_uses_non_foreground_broadcast(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", return_value={
+            "ok": True, "op": "audio_adjustment", "accepted": True,
+        }) as control:
+            result = c.set_active_audio("ENCODED", True, 25)
+        self.assertTrue(result["accepted"])
+        self.assertEqual(control.call_args.args[0], "audio_adjustment")
+        self.assertEqual(control.call_args.kwargs, {
+            "foreground": False,
+            "output": "passthrough",
+            "passthrough_offset_enabled": "true",
+            "offset_ms": 25,
+        })
+        with self.assertRaisesRegex(ValueError, "output must be decoded or passthrough"):
+            c.set_active_audio("automatic")
+        with self.assertRaisesRegex(ValueError, "between -4000 and 4000"):
+            c.set_active_audio(offset_ms=4001)
+        with self.assertRaisesRegex(ValueError, "is required"):
+            c.set_active_audio()
 
 
 

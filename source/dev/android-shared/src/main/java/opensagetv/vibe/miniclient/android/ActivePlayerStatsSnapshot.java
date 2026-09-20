@@ -81,6 +81,7 @@ final class ActivePlayerStatsSnapshot
     long audioDecoderInitCount = -1L;
     long audioDecoderReleaseCount = -1L;
     String audioOutput = "";
+    String audioOffsetPath = "";
     String decoderCandidates = "";
     String decoderEvents = "";
     String decoderExclusions = "";
@@ -163,6 +164,7 @@ final class ActivePlayerStatsSnapshot
         out.videoHeight = top.getVideoDimensions() == null ? -1 : top.getVideoDimensions().height;
         out.contentFps = top.getContentFrameRateHz();
         out.audioOutput = clean(top.getAudioOutputSummary());
+        out.audioOffsetPath = clean(top.getAudioOffsetSummary());
         out.subtitleTrack = top.getSelectedSubtitleTrack();
         out.subtitleOffsetMs = top.getSubtitleOffsetMillis();
         out.audioOffsetMs = top.getAudioOffsetMillis();
@@ -278,6 +280,10 @@ final class ActivePlayerStatsSnapshot
                 + signed(audioOffsetMs) + " ms"
                 + (dvdAvDeltaUs != Long.MIN_VALUE ? "  |  A/V samples "
                 + signed(dvdAvDeltaUs / 1_000L) + " ms" : ""));
+        if (audioOutput.length() > 0)
+            line(text, "Audio output  " + audioOutput);
+        if (audioOffsetPath.length() > 0)
+            line(text, "Audio offset path  " + audioOffsetPath);
         if (subtitleTrack != MiniPlayerPlugin.DISABLE_TRACK || dvdSubtitleStream >= 0)
             line(text, "Captions  track=" + (subtitleTrack == MiniPlayerPlugin.DISABLE_TRACK
                     ? "off" : subtitleTrack)

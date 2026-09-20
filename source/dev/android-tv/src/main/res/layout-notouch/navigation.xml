@@ -198,18 +198,12 @@
             android:tag="ff_2"/>
 
         <ImageView
-            android:id="@+id/nav_switch_player"
-            style="@style/NavIconButton"
-            android:layout_column="10"
-            android:layout_row="7"
-            android:src="@drawable/ic_switch_video_white_24dp"
-            android:tag="_switch_video"/>
-        <ImageView
             android:visibility="visible"
             android:id="@+id/nav_video_info"
             style="@style/NavIconButton"
             android:layout_column="9"
             android:layout_row="4"
+            android:contentDescription="Video Information and Diagnostics"
             android:src="@drawable/ic_vid_info_white_24dp"
             android:tag="video_info"/>
         <ImageView
@@ -229,6 +223,14 @@
             android:src="@drawable/ic_video_test_white_24dp"
             android:tag="test_current_video"/>
         <ImageView
+            android:id="@+id/nav_playback_stats"
+            style="@style/NavIconButton"
+            android:layout_column="12"
+            android:layout_row="4"
+            android:contentDescription="Show Playback Stats"
+            android:src="@drawable/ic_equalizer_white_24dp"
+            android:tag="playback_stats"/>
+        <ImageView
             android:id="@+id/nav_toggle_ar"
             style="@style/NavIconButton"
             android:layout_column="9"
@@ -239,37 +241,29 @@
         <ImageView
             android:id="@+id/nav_closed_captions"
             style="@style/NavIconButton"
-            android:layout_column="11"
+            android:layout_column="12"
             android:layout_row="7"
-            android:contentDescription="@string/caption_control_title"
+            android:contentDescription="Subtitles and Broadcast Captions"
             android:src="@drawable/ic_closed_caption_white_24dp"
             android:tag="closed_captions"/>
 
         <ImageView
             android:id="@+id/nav_active_player_adjustments"
             style="@style/NavIconButton"
-            android:layout_column="12"
+            android:layout_column="10"
             android:layout_row="7"
-            android:contentDescription="Active Player Adjustments"
-            android:src="@drawable/ic_settings_white_24dp"
+            android:contentDescription="Video Settings"
+            android:src="@drawable/ic_video_settings_white_24dp"
             android:tag="active_player_adjustments"/>
 
         <ImageView
-            android:id="@+id/nav_playback_stats"
+            android:id="@+id/nav_audio_output"
             style="@style/NavIconButton"
-            android:layout_column="13"
+            android:layout_column="11"
             android:layout_row="7"
-            android:contentDescription="Show Playback Stats"
-            android:src="@drawable/ic_equalizer_white_24dp"
-            android:tag="playback_stats"/>
-
-        <ImageView
-            android:id="@+id/nav_remote_mode"
-            style="@style/NavIconButton"
-            android:layout_column="14"
-            android:layout_row="7"
-            android:src="@drawable/ic_open_with_white_24dp"
-            android:tag="toggle_smart_remote"/>
+            android:contentDescription="Audio Output and Sync"
+            android:src="@drawable/ic_audio_tune_white_24dp"
+            android:tag="audio_output"/>
 
     </GridLayout>
     </LinearLayout>

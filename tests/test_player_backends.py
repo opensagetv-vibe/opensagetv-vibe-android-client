@@ -102,6 +102,39 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # and SETVIDEORECT arrive before a slower device's decoder is ready.
         # The playback-generation guard still permits exactly one TV toggle.
         reviewed_bounded_fullscreen_retry_hash = "1fe3cbea3cf8d22e9a473d1e1f3df6f3676947a4ae24e6c125dada888c17bba3"
+        # Adds the datasource-neutral DVB Teletext subtitle session, local
+        # overlay, and stock-server CC1/CC2 callback mapping. Decoder-specific
+        # video/audio transport remains unchanged.
+        # Adds lifecycle-safe Teletext presentation cleanup and bounded debug
+        # state; local subtitle overlays cannot survive STOP/EOS or a newer
+        # playback generation.
+        reviewed_teletext_subtitle_hash = "e88007a3567707106a49a81d0ed850b9c2ba866a696ed62bd9286070e7489048"
+        # Adds only stream-aware virtual CC1/CC2 resolution on top of the
+        # reviewed Teletext session. It delegates actual selection to each
+        # existing backend and does not alter video/audio transport.
+        reviewed_virtual_caption_slot_hash = "7c1d584a4b9c91b04a686402dfcbdb258d36d07fcf0a6f1b4f2a16cf0a46cb0e"
+        # Ports the stock HD300 command-36 MPEG-TS subpicture PID selection
+        # into the existing local DVB/Teletext renderer without changing DVD.
+        reviewed_legacy_dvb_subpicture_hash = "4b4c70e3728f3c9e58964b2b0cf5784a31d430e4ad06deb7600b30b0116e19b7"
+        # Current reviewed caption-session implementation, including the
+        # startup re-resolution and stock command-36 DVB bridge.
+        reviewed_caption_session_current_hash = "49a34f00f0abd95dc169f06ae9b835ee805fc529e4f6deeedb108dddb607a46b"
+        # Applies an explicit CC1/CC2 type mapping (for example CC1 -> DVB)
+        # when stock SageTV publishes VIDEO_CC_STATE, including the async
+        # track-discovery and live-settings re-resolution paths.
+        reviewed_stv_caption_slot_mapping_hash = "f70e707942f2492eac331623e47183d501712b8f7cced6a4dfaee3d113ff7e24"
+        # Separates STV broadcast CC resolution from SRT/PGS/DVD subtitle
+        # preference and prevents CC from depending on Subtitles selection.
+        reviewed_broadcast_cc_separation_hash = "709df6c7d2cec94a12a109be55cd3b145897531e3c842a3c7b6c7ad381647689"
+        # Adds evidence-based Auto resolution: synthetic CEA tracks are not
+        # selected until the decoder observes CEA samples; UK DVB/Teletext
+        # streams therefore reach their real broadcast caption service.
+        reviewed_broadcast_cc_evidence_fallback_hash = "42a1ee6c51bfd5e732d4398c9ded5e2ff00831aa356d90cdab4d12eb8708cd80"
+        # Current reviewed caption-session form makes explicit local DVB own
+        # the bitmap renderer while CC1/CC2 remain text-caption slots. This
+        # was physically gated on stock .175/non-Pro .25 before the audio
+        # output work and does not alter player audio/video transport.
+        reviewed_explicit_dvb_caption_owner_hash = "6ac992f59c957abb50aba034ceeea9aec808c27a9f2127ea6689e7f6aacbfe68"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -119,6 +152,14 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_stock_stop_restart_hash,
             reviewed_diagnostic_stop_checkpoint_hash,
             reviewed_bounded_fullscreen_retry_hash,
+            reviewed_teletext_subtitle_hash,
+            reviewed_virtual_caption_slot_hash,
+            reviewed_legacy_dvb_subpicture_hash,
+            reviewed_caption_session_current_hash,
+            reviewed_stv_caption_slot_mapping_hash,
+            reviewed_broadcast_cc_separation_hash,
+            reviewed_broadcast_cc_evidence_fallback_hash,
+            reviewed_explicit_dvb_caption_owner_hash,
         }, rel)
 
     def test_four_backends_have_stable_preference_values(self):
@@ -226,7 +267,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.92")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.93")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -437,10 +478,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn("pull_seek_policy_", text, rel)
             self.assertIn("Pull seek capability: seekable=", text, rel)
             pull_tuning = text.split("if (!pushMode)", 1)[1]
-            if "exoplayer2" in rel:
-                self.assertIn("ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);", pull_tuning, rel)
-            else:
-                self.assertIn("ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);", pull_tuning, rel)
+            self.assertIn("createCaptionAwareExtractorsFactory(true)", pull_tuning, rel)
+            self.assertIn("withPassthroughOffset", pull_tuning, rel)
 
         exo2 = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("SeekParameters.NEXT_SYNC", exo2)
@@ -795,6 +834,306 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("player-diag", dev_sh)
         self.assertIn("dumpsys SurfaceFlinger", script)
         self.assertIn("adb.logcat_tail(10000)", script)
+
+    def test_audio_icon_exposes_live_decoded_pcm_and_sync_controls(self):
+        dialog = (SHARED / "ActivePlayerAdjustmentsDialog.java").read_text(encoding="utf-8")
+        navigation = (SHARED / "NavigationDialog.java").read_text(encoding="utf-8")
+        layout = (RES / "layout/navigation.xml").read_text(encoding="utf-8")
+        tv_layout = (DEV / "android-tv/src/main/res/layout-notouch/navigation.xml").read_text(encoding="utf-8")
+        interface = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/MiniPlayerPlugin.java").read_text(encoding="utf-8")
+        self.assertIn('android:id="@+id/nav_audio_output"', layout)
+        self.assertIn('android:id="@+id/nav_audio_output"', tv_layout)
+        self.assertIn("ActivePlayerAdjustmentsDialog.showAudio(activity)", navigation)
+        self.assertIn('heading.setText("Audio settings")', dialog)
+        self.assertIn('audioSettingRow("Audio output"', dialog)
+        self.assertIn('audioSettingRow("Passthrough offset"', dialog)
+        self.assertIn('audioSettingRow("Audio offset"', dialog)
+        self.assertIn('audioSettingRow("A/V sync test"', dialog)
+        self.assertIn('audioSettingRow("Audio stream"', dialog)
+        self.assertIn('audioSettingRow("Set as default for all media"', dialog)
+        self.assertIn("metrics.widthPixels * 0.66f", dialog)
+        self.assertIn("chooseAudioChoice(", dialog)
+        self.assertIn('captionButton("Back")', dialog)
+        self.assertIn("setOnCancelListener", dialog)
+        self.assertIn('"Decoded PCM stereo"', dialog)
+        self.assertIn("showAudioOffsetSlider(active)", dialog)
+        self.assertIn("stepMs = 25", dialog)
+        self.assertIn("minMs = -4_000", dialog)
+        self.assertIn("maxMs = 4_000", dialog)
+        self.assertIn("KeyEvent.KEYCODE_DPAD_LEFT", dialog)
+        self.assertIn("KeyEvent.KEYCODE_DPAD_RIGHT", dialog)
+        self.assertIn("KeyEvent.KEYCODE_BACK", dialog)
+        self.assertIn("PrefStore.Keys.playback_audio_offset_ms", dialog)
+        self.assertIn("showAudioMenu();", dialog)
+        self.assertIn("isAudioPassthroughEnabled()", interface)
+        self.assertIn("supportsPassthroughAudioOffset()", interface)
+        self.assertIn("setPassthroughAudioOffsetEnabled", interface)
+
+    def test_long_press_playback_menu_groups_compact_video_audio_and_caption_controls(self):
+        dialog = (SHARED / "ActivePlayerAdjustmentsDialog.java").read_text(encoding="utf-8")
+        navigation = (SHARED / "NavigationDialog.java").read_text(encoding="utf-8")
+        no_touch = (DEV / "android-tv/src/main/res/layout-notouch/navigation.xml").read_text(
+            encoding="utf-8"
+        )
+        shared_layout = (RES / "layout/navigation.xml").read_text(encoding="utf-8")
+        video_menu = dialog.split("private void showMain()", 1)[1].split(
+            "private void addVideoRow", 1
+        )[0]
+        for label in (
+            '"Player"', '"Decoding"', '"Codec Queueing"',
+            '"Source buffering"', '"Display"', '"DVD playback"',
+            '"Restart video decoder"', '"Reset video overrides"',
+        ):
+            self.assertIn(label, video_menu)
+        for removed in (
+            "Test Current Video", "Live playback diagnostics", "Playback Stats overlay",
+            "Audio track", "Subtitle timing", "Audio output / passthrough",
+            "Broadcast captions / CC",
+        ):
+            self.assertNotIn(removed, video_menu)
+        self.assertIn('showSettingsPanel("Video settings"', video_menu)
+        self.assertNotIn('captionRow(status(media)', video_menu)
+        for group in ("showVideoDisplayMenu", "showVideoDvdMenu"):
+            self.assertIn(group, dialog)
+        self.assertNotIn("showVideoEngineMenu", dialog)
+        for setting in ("Refresh-rate matching", "Timestamp repair", "HDMI settle"):
+            self.assertIn(setting, dialog)
+        self.assertIn("chooseVideoChoice", dialog)
+        self.assertIn("reopenVideoMenu", dialog)
+        self.assertIn("resetVideo()", video_menu)
+        for gsy_choice in (
+            'GSYPlayerEngine.AUTO', 'GSYPlayerEngine.MEDIA3',
+            'GSYPlayerEngine.SYSTEM', 'GSYPlayerEngine.LEGACY_EXO',
+        ):
+            self.assertIn(gsy_choice, dialog)
+        self.assertIn('backend.displayName() + " ("', dialog)
+        self.assertIn("ActivePlayerSessionOverrides.setGsyEngine", dialog)
+        self.assertIn("PrefStore.Keys.gsy_player_engine", dialog)
+        self.assertIn("client.eventbus().post(new VideoInfoShow())", navigation)
+        self.assertNotIn("ActivePlayerAdjustmentsDialog.showInformation", navigation)
+        self.assertNotIn("onSwitchPlayer();", navigation)
+        self.assertNotIn("onToggleSmartRemote();", navigation)
+        self.assertIn('android:src="@drawable/ic_video_settings_white_24dp"', no_touch)
+        self.assertNotIn('android:id="@+id/nav_switch_player"', no_touch)
+        self.assertNotIn('android:id="@+id/nav_remote_mode"', no_touch)
+        self.assertIn('android:contentDescription="Video Settings"', shared_layout)
+        self.assertIn('android:contentDescription="Audio Output and Sync"', shared_layout)
+        self.assertIn('android:contentDescription="Subtitles and Broadcast Captions"', shared_layout)
+        self.assertIn("name.setSingleLine(true)", dialog)
+        self.assertIn("current.setSingleLine(true)", dialog)
+        self.assertIn("TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration", dialog)
+        self.assertNotIn("setEllipsize", dialog)
+        self.assertIn("current.setGravity(Gravity.START | Gravity.CENTER_VERTICAL)", dialog)
+        self.assertIn("currentParams.leftMargin = dp(24)", dialog)
+        self.assertIn("dp(42), 1.6f", dialog)
+        self.assertIn("settingsDialogWidth(rows)", dialog)
+        self.assertIn("metrics.widthPixels * 0.54f", dialog)
+        self.assertIn("dp(520)", dialog)
+
+    def test_triangle_opens_combined_fullscreen_information_and_caption_menu_is_compact(self):
+        dialog = (SHARED / "ActivePlayerAdjustmentsDialog.java").read_text(encoding="utf-8")
+        navigation = (SHARED / "NavigationDialog.java").read_text(encoding="utf-8")
+        video_info = (SHARED / "VideoInfoDialog.java").read_text(encoding="utf-8")
+        video_layout = (RES / "layout/video_info.xml").read_text(encoding="utf-8")
+        self.assertIn("client.eventbus().post(new VideoInfoShow())", navigation)
+        self.assertNotIn("showInformationMenu", dialog)
+        self.assertNotIn("showDiagnostics(MediaCmd", dialog)
+        self.assertIn("diagnosticsTextForExport", video_info)
+        self.assertIn("R.id.vi_vibeDiagnostics", video_info)
+        self.assertIn("private final Activity activity", video_info)
+        self.assertNotIn("(Activity) getContext()", video_info)
+        self.assertIn('android:text="SageTV Video"', video_layout)
+        self.assertIn('android:text="Vibe Diagnostics"', video_layout)
+        self.assertIn("<TableLayout", video_layout)
+        self.assertIn('android:paddingBottom="2dp"', video_layout)
+        self.assertIn('android:id="@+id/vib_export"', video_layout)
+        self.assertIn('android:layout_height="match_parent"', video_layout)
+        self.assertIn('showCaptionPanel("Subtitles / broadcast CC"', dialog)
+        self.assertIn('"Subtitle stream: " + subtitleTrackValue', dialog)
+        self.assertIn('"Subtitle appearance: " + subtitleAppearanceValue', dialog)
+        self.assertIn('chooseCaptionChoice("Subtitle stream (SRT/PGS/DVD)"', dialog)
+        self.assertNotIn('"Subtitle offset: "', dialog)
+        self.assertIn("metrics.widthPixels * 0.42f", dialog)
+        self.assertIn("selectable ? dp(28)", dialog)
+
+    def test_embedded_bouncing_ball_av_sync_test_uses_real_media_pipeline(self):
+        dialog = (SHARED / "video/media3/Media3AvSyncTestDialog.java").read_text(
+            encoding="utf-8"
+        )
+        menu = (SHARED / "ActivePlayerAdjustmentsDialog.java").read_text(
+            encoding="utf-8"
+        )
+        generator = (ROOT / "scripts/generate_av_sync_fixture.py").read_text(
+            encoding="utf-8"
+        )
+        asset = DEV / "android-shared/src/main/assets/vibe_av_sync_ball.ts"
+        self.assertTrue(asset.is_file())
+        self.assertGreater(asset.stat().st_size, 500_000)
+        self.assertIn('Uri.parse("asset:///vibe_av_sync_ball.ts")', dialog)
+        self.assertIn("new ExoPlayer.Builder", dialog)
+        self.assertIn("Player.REPEAT_MODE_ONE", dialog)
+        self.assertIn("Media3AudioExtensionRenderersFactory", dialog)
+        self.assertIn("Media3PassthroughOffsetExtractorsFactory", dialog)
+        self.assertIn("new SurfaceView(activity)", dialog)
+        self.assertIn("player.setVideoSurfaceView(videoSurface)", dialog)
+        self.assertNotIn("new PlayerView(activity)", dialog)
+        self.assertIn("Unable to start the A/V sync test", dialog)
+        self.assertIn("active.setMute(true)", dialog)
+        self.assertIn("active.suspendAudioForExclusiveDiagnostic()", dialog)
+        self.assertIn("active.resumeAudioAfterExclusiveDiagnostic()", dialog)
+        self.assertIn("activeAudioSuspended ? 350L : 0L", dialog)
+        self.assertIn("Encoded A/V sync test is unavailable", dialog)
+        self.assertIn("active.setMute(previouslyMuted)", dialog)
+        self.assertIn("STEP_MS = 25", dialog)
+        self.assertIn("OFFSET_APPLY_DEBOUNCE_MS = 250L", dialog)
+        self.assertIn("pendingOffsetApply", dialog)
+        self.assertIn("500-410*abs(sin(PI*t))", generator)
+        self.assertIn("drawbox=x=0:y=596", generator)
+        self.assertIn("widthPixels * 0.35f", dialog)
+        self.assertIn("Gravity.BOTTOM | Gravity.RIGHT", dialog)
+        self.assertIn("LinearLayout.LayoutParams.MATCH_PARENT, dp(24)", dialog)
+        self.assertIn("player.setMediaSource(createFixtureSource(), positionMs)", dialog)
+        self.assertIn("activity, passthrough, 0", dialog)
+        self.assertIn("timingController.setOffsetMillis(offsetMs[0])", dialog)
+        self.assertIn('"Calibration offset applied: "', dialog)
+        self.assertIn("handler.removeCallbacks(pendingOffsetEvidence)", dialog)
+        self.assertIn("0.015*sin(2*PI*220*t)", generator)
+        self.assertIn("onFinished(offsetMs[0])", dialog)
+        self.assertIn("Media3AvSyncTestDialog.show", menu)
+        self.assertIn("Keep the center column completely clear", generator)
+        self.assertIn("BALL IMPACT", generator)
+        self.assertNotIn("BORDER FLASH", generator)
+        self.assertIn("SHOULD COINCIDE", generator)
+        self.assertIn('"-c:a", "ac3"', generator)
+        self.assertIn('"-ar", "48000"', generator)
+        self.assertIn("av-sync-fixture)", (ROOT / "dev.sh").read_text(encoding="utf-8"))
+
+    def test_exclusive_av_sync_diagnostic_releases_and_restores_encoded_audio_sink(self):
+        interface = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/MiniPlayerPlugin.java").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("suspendAudioForExclusiveDiagnostic()", interface)
+        self.assertIn("resumeAudioAfterExclusiveDiagnostic()", interface)
+        for player_rel in (
+            "video/media3/Media3MediaPlayerImpl.java",
+            "video/exoplayer2/Exo2MediaPlayerImpl.java",
+        ):
+            player = (SHARED / player_rel).read_text(encoding="utf-8")
+            self.assertIn("exclusiveDiagnosticAudioSuspended", player, player_rel)
+            self.assertIn("setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)", player,
+                          player_rel)
+            self.assertIn("setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)", player,
+                          player_rel)
+            self.assertIn('"diagnostic_audio_suspended"', player, player_rel)
+            self.assertIn('"diagnostic_audio_resumed"', player, player_rel)
+        gsy = (SHARED / "video/gsy/GSYMediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn("d().suspendAudioForExclusiveDiagnostic()", gsy)
+        self.assertIn("d().resumeAudioAfterExclusiveDiagnostic()", gsy)
+
+    def test_media3_and_legacy_exo_enforce_pcm_and_rebuild_live_source(self):
+        cases = (
+            ("video/media3/Media3MediaPlayerImpl.java",
+             "video/media3/Media3AudioExtensionRenderersFactory.java",
+             "video/media3/Media3PcmAudioProcessor.java"),
+            ("video/exoplayer2/Exo2MediaPlayerImpl.java",
+             "video/exoplayer2/Exo2AudioExtensionRenderersFactory.java",
+             "video/exoplayer2/Exo2PcmAudioProcessor.java"),
+        )
+        for player_rel, factory_rel, processor_rel in cases:
+            player = (SHARED / player_rel).read_text(encoding="utf-8")
+            factory = (SHARED / factory_rel).read_text(encoding="utf-8")
+            processor = (SHARED / processor_rel).read_text(encoding="utf-8")
+            self.assertIn("resolveAudioPassthroughEnabled", player, player_rel)
+            self.assertIn("retainedAudioRebuildDataSource", player, player_rel)
+            self.assertIn('"audio_output_live_rebuild"', player, player_rel)
+            self.assertIn("setAudioProcessors", factory, factory_rel)
+            self.assertIn("DEFAULT_AUDIO_CAPABILITIES", factory, factory_rel)
+            self.assertIn("setEnableFloatOutput(false)", factory, factory_rel)
+            self.assertIn("pendingAdjustmentFrames", processor, processor_rel)
+            self.assertIn("mixFrame", processor, processor_rel)
+
+    def test_media3_and_legacy_exo_offset_encoded_passthrough_without_changing_bytes(self):
+        controller = (SHARED / "video/EncodedPassthroughOffsetController.java").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("shiftAudioSampleTimeUs", controller)
+        self.assertIn("shiftVideoSampleTimeUs", controller)
+        self.assertIn("value > 0", controller)
+        self.assertIn("value < 0", controller)
+        for player_rel, wrapper_rel in (
+            ("video/media3/Media3MediaPlayerImpl.java",
+             "video/media3/Media3PassthroughOffsetExtractorsFactory.java"),
+            ("video/exoplayer2/Exo2MediaPlayerImpl.java",
+             "video/exoplayer2/Exo2PassthroughOffsetExtractorsFactory.java"),
+        ):
+            player = (SHARED / player_rel).read_text(encoding="utf-8")
+            wrapper = (SHARED / wrapper_rel).read_text(encoding="utf-8")
+            self.assertIn("withPassthroughOffset", player, player_rel)
+            self.assertIn("playback_passthrough_audio_offset_enabled", player, player_rel)
+            self.assertIn("schedulePassthroughOffsetReanchor", player, player_rel)
+            self.assertIn('"passthrough_offset_live_reanchor"', player, player_rel)
+            reanchor = player.split(
+                "private void schedulePassthroughOffsetReanchor", 1
+            )[1].split("public String getSelected", 1)[0]
+            self.assertIn("if (pushMode)", reanchor, player_rel)
+            self.assertIn('"passthrough_offset_push_deferred"', reanchor, player_rel)
+            self.assertIn("controller.setOffsetMillis", player, player_rel)
+            self.assertRegex(
+                player,
+                r"(?:controller|passthroughOffsetController)\.setEnabled",
+                player_rel,
+            )
+            self.assertNotIn("schedulePassthroughOffsetRebuild", player, player_rel)
+            self.assertIn("delegate.sampleData", wrapper, wrapper_rel)
+            self.assertIn("delegate.sampleMetadata(shifted", wrapper, wrapper_rel)
+            self.assertNotIn("AudioProcessor", wrapper, wrapper_rel)
+
+    def test_track_diagnostics_are_change_driven_and_safe_during_teardown(self):
+        for player_rel, expected_type in (
+            ("video/media3/Media3MediaPlayerImpl.java", "ExoPlayer"),
+            ("video/exoplayer2/Exo2MediaPlayerImpl.java", "ExoPlayer"),
+        ):
+            player = (SHARED / player_rel).read_text(encoding="utf-8")
+            tracks = player.split("public void onTracksChanged(Tracks tracks)", 1)[1]
+            tracks = tracks.split("public void onPlayerError", 1)[0]
+            ready = player.split("public void onPlaybackStateChanged(int playbackState)", 1)[1]
+            ready = ready.split("public void onTimelineChanged", 1)[0]
+            diagnostics = player.split(
+                f"private void debugAvailableTracks({expected_type} expectedPlayer)", 1
+            )[1].split("// cncb - Add and remove", 1)[0]
+
+            self.assertIn("debugAvailableTracks(listenerPlayer);", tracks, player_rel)
+            self.assertIn("player != listenerPlayer", tracks, player_rel)
+            self.assertNotIn("debugAvailableTracks(listenerPlayer);", ready, player_rel)
+            self.assertIn("if (expectedPlayer == null)", diagnostics, player_rel)
+            self.assertIn("expectedPlayer.getRendererType(i)", diagnostics, player_rel)
+            self.assertNotIn("player.getRendererType(i)", diagnostics, player_rel)
+
+        media3 = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(
+            encoding="utf-8"
+        )
+        ready = media3.split("public void onPlaybackStateChanged(int playbackState)", 1)[1]
+        ready = ready.split("public void onTimelineChanged", 1)[0]
+        self.assertIn("listenerPlayer.getDuration()", ready)
+        self.assertNotIn("player.getDuration()", ready)
+
+    def test_ijk_truthfully_reports_fixed_decoded_pcm(self):
+        player = (SHARED / "video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn('return "Decoded PCM (IJK fixed output)";', player)
+        self.assertIn("if (enabled)\n            return false;", player)
+
+    def test_audio_output_and_offset_are_exported_for_diagnostics(self):
+        stats = (SHARED / "ActivePlayerStatsSnapshot.java").read_text(encoding="utf-8")
+        state = (DEV / "android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java").read_text(encoding="utf-8")
+        self.assertIn('line(text, "Audio output  " + audioOutput)', stats)
+        for field in (
+            "audioPassthroughControlSupported", "audioPassthroughEnabled",
+            "audioOutputSummary", "audioOffsetSupported", "audioOffsetMs",
+            "audioOffsetSessionOverrideMs", "audioPassthroughSessionOverride",
+            "passthroughAudioOffsetSupported", "passthroughAudioOffsetEnabled",
+            "audioOffsetPath",
+        ):
+            self.assertIn(field, state)
 
 
 if __name__ == "__main__":

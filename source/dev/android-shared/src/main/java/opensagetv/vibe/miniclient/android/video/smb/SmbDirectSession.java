@@ -27,6 +27,8 @@ import opensagetv.vibe.miniclient.net.ISageTVDataSource;
 import opensagetv.vibe.miniclient.net.ShadowMediaServerSession;
 import opensagetv.vibe.miniclient.net.SmbMappedPath;
 import opensagetv.vibe.miniclient.net.SmbPathMapper;
+import opensagetv.vibe.miniclient.media.TeletextPesProbe;
+import opensagetv.vibe.miniclient.media.TeletextSubtitleEngine;
 
 /** One playback-owned SMB file plus its minimally active shadow MediaServer session. */
 public final class SmbDirectSession implements ISageTVDataSource, GrowingDataSource
@@ -156,6 +158,8 @@ public final class SmbDirectSession implements ISageTVDataSource, GrowingDataSou
             {
                 bytesRead += read;
                 lastReadEnd = position + read;
+                TeletextPesProbe.observe("smb-direct", position, buffer, offset, read);
+                TeletextSubtitleEngine.observe("smb-direct", position, buffer, offset, read);
             }
             return read <= 0 ? -1 : read;
         }

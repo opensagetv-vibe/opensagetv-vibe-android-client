@@ -20,6 +20,7 @@ DVD_YUV_PALETTE = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclie
 DVD_AUDIO_STREAM_CODE = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/dvd/DvdAudioStreamCode.java"
 PUSH_SOURCE = ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/net/PushBufferDataSource.java"
 MEDIA3_PUSH_SOURCE = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/Media3PushDataSource.java"
+DVD_LOAD_CONTROL = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/media3/DvdPushLoadControl.java"
 DVD_PREFS = ROOT / "source/dev/android-shared/src/main/res/xml/disc_playback_prefs.xml"
 ROOT_PREFS = ROOT / "source/dev/android-shared/src/main/res/xml/prefs.xml"
 DEBUG_STATE = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugStateProvider.java"
@@ -71,13 +72,14 @@ class DvdProtocolTests(unittest.TestCase):
     def test_playback_stats_overlay_is_bounded_opt_in_and_lifecycle_safe(self):
         overlay = ACTIVE_PROCESS_OVERLAY.read_text(encoding="utf-8")
         dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
+        navigation = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/NavigationDialog.java").read_text(encoding="utf-8")
         debug_state = DEBUG_STATE.read_text(encoding="utf-8")
         lifecycle = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/UIActivityLifeCycleHandler.java").read_text(encoding="utf-8")
         self.assertIn("DISPLAY_MS = 30_000L", overlay)
         self.assertIn("WeakReference<Activity>", overlay)
         self.assertIn("MAIN.removeCallbacks", overlay)
         self.assertIn("removeView", overlay)
-        self.assertIn("Playback Stats overlay", dialog)
+        self.assertIn("choosePlaybackStats", dialog)
         self.assertIn("☑ Playback Stats enabled", dialog)
         self.assertIn("☐ Playback Stats disabled", dialog)
         self.assertIn("final boolean wasVisible", dialog)
@@ -85,6 +87,8 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("Show detailed until turned off", dialog)
         self.assertIn("Show detailed for 30 seconds", dialog)
         self.assertIn("Export redacted detailed snapshot", dialog)
+        self.assertIn('setMode(activity, currentMedia, "toggle")', navigation)
+        self.assertIn("updatePlaybackStatsToggle", navigation)
         self.assertIn("activePlayerProcessOverlayVisible", debug_state)
         self.assertGreaterEqual(lifecycle.count("ActivePlayerProcessOverlay.hide();"), 2)
 
@@ -561,11 +565,16 @@ class DvdProtocolTests(unittest.TestCase):
 
     def test_dvd_push_uses_bounded_time_buffer_not_media3_fifty_second_default(self):
         media3 = MEDIA3.read_text(encoding="utf-8")
+        dvd_load = DVD_LOAD_CONTROL.read_text(encoding="utf-8")
         load_control = media3.split("if (dvdPushMode)", 1)[1].split(
             "else if (!pushMode && !httpls)", 1
         )[0]
-        self.assertIn("setBufferDurationsMs(2_000, 8_000, 0, 0)", load_control)
-        self.assertIn("setPrioritizeTimeOverSizeThresholds(true)", load_control)
+        self.assertIn("new DvdPushLoadControl", load_control)
+        self.assertIn("MIN_BUFFER_MS = 5_000", dvd_load)
+        self.assertIn("MAX_BUFFER_MS = 12_000", dvd_load)
+        self.assertIn("START_BUFFER_MS = MIN_BUFFER_MS", dvd_load)
+        self.assertIn("REBUFFER_MS = MIN_BUFFER_MS", dvd_load)
+        self.assertIn("setPrioritizeTimeOverSizeThresholds(true)", dvd_load)
 
     def test_dvd_frame_release_cadence_is_exposed_for_physical_judder_diagnosis(self):
         media3 = MEDIA3.read_text(encoding="utf-8")
@@ -883,13 +892,17 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("bufferedEdgeMs", ahead)
         self.assertIn("bufferedEdgeMs - getPlaybackPosition()", ahead)
 
-    def test_tiny_authored_dvd_cells_have_zero_start_and_rebuffer_thresholds(self):
+    def test_tiny_authored_dvd_cells_bypass_the_main_title_rebuffer_reserve(self):
         media3 = MEDIA3.read_text(encoding="utf-8")
         dvd_load = media3.split("if (dvdPushMode)", 1)[1].split(
             "else if (!pushMode && !httpls)", 1
         )[0]
-        self.assertIn(".setBufferDurationsMs(2_000, 8_000, 0, 0)", dvd_load)
-        self.assertIn("480 ms menu-transition cell", dvd_load)
+        self.assertIn("480 ms", dvd_load)
+        self.assertIn("navigation cells", dvd_load)
+        self.assertIn("dvdSegmentReaderEnded || dvdRepreparePending", dvd_load)
+        load_control = DVD_LOAD_CONTROL.read_text(encoding="utf-8")
+        self.assertIn("drainState.shouldDrainImmediately()", load_control)
+        self.assertIn("return true", load_control)
 
     def test_audio_only_navigation_cell_finishes_track_discovery_before_its_end(self):
         extractor = DVD_PS.read_text(encoding="utf-8")
@@ -978,7 +991,8 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("getBufferedPlaybackAheadMillis", media3)
         self.assertIn("dvdDecoderBufferedAheadMs <= 500", media)
         self.assertIn("&& decoderDrained", media)
-        self.assertIn("setBufferDurationsMs(2_000, 8_000, 0, 0)", media3)
+        self.assertIn("new DvdPushLoadControl", media3)
+        self.assertIn("REBUFFER_MS = MIN_BUFFER_MS", DVD_LOAD_CONTROL.read_text(encoding="utf-8"))
 
     def test_missing_dvd_text_track_is_rejected_before_media3_lookup(self):
         media3 = MEDIA3.read_text(encoding="utf-8")
@@ -1068,9 +1082,12 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("getCurrentTracks().getGroups()", media3)
         self.assertIn("Passthrough cannot be changed safely", dialog)
         self.assertIn("no output mode was changed", dialog)
-        self.assertIn("Preferred configured track", dialog)
-        self.assertIn("active.setPreferredSubtitleTrack()", dialog)
-        self.assertIn("tracks[selected - 5].getIndex()", dialog)
+        self.assertIn('rowList.add("Available broadcast CC")', dialog)
+        self.assertIn("addAvailableCaptionRows", dialog)
+        self.assertIn("captionSlotDetected", dialog)
+        self.assertIn("chooseCaptionType", dialog)
+        self.assertIn("chooseCaptionLanguage", dialog)
+        self.assertIn("applyClosedCaptionSlot", PLUGIN.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

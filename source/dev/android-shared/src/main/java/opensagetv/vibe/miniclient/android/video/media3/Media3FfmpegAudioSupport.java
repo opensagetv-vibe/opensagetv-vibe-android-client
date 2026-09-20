@@ -39,6 +39,25 @@ public final class Media3FfmpegAudioSupport
     public static boolean supportsFormat(String mimeType)
     {
         configure();
-        return FfmpegLibrary.supportsFormat(mimeType);
+        return FfmpegLibrary.supportsFormat(canonicalMimeType(mimeType));
+    }
+
+    /**
+     * Media3's FFmpeg extension compares the MPEG layer MIME aliases with
+     * case-sensitive constants even though MIME types themselves are
+     * case-insensitive. SageTV and Android commonly report these aliases in
+     * lower case. Canonicalize only the two affected aliases before capability
+     * negotiation so a playable MP2/MP1 stream does not make a stock server
+     * fall back to its low-resolution transcoder.
+     */
+    static String canonicalMimeType(String mimeType)
+    {
+        if (mimeType == null)
+            return null;
+        if ("audio/mpeg-l1".equalsIgnoreCase(mimeType))
+            return "audio/mpeg-L1";
+        if ("audio/mpeg-l2".equalsIgnoreCase(mimeType))
+            return "audio/mpeg-L2";
+        return mimeType;
     }
 }

@@ -211,6 +211,7 @@ def main() -> int:
             "get_player_telemetry",
             "wait_for_player_event",
             "dev_player_state",
+            "dev_set_active_audio",
             "dev_set_player_config",
             "dev_connect_server",
             "dev_exit_session",

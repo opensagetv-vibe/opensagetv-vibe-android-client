@@ -6,6 +6,7 @@ import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.audio.AudioCapabilities;
 import com.google.android.exoplayer2.audio.AudioSink;
 import com.google.android.exoplayer2.audio.DefaultAudioSink;
+import com.google.android.exoplayer2.audio.AudioProcessor;
 
 /**
  * Legacy ExoPlayer renderer factory with an explicit PCM-only audio sink policy.
@@ -19,13 +20,19 @@ import com.google.android.exoplayer2.audio.DefaultAudioSink;
 final class Exo2AudioExtensionRenderersFactory extends DefaultRenderersFactory
 {
     private final boolean allowEncodedAudioPassthrough;
+    private final Exo2PcmAudioProcessor pcmAudioProcessor;
 
     Exo2AudioExtensionRenderersFactory(Context context,
-                                       boolean allowEncodedAudioPassthrough)
+                                       boolean allowEncodedAudioPassthrough,
+                                       int audioOffsetMs)
     {
         super(context);
         this.allowEncodedAudioPassthrough = allowEncodedAudioPassthrough;
+        pcmAudioProcessor = allowEncodedAudioPassthrough
+                ? null : new Exo2PcmAudioProcessor(audioOffsetMs);
     }
+
+    Exo2PcmAudioProcessor getPcmAudioProcessor() { return pcmAudioProcessor; }
 
     @Override
     protected AudioSink buildAudioSink(Context context,
@@ -44,7 +51,8 @@ final class Exo2AudioExtensionRenderersFactory extends DefaultRenderersFactory
 
         return new DefaultAudioSink.Builder()
                 .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
-                .setEnableFloatOutput(enableAudioFloatOutput)
+                .setAudioProcessors(new AudioProcessor[] { pcmAudioProcessor })
+                .setEnableFloatOutput(false)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setOffloadMode(DefaultAudioSink.OFFLOAD_MODE_DISABLED)
                 .build();

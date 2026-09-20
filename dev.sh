@@ -394,6 +394,12 @@ case "${1:-help}" in
     # captions, whole-second A/V pulses, dual AC-3, and deterministic EDL.
     dev_exec bash "$CONTAINER_WORKSPACE/scripts/generate_seek_fixture.sh" "$@"
     ;;
+  av-sync-fixture)
+    shift
+    # Redistributable bouncing-ball impact/flash/click pattern embedded in the
+    # Android client and used by its local A/V Sync Test.
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/generate_av_sync_fixture.py" "$@"
+    ;;
   codec-fixtures)
     shift
     # Deterministic Kodi-derived codec/profile/bitstream test matrix. Generated

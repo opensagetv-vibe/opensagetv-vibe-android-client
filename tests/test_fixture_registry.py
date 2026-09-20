@@ -43,6 +43,16 @@ class FixtureRegistryTests(unittest.TestCase):
         }
         self.assertEqual(selected_checks(case), ["absolute_seek", "pause_resume"])
 
+    def test_teletext_probe_mode_has_positive_and_negative_controls(self):
+        environment = load_test_environment(ROOT / "config" / "firetv.example.toml")
+        cases = environment.fixture_cases(mode="teletext_probe", enabled_only=False)
+        expected = {case["id"]: case["expected_teletext_pes"] for case in cases}
+        self.assertEqual(expected, {
+            "uk_taskmaster": "absent",
+            "uk_breakfast": "preserved",
+            "uk_classic_holby": "preserved",
+        })
+
     def test_root_workflow_exposes_mode_discovery_runner(self):
         text = (ROOT / "dev.sh").read_text(encoding="utf-8")
         script = (ROOT / "scripts" / "mcp_fixture_matrix.py").read_text(encoding="utf-8")

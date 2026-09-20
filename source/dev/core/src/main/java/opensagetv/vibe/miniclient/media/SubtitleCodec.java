@@ -8,6 +8,8 @@ public enum SubtitleCodec
     SUBRIP("SUBRIP", "SubRip Subtitles", new String[]{"SRT"}, "application/x-subrip"),
     PGS("PGSSUB", "PGS Subtitle", new String[]{"PGSSUB"}, "application/pgs"),
     DVB("DVBSUB", "DVB Subtitles", new String[]{"DVBSUB", "DVB_SUBTITLE"}, "application/dvbsubs"),
+    TELETEXT("TELETEXT", "DVB Teletext Subtitles",
+            new String[]{"TELETEXT", "DVB_TELETEXT"}, "application/dvbteletext"),
     CEA608("CEA-608", "cea-608 Closed Captions", new String[]{""}, "application/cea-608"),
     CEA708("CEA-708", "cea-708 Closed Captions", new String[]{""}, "application/cea-708");
 

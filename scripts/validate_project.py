@@ -242,6 +242,66 @@ def main() -> int:
             # retried within the same generation and still emits at most one
             # TV toggle for an actual embedded preview.
             "1fe3cbea3cf8d22e9a473d1e1f3df6f3676947a4ae24e6c125dada888c17bba3",
+            # Reviewed DVB Teletext presentation lifecycle. Decoder-owned
+            # overlays are generation-bound and removed before SageTV menus
+            # are exposed; media transport and decoder selection are unchanged.
+            "e88007a3567707106a49a81d0ed850b9c2ba866a696ed62bd9286070e7489048",
+            # Reviewed virtual-caption-slot resolver. This adds only a
+            # preference-driven subtitle-track selection layer over the
+            # existing Teletext/bitmap/CEA paths and leaves video/audio
+            # transport, lifecycle, and decoder ownership unchanged.
+            "7c1d584a4b9c91b04a686402dfcbdb258d36d07fcf0a6f1b4f2a16cf0a46cb0e",
+            # Reviewed mixed DVB/Teletext virtual-slot correction. The
+            # Teletext callback bridge now maps only slots whose complete
+            # stream-policy result is actually Teletext, preventing a sole
+            # Teletext service from occupying both CC1 and CC2 and being
+            # discarded by duplicate-channel protection.
+            "7ad5ba35bd3396e482482444026cd10c98a9f696a4e325202b1b081ff3bc197b",
+            # Reviewed asynchronous native-track publication correction. A
+            # decoded Teletext cue re-resolves the same bounded virtual-slot
+            # policy before enqueue, so an early provisional mapping cannot
+            # survive after Media3/Exo publishes the DVB service inventory.
+            "c3857239090398405b5f7053033103a34a5260fce116855ecba53d9f6bc67a73",
+            # Reviewed stock-server Teletext compatibility mirror. When the
+            # server cannot publish VIDEO_CC_STATE or accept DVB bitmaps, a
+            # sole decoded Teletext service is carried on both legacy CC1 and
+            # CC2 channels; local modern subtitle selection is unchanged.
+            "54e47e35beec7142656e971989571ececb425376d5b72db2b4d976d69d0f6dbe",
+            # Reviewed original-HD300 DVB subpicture command port. For
+            # non-DVD MPEG-TS only, command 36/type 1 is resolved by source
+            # PID into the existing local subtitle renderer. The dedicated
+            # DVD-SPU path and video/audio transport are unchanged.
+            "4b4c70e3728f3c9e58964b2b0cf5784a31d430e4ad06deb7600b30b0116e19b7",
+            # Reviewed explicit DVB caption mode. This keeps DVB bitmap
+            # selection client-local, bypasses server caption-state/Teletext
+            # fallback while selected, and never relabels DVB as Teletext.
+            "49a34f00f0abd95dc169f06ae9b835ee805fc529e4f6deeedb108dddb607a46b",
+            # Reviewed stock-STV virtual-slot mapping. When VIDEO_CC_STATE
+            # selects CC1/CC2, an explicit per-slot DVB/Teletext/CEA type is
+            # resolved after track discovery and when the live setting changes.
+            "f70e707942f2492eac331623e47183d501712b8f7cced6a4dfaee3d113ff7e24",
+            # Reviewed broadcast-CC separation. VIDEO_CC_STATE/CC1/CC2 now
+            # resolve only broadcast services and never the SRT/PGS/DVD
+            # subtitle preference.
+            "709df6c7d2cec94a12a109be55cd3b145897531e3c842a3c7b6c7ad381647689",
+            # Reviewed Auto caption evidence fallback. Synthetic CEA tracks
+            # are ignored until real CEA samples are observed, allowing UK
+            # DVB/Teletext streams to select their actual broadcast service.
+            "42a1ee6c51bfd5e732d4398c9ded5e2ff00831aa356d90cdab4d12eb8708cd80",
+            # Reviewed explicit-slot/subpicture precedence correction. Stock
+            # command 36 remains authoritative in STV mode, while an explicit
+            # local CC1/CC2/DVB mode is no longer erased by Subtitles-off.
+            "05c2c2cc0b2482a55a17547e2bc61106d20e55291fbcf0ca9ca39f6397d34f9f",
+            # Reviewed single-renderer caption ownership. On a stock server,
+            # explicit local CC1/CC2/DVB selection disables and flushes the
+            # legacy event-225 Teletext bridge before the Android Teletext or
+            # DVB renderer is selected, preventing duplicate captions.
+            "07192add698b1613dc23e8a86d9f615d10f94844ec33de9432e8cf8812ccb9d9",
+            # Reviewed caption-surface simplification. Virtual CC1/CC2 slots
+            # now exclude DVB bitmap services; DVB is selected only through
+            # the explicit local DVB mode or the original STV Subtitles PID
+            # command. Video/audio transport and lifecycle remain unchanged.
+            "6ac992f59c957abb50aba034ceeea9aec808c27a9f2127ea6689e7f6aacbfe68",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

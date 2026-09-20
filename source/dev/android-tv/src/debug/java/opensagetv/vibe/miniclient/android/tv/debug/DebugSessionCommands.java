@@ -173,6 +173,23 @@ final class DebugSessionCommands
         return "op=active_player_adjustments;shown=true";
     }
 
+    static String showCurrentVideoTest(Context context)
+    {
+        final android.app.Activity activity =
+                UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        if (activity == null)
+            throw new IllegalStateException("no resumed MiniClient playback activity");
+        requireConnectedClient(context);
+        activity.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                ActivePlayerAdjustmentsDialog.testCurrentVideo(activity);
+            }
+        });
+        return "op=test_current_video;confirmationShown=true";
+    }
+
     static String setActivePlayerOverlay(Context context, Intent intent)
     {
         final android.app.Activity activity =

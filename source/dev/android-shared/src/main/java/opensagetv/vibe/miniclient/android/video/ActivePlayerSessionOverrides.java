@@ -16,6 +16,7 @@ public final class ActivePlayerSessionOverrides
     public static final String BUFFER_RESILIENT = "resilient";
 
     private static volatile String backend;
+    private static volatile String gsyEngine;
     private static volatile String decodingMethod;
     private static volatile String codecMode;
     private static volatile String dvdTimestampRepair;
@@ -25,6 +26,8 @@ public final class ActivePlayerSessionOverrides
     private static volatile Integer subtitleTextScalePercent;
     private static volatile String subtitleTextStyle;
     private static volatile Integer audioOffsetMs;
+    private static volatile Boolean audioPassthroughEnabled;
+    private static volatile Boolean passthroughAudioOffsetEnabled;
     private static volatile String refreshRatePolicy;
     private static volatile Integer refreshSettleMs;
 
@@ -33,6 +36,7 @@ public final class ActivePlayerSessionOverrides
     public static synchronized void reset()
     {
         backend = null;
+        gsyEngine = null;
         decodingMethod = null;
         codecMode = null;
         dvdTimestampRepair = null;
@@ -42,6 +46,22 @@ public final class ActivePlayerSessionOverrides
         subtitleTextScalePercent = null;
         subtitleTextStyle = null;
         audioOffsetMs = null;
+        audioPassthroughEnabled = null;
+        passthroughAudioOffsetEnabled = null;
+        refreshRatePolicy = null;
+        refreshSettleMs = null;
+        PlayerRuntimeTuning.reset();
+    }
+
+    /** Clear video-only session overrides without disturbing Audio or CC menus. */
+    public static synchronized void resetVideo()
+    {
+        backend = null;
+        gsyEngine = null;
+        decodingMethod = null;
+        codecMode = null;
+        dvdTimestampRepair = null;
+        bufferPreset = null;
         refreshRatePolicy = null;
         refreshSettleMs = null;
         PlayerRuntimeTuning.reset();
@@ -49,6 +69,10 @@ public final class ActivePlayerSessionOverrides
 
     public static String getBackend() { return backend; }
     public static void setBackend(String value) { backend = normalize(value); }
+    public static String getGsyEngine() { return gsyEngine; }
+    public static void setGsyEngine(String value) { gsyEngine = normalize(value); }
+    public static String resolveGsyEngine(String persisted)
+    { return gsyEngine == null ? persisted : gsyEngine; }
     public static String getDecodingMethod() { return decodingMethod; }
     public static void setDecodingMethod(String value) { decodingMethod = normalize(value); }
     public static String getCodecMode() { return codecMode; }
@@ -71,7 +95,19 @@ public final class ActivePlayerSessionOverrides
     { subtitleTextStyle = normalizeSubtitleStyle(value); }
     public static Integer getAudioOffsetMs() { return audioOffsetMs; }
     public static void setAudioOffsetMs(int value)
-    { audioOffsetMs = Math.max(-2_000, Math.min(2_000, value)); }
+    { audioOffsetMs = Math.max(-4_000, Math.min(4_000, value)); }
+    public static Boolean getAudioPassthroughEnabled() { return audioPassthroughEnabled; }
+    public static void setAudioPassthroughEnabled(boolean value)
+    { audioPassthroughEnabled = value; }
+    public static boolean resolveAudioPassthroughEnabled(boolean persisted)
+    { return audioPassthroughEnabled == null ? persisted : audioPassthroughEnabled; }
+    public static Boolean getPassthroughAudioOffsetEnabled()
+    { return passthroughAudioOffsetEnabled; }
+    public static void setPassthroughAudioOffsetEnabled(boolean value)
+    { passthroughAudioOffsetEnabled = value; }
+    public static boolean resolvePassthroughAudioOffsetEnabled(boolean persisted)
+    { return passthroughAudioOffsetEnabled == null
+            ? persisted : passthroughAudioOffsetEnabled; }
     public static String getRefreshRatePolicy() { return refreshRatePolicy; }
     public static void setRefreshRatePolicy(String value) { refreshRatePolicy = normalize(value); }
     public static String resolveRefreshRatePolicy(String persisted)
@@ -155,17 +191,20 @@ public final class ActivePlayerSessionOverrides
 
     public static boolean isActive()
     {
-        return backend != null || decodingMethod != null || codecMode != null
+        return backend != null || gsyEngine != null || decodingMethod != null || codecMode != null
                 || dvdTimestampRepair != null || bufferPreset != null
                 || subtitleOffsetMs != null || subtitleSafeAreaPercent != null
                 || subtitleTextScalePercent != null || subtitleTextStyle != null
                 || audioOffsetMs != null
+                || audioPassthroughEnabled != null
+                || passthroughAudioOffsetEnabled != null
                 || refreshRatePolicy != null || refreshSettleMs != null;
     }
 
     public static String compactSummary()
     {
-        return "backend=" + value(backend) + ", decode=" + value(decodingMethod)
+        return "backend=" + value(backend) + ", gsyEngine=" + value(gsyEngine)
+                + ", decode=" + value(decodingMethod)
                 + ", queue=" + value(codecMode) + ", dvdPts="
                 + value(dvdTimestampRepair) + ", buffer=" + value(bufferPreset)
                 + ", subtitleOffsetMs=" + value(subtitleOffsetMs)
@@ -173,6 +212,8 @@ public final class ActivePlayerSessionOverrides
                 + ", subtitleScale=" + value(subtitleTextScalePercent)
                 + ", subtitleStyle=" + value(subtitleTextStyle)
                 + ", audioOffsetMs=" + value(audioOffsetMs)
+                + ", audioPassthrough=" + value(audioPassthroughEnabled)
+                + ", passthroughAudioOffset=" + value(passthroughAudioOffsetEnabled)
                 + ", refresh=" + value(refreshRatePolicy)
                 + ", refreshSettleMs=" + value(refreshSettleMs);
     }
@@ -200,5 +241,10 @@ public final class ActivePlayerSessionOverrides
     private static String value(Integer value)
     {
         return value == null ? "default" : Integer.toString(value);
+    }
+
+    private static String value(Boolean value)
+    {
+        return value == null ? "default" : Boolean.toString(value);
     }
 }

@@ -33,12 +33,18 @@ cd "$ROOT"
 
 if (( ! SKIP_FIXTURES )); then
   seek=artifacts/test-media/VibeSeekTest-1080i-MPEG2-AC3-CC.ts
+  av_sync=source/dev/android-shared/src/main/assets/vibe_av_sync_ball.ts
   codec=artifacts/test-media/kodi-codec/fixture-manifest.json
   dvd=artifacts/test-media/VIBE_AUTHORED_DVD/VIBE_DVD_TEST_MANIFEST.json
   if (( REGENERATE )) || [[ ! -f "$seek" ]]; then
     ./dev.sh seek-fixture "$seek" 900
   else
     echo "REUSE: $seek"
+  fi
+  if (( REGENERATE )) || [[ ! -f "$av_sync" ]]; then
+    ./dev.sh av-sync-fixture
+  else
+    echo "REUSE: $av_sync"
   fi
   if (( REGENERATE )) || [[ ! -f "$codec" ]]; then
     ./dev.sh codec-fixtures --duration 6 --output-dir artifacts/test-media/kodi-codec

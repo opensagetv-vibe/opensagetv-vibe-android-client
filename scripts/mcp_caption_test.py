@@ -35,6 +35,12 @@ def stable_caption_time_ms(text: str) -> int | None:
     return (((int(hours) * 60) + int(minutes)) * 60 + int(seconds)) * 1000 + int(milliseconds)
 
 
+def teletext_callback_active(state: dict) -> bool:
+    value = str(state.get("teletextDecoder", ""))
+    match = re.search(r"(?:^|,)services=(\d+)(?:,|$)", value)
+    return value.startswith("active=true") and match is not None and int(match.group(1)) > 0
+
+
 def wait_snapshot(client: MCPProcess, predicate, description: str, timeout_s: float) -> dict:
     deadline = time.monotonic() + timeout_s
     last: dict = {}
@@ -296,10 +302,15 @@ def main() -> int:
             20.0,
         )
         print(f"PASS: detected caption tracks: {tracks.get('subtitleTracks')}")
-        require(
-            tracks.get("preferredCaptionStandard") == args.preferred_caption_standard,
-            f"caption standard preference was not applied: {tracks}",
-        )
+        # In legacy callback mode SageTV owns the selector. Its CC1/CC2 wire
+        # state is intentionally represented as CEA-608 compatibility channels
+        # even when Vibe is sourcing the text from DVB Teletext. Do not mistake
+        # that server-authoritative mapping for a rejected local preference.
+        if not args.legacy_extender_callback:
+            require(
+                tracks.get("preferredCaptionStandard") == args.preferred_caption_standard,
+                f"caption standard preference was not applied: {tracks}",
+            )
         require(
             int(tracks.get("preferredCaptionService", 0)) == args.preferred_caption_service,
             f"caption service preference was not applied: {tracks}",
@@ -323,13 +334,18 @@ def main() -> int:
             callback_state = wait_snapshot(
                 client,
                 lambda state: bool(state.get("legacyCaptionCallbacksNegotiated", False))
-                    and bool(state.get("legacyCaptionCallbackActive", False))
-                    and int(state.get("legacyCaptionCallbackCount", 0)) > 0
-                    and int(state.get("legacyCaptionCallbackBytes", 0)) > 0
+                    and (
+                        (
+                            bool(state.get("legacyCaptionCallbackActive", False))
+                            and int(state.get("legacyCaptionCallbackCount", 0)) > 0
+                            and int(state.get("legacyCaptionCallbackBytes", 0)) > 0
+                        )
+                        or teletext_callback_active(state)
+                    )
                     and int(state.get("legacyCaptionWireEventCount", 0)) > before_wire_events
                     and int(state.get("legacyCaptionWireBytes", 0)) > 0
-                    and not bool(state.get("subtitleOverlayAttached", False)),
-                "legacy-extender caption callbacks on event 225 without a local overlay",
+                    and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
+                "legacy-extender or Teletext compatibility callbacks on event 225",
                 args.cue_timeout_s,
             )
             print(
@@ -338,8 +354,50 @@ def main() -> int:
                 f"decodedBytes={callback_state.get('legacyCaptionCallbackBytes')} "
                 f"wireEvents={callback_state.get('legacyCaptionWireEventCount')} "
                 f"wireBytes={callback_state.get('legacyCaptionWireBytes')} "
-                f"overlayAttached={callback_state.get('subtitleOverlayAttached')}"
+                f"teletext={callback_state.get('teletextDecoder')} "
+                f"localCueText={callback_state.get('currentSubtitleCueText')!r}"
             )
+            if teletext_callback_active(callback_state):
+                # Deliberately do not poll during this window. This guards the
+                # stock-STV failure where caption delivery stopped when the
+                # timeline/OSD stopped issuing GETMEDIATIME requests.
+                continuity_window_s = max(2.0, args.continuity_window_s)
+                before_clock_drains = int(
+                    callback_state.get("teletextClockDrainCount", 0)
+                )
+                before_clock_media_ms = int(
+                    callback_state.get("teletextClockLastMediaTimeMs", -1)
+                )
+                before_continuity_wire = int(
+                    callback_state.get("legacyCaptionWireEventCount", 0)
+                )
+                time.sleep(continuity_window_s)
+                continuity_state = call_dict(client, "dev_player_state", timeout=30.0)
+                clock_drain_delta = int(
+                    continuity_state.get("teletextClockDrainCount", 0)
+                ) - before_clock_drains
+                clock_media_delta_ms = int(
+                    continuity_state.get("teletextClockLastMediaTimeMs", -1)
+                ) - before_clock_media_ms
+                wire_delta = int(
+                    continuity_state.get("legacyCaptionWireEventCount", 0)
+                ) - before_continuity_wire
+                require(
+                    clock_drain_delta >= int(continuity_window_s * 5.0),
+                    "Teletext clock stopped while the SageTV OSD was idle: "
+                    f"drainDelta={clock_drain_delta} windowS={continuity_window_s}",
+                )
+                require(
+                    clock_media_delta_ms >= int(continuity_window_s * 500.0),
+                    "Teletext player clock did not advance while the SageTV OSD was idle: "
+                    f"mediaDeltaMs={clock_media_delta_ms} windowS={continuity_window_s}",
+                )
+                callback_state = continuity_state
+                print(
+                    "PASS: Teletext delivery clock remained independent of idle OSD polling "
+                    f"drainDelta={clock_drain_delta} "
+                    f"mediaDeltaMs={clock_media_delta_ms} wireDelta={wire_delta}"
+                )
             if args.cycle_stv_caption_states:
                 expected_states = (
                     ("Off", "off"),
@@ -365,7 +423,7 @@ def main() -> int:
                         client,
                         lambda state: int(state.get("legacyCaptionWireEventCount", 0))
                             > before_cycle_wire
-                            and not bool(state.get("subtitleOverlayAttached", False)),
+                            and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
                         f"event-225 continuity while SageTV captions are {requested_state}",
                         args.cue_timeout_s,
                     )
@@ -384,7 +442,7 @@ def main() -> int:
                     print(
                         f"PASS: SageTV standard CC state {reported!r}; "
                         f"event225={callback_state.get('legacyCaptionWireEventCount')} "
-                        f"overlayAttached={callback_state.get('subtitleOverlayAttached')} "
+                        f"localCueText={callback_state.get('currentSubtitleCueText')!r} "
                         f"capture={compact_tool_result(capture)}"
                     )
             for seek_index, command in enumerate(args.seek_command, start=1):
@@ -406,8 +464,11 @@ def main() -> int:
                 callback_state = wait_snapshot(
                     client,
                     lambda state: int(state.get("legacyCaptionWireEventCount", 0)) > before_seek_wire
-                        and bool(state.get("legacyCaptionCallbackActive", False))
-                        and not bool(state.get("subtitleOverlayAttached", False)),
+                        and (
+                            bool(state.get("legacyCaptionCallbackActive", False))
+                            or teletext_callback_active(state)
+                        )
+                        and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
                     f"legacy caption callback recovery after seek {seek_index} ({command})",
                     args.cue_timeout_s,
                 )
@@ -438,11 +499,13 @@ def main() -> int:
         if args.authority == "debug":
             selected = call_dict(client, "dev_set_subtitle_track", {"index": args.track_index}, timeout=30.0)
             require(bool(selected.get("accepted")), f"Caption track selection was rejected: {selected}")
+            selected_player_index = int(selected.get("playerIndex", args.track_index))
         else:
+            selected_player_index = args.track_index
             print("PASS: Android subtitle selector was not invoked; waiting for SageTV STV authority")
         selected_state = wait_snapshot(
             client,
-            lambda state: int(state.get("selectedSubtitleTrack", -1)) == args.track_index,
+            lambda state: int(state.get("selectedSubtitleTrackRaw", -1)) == selected_player_index,
             f"{args.authority} caption track selection",
             10.0,
         )

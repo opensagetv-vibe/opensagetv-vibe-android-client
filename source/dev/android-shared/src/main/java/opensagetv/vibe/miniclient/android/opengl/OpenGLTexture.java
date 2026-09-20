@@ -13,6 +13,8 @@ import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 
 import opensagetv.vibe.miniclient.uibridge.Texture;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
+import opensagetv.vibe.miniclient.graphics.UnifiedYuvImage;
 
 public class OpenGLTexture implements Texture {
     public static int TEXTURE_FILTER = GLES20.GL_LINEAR;
@@ -25,6 +27,9 @@ public class OpenGLTexture implements Texture {
     public int height;
     private final int logicalWidth;
     private final int logicalHeight;
+    private final int imageFormat;
+    private UnifiedYuvImage unifiedYuv;
+    private ByteBuffer unifiedRgbaRow;
 
     int texture[] = null;
 
@@ -49,10 +54,17 @@ public class OpenGLTexture implements Texture {
     }
 
     public OpenGLTexture(int width, int height) {
+        this(width, height, UnifiedGraphicsCapability.IMAGE_FORMAT_DEFAULT);
+    }
+
+    public OpenGLTexture(int width, int height, int imageFormat) {
         this.width = width;
         this.height = height;
         this.logicalWidth = width;
         this.logicalHeight = height;
+        this.imageFormat = imageFormat;
+        if (UnifiedGraphicsCapability.isHiresYuvFormat(imageFormat))
+            this.unifiedYuv = new UnifiedYuvImage(width, height);
     }
 
     public int texture() {
@@ -88,6 +100,15 @@ public class OpenGLTexture implements Texture {
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
+        if (UnifiedGraphicsCapability.isHiresYuvFormat(imageFormat)) {
+            // Allocate an ordinary RGBA backing texture.  The SageTV wire
+            // payload is assembled into this texture row by row below; using
+            // an RGBA texture keeps the existing Android shader/compositor.
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
+                    width, height, 0, GLES20.GL_RGBA,
+                    GLES20.GL_UNSIGNED_BYTE, null);
+        }
+
         //log.debug("New Texture[{}]: {} x {}", texture(), this.width, this.height);
 
         OpenGLUtils.logGLErrors("createTexture()");
@@ -111,6 +132,21 @@ public class OpenGLTexture implements Texture {
         }
 
         bitmap.recycle();
+    }
+
+    /** Called on the GL thread for a SageTV IMAGE_FORMAT_HIRESYUV line. */
+    public void loadUnifiedYuvLine(int line, byte[] data, int offset, int length) {
+        if (unifiedYuv == null) return;
+        unifiedYuv.loadLine(line, data, offset, length);
+        if (line < height) return;
+        int row = line - height;
+        if (texture == null) createTexture();
+        if (unifiedRgbaRow == null || unifiedRgbaRow.capacity() < width * 4)
+            unifiedRgbaRow = ByteBuffer.allocateDirect(width * 4).order(ByteOrder.nativeOrder());
+        unifiedYuv.copyRgbaRow(row, unifiedRgbaRow);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture[0]);
+        GLES20.glTexSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, row, width, 1,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, unifiedRgbaRow);
     }
 
     public void draw(int x, int y, int w, int h, int sx, int sy, int sw, int sh, int blend, OpenGLSurface toSurface) {

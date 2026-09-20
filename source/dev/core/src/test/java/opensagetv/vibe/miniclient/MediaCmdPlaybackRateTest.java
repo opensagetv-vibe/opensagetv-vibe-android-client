@@ -2,6 +2,8 @@ package opensagetv.vibe.miniclient;
 
 import org.junit.Test;
 
+import opensagetv.vibe.miniclient.prefs.PrefStore;
+
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -39,6 +41,77 @@ public class MediaCmdPlaybackRateTest
         assertEquals(4, command.ExecuteMediaCommand(
                 MediaCmd.MEDIACMD_SETRATE, 0, new byte[0], response));
         assertEquals(1.0f, Float.intBitsToFloat(MediaCmd.readInt(0, response)), 0.0f);
+    }
+
+    @Test
+    public void stvCc1UsesExplicitDvbSlotMapping()
+    {
+        MiniClient client = mock(MiniClient.class);
+        PrefStore prefs = mock(PrefStore.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.properties()).thenReturn(prefs);
+        when(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                .thenReturn("stv");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_type, "auto"))
+                .thenReturn("dvb");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_language, ""))
+                .thenReturn("");
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        command.setSageTvClosedCaptionState(1);
+
+        verify(player).applyClosedCaptionSlot(1, "dvb", "");
+    }
+
+    @Test
+    public void stvCc1AutoUsesBroadcastSlotAndNotGenericSubtitlePreference()
+    {
+        MiniClient client = mock(MiniClient.class);
+        PrefStore prefs = mock(PrefStore.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.properties()).thenReturn(prefs);
+        when(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                .thenReturn("stv");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_type, "auto"))
+                .thenReturn("auto");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_language, ""))
+                .thenReturn("");
+        when(player.applyClosedCaptionSlot(1, "auto", "")).thenReturn(true);
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        command.setSageTvClosedCaptionState(1);
+
+        verify(player).applyClosedCaptionSlot(1, "auto", "");
+        org.mockito.Mockito.verify(player, org.mockito.Mockito.never())
+                .setPreferredSubtitleTrack();
+        org.mockito.Mockito.verify(player, org.mockito.Mockito.never())
+                .setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
+    }
+
+    @Test
+    public void stvCc1WithoutBroadcastTrackDoesNotEnableOrdinarySubtitle()
+    {
+        MiniClient client = mock(MiniClient.class);
+        PrefStore prefs = mock(PrefStore.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.properties()).thenReturn(prefs);
+        when(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                .thenReturn("stv");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_type, "auto"))
+                .thenReturn("auto");
+        when(prefs.getString(PrefStore.Keys.caption_cc1_language, ""))
+                .thenReturn("");
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        command.setSageTvClosedCaptionState(1);
+
+        verify(player).applyClosedCaptionSlot(1, "auto", "");
+        verify(player).setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
+        org.mockito.Mockito.verify(player, org.mockito.Mockito.never())
+                .setPreferredSubtitleTrack();
     }
 
     private static void setPlayer(MediaCmd command, MiniPlayerPlugin player)

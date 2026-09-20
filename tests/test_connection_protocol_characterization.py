@@ -121,6 +121,20 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         self.assertIn("return !reconnecting", self.reconnect_state)
         self.assertIn("protocolStreams.close()", self.connection)
 
+    def test_stock_server_gfx_reconnect_has_a_bounded_acceptance_retry(self):
+        reconnect = self.connection.split(
+            "private java.net.Socket establishGfxReconnectSocket()", 1
+        )[1].split("public void connect()", 1)[0]
+        self.assertIn("final long[] delaysMs = { 0L, 150L, 350L };", reconnect)
+        self.assertIn("if (!alive)", reconnect)
+        self.assertIn("Thread.sleep(delaysMs[attempt])", reconnect)
+        self.assertIn("Thread.currentThread().interrupt()", reconnect)
+        self.assertIn("EstablishServerConnection(5)", reconnect)
+        self.assertIn(
+            "java.net.Socket reconnectSocket = establishGfxReconnectSocket();",
+            self.connection,
+        )
+
     def test_image_allocation_recovery_is_single_attempt_and_fail_open_is_forbidden(self):
         self.assertIn("catch (OutOfMemoryError firstFailure)", self.gfx_image_recovery)
         self.assertEqual(2, self.gfx_image_recovery.count("allocation.allocate()"))

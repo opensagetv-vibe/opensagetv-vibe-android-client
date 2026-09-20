@@ -16,6 +16,7 @@ import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.android.diagnostics.CurrentVideoTestStore;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
+import opensagetv.vibe.miniclient.media.TeletextPesProbe;
 
 /** Runs a bounded, user-initiated diagnostic against the currently loaded video. */
 final class CurrentVideoDiagnosticTest
@@ -55,7 +56,8 @@ final class CurrentVideoDiagnosticTest
         new AlertDialog.Builder(activity)
                 .setTitle("Test Current Video")
                 .setMessage("This approximately 20-second test measures playback cadence, "
-                        + "pause/resume, buffering, decoder output, and safe seek recovery. "
+                        + "pause/resume, buffering, decoder output, safe seek recovery, and "
+                        + "DVB Teletext PES preservation when present. "
                         + "Playback may move briefly and will be restored to its current position. "
                         + "The redacted result is saved in the next diagnostic export.")
                 .setPositiveButton("Run test", new DialogInterface.OnClickListener()
@@ -115,6 +117,7 @@ final class CurrentVideoDiagnosticTest
                         .append("mediaPathIncluded=false\n")
                         .append("originalState=").append(originalState).append('\n')
                         .append("originalPositionMs=").append(originalPositionMs).append('\n');
+                TeletextPesProbe.begin();
                 baseline = capture("baseline");
                 later(new Runnable()
                 {
@@ -376,6 +379,23 @@ final class CurrentVideoDiagnosticTest
 
         private void finish(String state)
         {
+            TeletextPesProbe.Snapshot teletext = TeletextPesProbe.finish();
+            report.append("\n[teletextPesPreservation]\n")
+                    .append(teletext.exportText());
+            if (teletext.isTeletextDetected())
+            {
+                boolean usable = teletext.isPreserved() && teletext.ptsCount > 0;
+                result("teletextPesPreservation", usable, false,
+                        "status=" + teletext.status + ";pesPackets="
+                                + teletext.pesPackets + ";dataUnits="
+                                + teletext.teletextDataUnits + ";ptsCount="
+                                + teletext.ptsCount + ";continuityErrors="
+                                + teletext.continuityErrors);
+            }
+            else
+            {
+                skipped("teletextPesPreservation", teletext.status);
+            }
             report.append("\n[summary]\nstate=").append(state)
                     .append("\npassed=").append(passed)
                     .append("\nwarnings=").append(warnings)

@@ -141,6 +141,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                     PlaybackDebugTrap.record("playback_complete", GSYSystemMediaPlayerImpl.this);
                     state = EOS_STATE;
                     eos = true;
+                    endTeletextPresentation();
                 }
             });
             player.setOnSeekCompleteListener(new MediaPlayer.OnSeekCompleteListener()
@@ -438,18 +439,20 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     @Override
     public int getSubtitleTrackCount()
     {
-        return 0;
+        return teletextTrackCount();
     }
 
     @Override
     public SubtitleTrack[] getSubtitleTracks()
     {
-        return new SubtitleTrack[0];
+        return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
     }
 
     @Override
     public void setSubtitleTrack(int streamPos)
     {
+        if (handleTeletextSubtitleSelection(streamPos))
+            return;
         if (streamPos != MiniPlayerPlugin.DISABLE_TRACK && VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.debug("GSY/System subtitle selection is not exposed yet: {}", streamPos);
@@ -459,7 +462,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     @Override
     public int getSelectedSubtitleTrack()
     {
-        return MiniPlayerPlugin.DISABLE_TRACK;
+        return selectedTeletextTrackOr(MiniPlayerPlugin.DISABLE_TRACK);
     }
 
     @Override

@@ -36,6 +36,7 @@ import com.google.android.exoplayer2.extractor.ts.PsExtractor;
 import com.google.android.exoplayer2.extractor.ts.DefaultTsPayloadReaderFactory;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory;
 import com.google.android.exoplayer2.source.MediaLoadData;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.source.TrackGroupArray;
@@ -69,6 +70,7 @@ import opensagetv.vibe.miniclient.android.video.PlaybackHealthSource;
 import opensagetv.vibe.miniclient.android.video.PlaybackHealthSnapshot;
 import opensagetv.vibe.miniclient.android.video.PlaybackRateController;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
+import opensagetv.vibe.miniclient.android.video.EncodedPassthroughOffsetController;
 import opensagetv.vibe.miniclient.android.video.MediaSessionCallbackHandler;
 import opensagetv.vibe.miniclient.android.video.smb.SmbDirectConfig;
 import opensagetv.vibe.miniclient.media.SubtitleCodec;
@@ -320,6 +322,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     }
     private MediaSource mediaSource;
     private long playbackStartPosition = -1;
+    private volatile boolean audioPassthroughEnabled;
+    private volatile boolean audioOutputRebuildQueued;
+    private volatile boolean exclusiveDiagnosticAudioSuspended;
+    private EncodedPassthroughOffsetController passthroughOffsetController;
+    private Runnable pendingPassthroughOffsetReanchor;
+    private DataSource retainedAudioRebuildDataSource;
+    private Exo2PcmAudioProcessor pcmAudioProcessor;
     private int initialAudioTrackIndex = -1;
     private long currentPlaybackPosition = 0;
     private ReentrantLock playbackPositionLock;
@@ -329,6 +338,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     private volatile boolean playRequested = true;
     private volatile boolean serverMuted;
     private volatile boolean dvdPushMode;
+
+    private ExtractorsFactory withPassthroughOffset(ExtractorsFactory factory)
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        return controller == null ? factory
+                : new Exo2PassthroughOffsetExtractorsFactory(factory, controller);
+    }
 
     private boolean errorState = false;
     private int retryCount = 0;
@@ -586,6 +602,11 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
     protected void releasePlayer()
     {
+        if (pendingPassthroughOffsetReanchor != null)
+        {
+            progressHandler.removeCallbacks(pendingPassthroughOffsetReanchor);
+            pendingPassthroughOffsetReanchor = null;
+        }
         playbackRateController.reset();
         cancelProgressUpdates();
         cancelPullSeekRecovery();
@@ -866,6 +887,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 if (player != null) player.setVolume(muted ? 0.0f : 1.0f);
             }
         });
+    }
+
+    @Override
+    public boolean isMuted()
+    {
+        return serverMuted;
     }
 
     private void cancelPullSeekRecovery()
@@ -1177,6 +1204,14 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 log.logDebug("Set Subtitle Track Called: " + streamPos);
 
+                if (handleTeletextSubtitleSelection(streamPos))
+                {
+                    showCaptions = false;
+                    RemoveSubTitleView();
+                    changeTrack(C.TRACK_TYPE_TEXT, DISABLE_TRACK, 0);
+                    return;
+                }
+
                 if (streamPos == Exo2MediaPlayerImpl.DISABLE_TRACK)
                 {
                     showCaptions = false;
@@ -1196,6 +1231,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     public void setPreferredSubtitleTrack()
     {
+        if (applyPendingServerSubpictureStream()) return;
+        if (applyConfiguredClosedCaptionSlot()) return;
         requestedSubtitleTrack = PREFERRED_TRACK;
         context.runOnUiThread(new Runnable()
         {
@@ -1230,13 +1267,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     public int getSelectedSubtitleTrack()
     {
-        return this.selectedSubtitleTrack;
+        return selectedTeletextTrackOr(this.selectedSubtitleTrack);
     }
 
     @Override
     public int getSubtitleTrackCount()
     {
-        return getTrackCount(C.TRACK_TYPE_TEXT);
+        return getTrackCount(C.TRACK_TYPE_TEXT) + teletextTrackCount();
     }
 
     @Override
@@ -1324,11 +1361,264 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     {
         ExoPlayer current = player;
         Format format = current == null ? null : current.getAudioFormat();
-        if (format == null) return "not resolved";
-        String mime = format.sampleMimeType == null ? "audio" : format.sampleMimeType;
-        return "stream format " + mime + "; output mode is selected by Android AudioSink"
-                + (format.channelCount > 0
-                ? ", " + format.channelCount + "ch" : "");
+        String stream = format == null || format.sampleMimeType == null
+                ? "audio not resolved" : format.sampleMimeType.replace("audio/", "");
+        String sampleRate = format != null && format.sampleRate > 0
+                ? ", " + format.sampleRate + " Hz" : "";
+        return audioPassthroughEnabled
+                ? "Encoded passthrough allowed; stream " + stream + sampleRate
+                : "Decoded PCM stereo; stream " + stream + sampleRate;
+    }
+
+    @Override public boolean supportsAudioPassthroughControl() { return true; }
+
+    @Override public boolean isAudioPassthroughEnabled()
+    {
+        return audioPassthroughEnabled;
+    }
+
+    @Override
+    public boolean suspendAudioForExclusiveDiagnostic()
+    {
+        if (Looper.myLooper() != Looper.getMainLooper() || player == null
+                || trackSelector == null || exclusiveDiagnosticAudioSuspended)
+            return false;
+        MappingTrackSelector.MappedTrackInfo trackInfo =
+                trackSelector.getCurrentMappedTrackInfo();
+        int rendererIndex = findRendererIndex(trackInfo, C.TRACK_TYPE_AUDIO);
+        DefaultTrackSelector.Parameters.Builder builder =
+                trackSelector.buildUponParameters();
+        if (rendererIndex != C.INDEX_UNSET)
+            builder.setRendererDisabled(rendererIndex, true);
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true);
+        trackSelector.setParameters(builder.build());
+        exclusiveDiagnosticAudioSuspended = true;
+        PlaybackDebugTrap.recordDetailed("diagnostic_audio_suspended", this,
+                "backend=legacy_exo");
+        return true;
+    }
+
+    @Override
+    public void resumeAudioAfterExclusiveDiagnostic()
+    {
+        if (!exclusiveDiagnosticAudioSuspended) return;
+        exclusiveDiagnosticAudioSuspended = false;
+        Runnable restore = new Runnable()
+        {
+            @Override public void run()
+            {
+                if (trackSelector == null || player == null) return;
+                MappingTrackSelector.MappedTrackInfo trackInfo =
+                        trackSelector.getCurrentMappedTrackInfo();
+                int rendererIndex = findRendererIndex(trackInfo, C.TRACK_TYPE_AUDIO);
+                DefaultTrackSelector.Parameters.Builder builder =
+                        trackSelector.buildUponParameters();
+                if (rendererIndex != C.INDEX_UNSET)
+                    builder.setRendererDisabled(rendererIndex, false);
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+                trackSelector.setParameters(builder.build());
+                PlaybackDebugTrap.recordDetailed("diagnostic_audio_resumed",
+                        Exo2MediaPlayerImpl.this, "backend=legacy_exo");
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) restore.run();
+        else context.runOnUiThread(restore);
+    }
+
+    @Override
+    public boolean setAudioPassthroughEnabled(final boolean enabled)
+    {
+        ActivePlayerSessionOverrides.setAudioPassthroughEnabled(enabled);
+        if (enabled == audioPassthroughEnabled)
+            return true;
+        return requestAudioOutputRebuild("passthrough=" + enabled);
+    }
+
+    private boolean requestAudioOutputRebuild(final String reason)
+    {
+        final ExoPlayer expectedPlayer = player;
+        final DataSource expectedDataSource = dataSource;
+        final String expectedUrl = url;
+        if (expectedPlayer == null || (expectedDataSource == null && !httpls)
+                || expectedUrl == null
+                || audioOutputRebuildQueued)
+            return false;
+        audioOutputRebuildQueued = true;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                try
+                {
+                    if (player != expectedPlayer || dataSource != expectedDataSource)
+                        return;
+                    long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
+                    boolean resume = expectedPlayer.getPlayWhenReady();
+                    int selectedAudioTrack = getSelectedAudioTrack();
+                    playbackRateController.reset();
+                    cancelProgressUpdates();
+                    cancelPullSeekRecovery();
+                    cancelGrowingPullSeek();
+                    MediaSessionCompat oldSession = mediaSession;
+                    mediaSession = null;
+                    player = null;
+                    playerReady = false;
+                    try { expectedPlayer.setPlayWhenReady(false); } catch (Exception ignored) { }
+                    try { expectedPlayer.release(); } catch (Exception ex)
+                    { log.logError("Error releasing legacy Exo for audio-output rebuild", ex); }
+                    if (oldSession != null)
+                    {
+                        try { oldSession.setActive(false); oldSession.release(); }
+                        catch (Exception ex)
+                        { log.logError("Error releasing MediaSession for audio-output rebuild", ex); }
+                    }
+                    retainedAudioRebuildDataSource = expectedDataSource;
+                    if (!pushMode)
+                        playbackStartPosition = positionMs;
+                    playRequested = resume;
+                    eos = false;
+                    state = resume ? PLAY_STATE : PAUSE_STATE;
+                    context.setupVideoFrame();
+                    PlaybackDebugTrap.recordDetailed("audio_output_live_rebuild",
+                            Exo2MediaPlayerImpl.this,
+                            "reason=" + reason + ", positionMs=" + positionMs
+                                    + ", push=" + pushMode);
+                    setupPlayer(expectedUrl);
+                    if (selectedAudioTrack >= 0)
+                        setAudioTrack(selectedAudioTrack);
+                }
+                finally
+                {
+                    audioOutputRebuildQueued = false;
+                }
+            }
+        });
+        return true;
+    }
+
+    @Override public boolean supportsAudioOffset()
+    {
+        return audioPassthroughEnabled
+                ? passthroughOffsetController != null
+                        && passthroughOffsetController.isEnabled()
+                : pcmAudioProcessor != null;
+    }
+
+    @Override public boolean setAudioOffsetMillis(int offsetMs)
+    {
+        ActivePlayerSessionOverrides.setAudioOffsetMs(offsetMs);
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (audioPassthroughEnabled && controller != null && controller.isEnabled())
+        {
+            int bounded = ActivePlayerSessionOverrides.getAudioOffsetMs();
+            controller.setOffsetMillis(bounded);
+            schedulePassthroughOffsetReanchor("passthrough_offset=" + bounded);
+            return true;
+        }
+        Exo2PcmAudioProcessor processor = pcmAudioProcessor;
+        if (audioPassthroughEnabled || processor == null)
+            return false;
+        processor.setOffsetMillis(offsetMs);
+        return true;
+    }
+
+    @Override public int getAudioOffsetMillis()
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (audioPassthroughEnabled && controller != null)
+        {
+            Integer requested = ActivePlayerSessionOverrides.getAudioOffsetMs();
+            return requested == null ? controller.getOffsetMillis() : requested;
+        }
+        Exo2PcmAudioProcessor processor = pcmAudioProcessor;
+        return processor == null ? 0 : processor.getOffsetMillis();
+    }
+
+    @Override public boolean supportsPassthroughAudioOffset()
+    {
+        return audioPassthroughEnabled && passthroughOffsetController != null;
+    }
+
+    @Override public boolean setPassthroughAudioOffsetEnabled(boolean enabled)
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (!audioPassthroughEnabled || controller == null) return false;
+        ActivePlayerSessionOverrides.setPassthroughAudioOffsetEnabled(enabled);
+        controller.setEnabled(enabled);
+        schedulePassthroughOffsetReanchor("passthrough_offset_enabled=" + enabled);
+        return true;
+    }
+
+    @Override public boolean isPassthroughAudioOffsetEnabled()
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (!audioPassthroughEnabled || controller == null) return false;
+        Boolean requested = ActivePlayerSessionOverrides
+                .getPassthroughAudioOffsetEnabled();
+        return requested == null ? controller.isEnabled() : requested;
+    }
+
+    @Override public String getAudioOffsetSummary()
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (audioPassthroughEnabled)
+        {
+            if (controller == null) return "passthrough clock offset unavailable";
+            Boolean requested = ActivePlayerSessionOverrides
+                    .getPassthroughAudioOffsetEnabled();
+            Integer requestedMs = ActivePlayerSessionOverrides.getAudioOffsetMs();
+            if (requested != null || requestedMs != null)
+                return "passthrough clock offset "
+                        + (requested == null ? controller.isEnabled() : requested)
+                        + ", requestedMs="
+                        + (requestedMs == null ? controller.getOffsetMillis() : requestedMs)
+                        + ", applied=" + controller.describe();
+            return controller.describe();
+        }
+        Exo2PcmAudioProcessor processor = pcmAudioProcessor;
+        return processor == null ? "decoded PCM offset unavailable"
+                : "decoded PCM offset " + processor.getOffsetMillis() + " ms";
+    }
+
+    private void schedulePassthroughOffsetReanchor(final String reason)
+    {
+        if (pendingPassthroughOffsetReanchor != null)
+            progressHandler.removeCallbacks(pendingPassthroughOffsetReanchor);
+        pendingPassthroughOffsetReanchor = null;
+        if (pushMode)
+        {
+            // Push is server-clocked and is not locally seekable. Let the
+            // atomic controller affect new samples and allow the next server
+            // discontinuity to flush the prior timestamp queue.
+            PlaybackDebugTrap.recordDetailed("passthrough_offset_push_deferred",
+                    this, "reason=" + reason);
+            return;
+        }
+        final ExoPlayer expectedPlayer = player;
+        pendingPassthroughOffsetReanchor = new Runnable()
+        {
+            @Override public void run()
+            {
+                pendingPassthroughOffsetReanchor = null;
+                if (expectedPlayer == null || player != expectedPlayer) return;
+                long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
+                try
+                {
+                    // The active extractor already references this atomic
+                    // controller. Flush only pre-change timestamps; do not
+                    // release encoded AudioTrack/player state on the UI thread.
+                    expectedPlayer.seekTo(positionMs);
+                    PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
+                            Exo2MediaPlayerImpl.this,
+                            "reason=" + reason + ", positionMs=" + positionMs);
+                }
+                catch (RuntimeException ex)
+                {
+                    log.logError("Unable to re-anchor legacy Exo passthrough offset", ex);
+                }
+            }
+        };
+        progressHandler.postDelayed(pendingPassthroughOffsetReanchor, 200L);
     }
 
     @Override
@@ -1420,7 +1710,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         runtimeConfig = PlayerRuntimeConfig.capture(PlayerRuntimeConfig.Backend.LEGACY_EXO);
         log.logDebug("Runtime configuration: " + runtimeConfig.compactLog());
 
-        if (pushMode)
+        if (retainedAudioRebuildDataSource != null)
+        {
+            dataSource = retainedAudioRebuildDataSource;
+            retainedAudioRebuildDataSource = null;
+            log.logDebug("Reusing active datasource for live audio-output rebuild");
+        }
+        else if (pushMode)
         {
             log.logDebug("Creating Exo2PushDataSource datasource");
             dataSource = new Exo2PushDataSource();
@@ -1444,11 +1740,25 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             }
         }
 
-        boolean disableAudioPassthrough = prefs.getBoolean(
-                PrefStore.Keys.disable_audio_passthrough, true);
-        DefaultRenderersFactory renderersFactory =
+        audioPassthroughEnabled = ActivePlayerSessionOverrides
+                .resolveAudioPassthroughEnabled(!prefs.getBoolean(
+                        PrefStore.Keys.disable_audio_passthrough, true));
+        boolean disableAudioPassthrough = !audioPassthroughEnabled;
+        Integer sessionAudioOffset = ActivePlayerSessionOverrides.getAudioOffsetMs();
+        int audioOffsetMs = sessionAudioOffset == null
+                ? prefs.getInt(PrefStore.Keys.playback_audio_offset_ms, 0)
+                : sessionAudioOffset;
+        boolean passthroughOffsetEnabled = ActivePlayerSessionOverrides
+                .resolvePassthroughAudioOffsetEnabled(prefs.getBoolean(
+                        PrefStore.Keys.playback_passthrough_audio_offset_enabled, false));
+        passthroughOffsetController = audioPassthroughEnabled
+                ? new EncodedPassthroughOffsetController(
+                        passthroughOffsetEnabled, audioOffsetMs) : null;
+        Exo2AudioExtensionRenderersFactory audioRenderersFactory =
                 new Exo2AudioExtensionRenderersFactory(
-                        context.getContext(), !disableAudioPassthrough);
+                        context.getContext(), audioPassthroughEnabled, audioOffsetMs);
+        pcmAudioProcessor = audioRenderersFactory.getPcmAudioProcessor();
+        DefaultRenderersFactory renderersFactory = audioRenderersFactory;
         String codecMode = runtimeConfig.getCodecMode();
         if ("async".equals(codecMode)) renderersFactory.forceEnableMediaCodecAsynchronousQueueing();
         else if ("sync".equals(codecMode)) renderersFactory.forceDisableMediaCodecAsynchronousQueueing();
@@ -1575,8 +1885,15 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             public void onAudioSinkError(EventTime eventTime, Exception audioSinkError)
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                {
                     decoderAttemptTelemetry.recordAudioOutputError(
                             audioSinkError.getClass().getSimpleName());
+                    PlaybackDebugTrap.recordDetailed("audio_sink_error",
+                            Exo2MediaPlayerImpl.this,
+                            audioSinkError.getClass().getSimpleName() + ":"
+                                    + String.valueOf(audioSinkError.getMessage()));
+                    log.logError("Legacy Exo audio sink error", audioSinkError);
+                }
             }
 
             @Override
@@ -1607,7 +1924,16 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             public void onTracksChanged(Tracks tracks)
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                {
                     decoderAttemptTelemetry.recordTrackChange();
+                    // Caption tracks may arrive after prepare. Reapply the
+                    // persisted virtual slot without requiring menu input.
+                    applyConfiguredClosedCaptionSlot();
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                        return;
+                    log.logDebug("Track map changed - debugging available tracks in file");
+                    debugAvailableTracks(listenerPlayer);
+                }
             }
 
             @Override
@@ -1737,6 +2063,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     //notifySageTVStop();
                     eos = true;
                     state = Exo2MediaPlayerImpl.EOS_STATE;
+                    endTeletextPresentation();
                 }
                 if (playbackState == Player.STATE_READY)
                 {
@@ -1757,13 +2084,14 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         initialAudioTrackIndex = -1;
                     }
 
-                    log.logDebug("Player.STATE_READY - Debugging available tracks in file");
-                    debugAvailableTracks();
-                    if (requestedSubtitleTrack == PREFERRED_TRACK)
+                    // Apply persisted DVB/CC slots after the final track map
+                    // is ready; no second menu selection should be needed.
+                    boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();
+                    if (!configuredCaptionApplied && requestedSubtitleTrack == PREFERRED_TRACK)
                     {
                         setPreferredSubtitleTrack();
                     }
-                    else if (requestedSubtitleTrack != DISABLE_TRACK
+                    else if (!configuredCaptionApplied && requestedSubtitleTrack != DISABLE_TRACK
                             && selectedSubtitleTrack != requestedSubtitleTrack)
                     {
                         log.logDebug("Applying pending SageTV subtitle track: " + requestedSubtitleTrack);
@@ -1935,7 +2263,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             // unchanged, but give Pull a wider PCR search window and sync-point seeking.
             if (!pushMode)
             {
-                ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);
+                ExtractorsFactory extractorsFactory = withPassthroughOffset(
+                        createCaptionAwareExtractorsFactory(true));
                 mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
                 player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
@@ -1947,6 +2276,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 ExtractorsFactory pushExtractors = dvdPushMode
                         ? createDvdExtractorsFactory()
                         : createCaptionAwareExtractorsFactory(false);
+                pushExtractors = withPassthroughOffset(pushExtractors);
                 mediaSource = new ProgressiveMediaSource.Factory(
                         dataSourceFactory, pushExtractors)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
@@ -1973,6 +2303,16 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             }
             player.prepare();
 
+        }
+        else
+        {
+            ExtractorsFactory httpExtractors = withPassthroughOffset(
+                    new DefaultExtractorsFactory());
+            mediaSource = new DefaultMediaSourceFactory(
+                    context.getContext(), httpExtractors)
+                    .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            player.setMediaSource(mediaSource, true);
+            player.prepare();
         }
 
         //Set seek preferences
@@ -2048,6 +2388,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     public int getLegacyCaptionCallbackCountForDebug()
     {
         return legacyCaptionBridge.getForwardedSamples();
+    }
+
+    @Override
+    public boolean hasObservedCeaCaptionData()
+    {
+        return legacyCaptionBridge.isForwardingCurrentStream();
     }
 
     public long getLegacyCaptionCallbackBytesForDebug()
@@ -2232,13 +2578,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     public SubtitleTrack[] getSubtitleTracks()
     {
         if (trackSelector == null)
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector.getCurrentMappedTrackInfo();
         if (mappedTrackInfo == null)
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         int rendererIndex = findRendererIndex(mappedTrackInfo, C.TRACK_TYPE_TEXT);
         if (rendererIndex == C.INDEX_UNSET)
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         TrackGroupArray trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex);
         int trackCount = trackGroups.length;
         SubtitleTrack[] tracks = new SubtitleTrack[0];
@@ -2257,13 +2603,15 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 int accessibilityChannel = trackGroup.getFormat(0).accessibilityChannel;
                 boolean supported = (mappedTrackInfo.getTrackSupport(rendererIndex, i, 0) == C.FORMAT_HANDLED);
 
+                int sourceStreamId = SubtitleTrack.parseSourceStreamId(
+                        trackGroup.getFormat(0).id);
                 SubtitleTrack track = new SubtitleTrack(i, codec, langugae, label, supported,
-                        accessibilityChannel);
+                        accessibilityChannel, sourceStreamId);
                 tracks[i] = track;
             }
         }
 
-        return tracks;
+        return appendTeletextSubtitleTracks(tracks);
     }
 
     private int findRendererIndex(MappingTrackSelector.MappedTrackInfo trackInfo, int trackType)
@@ -2280,7 +2628,24 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
     public void debugAvailableTracks()
     {
-        MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector.getCurrentMappedTrackInfo();
+        debugAvailableTracks(player);
+    }
+
+    private void debugAvailableTracks(ExoPlayer expectedPlayer)
+    {
+        if (expectedPlayer == null)
+        {
+            log.logDebug("Skipping track diagnostics because the player was released");
+            return;
+        }
+        DefaultTrackSelector expectedTrackSelector = trackSelector;
+        if (expectedTrackSelector == null)
+        {
+            log.logDebug("Skipping track diagnostics because the track selector was released");
+            return;
+        }
+        MappingTrackSelector.MappedTrackInfo mappedTrackInfo =
+                expectedTrackSelector.getCurrentMappedTrackInfo();
 
         if (mappedTrackInfo == null)
         {
@@ -2296,9 +2661,9 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
             if (trackGroups.length != 0)
             {
-                int label;
+                int rendererType = expectedPlayer.getRendererType(i);
 
-                switch (player.getRendererType(i))
+                switch (rendererType)
                 {
                     case C.TRACK_TYPE_AUDIO:
 
@@ -2334,7 +2699,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         log.logDebug("\t\tLanguage: " + format.language);
 
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_TEXT)
+                        if (rendererType == C.TRACK_TYPE_TEXT)
                         {
 
                             /*if((MimeTypes.APPLICATION_CEA708.equalsIgnoreCase(format.sampleMimeType) || MimeTypes.APPLICATION_CEA608.equalsIgnoreCase(format.sampleMimeType))
@@ -2351,7 +2716,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         }
 
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_AUDIO)
+                        if (rendererType == C.TRACK_TYPE_AUDIO)
                         {
                             log.logDebug("\t\tChannel: " + format.channelCount);
                             log.logDebug("\t\tBitrate: " + format.bitrate);
@@ -2361,7 +2726,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
                         }
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_VIDEO)
+                        if (rendererType == C.TRACK_TYPE_VIDEO)
                         {
                             if (format.colorInfo != null)
                             {

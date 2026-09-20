@@ -215,6 +215,14 @@ public interface PrefStore
         String disc_mpeg2_timestamp_repair = "disc_mpeg2_timestamp_repair";
 
         /**
+         * Opt-in HD200/HD300-style unified high-resolution media-player
+         * graphics negotiation.  Disabled preserves the existing Android
+         * separate-surface behavior.  The setting takes effect on the next
+         * SageTV connection because it is a capability handshake.
+         */
+        String unified_graphics_surfaces = "unified_graphics_surfaces";
+
+        /**
          * If set to true, then system sleep is disabled
          */
         String disable_sleep = "disable_sleep";
@@ -233,7 +241,7 @@ public interface PrefStore
         /** Preferred BCP-47 audio language; empty means automatic/server order. */
         String preferred_audio_language = "preferred_audio_language";
 
-        /** Preferred BCP-47 subtitle language; does not enable captions. */
+        /** Preferred BCP-47 SRT/DVD subtitle language; never selects broadcast CC. */
         String preferred_subtitle_language = "preferred_subtitle_language";
 
         /** auto, cea608, or cea708; SageTV remains the caption on/off authority. */
@@ -244,10 +252,28 @@ public interface PrefStore
 
         /**
          * Caption fallback for an unmodified SageTV server that cannot send
-         * VIDEO_CC_STATE: stv, off, cc1, or cc2. A Vibe server's STV state
-         * always overrides this compatibility setting.
+         * VIDEO_CC_STATE: stv, off, cc1, cc2, or dvb. DVB is an explicit
+         * client-local bitmap-caption override; STV remains server-owned.
          */
         String legacy_server_caption_mode = "legacy_server_caption_mode";
+
+        /** Stable language/page specification mapped into stock SageTV CC1. */
+        String teletext_cc1_mapping = "teletext_cc1_mapping";
+
+        /** Stable language/page specification mapped into stock SageTV CC2. */
+        String teletext_cc2_mapping = "teletext_cc2_mapping";
+
+        /** Preferred broadcast-caption type for virtual SageTV CC1. */
+        String caption_cc1_type = "caption_cc1_type";
+
+        /** Preferred ISO/BCP-47 language for virtual SageTV CC1; empty is Auto. */
+        String caption_cc1_language = "caption_cc1_language";
+
+        /** Preferred broadcast-caption type for virtual SageTV CC2. */
+        String caption_cc2_type = "caption_cc2_type";
+
+        /** Preferred ISO/BCP-47 language for virtual SageTV CC2; empty is Auto. */
+        String caption_cc2_language = "caption_cc2_language";
 
         /** Media3 MediaCodec queueing mode: sync, auto, or async. Default: sync. */
         String media3_codec_mode = "media3_codec_mode";
@@ -272,6 +298,10 @@ public interface PrefStore
 
         /** Bounded player-presentation audio offset; unsupported outputs ignore it. */
         String playback_audio_offset_ms = "playback_audio_offset_ms";
+
+        /** Opt-in player-clock audio offset while encoded passthrough is active. */
+        String playback_passthrough_audio_offset_enabled =
+                "playback_passthrough_audio_offset_enabled";
 
         /** Active display matching: off, seamless, or always. */
         String playback_refresh_rate_matching = "playback_refresh_rate_matching";

@@ -120,6 +120,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugSessionCommands.showActivePlayerAdjustments(context));
             }
+            else if ("test_current_video".equals(op))
+            {
+                ok(DebugSessionCommands.showCurrentVideoTest(context));
+            }
             else if ("active_player_overlay".equals(op))
             {
                 ok(DebugSessionCommands.setActivePlayerOverlay(context, intent));
@@ -184,6 +188,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("subtitle_control".equals(op))
             {
                 ok(DebugPlayerCommands.subtitle(context, intent));
+            }
+            else if ("audio_adjustment".equals(op))
+            {
+                ok(DebugPlayerCommands.audioAdjustment(context, intent));
             }
             else if ("audio_focus_request".equals(op))
             {

@@ -18,7 +18,9 @@ import android.widget.TextView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniClient;
+import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticExportController;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
 import opensagetv.vibe.miniclient.events.VideoInfoRefresh;
 import opensagetv.vibe.miniclient.util.AspectHelper;
@@ -30,13 +32,16 @@ import opensagetv.vibe.miniclient.video.VideoInfoResponse;
  */
 public class VideoInfoDialog extends Dialog implements VibeEventListener {
     static final Logger log = LoggerFactory.getLogger(VideoInfoDialog.class);
+    private final Activity activity;
     private final MiniClient client;
     private View navView;
     private boolean eventBusRegistered;
+    private String diagnosticsText = "";
 
 
     public VideoInfoDialog(Activity activity) {
         super(activity, R.style.Theme_Dialog_DoNotDim);
+        this.activity = activity;
         this.client = MiniclientApplication.get().getClient();
     }
 
@@ -59,6 +64,12 @@ public class VideoInfoDialog extends Dialog implements VibeEventListener {
         connect(R.id.vib_refresh, new Runnable() {
             public void run() {
                 refresh(VideoInfoRefresh.INSTANCE);
+            }
+        });
+
+        connect(R.id.vib_export, new Runnable() {
+            public void run() {
+                DiagnosticExportController.show(activity, diagnosticsText);
             }
         });
 
@@ -127,6 +138,12 @@ public class VideoInfoDialog extends Dialog implements VibeEventListener {
             }
             setText(R.id.vi_uri, resp.uri);
         }
+
+        MediaCmd media = client.getCurrentConnection() == null
+                ? null : client.getCurrentConnection().getMediaCmd();
+        diagnosticsText = ActivePlayerAdjustmentsDialog.diagnosticsTextForExport(
+                activity, media);
+        setText(R.id.vi_vibeDiagnostics, diagnosticsText);
     }
 
     public void connect(int id, final Runnable runnable) {

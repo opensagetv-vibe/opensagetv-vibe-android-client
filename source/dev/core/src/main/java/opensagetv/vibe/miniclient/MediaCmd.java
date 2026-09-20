@@ -240,7 +240,7 @@ public class MediaCmd
             return false;
         String mode = properties.getString(
                 PrefStore.Keys.legacy_server_caption_mode, "stv");
-        return "cc1".equals(mode) || "cc2".equals(mode);
+        return "cc1".equals(mode) || "cc2".equals(mode) || "dvb".equals(mode);
     }
 
     /**
@@ -252,7 +252,8 @@ public class MediaCmd
     public void setLegacyServerCaptionMode(String requestedMode)
     {
         String mode = requestedMode == null ? "stv" : requestedMode.trim().toLowerCase();
-        if (!"off".equals(mode) && !"cc1".equals(mode) && !"cc2".equals(mode))
+        if (!"off".equals(mode) && !"cc1".equals(mode) && !"cc2".equals(mode)
+                && !"dvb".equals(mode))
             mode = "stv";
         client.properties().setString(PrefStore.Keys.legacy_server_caption_mode, mode);
         applySageTvClosedCaptionState();
@@ -260,9 +261,12 @@ public class MediaCmd
 
     public String getLegacyServerCaptionMode()
     {
-        String mode = client.properties().getString(
+        PrefStore properties = client.properties();
+        if (properties == null) return "stv";
+        String mode = properties.getString(
                 PrefStore.Keys.legacy_server_caption_mode, "stv");
-        if ("off".equals(mode) || "cc1".equals(mode) || "cc2".equals(mode))
+        if ("off".equals(mode) || "cc1".equals(mode) || "cc2".equals(mode)
+                || "dvb".equals(mode))
             return mode;
         return "stv";
     }
@@ -273,6 +277,18 @@ public class MediaCmd
         if (currentPlayer == null)
             return;
 
+        // DVB is a client-local mode. A server VIDEO_CC_STATE describes the
+        // SageTV/STV caption state and must not replace an explicit Android
+        // DVB bitmap selection with Teletext or a generic preferred track.
+        if ("dvb".equals(getLegacyServerCaptionMode()))
+        {
+            // Explicit DVB is a broadcast-caption choice. Do not route it
+            // through the generic subtitle resolver, which may select SRT,
+            // PGS, or DVD text instead.
+            currentPlayer.applyDvbCaptionTrack();
+            return;
+        }
+
         boolean captionsEnabled = sageTvClosedCaptionStateReceived
                 ? sageTvClosedCaptionState != 0
                 : isLegacyServerCaptionFallbackActive();
@@ -280,15 +296,27 @@ public class MediaCmd
             currentPlayer.setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
         else
         {
-            if (!sageTvClosedCaptionStateReceived)
+            // SageTV's stock VIDEO_CC_STATE carries only the virtual CC1/CC2
+            // state. Resolve it only against broadcast caption services
+            // (CEA-608/708, Teletext, or DVB bitmap). Never fall through to
+            // the generic subtitle resolver: that caused CC to appear to
+            // depend on the separate Subtitles selection.
+            int channel = sageTvClosedCaptionStateReceived
+                    ? sageTvClosedCaptionState : 0;
+            if (channel == 0)
             {
                 String mode = client.properties().getString(
                         PrefStore.Keys.legacy_server_caption_mode, "stv");
-                client.properties().setString(PrefStore.Keys.preferred_caption_standard, "cea608");
-                client.properties().setString(PrefStore.Keys.preferred_caption_service,
-                        "cc2".equals(mode) ? "2" : "1");
+                channel = "cc2".equals(mode) ? 2 : 1;
             }
-            currentPlayer.setPreferredSubtitleTrack();
+            String type = client.properties().getString(channel == 1
+                    ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
+                    "auto");
+            String language = client.properties().getString(channel == 1
+                    ? PrefStore.Keys.caption_cc1_language
+                    : PrefStore.Keys.caption_cc2_language, "");
+            if (!currentPlayer.applyClosedCaptionSlot(channel, type, language))
+                currentPlayer.setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
         }
     }
 

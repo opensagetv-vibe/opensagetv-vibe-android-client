@@ -707,6 +707,11 @@ class AdbClient:
         preferred_subtitle_language: str = "",
         preferred_caption_standard: str = "",
         preferred_caption_service: int | str = "",
+        legacy_server_caption_mode: str = "",
+        caption_cc1_type: str = "",
+        caption_cc1_language: str = "",
+        caption_cc2_type: str = "",
+        caption_cc2_language: str = "",
         fixed_encoding_preference: str = "",
         fixed_encoding_format: str = "",
         fixed_video_bitrate_kbps: int | str = "",
@@ -745,6 +750,7 @@ class AdbClient:
         disc_compatibility_fallback: bool | None = None,
         disc_mpeg2_timestamp_repair: str = "",
         wait_for_playback_before_first_osd: bool | None = None,
+        unified_graphics_surfaces: bool | None = None,
     ) -> dict[str, Any]:
         requested_streaming = str(streaming or "").strip().lower()
         requested_decoding = str(decoding or "").strip().lower()
@@ -762,6 +768,11 @@ class AdbClient:
             "preferred_subtitle_language": preferred_subtitle_language,
             "preferred_caption_standard": preferred_caption_standard,
             "preferred_caption_service": preferred_caption_service,
+            "legacy_server_caption_mode": legacy_server_caption_mode,
+            "caption_cc1_type": caption_cc1_type,
+            "caption_cc1_language": caption_cc1_language,
+            "caption_cc2_type": caption_cc2_type,
+            "caption_cc2_language": caption_cc2_language,
             "fixed_encoding_preference": fixed_encoding_preference,
             "fixed_encoding_format": fixed_encoding_format,
             "fixed_video_bitrate_kbps": fixed_video_bitrate_kbps,
@@ -815,6 +826,9 @@ class AdbClient:
             "wait_for_playback_before_first_osd": (
                 "true" if wait_for_playback_before_first_osd else "false"
             ) if isinstance(wait_for_playback_before_first_osd, bool) else "",
+            "unified_graphics_surfaces": (
+                "true" if unified_graphics_surfaces else "false"
+            ) if isinstance(unified_graphics_surfaces, bool) else "",
         }
         result = self.dev_control("config", **extras)
         if requested_streaming:
@@ -827,6 +841,10 @@ class AdbClient:
 
     def get_player_tuning(self) -> dict[str, Any]:
         return self.dev_control("tuning_get")
+
+    def set_unified_graphics(self, enabled: bool) -> dict[str, Any]:
+        """Toggle the opt-in unified HD graphics handshake for the next connection."""
+        return self.set_player_config(unified_graphics_surfaces=enabled)
 
     def get_client_id(self) -> dict[str, Any]:
         return self.dev_control("client_id_get")
@@ -1038,6 +1056,35 @@ class AdbClient:
         if value < -1:
             raise ValueError("subtitle index must be -1 (off) or >= 0")
         return self.dev_control("subtitle_control", foreground=False, index=value)
+
+    def set_active_audio(
+        self,
+        output: str | None = None,
+        passthrough_offset_enabled: bool | None = None,
+        offset_ms: int | None = None,
+    ) -> dict[str, Any]:
+        arguments: dict[str, Any] = {"foreground": False}
+        if output is not None:
+            value = str(output).strip().lower()
+            aliases = {"pcm": "decoded", "encoded": "passthrough"}
+            value = aliases.get(value, value)
+            if value not in {"decoded", "passthrough"}:
+                raise ValueError("output must be decoded or passthrough")
+            arguments["output"] = value
+        if passthrough_offset_enabled is not None:
+            arguments["passthrough_offset_enabled"] = (
+                "true" if passthrough_offset_enabled else "false"
+            )
+        if offset_ms is not None:
+            value = int(offset_ms)
+            if not -4000 <= value <= 4000:
+                raise ValueError("offset_ms must be between -4000 and 4000")
+            arguments["offset_ms"] = value
+        if len(arguments) == 1:
+            raise ValueError(
+                "output, passthrough_offset_enabled, or offset_ms is required"
+            )
+        return self.dev_control("audio_adjustment", **arguments)
 
     def seek_relative(self, delta_ms: int) -> dict[str, Any]:
         return self.dev_control("seek_relative", delta_ms=int(delta_ms))

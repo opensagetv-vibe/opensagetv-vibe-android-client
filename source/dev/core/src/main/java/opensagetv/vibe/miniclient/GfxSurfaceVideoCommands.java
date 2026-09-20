@@ -11,6 +11,7 @@ import opensagetv.vibe.miniclient.uibridge.ImageHolder;
 import opensagetv.vibe.miniclient.uibridge.Rectangle;
 import opensagetv.vibe.miniclient.uibridge.UIRenderer;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
 
 /** Executes surface allocation/selection and video-rectangle GFX commands. */
 final class GfxSurfaceVideoCommands {
@@ -58,10 +59,24 @@ final class GfxSurfaceVideoCommands {
                 return 0;
             case GFXCMD2.GFXCMD_SETVIDEOPROP:
                 if (length >= 40) {
+                    int mode = i(data, 0);
                     Rectangle source = new Rectangle(
                             i(data, 4), i(data, 8), i(data, 12), i(data, 16));
                     Rectangle destination = new Rectangle(
                             i(data, 20), i(data, 24), i(data, 28), i(data, 32));
+                    // The final active-window/handle field is present in the
+                    // HD300 command (44-byte payload). Android's video is an
+                    // independent MediaCodec SurfaceView, so retain the
+                    // normal rectangle path and explicitly diagnose a handle
+                    // instead of silently treating a unified-surface switch
+                    // as a decoder or playback change.
+                    if (length >= 44 && data != null && data.length >= 48) {
+                        int alpha = i(data, 36);
+                        int handle = i(data, 40);
+                        if (handle != 0 || (mode & UnifiedGraphicsCapability.VIDEO_MODE_HANDLE) != 0)
+                            log.debug("SETVIDEOPROP mode={} source={} destination={} alpha={} handle={} (Android video surface fallback)",
+                                    mode, source, destination, alpha, handle);
+                    }
                     MediaCmd media = client.getCurrentConnection().getMediaCmd();
                     if (media != null) {
                         MiniPlayerPlugin player = media.getPlaya();

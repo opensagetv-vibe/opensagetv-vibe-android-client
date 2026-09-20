@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.audio.AudioCapabilities;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.video.VideoRendererEventListener;
 
@@ -26,13 +27,19 @@ import java.util.ArrayList;
 final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
 {
     private final boolean allowEncodedAudioPassthrough;
+    private final Media3PcmAudioProcessor pcmAudioProcessor;
 
     Media3AudioExtensionRenderersFactory(Context context,
-                                         boolean allowEncodedAudioPassthrough)
+                                         boolean allowEncodedAudioPassthrough,
+                                         int audioOffsetMs)
     {
         super(context);
         this.allowEncodedAudioPassthrough = allowEncodedAudioPassthrough;
+        pcmAudioProcessor = allowEncodedAudioPassthrough
+                ? null : new Media3PcmAudioProcessor(audioOffsetMs);
     }
+
+    Media3PcmAudioProcessor getPcmAudioProcessor() { return pcmAudioProcessor; }
 
     @Override
     protected AudioSink buildAudioSink(Context context,
@@ -55,7 +62,11 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
         // that would silently restore the faulty vendor passthrough route.
         return new DefaultAudioSink.Builder()
                 .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
-                .setEnableFloatOutput(enableFloatOutput)
+                .setAudioProcessors(new AudioProcessor[] { pcmAudioProcessor })
+                // The Vibe PCM processor intentionally operates on signed
+                // 16-bit samples so downmix and live offset behavior are
+                // identical across Android versions and vendor sinks.
+                .setEnableFloatOutput(false)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .build();
     }

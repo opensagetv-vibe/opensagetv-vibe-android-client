@@ -22,6 +22,7 @@ import android.widget.LinearLayout;
 import androidx.media3.common.C;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.extractor.ts.TsExtractor;
@@ -33,6 +34,7 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.exoplayer.source.TrackGroupArray;
@@ -56,7 +58,9 @@ import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.GrowingPlaybackPositionGuard;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
+import opensagetv.vibe.miniclient.android.video.EncodedPassthroughOffsetController;
 import opensagetv.vibe.miniclient.android.video.TextSubtitlePresentation;
 import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
@@ -259,8 +263,23 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         return DeviceCodecCapabilityProfile.current()
                 .hasMpeg2HardwareDecoderNeedingMissingPtsRepair();
     }
+
+    private ExtractorsFactory withPassthroughOffset(ExtractorsFactory factory)
+    {
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        return controller == null ? factory
+                : new Media3PassthroughOffsetExtractorsFactory(factory, controller);
+    }
     private MediaSource mediaSource;
     private long playbackStartPosition = -1;
+    private volatile String activePlaybackUrl;
+    private volatile boolean audioPassthroughEnabled;
+    private volatile boolean audioOutputRebuildQueued;
+    private volatile boolean exclusiveDiagnosticAudioSuspended;
+    private DataSource retainedAudioRebuildDataSource;
+    private Media3PcmAudioProcessor pcmAudioProcessor;
+    private EncodedPassthroughOffsetController passthroughOffsetController;
+    private Runnable pendingPassthroughOffsetReanchor;
     private int initialAudioTrackIndex = -1;
     /** SageTV's packed DVD private-stream request, retained across cell replacements. */
     private volatile int requestedDvdAudioStream = -1;
@@ -288,6 +307,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private PlaybackSessionController.Token pendingGrowingPullSeekSession;
     private boolean pendingGrowingPullSeekResume;
     private boolean pendingGrowingPullSeekSmb;
+    private volatile long lastStableGrowingPullPositionMs = -1L;
+    private volatile long lastGrowingPullPositionRecoveryMs = -1L;
+    private volatile boolean growingPullPositionRecoveryPending;
+    private static final long GROWING_POSITION_RECOVERY_COOLDOWN_MS = 5000L;
     private final Runnable growingPullSeekRunnable = new Runnable()
     {
         @Override
@@ -305,7 +328,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     || !isCurrentPlaybackSession(expectedSession)
                     || !(dataSource instanceof Media3PullDataSource)
                     || mediaSource == null)
+            {
+                growingPullPositionRecoveryPending = false;
                 return;
+            }
             try
             {
                 Media3PullDataSource pull = (Media3PullDataSource) dataSource;
@@ -324,6 +350,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
             catch (Exception ex)
             {
+                growingPullPositionRecoveryPending = false;
                 PlaybackDebugTrap.record("growing_pull_seek_reprepare_error_"
                         + ex.getClass().getSimpleName(), Media3MediaPlayerImpl.this);
                 log.logError("Growing Pull seek reprepare failed at " + targetMs + "ms", ex);
@@ -501,6 +528,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             lastUri = urlString;
             dvdMimTransport = false;
             lastMediaTime = -1;
+            lastStableGrowingPullPositionMs = -1L;
+            lastGrowingPullPositionRecoveryMs = -1L;
+            growingPullPositionRecoveryPending = false;
             eos = false;
             seekPending = false;
             flushed = false;
@@ -587,7 +617,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 }
             };
             MediaSource replacementSource = new ProgressiveMediaSource.Factory(
-                    replacementFactory, createCaptionAwareExtractorsFactory(true))
+                    replacementFactory, withPassthroughOffset(
+                    createCaptionAwareExtractorsFactory(true)))
                     .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
 
             dataSource = replacementDataSource;
@@ -595,6 +626,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             currentPlaybackPosition = 0;
             currentBufferedPosition = 0;
             lastMediaTime = -1;
+            lastStableGrowingPullPositionMs = -1L;
+            lastGrowingPullPositionRecoveryMs = -1L;
+            growingPullPositionRecoveryPending = false;
             seekPending = false;
             flushed = false;
             eos = false;
@@ -908,9 +942,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     void ExoPause()
     {
         if (player == null)
-        {
             return;
-        }
 
         log.logInfo("Pause was called");
         player.setPlayWhenReady(false);
@@ -950,6 +982,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         cancelProgressUpdates();
         cancelPullSeekRecovery();
         cancelGrowingPullSeek();
+        if (pendingPassthroughOffsetReanchor != null)
+        {
+            progressHandler.removeCallbacks(pendingPassthroughOffsetReanchor);
+            pendingPassthroughOffsetReanchor = null;
+        }
         final ExoPlayer playerToRelease = player;
         final MediaSessionCompat sessionToRelease = mediaSession;
         // MediaSessionCompat is owned by Android's main thread. In particular,
@@ -1240,6 +1277,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         });
     }
 
+    @Override
+    public boolean isMuted()
+    {
+        return serverMuted;
+    }
+
     private void cancelPullSeekRecovery()
     {
         pullSeekRecoveryMonitor.cancel();
@@ -1477,6 +1520,15 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         {
             playbackPositionLock.lock();
 
+            if (timeInMS >= 0L)
+            {
+                // SageTV owns intentional seeks. Move the guard's baseline so
+                // a legitimate backward seek is not mistaken for a decoder
+                // timeline reset on the next progress tick.
+                lastStableGrowingPullPositionMs = timeInMS;
+                growingPullPositionRecoveryPending = false;
+            }
+
             // The extractor may be tens of seconds ahead of rendered video.
             // Never carry that pre-seek caption queue across a clock jump.
             resetLegacyCaptionsForDiscontinuity();
@@ -1541,6 +1593,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 log.logDebug("Set Subtitle Track Called: " + streamPos);
 
+                if (handleTeletextSubtitleSelection(streamPos))
+                {
+                    showCaptions = false;
+                    RemoveSubTitleView();
+                    changeTrack(C.TRACK_TYPE_TEXT, DISABLE_TRACK, 0);
+                    return;
+                }
+
                 if (streamPos == Media3MediaPlayerImpl.DISABLE_TRACK)
                 {
                     showCaptions = false;
@@ -1560,6 +1620,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public void setPreferredSubtitleTrack()
     {
+        if (applyPendingServerSubpictureStream()) return;
+        if (applyConfiguredClosedCaptionSlot()) return;
         requestedSubtitleTrack = PREFERRED_TRACK;
         context.runOnUiThread(new Runnable()
         {
@@ -1594,13 +1656,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public int getSelectedSubtitleTrack()
     {
-        return this.selectedSubtitleTrack;
+        return selectedTeletextTrackOr(this.selectedSubtitleTrack);
     }
 
     @Override
     public int getSubtitleTrackCount()
     {
-        return getTrackCount(C.TRACK_TYPE_TEXT);
+        return getTrackCount(C.TRACK_TYPE_TEXT) + teletextTrackCount();
     }
 
     @Override
@@ -1878,6 +1940,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void setupPlayer(String sageTVurl)
     {
+        activePlaybackUrl = sageTVurl;
         // BaseMediaPlayerImpl preserves the protocol URL in lastUri but wraps
         // non-HTTP inputs as stv://server/... before calling setupPlayer().
         // Detect the DVD session from the original MiniPlayer URL so the
@@ -1917,7 +1980,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         runtimeConfig = PlayerRuntimeConfig.capture(PlayerRuntimeConfig.Backend.MEDIA3);
         log.logDebug("Runtime configuration: " + runtimeConfig.compactLog());
 
-        if (pushMode)
+        if (retainedAudioRebuildDataSource != null)
+        {
+            dataSource = retainedAudioRebuildDataSource;
+            retainedAudioRebuildDataSource = null;
+            log.logDebug("Reusing active datasource for live audio-output rebuild");
+        }
+        else if (pushMode)
         {
             log.logDebug("Creating Media3PushDataSource datasource");
             dataSource = new Media3PushDataSource();
@@ -1942,11 +2011,25 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
 
         Media3FfmpegAudioSupport.configure();
-        boolean disableAudioPassthrough = prefs.getBoolean(
-                PrefStore.Keys.disable_audio_passthrough, true);
-        DefaultRenderersFactory renderersFactory =
+        audioPassthroughEnabled = ActivePlayerSessionOverrides
+                .resolveAudioPassthroughEnabled(!prefs.getBoolean(
+                        PrefStore.Keys.disable_audio_passthrough, true));
+        boolean disableAudioPassthrough = !audioPassthroughEnabled;
+        Integer sessionAudioOffset = ActivePlayerSessionOverrides.getAudioOffsetMs();
+        int audioOffsetMs = sessionAudioOffset == null
+                ? prefs.getInt(PrefStore.Keys.playback_audio_offset_ms, 0)
+                : sessionAudioOffset;
+        boolean passthroughOffsetEnabled = ActivePlayerSessionOverrides
+                .resolvePassthroughAudioOffsetEnabled(prefs.getBoolean(
+                        PrefStore.Keys.playback_passthrough_audio_offset_enabled, false));
+        passthroughOffsetController = audioPassthroughEnabled
+                ? new EncodedPassthroughOffsetController(
+                        passthroughOffsetEnabled, audioOffsetMs) : null;
+        Media3AudioExtensionRenderersFactory audioRenderersFactory =
                 new Media3AudioExtensionRenderersFactory(
-                        context.getContext(), !disableAudioPassthrough);
+                        context.getContext(), audioPassthroughEnabled, audioOffsetMs);
+        pcmAudioProcessor = audioRenderersFactory.getPcmAudioProcessor();
+        DefaultRenderersFactory renderersFactory = audioRenderersFactory;
         // Keep MediaCodec priority. The exact-version Media3 FFmpeg extension
         // is selected only when Android cannot decode the active audio format.
         // Encoded passthrough is opt-in because several Android TV devices
@@ -2007,23 +2090,22 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             // to run tens of seconds ahead of rendering causes decoder cadence
             // stalls and makes menu transitions sluggish. Keep a modest time-
             // based buffer while retaining quick start and HDD/network margin.
-            DefaultLoadControl dvdLoadControl = new DefaultLoadControl.Builder()
-                    // A DVD drain poll deliberately stops server input. A
-                    // positive rebuffer threshold can pause Media3 with a
-                    // partial final queue and deadlock against that poll.
-                    // Zero lets the queued cell/menu frames render to empty.
-                    // Authored navigation cells can contain less than 500 ms
-                    // of audio/video and MiniDVDPlayer waits for that cell to
-                    // drain before sending the next one. Requiring a normal
-                    // startup buffer here deadlocks both sides (observed with
-                    // a 480 ms menu-transition cell). Start any valid queued
-                    // sample immediately; the server-side DVD VM is already
-                    // pacing cell boundaries.
-                    .setBufferDurationsMs(2_000, 8_000, 0, 0)
-                    .setPrioritizeTimeOverSizeThresholds(true)
-                    .build();
+            // Normal title playback needs a small post-underrun reserve on
+            // fast Android decoders. DvdPushLoadControl bypasses that reserve
+            // after the current reader generation ends, preserving 480 ms
+            // navigation cells and final-GOP drain behavior.
+            LoadControl dvdLoadControl = new DvdPushLoadControl(
+                    new DvdPushLoadControl.DrainState()
+                    {
+                        @Override public boolean shouldDrainImmediately()
+                        {
+                            return dvdSegmentReaderEnded || dvdRepreparePending
+                                    || dvdReprepareScheduled;
+                        }
+                    });
             builder.setLoadControl(dvdLoadControl);
-            log.logDebug("DVD Push load control enabled: min=2000ms max=8000ms playback=0ms rebuffer=0ms");
+            log.logDebug("DVD Push load control enabled: min=2000ms max=8000ms "
+                    + "playback=750ms rebuffer=2000ms with segment-drain bypass");
         }
         else if (!pushMode && !httpls)
         {
@@ -2160,8 +2242,15 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onAudioSinkError(EventTime eventTime, Exception audioSinkError)
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
+                {
                     decoderAttemptTelemetry.recordAudioOutputError(
                             audioSinkError.getClass().getSimpleName());
+                    PlaybackDebugTrap.recordDetailed("audio_sink_error",
+                            Media3MediaPlayerImpl.this,
+                            audioSinkError.getClass().getSimpleName() + ":"
+                                    + String.valueOf(audioSinkError.getMessage()));
+                    log.logError("Media3 audio sink error", audioSinkError);
+                }
             }
 
             @Override
@@ -2193,10 +2282,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 decoderAttemptTelemetry.recordTrackChange();
+                // Caption tracks can be published after the initial player
+                // preference pass. Reapply the persisted virtual slot here so
+                // DVB/CC1/CC2 do not require opening the menu a second time.
+                applyConfiguredClosedCaptionSlot();
                 // Track discovery is incremental for DVD private_stream_1.
                 // Retry here because STATE_READY may precede the requested
                 // AC-3 substream becoming visible to the selector.
                 applyRequestedDvdAudioTrack();
+                if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                log.logDebug("Track map changed - debugging available tracks in file");
+                debugAvailableTracks(listenerPlayer);
             }
 
             @Override
@@ -2358,6 +2454,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         //notifySageTVStop();
                         eos = true;
                         state = Media3MediaPlayerImpl.EOS_STATE;
+                        endTeletextPresentation();
                     }
                 }
                 if (playbackState == Player.STATE_READY)
@@ -2381,28 +2478,40 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     }
                     applyRequestedDvdAudioTrack();
 
-                    log.logDebug("Player.STATE_READY - Debugging available tracks in file");
-                    debugAvailableTracks();
-                    if (requestedSubtitleTrack == PREFERRED_TRACK)
+                    // Track selection can synchronously deliver another player callback while
+                    // a concurrent MiniPlayer teardown clears the active field.  The listener
+                    // still owns a valid local reference, but no work from the retired session
+                    // may inspect or publish state after that transition.
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                        return;
+
+                    // A persisted DVB/CC slot may have been applied before
+                    // Media3 exposed its final track map. Apply it again at
+                    // READY so playback starts with the saved choice.
+                    boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();
+                    if (!configuredCaptionApplied && requestedSubtitleTrack == PREFERRED_TRACK)
                     {
                         setPreferredSubtitleTrack();
                     }
-                    else if (requestedSubtitleTrack != DISABLE_TRACK
+                    else if (!configuredCaptionApplied && requestedSubtitleTrack != DISABLE_TRACK
                             && selectedSubtitleTrack != requestedSubtitleTrack)
                     {
                         log.logDebug("Applying pending SageTV subtitle track: " + requestedSubtitleTrack);
                         setSubtitleTrack(requestedSubtitleTrack);
                     }
 
+                    if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
+                        return;
+
                     long duration = 0;
 
-                    if(player.getDuration() < 0)
+                    if(listenerPlayer.getDuration() < 0)
                     {
                         duration = -1;
                     }
                     else
                     {
-                        duration = player.getDuration();
+                        duration = listenerPlayer.getDuration();
                     }
                     //Library files start with stc:// but do not have push in it
                     //Live TV has push: with a lot of other data in it
@@ -2581,7 +2690,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             // caption-service descriptor. Seek tuning remains Pull-only.
             if (!pushMode)
             {
-                ExtractorsFactory extractorsFactory = createCaptionAwareExtractorsFactory(true);
+                ExtractorsFactory extractorsFactory = withPassthroughOffset(
+                        createCaptionAwareExtractorsFactory(true));
                 mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
                 player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
@@ -2621,6 +2731,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         dvdExtractorsFactory.setPtsOffset90Khz(getDvdPtsOffset90KhzForDebug());
                         pushExtractors = dvdExtractorsFactory;
                     }
+                    pushExtractors = withPassthroughOffset(pushExtractors);
                     dvdEpochExtractorsFactory = pushExtractors;
                     final Media3PushDataSource dvdSource =
                             (Media3PushDataSource) dataSource;
@@ -2632,7 +2743,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 {
                     dvdExtractorsFactory = null;
                     dvdEpochExtractorsFactory = null;
-                    pushExtractors = defaultPushExtractors;
+                    pushExtractors = withPassthroughOffset(defaultPushExtractors);
                 }
                 mediaSource = new ProgressiveMediaSource.Factory(
                         dataSourceFactory, pushExtractors)
@@ -2664,8 +2775,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
         else
         {
-            // Let Media3's default MediaSourceFactory choose the appropriate source for HTTP.
-            player.setMediaItem(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            ExtractorsFactory httpExtractors = withPassthroughOffset(
+                    new DefaultExtractorsFactory());
+            mediaSource = new DefaultMediaSourceFactory(
+                    context.getContext(), httpExtractors)
+                    .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            player.setMediaSource(mediaSource, true);
             player.prepare();
         }
 
@@ -2704,7 +2819,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
                 {
-                    long currentPositionMs = listenerPlayer.getCurrentPosition();
+                    long reportedPositionMs = listenerPlayer.getCurrentPosition();
+                    long currentPositionMs = guardGrowingPullPosition(
+                            reportedPositionMs, listenerSession, listenerPlayer);
                     Media3MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
                     scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
                     currentBufferedPosition = listenerPlayer.getBufferedPosition();
@@ -2720,6 +2837,60 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         progressRunnable = sessionProgress[0];
 
         progressHandler.postDelayed(progressRunnable, 0);
+    }
+
+    /**
+     * Media3 can briefly rebuild a growing TS timeline at zero without a user
+     * seek.  Do not publish that transient zero to SageTV: it makes SageMC
+     * believe the live recording moved back to its opening position.  Reuse the
+     * existing bounded growing-source reprepare at the last stable position.
+     */
+    private long guardGrowingPullPosition(long reportedPositionMs,
+                                          PlaybackSessionController.Token session,
+                                          ExoPlayer expectedPlayer)
+    {
+        long reported = Math.max(0L, reportedPositionMs);
+        Media3PullDataSource pull = dataSource instanceof Media3PullDataSource
+                ? (Media3PullDataSource) dataSource : null;
+        boolean growing = !pushMode && !dvdPushMode && pull != null
+                && pull.isEffectivelyGrowing();
+        // A queued guard recovery is not a user seek. Keep preserving the
+        // stable position until the replacement source produces it again.
+        boolean explicitSeek = seekPending;
+        GrowingPlaybackPositionGuard.Decision decision =
+                GrowingPlaybackPositionGuard.observe(lastStableGrowingPullPositionMs,
+                        reported, growing, explicitSeek,
+                        growingPullPositionRecoveryPending);
+
+        if (decision.action == GrowingPlaybackPositionGuard.Action.PRESERVE_AND_RECOVER)
+        {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (lastGrowingPullPositionRecoveryMs < 0L
+                    || now - lastGrowingPullPositionRecoveryMs
+                    >= GROWING_POSITION_RECOVERY_COOLDOWN_MS)
+            {
+                lastGrowingPullPositionRecoveryMs = now;
+                growingPullPositionRecoveryPending = true;
+                PlaybackDebugTrap.recordDetailed("growing_pull_position_reset_guard",
+                        this, "reportedMs=" + reported + ";preservedMs="
+                                + decision.positionMs);
+                scheduleGrowingPullSeek(decision.positionMs,
+                        expectedPlayer.getPlayWhenReady(), false, session);
+            }
+        }
+        if (decision.action == GrowingPlaybackPositionGuard.Action.ACCEPT
+                && (!growing || reported >= lastStableGrowingPullPositionMs))
+        {
+            if (reported > 0L)
+                lastStableGrowingPullPositionMs = reported;
+            if (growingPullPositionRecoveryPending
+                    && reported + GrowingPlaybackPositionGuard.BACKWARD_JUMP_THRESHOLD_MS
+                    >= lastStableGrowingPullPositionMs)
+            {
+                growingPullPositionRecoveryPending = false;
+            }
+        }
+        return decision.positionMs;
     }
 
     @Override
@@ -2754,6 +2925,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     public int getLegacyCaptionCallbackCountForDebug()
     {
         return legacyCaptionBridge.getForwardedSamples();
+    }
+
+    @Override
+    public boolean hasObservedCeaCaptionData()
+    {
+        return legacyCaptionBridge.isForwardingCurrentStream();
     }
 
     public long getLegacyCaptionCallbackBytesForDebug()
@@ -3049,11 +3226,265 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     {
         ExoPlayer currentPlayer = player;
         Format format = currentPlayer == null ? null : currentPlayer.getAudioFormat();
-        if (format == null) return "not resolved";
-        String mime = format.sampleMimeType == null ? "audio" : format.sampleMimeType;
-        return "stream format " + mime + "; output mode is selected by Android AudioSink"
-                + (format.channelCount > 0
-                ? ", " + format.channelCount + "ch" : "");
+        String stream = format == null || format.sampleMimeType == null
+                ? "audio not resolved" : format.sampleMimeType.replace("audio/", "");
+        String sampleRate = format != null && format.sampleRate > 0
+                ? ", " + format.sampleRate + " Hz" : "";
+        return audioPassthroughEnabled
+                ? "Encoded passthrough allowed; stream " + stream + sampleRate
+                : "Decoded PCM stereo; stream " + stream + sampleRate;
+    }
+
+    @Override public boolean supportsAudioPassthroughControl() { return true; }
+
+    @Override public boolean isAudioPassthroughEnabled()
+    {
+        return audioPassthroughEnabled;
+    }
+
+    @Override
+    public boolean suspendAudioForExclusiveDiagnostic()
+    {
+        if (Looper.myLooper() != Looper.getMainLooper() || player == null
+                || trackSelector == null || exclusiveDiagnosticAudioSuspended)
+            return false;
+        MappingTrackSelector.MappedTrackInfo trackInfo =
+                trackSelector.getCurrentMappedTrackInfo();
+        int rendererIndex = findRendererIndex(trackInfo, C.TRACK_TYPE_AUDIO);
+        DefaultTrackSelector.Parameters.Builder builder =
+                trackSelector.buildUponParameters();
+        if (rendererIndex != C.INDEX_UNSET)
+            builder.setRendererDisabled(rendererIndex, true);
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true);
+        trackSelector.setParameters(builder.build());
+        exclusiveDiagnosticAudioSuspended = true;
+        PlaybackDebugTrap.recordDetailed("diagnostic_audio_suspended", this,
+                "backend=media3");
+        return true;
+    }
+
+    @Override
+    public void resumeAudioAfterExclusiveDiagnostic()
+    {
+        if (!exclusiveDiagnosticAudioSuspended) return;
+        exclusiveDiagnosticAudioSuspended = false;
+        Runnable restore = new Runnable()
+        {
+            @Override public void run()
+            {
+                if (trackSelector == null || player == null) return;
+                MappingTrackSelector.MappedTrackInfo trackInfo =
+                        trackSelector.getCurrentMappedTrackInfo();
+                int rendererIndex = findRendererIndex(trackInfo, C.TRACK_TYPE_AUDIO);
+                DefaultTrackSelector.Parameters.Builder builder =
+                        trackSelector.buildUponParameters();
+                if (rendererIndex != C.INDEX_UNSET)
+                    builder.setRendererDisabled(rendererIndex, false);
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+                trackSelector.setParameters(builder.build());
+                if (dvdPushMode) applyRequestedDvdAudioTrack();
+                PlaybackDebugTrap.recordDetailed("diagnostic_audio_resumed",
+                        Media3MediaPlayerImpl.this, "backend=media3");
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) restore.run();
+        else context.runOnUiThread(restore);
+    }
+
+    @Override
+    public boolean setAudioPassthroughEnabled(final boolean enabled)
+    {
+        ActivePlayerSessionOverrides.setAudioPassthroughEnabled(enabled);
+        if (enabled == audioPassthroughEnabled)
+            return true;
+        return requestAudioOutputRebuild("passthrough=" + enabled);
+    }
+
+    private boolean requestAudioOutputRebuild(final String reason)
+    {
+        final ExoPlayer expectedPlayer = player;
+        final DataSource expectedDataSource = dataSource;
+        final String expectedUrl = activePlaybackUrl;
+        if (expectedPlayer == null || (expectedDataSource == null && !httpls)
+                || expectedUrl == null
+                || audioOutputRebuildQueued)
+            return false;
+        audioOutputRebuildQueued = true;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                try
+                {
+                    if (player != expectedPlayer || dataSource != expectedDataSource)
+                        return;
+                    long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
+                    boolean resume = expectedPlayer.getPlayWhenReady();
+                    int selectedAudioTrack = getSelectedAudioTrack();
+                    cancelFastSwitchWatchdog();
+                    playbackRateController.reset();
+                    cancelProgressUpdates();
+                    cancelPullSeekRecovery();
+                    cancelGrowingPullSeek();
+                    MediaSessionCompat oldSession = mediaSession;
+                    mediaSession = null;
+                    player = null;
+                    playerReady = false;
+                    try { expectedPlayer.setPlayWhenReady(false); } catch (Exception ignored) { }
+                    try { expectedPlayer.release(); } catch (Exception ex)
+                    { log.logError("Error releasing Media3 for audio-output rebuild", ex); }
+                    if (oldSession != null)
+                    {
+                        try { oldSession.setActive(false); oldSession.release(); }
+                        catch (Exception ex)
+                        { log.logError("Error releasing MediaSession for audio-output rebuild", ex); }
+                    }
+                    retainedAudioRebuildDataSource = expectedDataSource;
+                    if (!pushMode)
+                        playbackStartPosition = positionMs;
+                    playRequested = resume;
+                    eos = false;
+                    state = resume ? PLAY_STATE : PAUSE_STATE;
+                    context.setupVideoFrame();
+                    PlaybackDebugTrap.recordDetailed("audio_output_live_rebuild",
+                            Media3MediaPlayerImpl.this,
+                            "reason=" + reason + ", positionMs=" + positionMs
+                                    + ", push=" + pushMode);
+                    setupPlayer(expectedUrl);
+                    if (selectedAudioTrack >= 0)
+                        setAudioTrack(selectedAudioTrack);
+                }
+                finally
+                {
+                    audioOutputRebuildQueued = false;
+                }
+            }
+        });
+        return true;
+    }
+
+    @Override public boolean supportsAudioOffset()
+    {
+        if (!audioPassthroughEnabled) return pcmAudioProcessor != null;
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        return controller != null && isPassthroughAudioOffsetEnabled();
+    }
+
+    @Override public boolean setAudioOffsetMillis(int offsetMs)
+    {
+        int bounded = Math.max(-4_000, Math.min(4_000, offsetMs));
+        ActivePlayerSessionOverrides.setAudioOffsetMs(bounded);
+        if (!audioPassthroughEnabled)
+        {
+            Media3PcmAudioProcessor processor = pcmAudioProcessor;
+            if (processor == null) return false;
+            processor.setOffsetMillis(bounded);
+            return true;
+        }
+        if (!supportsAudioOffset()) return false;
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        controller.setOffsetMillis(bounded);
+        schedulePassthroughOffsetReanchor("offsetMs=" + bounded);
+        return true;
+    }
+
+    @Override public int getAudioOffsetMillis()
+    {
+        if (!audioPassthroughEnabled)
+        {
+            Media3PcmAudioProcessor processor = pcmAudioProcessor;
+            return processor == null ? 0 : processor.getOffsetMillis();
+        }
+        Integer requested = ActivePlayerSessionOverrides.getAudioOffsetMs();
+        if (requested != null) return requested;
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        return controller == null ? 0 : controller.getOffsetMillis();
+    }
+
+    @Override public boolean supportsPassthroughAudioOffset()
+    {
+        return audioPassthroughEnabled && passthroughOffsetController != null;
+    }
+
+    @Override public boolean isPassthroughAudioOffsetEnabled()
+    {
+        Boolean requested = ActivePlayerSessionOverrides.getPassthroughAudioOffsetEnabled();
+        if (requested != null) return requested;
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        return controller != null && controller.isEnabled();
+    }
+
+    @Override public boolean setPassthroughAudioOffsetEnabled(boolean enabled)
+    {
+        if (!supportsPassthroughAudioOffset()) return false;
+        ActivePlayerSessionOverrides.setPassthroughAudioOffsetEnabled(enabled);
+        passthroughOffsetController.setEnabled(enabled);
+        schedulePassthroughOffsetReanchor("passthroughOffset=" + enabled);
+        return true;
+    }
+
+    @Override public String getAudioOffsetSummary()
+    {
+        if (!audioPassthroughEnabled)
+            return pcmAudioProcessor == null ? "unavailable" : "decoded PCM sample offset";
+        EncodedPassthroughOffsetController controller = passthroughOffsetController;
+        if (controller == null) return "passthrough clock offset unavailable";
+        Boolean requested = ActivePlayerSessionOverrides.getPassthroughAudioOffsetEnabled();
+        Integer requestedMs = ActivePlayerSessionOverrides.getAudioOffsetMs();
+        if (requested != null || requestedMs != null)
+            return "passthrough clock offset "
+                    + (requested == null ? controller.isEnabled() : requested)
+                    + ", requestedMs="
+                    + (requestedMs == null ? controller.getOffsetMillis() : requestedMs)
+                    + ", applied=" + controller.describe();
+        return controller.describe();
+    }
+
+    private void schedulePassthroughOffsetReanchor(final String reason)
+    {
+        if (pendingPassthroughOffsetReanchor != null)
+            progressHandler.removeCallbacks(pendingPassthroughOffsetReanchor);
+        pendingPassthroughOffsetReanchor = null;
+        if (pushMode)
+        {
+            // A server-owned Push stream is not locally seekable. In
+            // particular, seekTo(currentPosition) races the DVD VM's next
+            // FLUSH/NEWCELL generation and can leave Fire OS encoded output
+            // without a live AudioTrack after a remote skip. The atomic
+            // timestamp controller still applies to newly extracted samples;
+            // the next server discontinuity/reprepare flushes the old queue.
+            PlaybackDebugTrap.recordDetailed("passthrough_offset_push_deferred",
+                    this, "reason=" + reason);
+            return;
+        }
+        final ExoPlayer expectedPlayer = player;
+        pendingPassthroughOffsetReanchor = new Runnable()
+        {
+            @Override public void run()
+            {
+                pendingPassthroughOffsetReanchor = null;
+                if (expectedPlayer == null || player != expectedPlayer) return;
+                long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
+                try
+                {
+                    // The active extractor already owns the same atomic
+                    // controller, so changing an offset never requires an
+                    // AudioTrack/player teardown. A same-position seek only
+                    // flushes timestamps queued before the new value.
+                    expectedPlayer.seekTo(positionMs);
+                    PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
+                            Media3MediaPlayerImpl.this,
+                            "reason=" + reason + ", positionMs=" + positionMs);
+                }
+                catch (RuntimeException ex)
+                {
+                    // The atomic value still applies to future extracted
+                    // samples if a live/unseekable source rejects the flush.
+                    log.logError("Unable to re-anchor Media3 passthrough offset", ex);
+                }
+            }
+        };
+        progressHandler.postDelayed(pendingPassthroughOffsetReanchor, 200L);
     }
 
     public String getSelectedDvdAudioFormatIdForDebug()
@@ -3318,17 +3749,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     public SubtitleTrack[] getSubtitleTracks()
     {
         if (trackSelector == null)
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector.getCurrentMappedTrackInfo();
         if (mappedTrackInfo == null)
         {
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         }
 
         int rendererIndex = findRendererIndex(mappedTrackInfo, C.TRACK_TYPE_TEXT);
         if (rendererIndex == C.INDEX_UNSET)
         {
-            return new SubtitleTrack[0];
+            return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
         }
 
         TrackGroupArray trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex);
@@ -3355,13 +3786,16 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 int accessibilityChannel = format.accessibilityChannel;
                 boolean supported = (mappedTrackInfo.getTrackSupport(rendererIndex, i, 0) == C.FORMAT_HANDLED);
 
+                int sourceStreamId = SubtitleTrack.parseSourceStreamId(format.id);
+                if (sourceStreamId < 0)
+                    sourceStreamId = SubtitleTrack.parseSourceStreamId(trackGroup.id);
                 SubtitleTrack track = new SubtitleTrack(i, codec, langugae, label, supported,
-                        accessibilityChannel);
+                        accessibilityChannel, sourceStreamId);
                 tracks[i] = track;
             }
         }
 
-        return tracks;
+        return appendTeletextSubtitleTracks(tracks);
     }
 
     private int findRendererIndex(MappingTrackSelector.MappedTrackInfo trackInfo, int trackType)
@@ -3384,7 +3818,24 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     public void debugAvailableTracks()
     {
-        MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector.getCurrentMappedTrackInfo();
+        debugAvailableTracks(player);
+    }
+
+    private void debugAvailableTracks(ExoPlayer expectedPlayer)
+    {
+        if (expectedPlayer == null)
+        {
+            log.logDebug("Skipping track diagnostics because the player was released");
+            return;
+        }
+        DefaultTrackSelector expectedTrackSelector = trackSelector;
+        if (expectedTrackSelector == null)
+        {
+            log.logDebug("Skipping track diagnostics because the track selector was released");
+            return;
+        }
+        MappingTrackSelector.MappedTrackInfo mappedTrackInfo =
+                expectedTrackSelector.getCurrentMappedTrackInfo();
 
         if (mappedTrackInfo == null)
         {
@@ -3400,7 +3851,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
             if (trackGroups.length != 0)
             {
-                switch (player.getRendererType(i))
+                int rendererType = expectedPlayer.getRendererType(i);
+                switch (rendererType)
                 {
                     case C.TRACK_TYPE_AUDIO:
 
@@ -3436,7 +3888,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         log.logDebug("\t\tLanguage: " + format.language);
 
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_TEXT)
+                        if (rendererType == C.TRACK_TYPE_TEXT)
                         {
 
                             /*if((MimeTypes.APPLICATION_CEA708.equalsIgnoreCase(format.sampleMimeType) || MimeTypes.APPLICATION_CEA608.equalsIgnoreCase(format.sampleMimeType))
@@ -3453,7 +3905,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         }
 
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_AUDIO)
+                        if (rendererType == C.TRACK_TYPE_AUDIO)
                         {
                             log.logDebug("\t\tChannel: " + format.channelCount);
                             log.logDebug("\t\tBitrate: " + format.bitrate);
@@ -3463,7 +3915,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
                         }
 
-                        if (player.getRendererType(i) == C.TRACK_TYPE_VIDEO)
+                        if (rendererType == C.TRACK_TYPE_VIDEO)
                         {
                             if (format.colorInfo != null)
                             {

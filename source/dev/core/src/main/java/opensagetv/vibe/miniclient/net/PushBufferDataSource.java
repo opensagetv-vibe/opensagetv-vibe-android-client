@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicLong;
 
+import opensagetv.vibe.miniclient.media.TeletextPesProbe;
+import opensagetv.vibe.miniclient.media.TeletextSubtitleEngine;
 import opensagetv.vibe.miniclient.util.DataCollector;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 
@@ -162,6 +164,8 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
     public void flush()
     {
         log.debug("FLUSH()");
+        TeletextPesProbe.discontinuity("push-flush");
+        TeletextSubtitleEngine.discontinuity("push-flush");
 
         resetMeasurements();
 
@@ -446,6 +450,8 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
         }
         if (len > 0)
         {
+            TeletextPesProbe.observe("push", -1L, bytes, offset, len);
+            TeletextSubtitleEngine.observe("push", -1L, bytes, offset, len);
             pushCallCount.incrementAndGet();
             pushedBytes.addAndGet(len);
             if (eos)

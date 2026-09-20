@@ -177,7 +177,7 @@ public final class LegacyExtenderCaptionBridge
                 CC_SUBTITLE | FLUSH_SUBTITLE_QUEUE);
     }
 
-    static byte[] buildCea608ResetRecords()
+    public static byte[] buildCea608ResetRecords()
     {
         ByteArrayOutputStream records = new ByteArrayOutputStream(128);
         for (int type = 0; type <= 1; type++)

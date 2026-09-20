@@ -11,6 +11,7 @@ import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.SageCommand;
+import opensagetv.vibe.miniclient.media.SubtitleTrack;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.video.media3.Media3MediaPlayerImpl;
 import opensagetv.vibe.miniclient.uibridge.EventRouter;
@@ -127,10 +128,12 @@ final class DebugPlayerCommands
         if (indexText.isEmpty())
             throw new IllegalArgumentException("index is required");
         int index = Integer.parseInt(indexText);
-        int trackCount = player.getSubtitleTrackCount();
+        SubtitleTrack[] tracks = player.getSubtitleTracks();
+        int trackCount = tracks.length;
         if (index < -1 || index >= trackCount)
             throw new IllegalArgumentException("subtitle index must be -1 or a present track index");
-        int playerIndex = index == -1 ? MiniPlayerPlugin.DISABLE_TRACK : index;
+        int playerIndex = index == -1 ? MiniPlayerPlugin.DISABLE_TRACK
+                : tracks[index].getIndex();
         int before = player.getSelectedSubtitleTrack();
         player.setSubtitleTrack(playerIndex);
         return "op=subtitle_control;index=" + index
@@ -138,6 +141,63 @@ final class DebugPlayerCommands
                 + ";trackCount=" + trackCount
                 + ";playerIndex=" + playerIndex
                 + ";accepted=true;inputPath=android_debug_direct_player_api";
+    }
+
+    static String audioAdjustment(Context context, Intent intent)
+    {
+        MiniClient client = requireConnectedClient(context);
+        MiniPlayerPlugin player = requirePlayer(requireMediaCmd(client));
+        boolean requested = false;
+        boolean accepted = true;
+        StringBuilder result = new StringBuilder("op=audio_adjustment");
+
+        if (intent.hasExtra("output"))
+        {
+            requested = true;
+            String output = clean(intent.getStringExtra("output"));
+            boolean passthrough;
+            if ("decoded".equals(output) || "pcm".equals(output))
+                passthrough = false;
+            else if ("passthrough".equals(output) || "encoded".equals(output))
+                passthrough = true;
+            else
+                throw new IllegalArgumentException(
+                        "output must be decoded/pcm or passthrough/encoded");
+            boolean changed = player.setAudioPassthroughEnabled(passthrough);
+            accepted &= changed;
+            result.append(";output=").append(passthrough ? "passthrough" : "decoded")
+                    .append(";outputAccepted=").append(changed);
+        }
+
+        if (intent.hasExtra("passthrough_offset_enabled"))
+        {
+            requested = true;
+            boolean enabled = Boolean.parseBoolean(clean(
+                    intent.getStringExtra("passthrough_offset_enabled")));
+            boolean changed = player.setPassthroughAudioOffsetEnabled(enabled);
+            accepted &= changed;
+            result.append(";passthroughOffsetEnabled=").append(enabled)
+                    .append(";passthroughOffsetAccepted=").append(changed);
+        }
+
+        if (intent.hasExtra("offset_ms"))
+        {
+            requested = true;
+            int offsetMs = Integer.parseInt(clean(intent.getStringExtra("offset_ms")));
+            if (offsetMs < -4000 || offsetMs > 4000)
+                throw new IllegalArgumentException("offset_ms must be between -4000 and 4000");
+            boolean changed = player.setAudioOffsetMillis(offsetMs);
+            accepted &= changed;
+            result.append(";offsetMs=").append(offsetMs)
+                    .append(";offsetAccepted=").append(changed);
+        }
+
+        if (!requested)
+            throw new IllegalArgumentException(
+                    "output, passthrough_offset_enabled, or offset_ms is required");
+        return result.append(";accepted=").append(accepted)
+                .append(";inputPath=android_debug_direct_player_api")
+                .toString();
     }
 
     static String seekTime(Context context, Intent intent, String operation)

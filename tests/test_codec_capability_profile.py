@@ -126,10 +126,15 @@ class CodecCapabilityProfileTest(unittest.TestCase):
         ):
             self.assertIn(required, profile)
         self.assertIn("deviceAudio.canPlay(allCodecs[i])", options)
-        for relative in ("media3/Media3MediaPlayerImpl.java", "exoplayer2/Exo2MediaPlayerImpl.java"):
+        for relative, renderer_factory in (
+            ("media3/Media3MediaPlayerImpl.java", "Media3AudioExtensionRenderersFactory"),
+            ("exoplayer2/Exo2MediaPlayerImpl.java", "Exo2AudioExtensionRenderersFactory"),
+        ):
             player = (SHARED / relative).read_text(encoding="utf-8")
             self.assertNotIn('"encoded/passthrough-capable"', player)
-            self.assertIn("output mode is selected by Android AudioSink", player)
+            self.assertIn(renderer_factory, player)
+            self.assertIn("resolveAudioPassthroughEnabled", player)
+            self.assertIn("getPcmAudioProcessor", player)
 
     def test_root_workflow_exposes_physical_codec_gate(self):
         workflow = (ROOT / "dev.sh").read_text(encoding="utf-8")

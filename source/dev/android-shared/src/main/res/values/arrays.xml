@@ -329,12 +329,14 @@
         <item>Off</item>
         <item>CC1</item>
         <item>CC2</item>
+        <item>DVB</item>
     </string-array>
     <string-array name="entryvalues_legacy_server_caption_mode">
         <item>stv</item>
         <item>off</item>
         <item>cc1</item>
         <item>cc2</item>
+        <item>dvb</item>
     </string-array>
 
     <string-array name="entries_background_session_timeout">

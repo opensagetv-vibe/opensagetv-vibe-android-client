@@ -18,6 +18,7 @@ import opensagetv.vibe.miniclient.android.video.gsy.GSYPlayerEngine;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.net.SmbPathMapper;
 import opensagetv.vibe.miniclient.media.TrackPreferencePolicy;
+import opensagetv.vibe.miniclient.media.CaptionSlotPolicy;
 
 /** Validates and applies debug-only player configuration for the next playback. */
 final class DebugPlayerConfigCommands
@@ -40,6 +41,11 @@ final class DebugPlayerConfigCommands
         String preferredSubtitleLanguage = clean(intent.getStringExtra("preferred_subtitle_language"));
         String preferredCaptionStandard = clean(intent.getStringExtra("preferred_caption_standard"));
         String preferredCaptionService = clean(intent.getStringExtra("preferred_caption_service"));
+        String legacyServerCaptionMode = clean(intent.getStringExtra("legacy_server_caption_mode"));
+        String captionCc1Type = clean(intent.getStringExtra("caption_cc1_type"));
+        String captionCc1Language = clean(intent.getStringExtra("caption_cc1_language"));
+        String captionCc2Type = clean(intent.getStringExtra("caption_cc2_type"));
+        String captionCc2Language = clean(intent.getStringExtra("caption_cc2_language"));
         String fixedEncodingPreference = clean(intent.getStringExtra("fixed_encoding_preference"));
         String fixedEncodingFormat = clean(intent.getStringExtra("fixed_encoding_format"));
         String fixedVideoBitrateKbps = clean(intent.getStringExtra("fixed_video_bitrate_kbps"));
@@ -80,6 +86,8 @@ final class DebugPlayerConfigCommands
                 intent.getStringExtra("disc_compatibility_fallback"));
         String discMpeg2TimestampRepair = clean(
                 intent.getStringExtra("disc_mpeg2_timestamp_repair"));
+        String unifiedGraphicsSurfaces = clean(
+                intent.getStringExtra("unified_graphics_surfaces"));
         String waitForPlaybackBeforeFirstOsd = clean(
                 intent.getStringExtra("wait_for_playback_before_first_osd"));
         boolean clearSmbProfileAuth = parseBoolean(
@@ -125,6 +133,9 @@ final class DebugPlayerConfigCommands
         if (!waitForPlaybackBeforeFirstOsd.isEmpty())
             prefs.setBoolean(PrefStore.Keys.wait_for_playback_before_first_osd,
                     parseBoolean(waitForPlaybackBeforeFirstOsd, false));
+        if (!unifiedGraphicsSurfaces.isEmpty())
+            prefs.setBoolean(PrefStore.Keys.unified_graphics_surfaces,
+                    parseBoolean(unifiedGraphicsSurfaces, false));
 
         if (!player.isEmpty())
         {
@@ -213,6 +224,18 @@ final class DebugPlayerConfigCommands
                 throw new IllegalArgumentException("preferred caption service must be 1-" + maximum);
             prefs.setString(PrefStore.Keys.preferred_caption_service, String.valueOf(service));
         }
+
+        if (!legacyServerCaptionMode.isEmpty())
+        {
+            String value = legacyServerCaptionMode.toLowerCase();
+            if (!("stv".equals(value) || "off".equals(value) || "cc1".equals(value)
+                    || "cc2".equals(value) || "dvb".equals(value)))
+                throw new IllegalArgumentException("invalid legacy server caption mode: "
+                        + legacyServerCaptionMode);
+            prefs.setString(PrefStore.Keys.legacy_server_caption_mode, value);
+        }
+        setCaptionSlotConfig(prefs, captionCc1Type, captionCc1Language, 1);
+        setCaptionSlotConfig(prefs, captionCc2Type, captionCc2Language, 2);
 
         if (!fixedEncodingPreference.isEmpty())
         {
@@ -375,6 +398,32 @@ final class DebugPlayerConfigCommands
                         AndroidPrefStore.SMB_DIAGNOSTICS_AUTH_MODE,
                         AndroidPrefStore.SMB_AUTH_ANONYMOUS))
                 + ";appliesNextPlayback=true";
+    }
+
+    private static void setCaptionSlotConfig(PrefStore prefs, String type,
+            String language, int channel)
+    {
+        if (!type.isEmpty())
+        {
+            String normalized = CaptionSlotPolicy.normalizeType(type);
+            String supplied = type.trim().toLowerCase().replace("-", "");
+            if (!normalized.equals(supplied))
+                throw new IllegalArgumentException("invalid CC" + channel + " type: " + type);
+            if (CaptionSlotPolicy.TYPE_DVB.equals(normalized))
+                throw new IllegalArgumentException("DVB is a top-level caption mode, not a CC"
+                        + channel + " type; set legacy_server_caption_mode=dvb");
+            prefs.setString(channel == 1 ? PrefStore.Keys.caption_cc1_type
+                    : PrefStore.Keys.caption_cc2_type, normalized);
+        }
+        if (!language.isEmpty())
+        {
+            String normalized = "auto".equalsIgnoreCase(language) ? ""
+                    : TrackPreferencePolicy.normalizeLanguage(language);
+            if (!normalized.isEmpty() && !TrackPreferencePolicy.isValidLanguage(normalized))
+                throw new IllegalArgumentException("invalid CC" + channel + " language: " + language);
+            prefs.setString(channel == 1 ? PrefStore.Keys.caption_cc1_language
+                    : PrefStore.Keys.caption_cc2_language, normalized);
+        }
     }
 
     private static MiniClient requireClient(Context context)

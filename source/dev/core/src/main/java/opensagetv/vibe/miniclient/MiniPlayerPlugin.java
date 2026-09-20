@@ -91,6 +91,9 @@ public interface MiniPlayerPlugin extends Runnable
 
     void setMute(boolean b);
 
+    /** Current server/player mute state when the backend can report it. */
+    default boolean isMuted() { return false; }
+
     void stop();
 
     void pause();
@@ -151,6 +154,19 @@ public interface MiniPlayerPlugin extends Runnable
 
     default int getAudioOffsetMillis() { return 0; }
 
+    /** True when this backend can offset encoded passthrough at the A/V clock layer. */
+    default boolean supportsPassthroughAudioOffset() { return false; }
+
+    /** Enables or disables the encoded-passthrough clock-offset path for this session. */
+    default boolean setPassthroughAudioOffsetEnabled(boolean enabled) { return false; }
+
+    /** Whether the encoded-passthrough clock-offset path is active. */
+    default boolean isPassthroughAudioOffsetEnabled() { return false; }
+
+    /** Bounded diagnostic description of the active audio-offset implementation. */
+    default String getAudioOffsetSummary() { return supportsAudioOffset()
+            ? "decoded PCM sample offset" : "unavailable"; }
+
     /** Resolved active content frame rate, or a non-positive value if unknown. */
     default float getContentFrameRateHz() { return -1f; }
 
@@ -201,6 +217,22 @@ public interface MiniPlayerPlugin extends Runnable
     /** Apply a session-only passthrough policy. Unsupported outputs return false. */
     default boolean setAudioPassthroughEnabled(boolean enabled) { return false; }
 
+    /** Resolved policy for the active output; false means decoded PCM. */
+    default boolean isAudioPassthroughEnabled() { return false; }
+
+    /**
+     * Temporarily releases this player's audio renderer so an exclusive local
+     * diagnostic (for example the encoded A/V sync fixture) can own the
+     * platform AudioTrack. Video and the SageTV transport remain active.
+     *
+     * <p>The default is deliberately unsupported: muting does not release an
+     * encoded passthrough AudioTrack and must not be mistaken for suspension.</p>
+     */
+    default boolean suspendAudioForExclusiveDiagnostic() { return false; }
+
+    /** Restores audio after {@link #suspendAudioForExclusiveDiagnostic()}. */
+    default void resumeAudioAfterExclusiveDiagnostic() { }
+
     /**
      * Set the subtitle track to be played back.
      * @param streamPos The audio track position (zero based) in the file
@@ -235,6 +267,37 @@ public interface MiniPlayerPlugin extends Runnable
      * @return Array of support subtitle tracks
      */
     SubtitleTrack[] getSubtitleTracks();
+
+    /**
+     * True after the active stream has produced at least one valid CEA caption
+     * sample. TS extractors may declare compatibility CEA tracks up front, so
+     * their presence alone is not proof that the broadcast contains CEA data.
+     */
+    default boolean hasObservedCeaCaptionData() { return false; }
+
+    /** Map a decoder-owned subtitle service into the stock STV's CC1/CC2 slot. */
+    default boolean mapSubtitleTrackToClosedCaptionChannel(int channel, int trackId)
+    {
+        return false;
+    }
+
+    /** Active decoder-owned track mapped to stock CC1/CC2, or DISABLE_TRACK. */
+    default int getMappedSubtitleTrackForClosedCaptionChannel(int channel)
+    {
+        return DISABLE_TRACK;
+    }
+
+    /** Resolve and apply a virtual SageTV CC1/CC2 slot to the active stream. */
+    default boolean applyClosedCaptionSlot(int channel, String type, String language)
+    {
+        return false;
+    }
+
+    /** Select the first discovered DVB bitmap subtitle service for explicit local DVB mode. */
+    default boolean applyDvbCaptionTrack()
+    {
+        return false;
+    }
 
     void setVideoRectangles(Rectangle srcRect, Rectangle destRect, boolean hideCursor);
 

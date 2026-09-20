@@ -31,6 +31,12 @@
             android:summary="@string/summary_list_streaming_mode_preference"
             android:title="@string/title_list_streaming_mode_preference"/>
 
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="unified_graphics_surfaces"
+            android:summary="@string/unified_graphics_surfaces_summary"
+            android:title="@string/unified_graphics_surfaces_title" />
+
         <Preference android:title="Fixed Transcoding Settings"
             android:summary="Change the setting SageTV server will use to transcode content when using fixed streaming"
             android:key="fixed_transcoding"/>
@@ -45,8 +51,8 @@
 
         <Preference
             android:key="playback_track_settings"
-            android:summary="Preferred languages and CEA-608/708 service; SageTV controls caption Off/On"
-            android:title="Audio and Caption Track Settings" />
+            android:summary="Audio languages, broadcast CC services, and separate SRT/DVD subtitle language"
+            android:title="Audio, Broadcast CC, and Subtitle Settings" />
 
         <Preference
             android:key="disc_playback_settings"

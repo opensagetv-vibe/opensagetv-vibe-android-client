@@ -123,6 +123,17 @@ public class LoggingUIRenderer<Image extends Texture> implements UIRenderer<Imag
     }
 
     @Override
+    public ImageHolder<Image> loadImage(int width, int height, int imageFormat) {
+        log(String.format("loadImage(%s,%s,format=%s)", width, height, imageFormat));
+        return delegate.loadImage(width, height, imageFormat);
+    }
+
+    @Override
+    public boolean supportsImageFormat(int imageFormat) {
+        return delegate.supportsImageFormat(imageFormat);
+    }
+
+    @Override
     public void unloadImage(int handle, ImageHolder<Image> bi) {
         log(String.format("unloadImage(%s)", bi));
         delegate.unloadImage(handle, bi);

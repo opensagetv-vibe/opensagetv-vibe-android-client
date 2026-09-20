@@ -62,6 +62,26 @@ public interface UIRenderer<Image extends Texture> {
 
     ImageHolder<Image> loadImage(int width, int height);
 
+    /**
+     * Allocates an image for an optional SageTV wire format.  Implementations
+     * that do not understand a format must return {@code null}; the protocol
+     * layer then lets SageTV take its normal fallback instead of corrupting a
+     * texture or failing the connection.
+     */
+    default ImageHolder<Image> loadImage(int width, int height, int imageFormat) {
+        if (!supportsImageFormat(imageFormat))
+            return null;
+        ImageHolder<Image> holder = loadImage(width, height);
+        if (holder != null)
+            holder.setImageFormat(imageFormat);
+        return holder;
+    }
+
+    /** Returns true for formats this renderer can decode from LOADIMAGELINE. */
+    default boolean supportsImageFormat(int imageFormat) {
+        return imageFormat == 0;
+    }
+
     void unloadImage(int handle, ImageHolder<Image> bi);
 
     ImageHolder<Image> createSurface(int handle, int width, int height);

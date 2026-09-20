@@ -738,21 +738,41 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         }
     }
 
+    @Override public String getAudioOutputSummary()
+    {
+        return "Decoded PCM (IJK fixed output)";
+    }
+
+    @Override public boolean supportsAudioPassthroughControl() { return true; }
+
+    @Override public boolean isAudioPassthroughEnabled() { return false; }
+
+    @Override public boolean setAudioPassthroughEnabled(boolean enabled)
+    {
+        if (enabled)
+            return false;
+        opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides
+                .setAudioPassthroughEnabled(false);
+        return true;
+    }
+
     @Override
     public int getSubtitleTrackCount()
     {
-        return 0;
+        return teletextTrackCount();
     }
 
     @Override
     public SubtitleTrack[] getSubtitleTracks()
     {
-        return new SubtitleTrack[0];
+        return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
     }
 
     @Override
     public void setSubtitleTrack(int streamPos)
     {
+        if (handleTeletextSubtitleSelection(streamPos))
+            return;
         //Displaying subtitle/timedtext does not appear to be supported at this time.
         log.debug("TODO: setSubtitleTrack Called StreamPosition: {}", streamPos);
 
@@ -777,7 +797,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public int getSelectedSubtitleTrack()
     {
-        return DISABLE_TRACK;
+        return selectedTeletextTrackOr(DISABLE_TRACK);
     }
 
     protected void releasePlayer()

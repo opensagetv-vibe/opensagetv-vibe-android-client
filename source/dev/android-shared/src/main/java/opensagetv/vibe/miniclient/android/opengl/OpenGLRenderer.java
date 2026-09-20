@@ -52,6 +52,7 @@ import opensagetv.vibe.miniclient.uibridge.RectangleF;
 import opensagetv.vibe.miniclient.uibridge.RendererReadinessGate;
 import opensagetv.vibe.miniclient.uibridge.Scale;
 import opensagetv.vibe.miniclient.uibridge.UIRenderer;
+import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
 import opensagetv.vibe.miniclient.util.AspectHelper;
 import opensagetv.vibe.miniclient.video.HasVideoInfo;
 import opensagetv.vibe.miniclient.video.DiscPlaybackPolicy;
@@ -514,6 +515,27 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     }
 
     @Override
+    public ImageHolder<OpenGLTexture> loadImage(int width, int height, int imageFormat) {
+        if (imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_DEFAULT)
+            return loadImage(width, height);
+        if (!supportsImageFormat(imageFormat)) return null;
+        final OpenGLTexture t = new OpenGLTexture(width, height, imageFormat);
+        invokeLater(new Runnable() {
+            @Override
+            public void run() { t.createTexture(); }
+        });
+        ImageHolder<OpenGLTexture> holder = new ImageHolder<>(t, width, height);
+        holder.setImageFormat(imageFormat);
+        return holder;
+    }
+
+    @Override
+    public boolean supportsImageFormat(int imageFormat) {
+        return imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_DEFAULT
+                || imageFormat == UnifiedGraphicsCapability.IMAGE_FORMAT_HIRESYUV;
+    }
+
+    @Override
     public void unloadImage(final int handle, final ImageHolder<OpenGLTexture> bi) {
         if (bi == null || bi.get() == null) return;
 
@@ -750,6 +772,16 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public void loadImageLine(int handle, ImageHolder<OpenGLTexture> image, int line, int len2, byte[] b) {
+        if (image == null || image.get() == null
+                || image.getImageFormat() != UnifiedGraphicsCapability.IMAGE_FORMAT_HIRESYUV
+                || b == null || len2 <= 0 || b.length < 12 + len2)
+            return;
+        final OpenGLTexture texture = image.get();
+        final byte[] lineData = java.util.Arrays.copyOfRange(b, 12, 12 + len2);
+        invokeLater(new Runnable() {
+            @Override
+            public void run() { texture.loadUnifiedYuvLine(line, lineData, 0, lineData.length); }
+        });
 //        Bitmap bm = image.get().bitmap;
 //        int datapos, x;
 //        for (datapos = 12, x = 0; x < len2 / 4; x++, datapos += 4) {
