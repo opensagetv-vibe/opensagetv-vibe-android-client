@@ -2,6 +2,247 @@
 
 ## Unreleased
 
+## v0.5.93 - 2026-09-19
+
+- Consolidated the playback long-press controls into adjacent **Video**,
+  **Audio**, **Subtitles/CC**, and retained **Aspect ratio** icons. Video
+  settings now exposes Player, Decoding, Codec Queueing, Source buffering,
+  Display, DVD playback, decoder restart, and reset directly in one compact
+  two-column panel; settings already owned by Audio, Subtitles/CC, Playback
+  Stats, and Test Current Video were removed from it. The former standalone
+  player-switch and Smart Remote four-arrow shortcuts were removed. GSY can be
+  selected explicitly with Auto, Media3, Android System, or Legacy ExoPlayer
+  delegates, and the active delegate is shown in parentheses. Values remain
+  left-aligned and labels no longer ellipsize. The triangle icon continues to
+  open the full Video Information screen directly; that screen now combines
+  compact SageTV video information with Vibe diagnostics and no longer crashes
+  by casting a themed dialog context to an Activity.
+
+- Hardened native Media3 DVD Push playback on Fire TV Pro. The captured
+  ALADDIN exit was not caused by unified HD graphics: Unified was disabled and
+  the connection used the legacy `SEPARATE` path. Stock-server type-5 GFX
+  reconnects now receive bounded retries, and Media3/legacy-Exo track
+  diagnostics no longer race a released player during teardown. Media3 DVD
+  titles now build a `5,000 ms` startup/rebuffer reserve (bounded by a
+  `12,000 ms` maximum) instead of repeatedly resuming near an empty decoder
+  queue; an explicit segment-drain bypass keeps
+  short authored menu/navigation cells working. On Pro `.29` against stock
+  `.175`, ALADDIN sought to `479846 ms` and advanced `56123 ms` during a
+  `60145 ms` observation (`0.933x`) with zero dropped audio/video frames and no
+  process exit. A live encoded `+500 ms` passthrough offset also remained
+  stable, so the offset feature is not the root cause of the captured DVD
+  failure. The authored fixture root and Languages menus rendered after the
+  change. Exact forced type-5 recovery, Stop/teardown, and Unified On remain
+  open under DVD-001. Debug APK SHA-256:
+  `46730ed701f1c6b6ceb794f84d3b6140df2b1a44d289ff20743bee665ed825f9`.
+
+- Added a dedicated **Audio settings** speaker icon to the long-press
+  playback menu. Direct Media3 and legacy ExoPlayer, plus their GSY delegates,
+  can now switch a running program between encoded passthrough and forced
+  decoded stereo PCM with one same-position decoder rebuild. IJK remains
+  truthfully decoded PCM; unsupported native System control is not faked.
+  The same menu applies a bounded `-4000..+4000 ms` decoded-audio offset live
+  (positive means audio later), selects the audio track, and supports
+  session-only or saved-device-default scope. Encoded mode now has a separate,
+  default-off **Passthrough offset** switch for Media3 and legacy ExoPlayer.
+  Its timestamp adapters pass encoded bytes through unchanged: positive values
+  delay audio presentation and negative values delay video presentation. GSY
+  inherits its active delegate; IJK remains truthfully unavailable. A live
+  output-mode change performs a same-position player rebuild. Offset and
+  enable/disable changes update the active atomic timestamp controller and use
+  one debounced same-position seek to flush queued pre-change timestamps;
+  they no longer release an encoded AudioTrack/player on Android's UI thread.
+  This fixes the Fire TV Pro input-dispatch ANR seen while adjusting the live
+  passthrough slider. Playback
+  Stats, MCP state, and diagnostic exports include the effective output and
+  offset. Its Kodi-inspired two-column layout retains Vibe colors, and the
+  compact top offset slider changes by `25 ms` with Left/Right. Back keeps the
+  current-playback value and returns to Audio settings; **Set as default for
+  all media** is the separate persistent action. AUDIO-006 remains open and
+  the saved passthrough-offset default remains off until its player-clock path
+  passes real receiver/ARC lifecycle testing. A focused non-Pro `.25` / stock
+  `.175` smoke proved direct Media3 and legacy Exo Pull can apply `+25 ms` to
+  audio timestamps, `-25 ms` to video timestamps, reset to zero, and continue
+  playback without an error; this does not replace the open receiver/ARC gate.
+  The debug-only MCP surface now provides `dev_set_active_audio` so those live
+  changes can be repeated without fragile screen coordinates.
+  The Pro `.29` ANR regression also passed against stock `.175` using rapid
+  automated changes and the real slider (`8x` right, `8x` left, Back/Save):
+  playback and the process remained active with no new ANR/fatal exception,
+  then returned to decoded PCM/off/zero.
+  Pro `.29` and non-Pro `.25` stock `.175` decoded-output gates passed;
+  final settings-preserving debug APK SHA-256:
+  `20b3477faf16d639313305da9aebf274c75a966973d6724ae6e995a684554019`.
+
+- Added an in-client **A/V sync test** to Audio settings. A reproducible,
+  redistributable embedded 1280x720 H.264/59.94 fps and 48 kHz stereo AC-3
+  clip loops through Media3; its bouncing-ball impact and 25 ms click share one
+  authored clock. Left/Right calibrates in `25 ms` steps,
+  Center resets, and Back applies the session offset. The selected decoded or
+  encoded output route is used, the underlying program is muted only for the
+  test, and its previous mute state is restored at teardown. The original
+  full-height bounce is retained; fixture identity and impact instructions now
+  occupy the unused side columns, while the compact slider occupies the empty
+  lower-right side column and never crosses the ball path. The distracting
+  border flash was removed. A quiet continuous 220 Hz reference tone keeps
+  HDMI/receiver audio paths awake between the dominant one-second clicks.
+  Offset application is debounced so rapid `25 ms` input does not rebuild the
+  calibration AudioTrack for every keypress. Each settled change recreates the
+  embedded source at the same position, forcing buffered samples to be
+  re-extracted with the new timestamps; both decoded and encoded calibration
+  use the same byte-preserving timestamp controller. A Pro `.29` screenshot
+  confirmed unobstructed center travel. On-device logs proved `+1.125 s`
+  shifted 1,742 audio samples, `-1.125 s` delayed 3,555 video samples, Center
+  restored `0.000 s`, and Back returned to the MiniClient without a fatal
+  exception. USB HDMI was not routed to the Pro, so this is not an audible
+  receiver-sync claim. Current debug APK SHA-256:
+  `c2554aab36f994b6e05b683b203009287cc4aa019bd9eb085cd8e5b293d2f621`.
+
+- Simplified DVB caption control. DVB bitmap is no longer offered or resolved
+  inside the virtual CC1/CC2 profiles; those slots now represent only CEA and
+  Teletext caption channels. The active inventory labels DVB with `select DVB`,
+  and the single top-level `DVB` mode is the only explicit Android bitmap
+  override. Old CC-slot DVB preferences safely normalize to Auto. The stock
+  `.175` / non-Pro `.25` physical gate selected DVB track 2, produced bitmap
+  cues, and kept the Teletext overlay inactive. APK SHA-256:
+  `e5551f9b1af0dd178aae86b12f05702b2ef1352646d95f1e0b7d6eb26db31944`.
+
+- Fixed duplicate captions when moving from stock STV Teletext CC1/CC2 to an
+  explicit local CC1/CC2/DVB selection. The local caption mode now takes sole
+  renderer ownership, drains pending Teletext, and sends one legacy reset to
+  erase any caption already painted by SageTV before Android displays the
+  selected Teletext or DVB service. The active inventory no longer implies
+  that synthetic/unobserved CEA entries are available on UK DVB recordings.
+  Stock `.175` / non-Pro `.25` Media3 Pull hardware playback selected DVB track
+  2 and rendered one caption surface in
+  `artifacts/firetv/20260919-152730_caption-media3-pull-visible.png`. The
+  settings-preserving APK SHA-256 is
+  `b8dc2dd5a16e900dba06086b9b5e221c6fe8ebe83323bcadda1b8b12241249f4`.
+
+- Completed the stock-server broadcast-caption separation gate on non-Pro Fire
+  TV `.25` against stock SageTV `.175`. Media3 Pull hardware playback selected
+  the real UK Teletext service when the stream advertised synthetic CEA tracks,
+  kept the Teletext clock advancing while the STV OSD was idle, and passed the
+  stock Off/CC1/CC2/Off/CC1 cycle. The rebuilt settings-preserving APK is
+  `c51ce222718d4f44694c05db3ac81c5416c8d3c1666065e32ff4a3445533b6a5`.
+
+- Clarified SageTV's two caption paths and removed their accidental coupling.
+  `VIDEO_CC_STATE`/STV `CC1` and `CC2` now resolve only text-caption services
+  (CEA-608/708 or Teletext); they no longer fall through to DVB bitmap or the
+  generic SRT/PGS/DVD subtitle preference. The long-press UI now labels this
+  path **Broadcast captions (CC)** and identifies ordinary **SRT/DVD
+  subtitles** separately. An empty CC language means Auto (English first),
+  not the ordinary subtitle-language preference.
+
+- Added an opt-in **unified HD media-player graphics** setting under Playback
+  Settings. When enabled, the client negotiates stock SageTV's
+  `GFX_YUV_IMAGE_CACHE=UNIFIED` capability, preserving the HD200/HD300 DVB
+  track and MPEG-TS Push alignment branches. Both Android renderers now decode
+  the format-256 Y/UV image payload into their existing RGBA textures; an
+  unsupported HD300 video-plane handle is logged and safely follows the normal
+  Android `SurfaceView` rectangle path. Off remains the exact prior handshake.
+  The debug APK and MCP expose `dev_set_unified_graphics` for A/B testing; the
+  choice applies on the next server connection and never changes player,
+  decoder, buffering, seek, DVD, remux, or transcoding policy.
+
+- Completed the unified-graphics A/B gate on non-Pro Fire TV `.25` against
+  stock SageTV `.175`. The rebuilt APK passed Media3 Pull hardware playback,
+  audio, fullscreen, seek, pause/resume, STOP/teardown, reconnect, and error
+  checks with the switch both OFF and ON. Subsequent format-256 GDX Y/UV rows
+  now update the existing texture, and the 1,449-file manifest plus Core,
+  Android, Python, and MCP validation are recorded in
+  `docs/UNIFIED_BUILD_VALIDATION.md`.
+
+- Fixed DVB caption-mode persistence: selecting `DVB` now remains `DVB` when
+  the caption dialog is reopened, including when the server has reported an
+  STV caption state. The STV-authority notice is now shown only for explicit
+  `STV` selection.
+
+- Fixed persisted DVB selection during playback startup. Media3 and legacy
+  Exo now reapply the selected caption slot when asynchronous subtitle-track
+  discovery completes, so a saved DVB choice takes effect without reopening
+  the caption menu.
+
+- Added an explicit `DVB` caption mode to the long-press Android selector:
+  `OFF`, `CC1`, `CC2`, `STV`, and `DVB`. `DVB` selects a locally rendered DVB
+  bitmap subtitle track and is never reported or bridged as Teletext. `STV`
+  remains the server/STV-controlled mode; existing CC1/CC2 compatibility
+  behavior is unchanged.
+
+- Added a growing-recording position guard for Media3 Pull. If a growing
+  transport stream reports an unexplained multi-second backward jump without a
+  user seek, Vibe preserves the last stable position and performs one
+  position-preserving source recovery. The guard is limited to growing Pull
+  sessions; Push, Fixed/MIM, SMB Direct, DVD, completed files, and explicit
+  seeks retain their existing behavior. Unit tests pass, and a 90-second
+  non-Pro Fire TV `.25` run against stock server `.175` advanced from 178,129
+  ms to 286,274 ms with no backward reset or player error.
+
+- Completed the stream-aware CC1/CC2 selector on stock SageTV. Compact nested
+  dialogs retain their parent screen, expose only discovered type/language
+  choices, and distinguish verified services from provisional extractor tracks.
+  On non-Pro Fire TV `.25`, stock server `.175` physically passed the complete
+  Off/CC1/CC2/Off/CC1 STV cycle while Teletext event-225 delivery continued;
+  captured CC2 contained the page-888 text and captured Off contained none.
+
+- Ported the original HD300 ordinary-video DVB subpicture-selection contract.
+  Caption-scoped binary disassembly proves the extender decoded DVB locally to
+  its subtitle surface and received PID/disable selection through media command
+  36/type 1; DVB bitmap pixels never used the client-to-server event-225 path.
+  Media3 and legacy Exo now preserve source PIDs and resolve that command onto
+  their local bitmap tracks without changing DVD SPU handling. Android does not
+  falsely advertise the unrelated HD300 unified-YUV image-cache capability, so
+  a stock server that withholds the command still uses Vibe's local selector.
+
+- Reworked the long-press caption screen around SageTV-compatible virtual CC1
+  and CC2 slots. Each slot has a stream-aware Auto/Teletext/DVB/CEA-608/
+  CEA-708 type and an available-language selector. A read-only current-video
+  inventory shows every discovered broadcast-caption service and the actual
+  service resolved for CC1/CC2. Fully automatic slots choose distinct services
+  when possible; CEA-608 language remains Unknown because 608 does not provide
+  reliable per-service language metadata. Explicit STV mode remains separate
+  and authoritative.
+
+- Added stock-server DVB Teletext subtitle-page support without a new server
+  JAR, MIM, FFmpeg, or native decoder dependency. The independently written
+  Level-1 path discovers type-2/type-5 subtitle services, decodes page/row
+  addressing and the broadcast Latin G0 subset, schedules page updates and
+  clears from PES PTS, and maps up to two language/page services onto SageTV's
+  existing CC1/CC2 renderer. The same decoded track can instead be rendered
+  locally when selected from the device track list.
+
+- Changed the long-press CC icon from a four-state compatibility toggle into a
+  complete caption selector.
+
+- Fixed intermittent Teletext caption freezes after the SageTV timeline hid.
+  Caption delivery had depended on the STV issuing `GETMEDIATIME`; many STVs
+  stop that polling when their OSD times out. A lifecycle-bound 100 ms player
+  clock now drains due cues independently, pauses with playback, resumes and
+  resets across seek/flush/source changes, and serializes concurrent player-
+  clock/server-clock drains so event-225 packets remain ordered. The physical
+  Breakfast HDMI run showed changing captions throughout all sampled frames;
+  Classic Holby also rendered its page-888 captions on stock `.175`.
+
+- Extended **Test Current Video** with a dormant, user-initiated DVB Teletext
+  PES preservation probe. During the bounded test it inspects at most 64 MiB
+  of bytes already delivered by Pull, Push, or SMB Direct and reports PAT/PMT
+  descriptor services/pages, PES/data-unit delivery, PTS progression,
+  continuity, and active transport. It stores no media payload or decoded
+  subtitle text and does not misrepresent preservation as page rendering.
+
+- Corrected Media3 FFmpeg capability negotiation for MPEG Layer I/II audio.
+  Media3's extension requires the case-sensitive `audio/mpeg-L1` and
+  `audio/mpeg-L2` aliases, while SageTV commonly reports their lowercase
+  equivalents. The false MP2 rejection had made an unmodified SageTV server
+  convert a supported UK H.264 TS into a 352x240 MPEG-2 Push stream. The
+  corrected client retains original transport-stream Pull playback with
+  hardware video decoding.
+
+- Physically validated Teletext PES preservation on non-Pro Fire TV `.25`
+  against stock server `.175`: Breakfast and Classic Holby delivered English
+  page 888 with timestamped PES/data units and no PTS regressions or continuity
+  errors; Taskmaster correctly produced the no-Teletext negative result.
+
 ## v0.5.92 - 2026-09-13
 
 - Changed the normal verified development APK installer to use an in-place

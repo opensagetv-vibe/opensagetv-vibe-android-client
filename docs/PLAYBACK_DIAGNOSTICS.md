@@ -90,6 +90,51 @@ labels, mystery text, wall-clock date/time, and other fields that do not help
 isolate a SageTV transport, buffering, decoder, cadence, seek, caption, or A/V
 sync fault.
 
+### Audio output and synchronization
+
+During playback, long-press Select/OK and choose the speaker icon with the cyan
+underline. The dedicated **Audio settings** menu uses a compact two-column
+layout inspired by Kodi while retaining Vibe's colors. It shows the effective
+output, signed audio offset, selected track, and a separate **Set as default
+for all media** action. Its nested choices return to the parent audio panel.
+
+- **Decoded PCM stereo** disables encoded passthrough and downmixes decoded
+  mono or multichannel audio to 48 kHz-capable stereo PCM. Media3, legacy
+  ExoPlayer, and their GSY delegates rebuild once at the same active position;
+  IJK already produces decoded PCM. GSY System remains a truthful unsupported
+  native control and normal GSY Auto uses its supported Media3 delegate.
+- **Encoded passthrough** restores sink capability negotiation. Media3 and
+  legacy ExoPlayer then expose a separate, default-off **Passthrough offset**
+  switch. Positive values delay encoded-audio presentation timestamps;
+  negative values delay video presentation timestamps. The extractor adapters
+  delegate encoded sample bytes unchanged. GSY inherits the active delegate;
+  IJK remains unavailable.
+- **Audio offset** opens a compact top slider bounded from `-4000` to
+  `+4000 ms`. Left/Right changes it live in `25 ms` increments. Positive means
+  audio later; negative means audio earlier. Back keeps the current-playback
+  value and returns to Audio settings. It changes decoded samples only and
+  never changes SageTV's timeline or video clock.
+- **Set as default for all media** persists the current output choice and
+  supported offset as this device's default. Resetting current-session
+  overrides reapplies that saved default.
+- **A/V sync test** opens a server-independent generated bouncing-ball clip.
+  Its impact and dominant one-second click share an authored timestamp, while
+  a quiet reference tone keeps external audio paths awake. The compact control
+  panel stays in the lower-right side column, outside the ball path. Each
+  settled change recreates the local source at the same playback position so
+  already buffered samples cannot hide the new timestamp offset. Center resets
+  to zero and Back applies the value to the active playback session.
+- Encoded-passthrough offset remains an open physical gate. Its saved default
+  stays off until Media3, legacy Exo, and their GSY delegates pass both signs,
+  zero reset, seek, pause, track/format change, live transition, HOME/return,
+  and teardown on a real TV/receiver/ARC encoded route.
+
+The detailed Playback Stats view, MCP snapshot, and exported diagnostics report
+the effective audio output, applied offset, and session override. Fire OS
+**Best Available** can still add latency in a TV/receiver/ARC processing chain;
+Vibe does not apply a model-wide automatic offset. Use decoded stereo first,
+then set an offset only against the actual output path being watched.
+
 ### Export a support bundle from a TV device
 
 The client can create a bounded, redacted support bundle without requiring an
@@ -143,6 +188,11 @@ confirm **Run test**. The bounded test:
 
 - samples sustained playback position, rendered/dropped frames, buffering,
   source reads, decoder/output, display, sync, and transport state;
+- while the test is active, inspects at most 64 MiB of MPEG-TS bytes for PAT/
+  PMT Teletext descriptors, subtitle page/service metadata, Teletext PES and
+  data units, PTS progression, and continuity. It reports the active Pull,
+  Push, or SMB Direct source but retains neither payload bytes nor decoded
+  subtitle text;
 - verifies pause and resume when the stream was originally playing;
 - seeks to a safe nearby position, returns, repeats the first target, and
   records recovery time, landing error, bytes/reads, and Pull probe-cache use;
@@ -160,6 +210,35 @@ dialog can immediately view the report or open the normal export flow.
 Use this action on the affected device and media before changing player
 settings. It makes reports from Fire TV, ONN, NVIDIA, and other Android TV
 hardware comparable without requiring MCP or ADB.
+
+### Inspect captions in the current video
+
+Open the long-press playback menu and select the CC icon. The top **Available
+in current video (read-only)** section lists the broadcast-caption tracks the
+active player has actually discovered, including codec, trustworthy language,
+and service/page labels. It also shows the concrete service currently resolved
+for virtual CC1 and CC2. Select **Refresh** when playback has only just started
+and discovery is still pending. The five rows below change Caption authority,
+CC1 Type/Language, or CC2 Type/Language; the inventory and resolved results are
+never editable. `No matching service` means the requested combination is not
+in this video, while `None detected yet` distinguishes late discovery.
+
+The Teletext preservation result is a pre-decoder transport gate. `preserved` proves that
+the selected stock-server/client transport delivered an identified Teletext
+subtitle service with PES data units and timestamps to the Android client. It
+does not by itself prove successful page decoding or rendering. `not-detected`
+is an expected skip for recordings without a Teletext PMT descriptor;
+`descriptor-only` or `pes-without-data-units` identifies the smaller transport
+or parser boundary to investigate before implementing page decoding.
+
+The commissioned stock-server controls are `Breakfast-26711345-0.ts` and
+`ClassicHolbyCity-SinsoftheFather-26696712-0.ts` (Teletext page 888 present),
+plus `Taskmaster-ThisIsFoodGlue-26714235-0.ts` (DVB bitmap subtitles only).
+On non-Pro Fire TV `.25`, the two positives preserved timestamped PES/data
+units with no PTS regressions or continuity errors, while Taskmaster correctly
+reported `not-detected`. A valid run must use the original TS through Pull or
+SMB Direct; a stock-server low-resolution Push transcode cannot prove source
+Teletext preservation.
 
 ![Test Current Video icon selected in the long-press playback menu](images/test-current-video-menu.png)
 
@@ -441,3 +520,47 @@ Run, in order:
 Device changes additionally require guarded Dev-only install and launch,
 followed by the relevant physical matrix. A build without physical evidence
 must say that device gates are pending.
+### Unified graphics A/B check
+
+For a stock-server comparison, leave the setting off, reconnect, and capture a
+baseline. Then enable **Playback Settings > Use unified HD media-player
+graphics (experimental)** and reconnect the same client to the same server.
+The debug snapshot reports `unifiedGraphicsSurfaces=true` and the connection
+log records the `GFX_YUV_IMAGE_CACHE='UNIFIED'` reply. Disable it and reconnect
+to restore the pre-existing handshake.
+
+The equivalent MCP calls are:
+
+```text
+dev_set_unified_graphics(enabled=true)
+dev_player_state()
+dev_set_unified_graphics(enabled=false)
+```
+
+The debug APK also accepts the existing `dev_set_player_config` control with
+`unified_graphics_surfaces=true|false`. This is a capability setting, so a
+currently playing item is not renegotiated in place. Compare the same
+MPEG-TS/DVB recording in both sessions and retain the logs; the option is not
+intended to change fixed/transcoded playback or replace Media3's clock.
+
+### Native DVD Push buffering check
+
+Do not diagnose a native DVD cadence failure from player position alone. For
+main-title playback, compare wall time with both `mediaTimeMs` and
+`health_playerPositionMs`, and retain rendered/dropped audio and video counts,
+`health_isLoading`, AudioTrack underruns, reconnect counts, and the DVD frame
+release histogram.
+
+Media3 DVD Push intentionally uses two buffering behaviors:
+
+- normal title playback starts and resumes after rebuffer only after building
+  `5,000 ms` of media (with a `12,000 ms` maximum), avoiding a rapid
+  READY/BUFFERING loop when stock DVD Push arrives close to authored bitrate;
+- an ended reader generation or pending DVD reprepare bypasses that reserve so
+  a short menu/navigation cell can drain and the next VM cell can render.
+
+A title gate must include a sustained motion observation and a nonzero seek.
+A menu gate must separately prove root-menu rendering, a submenu transition,
+and return/re-entry. Never raise the title reserve globally without checking
+the authored short-cell fixture, and never restore a zero rebuffer threshold
+merely to make menu cells drain.

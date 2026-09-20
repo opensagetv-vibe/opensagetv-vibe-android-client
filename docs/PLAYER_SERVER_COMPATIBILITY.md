@@ -28,6 +28,30 @@ control.
 
 ## Feature intent and test-only controls
 
+### SageTV CC versus subtitles
+
+The stock STV's `Off/CC1/CC2` control is broadcast closed-caption authority,
+not a generic subtitle selector. Vibe therefore keeps these paths distinct:
+
+| SageTV/UI concept | Vibe source types | Examples |
+|---|---|---|
+| Broadcast captions (CC1/CC2) | CEA-608, CEA-708, DVB Teletext | ATSC/DVB text-caption services |
+| DVB mode | DVB bitmap | Locally decoded DVB bitmap subtitle service |
+| Subtitles | SRT/other text tracks, PGS, DVD SPU | Sidecar/file subtitles and authored DVD subtitle streams |
+
+An STV `VIDEO_CC_STATE` update never enables or selects an SRT/PGS/DVD track.
+Conversely, the ordinary subtitle-language preference never enables CC. The
+long-press menu names the first path **Broadcast captions (CC)** and shows
+**SRT/DVD subtitles are separate**. When a CC slot is set to Auto with no
+explicit language, English is preferred first, followed by the configured
+broadcast service order; changing CC1/CC2 language changes only that slot.
+On stock SageTV, `STV` uses the legacy event-225 renderer for CEA/Teletext and
+the separate STV **Subtitles** command for DVB when available. Explicit local
+`CC1`/`CC2` resolve only CEA/Teletext; the one top-level `DVB` choice selects
+the Android bitmap renderer directly. Local modes first reset any caption
+previously painted through event 225, so two caption renderers cannot remain
+visible together.
+
 The tables below use these intent labels. A feature being used during physical
 commissioning does not by itself make that feature test-only.
 
@@ -69,25 +93,67 @@ bitmap display, same-session Off/On, and FF/REW recovery. The selected video
 decoder is NVIDIA MediaCodec; unsupported platform AC-3 audio uses the bundled
 FFmpeg audio decoder without moving video off hardware.
 
-DVB Teletext is not the same codec as DVB bitmap subtitles and is not claimed
-as supported. The comparison found:
+DVB Teletext is not the same codec as DVB bitmap subtitles. Vibe keeps the two
+track types separate and now supports both. The reference comparison and the
+resulting Vibe implementation are:
 
 | Engine/reference | DVB bitmap | DVB Teletext implementation |
 |---|---|---|
-| Media3 / legacy ExoPlayer | Native TS extractor and bitmap cue renderer | No Teletext PES/page decoder exposed by either pinned extractor generation |
+| Media3 / legacy ExoPlayer | Native TS extractor and bitmap cue renderer | Vibe taps the existing TS byte path before the player and supplies its independent Teletext page decoder because neither pinned extractor exposes one |
 | Kodi | Supported | Dedicated demux Teletext stream plus Teletext decoder/player state, separate from ordinary subtitle selection |
 | VLC | Supported when built for it | Native `modules/codec/zvbi.c` path backed by libzvbi |
 | FFmpeg | Build-dependent | `libzvbi_teletextdec` exists only when FFmpeg is compiled with libzvbi; the Vibe Android FFmpeg extensions are audio-only and do not contain it |
 | MX Player | Behavioral comparison only | Proprietary source; no auditable implementation can be ported |
 
-Adding Teletext correctly would require a new native dependency/license audit,
-TS PES extraction, page/service state, timing, rendering, controls, and both
-Exo integrations. That is a separate feature rather than a safe correction to
-DVB subtitle handling. The current safe fallback is deterministic: a real DVB
-bitmap track outranks the CEA declarations that must be injected for descriptor-
-less North American ATSC streams; those declarations remain labeled CEA and
-are never presented as Teletext. A Teletext-only service is not exposed or
-rendered instead of silently selecting the wrong subtitle type.
+Vibe implements the needed Level-1 subtitle subset directly in Java rather
+than adding libzvbi or copying GPL decoder source. It discovers type-2/type-5
+services from PAT/PMT descriptors, reassembles Teletext PES/data units, decodes
+the Hamming-protected magazine/packet/page/row address and broadcast Latin G0
+characters, and schedules page changes and clears from PES PTS. The decoder is
+shared by Pull, Push, and SMB byte paths and feeds Media3, legacy Exo, IJK, and
+GSY sessions without changing their hardware video decoder selection.
+
+Vibe's long-press CC1/CC2 choices are treated as two virtual caption slots
+rather than literal CEA-608 channel numbers. Each client-controlled slot can
+resolve Auto, Teletext, CEA-608, or CEA-708 plus a discovered language. DVB
+bitmap is intentionally excluded and uses the separate top-level DVB mode. The
+long-press CC dialog lists the current video's services and resolved slot
+targets read-only, so an unavailable combination is visible before selection.
+Fully automatic slots choose distinct best services when possible. Teletext
+uses the legacy-extender event-225 bridge; DVB bitmap remains a local bitmap
+track and is never converted to text. CEA-608 per-service language is shown as
+Unknown because it is not reliably signaled. STV mode remains separate. On an
+unmodified server it can select CEA/event-225 channels, including Teletext text
+encoded onto those channels, but it cannot select a client-local DVB bitmap
+track unless the server sends the separate HD300 subpicture command.
+
+Test Current Video now includes a bounded pre-decoder Teletext preservation
+gate. It parses the bytes already delivered by Pull, Push, or SMB Direct,
+records metadata/counters only, and distinguishes no descriptor, descriptor
+without PES, PES without Teletext data units, and preserved timestamped PES.
+The supplied unchanged `Breakfast` and `ClassicHolbyCity` recordings are the
+positive controls; `Taskmaster` is the no-Teletext negative control. This gate
+continues to isolate transport preservation from page rendering and requires
+no stock-server modification.
+
+The gate is physically commissioned on non-Pro Fire TV `.25` against stock
+server `.175`. Breakfast preserved PID `0x157f` / page 888 with 446 PTS-bearing
+PES packets and 1,338 data units; Classic Holby preserved PID `0x0947` / page
+888 with 76 PTS-bearing PES packets and 98 data units. Both reported zero PTS
+regressions and continuity errors. Taskmaster was the expected no-Teletext
+negative control. Media3 MPEG-L2 capability aliases are canonicalized before
+negotiation so these stock-server tests retain the original TS instead of
+silently falling back to a 352x240 MPEG-2 transcode.
+
+TTX-002 physical rendering also passes on non-Pro `.25` against stock `.175`.
+Breakfast produced more than 1,100 timed decoded updates and continuously
+changing SageTV-rendered text in the FFmpeg-only HDMI capture
+`artifacts/firetv/ttx-flow-clock-fixed-30s.mp4`; pause/resume and a large seek
+retained ordered output. Classic Holby exposed English page 888 and visibly
+rendered it while retaining hardware H.264 video and decoded MPEG-L2 audio.
+The client uses its own 100 ms player clock, rather than depending on an STV's
+possibly dormant OSD `GETMEDIATIME` requests, so captions no longer freeze
+after the timeline hides.
 
 ## What does not work with an unmodified SageTV server
 
@@ -184,12 +250,12 @@ remain inference even when the server contains explicit extender workarounds.
 | Buffering and adaptive Push | Proven wire behavior: detailed Push adds channel, stream and target bandwidth plus server mux time; `MiniPlayer` uses returned free space/play state and contains explicit low-bandwidth/transcode decisions. | Decode the complete detailed reply and expose server/client/datasource rates and wait time through MCP. Do not invent Android-side server rate control. | Implemented and physically observed. |
 | Seek/skip near live edge | Proven desktop behavior: `VideoFrame` keeps skip/FF behind the live edge using encoder-delay-aware margins and prevents unsafe completed-file EOF seeks. | Shared `PlaybackSeekPolicy`, exact requested/clamped telemetry, serialized seek recovery. | Implemented and physically tested across Pull, Push, SMB and Fixed. |
 | Frame stepping | Proven command/property contract (`FRAME_STEP`, media command 28); backend mechanics are platform-specific. | Advertise only for a player/streaming combination that can apply a bounded paused step. | Implemented behind capability policy; physical release gate remains separate where applicable. |
-| Captions/subtitles | Proven protocol: legacy hardware extenders advertised `GFX_SUBTITLES`, returned raw decoder-extracted caption packets through callback type 225, and let SageTV select/render CC1/CC2/DTVCC. Stock `MiniPlayer.setClosedCaptioningState()` returns `false` because it does not need to publish state to that callback producer. | Media3, legacy Exo, and GSY extractor delegates now tap raw TS CEA samples, convert them to the proven eight-byte SageTV records, and send event 225. Local text rendering is suppressed only after callback packets are active. IJK advertises `FALSE` and retains explicit client fallback. Extractor fragments are cleared on seeks, duplicate parallel-track samples are suppressed, and MPEG-2 caption packets are delivered in PTS rather than decode order. | PASS on stock `.175`: Media3 and legacy Exo hardware Pull each pass Off/CC1/CC2/Off/CC1 and FF/REW/FF2/REW2 with ordered lower-screen captions within the two-second fixture timing gate. |
+| Captions/subtitles | Proven protocol/binary split: legacy hardware extenders returned raw CEA packets through callback type 225 so SageTV selected/rendered CC1/CC2/DTVCC, but the HD300 decoded DVB bitmap subtitles locally and received their PID/disable state through media command 36/type 1. Stock `MiniPlayer.setClosedCaptioningState()` returns `false`; it does not publish CC state to the callback producer. | Media3, legacy Exo, and GSY extractor delegates send raw CEA through event 225. The independent Teletext decoder can encode page text onto those CEA channels for stock STV control. DVB remains a local bitmap track; Media3/legacy Exo now preserve its source PID and accept the separate legacy command when sent. IJK advertises `FALSE` for raw CEA and retains explicit client fallback. | PASS on stock `.175`: Media3 hardware Pull passed Teletext Off/CC1/CC2/Off/CC1 with visible CC2 and clean Off captures; Taskmaster separately passed client-local DVB bitmap rendering. Existing CEA seek/timing gates remain passed. |
 | Aspect and interlace | Proven capabilities: server queries supported/source/advanced aspect and deinterlace-control properties; Windows provides Source/Stretch/Zoom and explicit deinterlace choices. | Keep Source/Stretch/Zoom under STV control. Observe H.262 sequence/picture headers and report progressive/interlaced/telecine/field-picture state, but explicitly report that Android exposes no selectable desktop deinterlacer. | Implemented; 1080i Media3/legacy-Exo Pull and native DVD physically report interlaced sequence/frame state with hardware MTK MPEG-2. Deinterlace quality remains hardware-specific. |
 | Standby/reconnect | Proven protocol: server announces `RECONNECT_SUPPORTED`; Core has a forced-media-reconnect branch. Extender firmware recovery timing is unknown. | Generation-owned connection/session state, selectable Home behavior, bounded resume, optional timeout disconnect, and old behavior opt-out. | Implemented and physically tested on API 25; API 26+ background limit gate remains external. |
 | Remote input | Proven protocol: `INPUT_DEVICES` differentiates IR/keyboard/mouse/touch/TV and server events own STV actions. | Advertise TV without falsely implying mouse/desktop extender identity; switch arrow semantics only while the server DVD VM is in a menu. | Implemented and authored-menu tested. |
 | Fast/seamless switching | Proven desktop contract: `canFastLoad`/`fastLoad` retains a player only after compatibility checks. Firmware decoder reuse details are unknown. | Media3 retains its player/Surface only for completed random-access Pull/SMB files. Push, live/growing, circular, HTTP, external-link, and DVD loads fail closed to normal replacement; error or an eight-second no-frame timeout gets exactly one full-player fallback. | Implemented and physically passed distinct-file Pull/SMB switches with hardware MPEG-2 on AFTMM/API-25. |
-| Audio decode and passthrough | Proven protocol: codec playback support and extender `AUDIO_OUTPUTS`/HBR selection are different capabilities. Android MediaCodec availability does not prove encoded HDMI output, and a stream MIME does not prove the active AudioSink mode. | Inventory platform audio decoders and connected encoded-sink formats separately; negotiate a codec only when it is decodable or accepted by the sink. Do not advertise extender HBR output modes. | AC3/EAC3 direct Pull and DTS exclusion physically passed on AFTMM/API-25; passthrough remains unadvertised. |
+| Audio decode and passthrough | Proven protocol: codec playback support and extender `AUDIO_OUTPUTS`/HBR selection are different capabilities. Android MediaCodec availability does not prove encoded HDMI output, and a stream MIME does not prove the active AudioSink mode. | Inventory platform audio decoders and connected encoded-sink formats separately; negotiate a codec only when it is decodable or accepted by the sink. Do not advertise extender HBR output modes. The local long-press control can force decoded stereo PCM or permit encoded passthrough without changing the server capability contract. | AC3 direct Pull passed on AFTMM/API-25 and AFTKRT/API-30. Media3 and legacy Exo passed live decoded/passthrough/decoded same-position rebuilds; IJK truthfully remains decoded PCM. Signed offset is available for decoded PCM and, behind a separate default-off control, encoded passthrough. Encoded offset changes update atomic timestamps and seek/re-anchor without rebuilding AudioTrack/player state. Pro `.29` / stock `.175` passed rapid debug changes and the real `8x` right/left slider regression without another input-dispatch ANR; the complete receiver/ARC lifecycle matrix remains open. |
 | DVD navigation | Proven server behavior: `MiniDVDPlayer` plus Java/Ogle VM owns title/cell/menu state and sends DVD metadata commands with pushed MPEG-PS. Windows `DShowDVDPlayer` supplies the user-visible semantic reference. | Preserve server VM/session authority and port presentation to Android Media3; never infer correctness from the old Linux client. | Native commissioned; opt-in Hybrid/MIM and explicit MIM main-feature authored-fixture gates pass with negotiated fallback. |
 | Server-specific extender workarounds | Proven only where branches and comments exist (for example pause/flush behavior and media-extender mute restoration); the reason inside closed firmware is inference. | Apply a workaround only when Android reproduces the behavior, behind a focused test and capability gate. | No unproven firmware workaround was copied globally. |
 
@@ -212,7 +278,8 @@ they are not inferred firmware behavior:
 | Forced reconnect, auth cache, offline image cache, and compressed GFX transport | Retained only where implemented and independently tested. |
 | HD-extender reverse near the PTS rollover has a server-side media-time clamp | Left server-owned. Android does not add a competing clock correction. |
 | Audio-output/HBR selection, HDMI mode switching, RC5, remote filesystem, screenshots, advanced deinterlace, YUV unified cache, and 3D transforms | Not advertised. Android must not inherit firmware-specific behavior merely by being classified as an extender. Existing player/OS controls remain separate. |
-| `GFX_SUBTITLES` and event 225 | Newly implemented for extractor-backed players using raw CEA packets. IJK returns `FALSE`; decoded cue text is never mislabeled as a legacy packet. |
+| `GFX_SUBTITLES` and event 225 | Implemented for extractor-backed raw CEA packets and the independent DVB Teletext page decoder. Teletext is intentionally encoded into standards-compatible CC1/CC2 records for the stock STV renderer. Original HD300 binary evidence proves DVB bitmap never used this callback; it remains a local bitmap track. IJK still returns `FALSE` for raw CEA extraction but can use the shared pre-player Teletext byte path. |
+| Ordinary-video command 36/type 1 | Implemented for Media3 and legacy Exo: preserve a discovered track's MPEG-TS source PID, decode the `0x2000` disable flag, defer an early command until tracks appear, and select the matching local DVB/Teletext track. The existing `push:dvd` SPU path remains separate. Stock Core only enables this DVB branch for `isStandaloneMediaPlayer()`, which is coupled to the HD300 `GFX_YUV_IMAGE_CACHE=UNIFIED` contract. Android does not advertise that unrelated unsupported graphics capability; the client-local selector is the stock-safe fallback. |
 
 No other firmware-only branch is safe to enable without a physical
 reproduction. New compiled-firmware observations must remain labeled as
@@ -229,7 +296,7 @@ inference until matched to protocol/server source or a focused physical test.
 | Ubuntu 26 modern Fixed codec mapping | No | No | Yes | Maps obsolete requests such as `libfaac` and selects modern encoders/mux options. |
 | Intel QSV / AMD VAAPI / NVIDIA NVENC selection and fallback | No | No | Yes | Intel VAAPI is commissioned. Intel QSV is reproducibly unstable on this host; AMD/NVIDIA remain SKIPPED without hardware. |
 | Fixed-output CEA-608/708 retention | Not established | No | Yes | PASS with MIM 0.4.7 `-a53cc 1`, software MPEG-2 decode, Intel VAAPI H.264 encode, and the safe 512 KiB/500 ms warm-probe policy. |
-| SageTV STV caption-state authority | Yes on extractor-backed players | Optional | No | Standard `GFX_SUBTITLES` + event 225 works with stock SageTV. `VIDEO_CC_STATE` remains an optional compatibility extension; IJK uses explicit client fallback. |
+| SageTV STV caption-state authority | Yes for CEA and bridged Teletext; DVB uses the separate STV Subtitles command when Core sends it | Optional | No | Standard `GFX_SUBTITLES` + event 225 works with stock SageTV for extractor-backed CEA and independently decoded DVB Teletext. Explicit local CC1/CC2 (CEA/Teletext) or DVB mode suppresses and flushes that callback before Android renders a track. A Vibe `VIDEO_CC_STATE` extension can publish the STV state to text-caption slots. Raw CEA on IJK uses explicit client fallback. |
 | Exact server-file automation event (**TEST ONLY**) | No | Yes | No | Opt-in test control; normal UI playback does not require it. |
 | Exact dotted-channel automation event and positive channel acknowledgment (**TEST ONLY**) | No | Yes | No | Opt-in test control; normal STV tuning does not require it. |
 | MIM active-backend status query (**Diagnostic**) | No | No | Yes | `ffmpeg --mim-status` returns machine-readable job status. |
@@ -295,7 +362,7 @@ must record the stored value so results are reproducible.
 | MCP `codec_capabilities` snapshot (**TEST ONLY**) | On-demand decoder inventory and selected-decoder evidence | Reports platform hardware/software classification, MIME/profile/dimension/features, queueing mode, and current player health without background instrumentation. | Debug builds only; no server or wire-protocol change. |
 | `preferred_audio_language` / `preferred_subtitle_language` | empty/auto or a BCP-47 language tag | Applies language preference through the selected Exo track selector; missing-language tracks remain safe fallbacks. | Fully client-side. |
 | `preferred_caption_standard` / `preferred_caption_service` | `auto`, `cea608` CC1-CC4, or `cea708` Service 1-63 | Resolves the preferred broadcast-caption track only after SageTV/STV enables captions. | Fully client-side; it is not a second caption enable gate. |
-| `legacy_server_caption_mode` | `stv`, `off`, `cc1`, `cc2` | Fallback available in Audio and Caption settings and the MiniClient long-press CC submenu. Negotiated event-225 rendering or received `VIDEO_CC_STATE` wins. | `stv` works on stock SageTV with Media3/legacy Exo/GSY; explicit modes remain for IJK or failed negotiation. |
+| `legacy_server_caption_mode` | `stv`, `off`, `cc1`, `cc2`, `dvb` | Available in Audio and Caption settings and the MiniClient long-press CC submenu. `stv` preserves server authority; explicit local modes own one Android renderer and suppress/reset event 225 on stock Core. | `stv` works on stock SageTV with Media3/legacy Exo/GSY; explicit local modes provide deterministic service selection when stock Core cannot publish `VIDEO_CC_STATE`. |
 | `gsy_player_engine` | `auto`, `media3`, `system`, `legacy_exo` | Selects the delegate only when `default_player=gsyplayer`. | Fully client-side. The resolved delegate must be recorded. |
 | `media3_codec_mode` / `exo2_codec_mode` | `auto`, `async`, `sync` | Selects MediaCodec queueing behavior for the corresponding engine. | Fully client-side; device/API dependent. |
 | `exoplayer_ffmpeg_extension` | `0` off, `1` if needed, `2` preferred | Controls the legacy Exo FFmpeg audio extension. | Fully client-side and does not refer to server MIM. |
@@ -497,3 +564,35 @@ Intel QSV remains an experimental option but is not the commissioned default:
 direct physical runs reproducibly exited with signal/return code 139. The
 stable default order is `vaapi,qsv,nvenc,software`, with hardware decode off so
 A/53 caption data survives the MPEG-2 input path.
+## Optional unified HD media-player graphics capability
+
+The Android client includes an opt-in implementation of the SageTV core
+`GFX_YUV_IMAGE_CACHE=UNIFIED` contract. Enable **Settings > Playback Settings >
+Use unified HD media-player graphics (experimental)**, or use the debug/MCP
+`dev_set_unified_graphics` control. It takes effect on the next SageTV
+connection; installing a new APK does not clear the saved choice.
+
+When enabled, Vibe replies `UNIFIED` to the stock server's capability query.
+This intentionally exercises the same core branches as an HD200/HD300:
+
+- DVB subtitle tracks are retained by SageTV instead of being discarded for a
+  non-standalone player.
+- MPEG-TS Push writes can be aligned to complete transport packets, improving
+  the server's trick-play boundary behavior.
+- The Android GDX and OpenGL renderers decode SageTV's format-256
+  Y-plane/interleaved-UV image lines into their existing RGBA texture path.
+  The normal `SETVIDEOPROP` rectangle path remains in use for Android's
+  MediaCodec `SurfaceView`; a handle is logged and safely ignored when a
+  server asks for HD300-specific video-plane composition.
+
+When disabled, the client returns an empty `GFX_YUV_IMAGE_CACHE` reply, which
+preserves the existing `GFX_HIRES_SURFACES` separate-cache behavior. The
+setting does not force a player backend, decoder, buffering preset, seek
+algorithm, DVD transport, remux, or transcoding mode. `GetRemoteUIType()` may
+report **HD Media Player** while enabled; third-party STVs that branch on that
+public value should be checked during compatibility testing.
+
+The capability is safe with an unmodified SageTV server. A server that sends
+an image format a renderer cannot handle receives a zero image handle and can
+fall back to its ordinary image path; the client logs the reason without
+tearing down playback.

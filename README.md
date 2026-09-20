@@ -299,6 +299,14 @@ Android debug track selector and fails unless the SageTV STV's caption state
 selects and renders a real cue. Use `--authority debug` only for isolated
 decoder diagnostics.
 
+The playback long-press row keeps Aspect ratio and places **Video**,
+**Audio**, and **Subtitles/CC** beside it. Video settings directly exposes the
+active Player, Decoding mode, Codec Queueing, Source buffering, Display, DVD
+playback, decoder restart, and reset controls. GSY selections name their
+delegate in parentheses. Audio and caption choices remain in their dedicated
+panels, while the triangle opens the combined SageTV Video Information and
+Vibe Diagnostics screen directly.
+
 Long-press the remote's navigation key during playback and select the bar-chart
 icon to toggle detailed Playback Stats directly, or open **Active Player
 Adjustments > Playback Stats overlay** for compact or detailed live
@@ -360,6 +368,34 @@ for 120 ms at every whole second, making A/V and caption offset visible in the
 same HDMI capture. The MCP `generate_seek_fixture` tool can recreate and
 publish the same fixture to the configured SMB test share without returning
 credentials.
+
+### Built-in bouncing-ball A/V synchronization test
+
+During playback, long-press the remote, select the speaker icon, and choose
+**A/V sync test**. The client loops a redistributable 12-second 1280x720 H.264
+pattern through a real Media3 video/audio pipeline. The ball reaches the line
+once per second while a one-frame border flash and a 25 ms, 48 kHz stereo AC-3
+click use the same authored clock. At correct synchronization, all three occur
+together.
+
+Left/Right changes the test by `25 ms`, Center resets to zero, and Back applies
+the value to the active playback session and returns to Audio settings. The
+test uses the current decoded-PCM or encoded-passthrough output selection,
+mutes only the underlying program, and restores its prior mute state on exit.
+The saved device default is unchanged until **Set as default for all media** is
+chosen separately.
+
+The deterministic embedded asset can be regenerated in the unified build
+environment:
+
+```powershell
+dev.cmd av-sync-fixture
+```
+
+The generator validates H.264, 59.94 fps, 1280x720 video and 48 kHz stereo
+AC-3 audio before the asset is packaged into the APK. This calibration isolates
+the Android display/audio/HDMI/receiver route; the longer server fixtures remain
+the separate transport, seek, live-transition, and lifecycle tests.
 
 Generate the short Kodi-derived codec/profile/bitstream matrix with the same
 unified container:
