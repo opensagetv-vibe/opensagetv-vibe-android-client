@@ -252,7 +252,8 @@ final class DebugPlayerConfigCommands
             prefs.setString(AndroidPrefStore.FIXED_ENCODING_FORMAT, value);
         }
         if (!fixedVideoBitrateKbps.isEmpty())
-            prefs.setInt(AndroidPrefStore.FIXED_ENCODING_VIDEO_BITRATE_KBPS, parseBoundedInt(fixedVideoBitrateKbps, 4000, 1, 100000));
+            prefs.setString(AndroidPrefStore.FIXED_ENCODING_VIDEO_BITRATE_KBPS,
+                    String.valueOf(parseBoundedInt(fixedVideoBitrateKbps, 4000, 1, 100000)));
         if (!fixedVideoFps.isEmpty())
         {
             String value = fixedVideoFps.toUpperCase();
@@ -279,7 +280,8 @@ final class DebugPlayerConfigCommands
             prefs.setString(AndroidPrefStore.FIXED_ENCODING_AUDIO_CODEC, value);
         }
         if (!fixedAudioBitrateKbps.isEmpty())
-            prefs.setInt(AndroidPrefStore.FIXED_ENCODING_AUDIO_BITRATE_KBPS, parseBoundedInt(fixedAudioBitrateKbps, 128, 1, 10000));
+            prefs.setString(AndroidPrefStore.FIXED_ENCODING_AUDIO_BITRATE_KBPS,
+                    String.valueOf(parseBoundedInt(fixedAudioBitrateKbps, 128, 1, 10000)));
         if (!fixedAudioChannels.isEmpty())
         {
             String value = fixedAudioChannels.toLowerCase();

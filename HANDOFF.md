@@ -1,5 +1,27 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Fixed-transcoding settings crash closure (2026-09-20)
+
+Opening **Fixed Transcoding Settings** previously force-finished the app on
+non-Pro Fire TV `.25`. The captured fatal exception was an AndroidX
+`ListPreference` inflation `ClassCastException`: existing video and audio
+bitrate values were stored as Android `Integer` values while the migrated
+preference UI requires `String` values.
+
+`FixedTranscodingFragment` now normalizes all list-backed fixed-transcoding
+keys before XML inflation. The two numeric bitrate keys retain their exact
+values, invalid legacy types on other list keys fall back only that key to its
+documented default, and unrelated preferences are untouched. `AndroidPrefStore`
+reads both numeric and string integer representations, while debug/MCP writes
+the canonical string form going forward.
+
+The settings-preserving APK SHA-256 is
+`9698e61ea450ecf27f948d14e27bd3683d289e2eb9f2a2f50347c38b919e3f1f`.
+On `.25`, the real retained `<int>` values `4000` and `128` migrated in place
+to strings, the activity and bitrate chooser rendered, focus stayed on the
+activity, and logcat contained no fatal exception. No preference reset or app
+data clear was used.
+
 ## DVD MIM plugin integration checkpoint (2026-09-20)
 
 Explicit `mim_main_feature` now passes on non-Pro Fire TV `.25` against

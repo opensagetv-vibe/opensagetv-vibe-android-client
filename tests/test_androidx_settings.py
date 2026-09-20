@@ -52,6 +52,30 @@ class AndroidXSettingsTests(unittest.TestCase):
         fragment = (SETTINGS / "MediaMappingsFragment.java").read_text(encoding="utf-8")
         self.assertIn("SwitchPreferenceCompat spSmartRemote", fragment)
 
+    def test_fixed_transcoding_migrates_legacy_numeric_list_values_before_inflate(self):
+        fragment = (SETTINGS / "FixedTranscodingFragment.java").read_text(encoding="utf-8")
+        pref_store = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/prefs/AndroidPrefStore.java").read_text(encoding="utf-8")
+        debug_config = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugPlayerConfigCommands.java").read_text(encoding="utf-8")
+
+        migration = "migrateFixedTranscodingListPreferenceTypes"
+        self.assertIn(migration, fragment)
+        self.assertLess(fragment.index(migration), fragment.index("setPreferencesFromResource"))
+        for key in (
+            "FIXED_ENCODING_PREFERENCE",
+            "FIXED_ENCODING_FORMAT",
+            "FIXED_ENCODING_VIDEO_BITRATE_KBPS",
+            "FIXED_ENCODING_FPS",
+            "FIXED_ENCODING_VIDEO_RESOLUTION",
+            "FIXED_ENCODING_AUDIO_CODEC",
+            "FIXED_ENCODING_AUDIO_BITRATE_KBPS",
+            "FIXED_ENCODING_AUDIO_CHANNELS",
+        ):
+            self.assertIn(key, pref_store)
+        self.assertIn("value instanceof Number", pref_store)
+        self.assertIn("return ((Number) value).intValue();", pref_store)
+        self.assertIn("setString(AndroidPrefStore.FIXED_ENCODING_VIDEO_BITRATE_KBPS", debug_config)
+        self.assertIn("setString(AndroidPrefStore.FIXED_ENCODING_AUDIO_BITRATE_KBPS", debug_config)
+
 
 if __name__ == "__main__":
     unittest.main()

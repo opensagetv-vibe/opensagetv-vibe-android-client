@@ -2,6 +2,7 @@ package opensagetv.vibe.miniclient.android.prefs;
 
 import android.content.SharedPreferences;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -103,6 +104,64 @@ public class AndroidPrefStore implements PrefStore
     public static final String AUDIO_CODEC_SUPPORT_DEFAULT = "automatic";
     //</editor-fold>
 
+    /**
+     * AndroidX {@code ListPreference} persists values as strings. Older Vibe
+     * builds and the debug commissioning API stored the two numeric fixed-
+     * transcoding list values as integers, which makes AndroidX throw a
+     * {@link ClassCastException} before the settings screen can render.
+     *
+     * Normalize every value consumed by that screen before preference
+     * inflation. Numeric bitrate values retain their exact value; an invalid
+     * type for any other list falls back only that key to its documented
+     * default. Existing strings and unrelated settings are untouched.
+     */
+    public static void migrateFixedTranscodingListPreferenceTypes(SharedPreferences preferences)
+    {
+        if (preferences == null)
+            return;
+
+        String[] keys = new String[] {
+                FIXED_ENCODING_PREFERENCE,
+                FIXED_ENCODING_FORMAT,
+                FIXED_ENCODING_VIDEO_BITRATE_KBPS,
+                FIXED_ENCODING_FPS,
+                FIXED_ENCODING_VIDEO_RESOLUTION,
+                FIXED_ENCODING_AUDIO_CODEC,
+                FIXED_ENCODING_AUDIO_BITRATE_KBPS,
+                FIXED_ENCODING_AUDIO_CHANNELS
+        };
+        String[] defaults = new String[] {
+                FIXED_ENCODING_PREFERENCE_DEFAULT,
+                FIXED_ENCODING_FORMAT_DEFAULT,
+                String.valueOf(FIXED_ENCODING_VIDEO_BITRATE_KBPS_DEFAULT),
+                FIXED_ENCODING_FPS_DEFAULT,
+                FIXED_ENCODING_VIDEO_RESOLUTION_DEFAULT,
+                FIXED_ENCODING_AUDIO_CODEC_DEFAULT,
+                String.valueOf(FIXED_ENCODING_AUDIO_BITRATE_KBPS_DEFAULT),
+                FIXED_ENCODING_AUDIO_CHANNELS_DEFAULT
+        };
+        Map<String, ?> values = preferences.getAll();
+        SharedPreferences.Editor editor = null;
+        for (int i = 0; i < keys.length; i++)
+        {
+            Object value = values.get(keys[i]);
+            if (value == null || value instanceof String)
+                continue;
+
+            String normalized = defaults[i];
+            if ((FIXED_ENCODING_VIDEO_BITRATE_KBPS.equals(keys[i])
+                    || FIXED_ENCODING_AUDIO_BITRATE_KBPS.equals(keys[i]))
+                    && value instanceof Number)
+                normalized = String.valueOf(((Number) value).intValue());
+
+            if (editor == null)
+                editor = preferences.edit();
+            editor.putString(keys[i], normalized);
+        }
+        if (editor != null)
+            editor.commit();
+    }
+
     private final SharedPreferences prefs;
 
     public AndroidPrefStore(SharedPreferences prefs)
@@ -167,13 +226,17 @@ public class AndroidPrefStore implements PrefStore
     @Override
     public int getInt(String key, int defValue)
     {
+        Object value = prefs.getAll().get(key);
+        if (value == null)
+            return defValue;
+        if (value instanceof Number)
+            return ((Number) value).intValue();
         try
         {
-            return Integer.parseInt(prefs.getString(key, String.valueOf(defValue)));
+            return Integer.parseInt(String.valueOf(value));
         }
-        catch (ClassCastException cce)
+        catch (NumberFormatException nfe)
         {
-            this.setInt(key, defValue);
             return defValue;
         }
     }

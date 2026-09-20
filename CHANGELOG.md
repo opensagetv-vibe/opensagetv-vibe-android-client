@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed the Fixed Transcoding Settings activity exiting to the Fire TV home
+  screen. Legacy builds and the debug commissioning API stored the video/audio
+  bitrate selections as integer `SharedPreferences`, but AndroidX
+  `ListPreference` requires strings and crashed during screen inflation. The
+  activity now performs a bounded pre-inflation migration that preserves the
+  exact bitrate values, normalizes all eight list-backed fixed-transcoding
+  keys, leaves unrelated settings untouched, and accepts either legacy numeric
+  or current string values in runtime getters. Debug configuration now writes
+  the canonical string form. A settings-preserving install on non-Pro `.25`
+  migrated `4000`/`128`, rendered the screen and bitrate chooser, and retained
+  focus with no fatal exception.
 - Commissioned explicit DVD MIM main-feature playback on isolated Vibe server
   `.232` with the OpenSageTV Vibe FFmpeg Plugin and updated Core transcoder
   resolver. The generated authored DVD produced VAAPI `h264_vaapi` on the
