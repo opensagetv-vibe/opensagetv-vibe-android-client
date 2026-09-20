@@ -29,7 +29,7 @@ dev_exec() {
   # credentials stay in the ignored test-environment TOML.
   local commissioning_env=()
   local commissioning_name
-  for commissioning_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD SAGETV_TEST_DEVICE_ALIAS SAGETV_TEST_SERVER_ALIAS SAGETV_TEST_SERVER_ADDRESS; do
+  for commissioning_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD SAGETV_CORE_MCP_BASE SAGETV_CORE_MCP_TOKEN SAGETV_TEST_DEVICE_ALIAS SAGETV_TEST_SERVER_ALIAS SAGETV_TEST_SERVER_ADDRESS; do
     if [[ -n "${!commissioning_name:-}" ]]; then
       commissioning_env+=("$commissioning_name=${!commissioning_name}")
     fi

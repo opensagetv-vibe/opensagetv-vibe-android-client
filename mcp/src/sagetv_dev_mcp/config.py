@@ -377,6 +377,15 @@ class TestEnvironment:
             for extension in ("vibe_sage_jar", "vibe_mim", "vibe_ffmpeg"):
                 if extension in server and not isinstance(server.get(extension), bool):
                     errors.append(f"servers.{server_name}.{extension} must be true or false")
+            if "core_mcp_enabled" in server and not isinstance(
+                server.get("core_mcp_enabled"), bool
+            ):
+                errors.append(f"servers.{server_name}.core_mcp_enabled must be true or false")
+            if server.get("core_mcp_enabled") is True:
+                if not _string(server.get("core_mcp_base_url")):
+                    errors.append(f"servers.{server_name}.core_mcp_base_url is required")
+                if not _string(server.get("core_mcp_token")):
+                    errors.append(f"servers.{server_name}.core_mcp_token is required")
         configs = [(name, self._smb_config_for_server(server)) for name, server in servers.items() if isinstance(server, dict)]
         if not configs:
             configs = [("legacy", _table(self.data, "smb"))]

@@ -430,7 +430,8 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
             lifecycle.index('tool_call(client, "clear_logcat"'),
             lifecycle.index('"dev_prepare_clean_start"'),
         )
-        self.assertIn('SagexApiClient.discover(server_address)', server)
+        self.assertIn('discover_sage_control(server_address)', server)
+        self.assertIn('sagex = discover_sage_control(key[0])', server)
         self.assertIn('sagex.resolve_context(client_id)', server)
         self.assertIn('sagex.find_media(requested)', server)
         self.assertIn('sagex.watch(context, match.media_file_id)', server)

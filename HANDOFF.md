@@ -1,5 +1,21 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Stock Core MCP bridge integration (2026-09-20)
+
+The commissioning MCP now prefers the sibling stock-compatible Core MCP bridge
+when a server explicitly configures `core_mcp_enabled`, its base URL, and its
+local bearer token. The adapter uses the bridge for exact paths, watch, seek,
+UI commands, channel tune, caption state, library scans, diagnostics, and
+watched-state clearing while retaining existing Sagex/Web and private-event
+fallback behavior when the bridge is absent.
+
+On non-Pro Fire TV `.25` against unmodified stock `.175`, Media3 hardware Pull
+passed exact fixture start, from-beginning, advancing 1080i MPEG-2 and AC-3,
+fullscreen, forward/back recovery, pause/resume, and an empty crash-log gate.
+Live TV and bridge-driven exact channel `2.1` also passed. The `.175`
+`Sage.jar` SHA-256 remained
+`d76ded981b9bc51e25b9cec821b6abeb771b46c2996dc45e453349b5e703fcb0`.
+
 ## Fixed-transcoding settings crash closure (2026-09-20)
 
 Opening **Fixed Transcoding Settings** previously force-finished the app on

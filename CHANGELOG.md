@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added bridge-first commissioning control for the stock-compatible Vibe Core
+  MCP plugin. When explicitly configured, exact indexed paths, watch,
+  media-relative seek, UI commands, channels, captions, scans, and watched
+  state use the authenticated bridge; Sagex/Web and private Vibe events remain
+  safe fallbacks. Non-Pro `.25` passed exact-path MPEG-2/AC-3 Media3 hardware
+  Pull playback, forward/back recovery, pause/resume, fullscreen, crash-log,
+  live-TV, and exact-channel gates against unchanged stock `.175`.
 - Fixed the Fixed Transcoding Settings activity exiting to the Fire TV home
   screen. Legacy builds and the debug commissioning API stored the video/audio
   bitrate selections as integer `SharedPreferences`, but AndroidX

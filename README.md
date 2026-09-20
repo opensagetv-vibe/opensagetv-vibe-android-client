@@ -215,6 +215,15 @@ supported environment overrides still win. The checked-in complete example
 contains only documentation addresses and blank credentials; see
 `docs/TEST_ENVIRONMENT.md`.
 
+For a stock server with the optional Vibe Core MCP plugin, set the per-server
+`core_mcp_enabled`, `core_mcp_base_url`, and ignored `core_mcp_token` values.
+The commissioning MCP then prefers the authenticated stock-API bridge for
+exact-path playback, seek, channel, caption, scan, and watched-state controls.
+If it is not enabled, existing Sagex/Web and property-gated Vibe compatibility
+paths remain unchanged. `SAGETV_CORE_MCP_BASE` and
+`SAGETV_CORE_MCP_TOKEN` are supported local overrides and are forwarded by the
+Windows, WSL, and container wrappers without being written to tracked files.
+
 Physical tests must record the APK hash, device/API, server build, backend,
 streaming mode, decoder, media state, visible A/V result, and correlated
 Android/server evidence. Watchdog expiration is an observation, not automatic
@@ -246,8 +255,9 @@ the stock Sagex `Watch` API rather than navigating an STV-specific Search UI.
 Unlike the exploratory player matrix, any missing/rejected playback operation
 makes this strict gate fail.
 
-The commissioned Vibe server supports an opt-in debug-only exact-path start
-that avoids Search UI navigation:
+The commissioned Vibe server supports an opt-in debug-only exact-path start;
+stock servers can provide the same deterministic commissioning action through
+the optional Vibe Core MCP plugin. Both avoid Search UI navigation:
 
 ```bat
 dev.cmd mcp-session-test --server-address 192.168.10.232 --no-save-server --player media3 --streaming push --decoding hardware --server-path "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts" --exit none

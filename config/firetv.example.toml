@@ -55,6 +55,11 @@ web_control_mode = "none"
 vibe_sage_jar = true
 vibe_mim = true
 vibe_ffmpeg = true
+# Optional stock-API control plugin. When enabled, the commissioning MCP uses
+# this authenticated bridge before Sagex/Web or private MiniClient test events.
+core_mcp_enabled = false
+core_mcp_base_url = "http://192.0.2.20:8270"
+core_mcp_token = ""
 web_base_url = "http://192.0.2.20:8080"
 web_remote_url = "http://192.0.2.20:8080/sage/webremote.html"
 web_username = ""
@@ -81,6 +86,9 @@ web_control_mode = "auto"
 vibe_sage_jar = false
 vibe_mim = false
 vibe_ffmpeg = false
+core_mcp_enabled = false
+core_mcp_base_url = "http://192.0.2.21:8270"
+core_mcp_token = ""
 web_base_url = "http://192.0.2.21:8080"
 web_remote_url = "http://192.0.2.21:8080/sage/webremote.html"
 web_username = ""
