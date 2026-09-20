@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **57** (2026-09-19)
+Checklist revision: **58** (2026-09-19)
 
 ## Stable checklist rules
 
@@ -604,7 +604,7 @@ explicitly approves publication after the active hardware phases.
   GSY delegate; and make the triangle open the combined compact SageTV Video
   Information and Vibe Diagnostics screen without the themed-context crash.
   Focused contracts and the complete project/MCP/Core/build gates pass.
-- [ ] **GH-006 - Publish v0.5.93 playback update.** Synchronize release
+- [x] **GH-006 - Publish v0.5.93 playback update.** Synchronize release
   metadata, changelog, handoff, task state, and complete manifest; run primary
   and fresh Git-less source/APK gates; create logical commits; push `main`;
   publish the versioned APK, source, checksums, manifest, and review bundle;
@@ -678,6 +678,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 58 | 2026-09-19 | Completed GH-006: pushed implementation/release commits `3cf637d` and `6c4b890`, passed the primary and fresh Git-less source/APK gates, published five v0.5.93 assets with grouped bullet notes, matched every downloaded public asset to its local SHA-256, and verified successful repository checks, Pages deployment, latest-release API, and HTTP 200 downloader. |
 | 57 | 2026-09-19 | Added GH-006 after explicit user approval to publish the accumulated 0.5.93 playback update, including grouped bullet-formatted release notes and public artifact/workflow/Pages verification. |
 | 56 | 2026-09-19 | Completed UI-001: consolidated the long-press Video/Audio/Subtitles-CC/Aspect controls, flattened the Video settings rows, removed duplicate and obsolete shortcuts, added explicit GSY delegate choices, prevented label/value truncation, combined Video Information with Vibe diagnostics, and fixed its themed-context Activity crash. |
 | 55 | 2026-09-19 | Corrected the embedded A/V sync calibration path after proving that a fully buffered fixture could retain already-extracted timestamps. Every settled adjustment now recreates the local source at the same position so samples are extracted with the new offset; both decoded and encoded calibration routes use the byte-preserving timestamp controller, and a quiet continuous pilot tone keeps HDMI/receiver audio paths awake between clicks. Pro `.29` ADB evidence proved `+1.125 s` shifted audio, `-1.125 s` delayed video, zero reset, and clean return to the MiniClient. USB HDMI was not routed to the Pro, so audible receiver synchronization remains explicitly open. The full 562 client, 87 MCP, and core Java gates pass. |

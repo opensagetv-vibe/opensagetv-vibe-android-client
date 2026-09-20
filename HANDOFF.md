@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client handoff
 
-## v0.5.93 release-candidate checkpoint (2026-09-19)
+## v0.5.93 release checkpoint (2026-09-19)
 
 The accumulated stock-server playback, captions, unified graphics, growing-
 stream recovery, audio synchronization, DVD Push buffering, and consolidated
@@ -10,10 +10,17 @@ project/static tests, 87 MCP/workflow tests, Core Java tests, the complete
 and strict debug-APK inspection. The `0.5.93-DEV-DEBUG` APK SHA-256 is
 `c85be3e468e141b20e6b83cb6421e0b9757697429a654e1c29b157c016df1d39`.
 
-GH-006 owns the remaining clean source-bundle verification, logical commits,
-push, tag/release publication, public hash and workflow verification, and the
-latest-APK Pages check. Release notes must remain concise bullet points grouped
-under Changes, Fixes, Compatibility, Validation, and Known limitations.
+GH-006 is complete. A fresh Git-less source extraction passed its 1,463-file
+manifest, 564 project/static tests with the expected Git-metadata-only skip,
+87 MCP/workflow tests, Core Java tests, full validation, and a clean 60-task
+Android build. Commits `3cf637d` and `6c4b890` were pushed to `main`; the public
+[`v0.5.93` release](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.93)
+contains the APK, source ZIP, combined review bundle, release manifest, and
+checksums. Its release page uses bullet points grouped under Changes, Fixes,
+Compatibility, Validation, and Known limitations. All five downloaded public
+assets match their local SHA-256 hashes, GitHub repository and Pages checks
+passed, the latest-release API returns `v0.5.93`, and the permanent Pages
+downloader returns HTTP 200.
 
 ## Playback-control consolidation checkpoint (2026-09-19)
 
