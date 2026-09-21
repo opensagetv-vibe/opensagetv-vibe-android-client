@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **65** (2026-09-21)
+Checklist revision: **66** (2026-09-21)
 
 ## Stable checklist rules
 
@@ -643,7 +643,7 @@ explicitly approves publication after the active hardware phases.
   use concise bullet-formatted release notes grouped by Changes, Fixes,
   Compatibility, Validation, and Known limitations; then verify public hashes,
   GitHub checks, and the Pages latest-APK redirect.
-- [ ] **GH-007 - Publish v0.5.94 compatibility update.** Package the completed
+- [x] **GH-007 - Publish v0.5.94 compatibility update.** Package the completed
   stock Core MCP bridge, private-event removal, Fixed Transcoding preference
   migration, functional capability names, and provider-neutral DVD transform
   negotiation. Run primary and independent Git-less source/APK gates; publish
@@ -717,6 +717,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 66 | 2026-09-21 | Completed GH-007: passed primary and independent Git-less source/APK gates, pushed `0e70947`, published five v0.5.94 assets with grouped bullet notes, matched every downloaded public asset hash, and verified green repository/Pages checks plus the latest-release API and downloader. |
 | 65 | 2026-09-21 | Added GH-007 after confirming that five post-v0.5.93 commits changed Android runtime and protocol code and therefore require a new APK release rather than only a source push. |
 | 64 | 2026-09-20 | Completed FOUND-017: Android now advertises only the provider-neutral `dvd_mpegts_v1` transport and `transformed_main_feature` policy, retains bounded old-value migration compatibility, and passes focused protocol/policy tests against the generic Core SPI and plugin-owned MIM implementation. |
 | 63 | 2026-09-20 | Completed FOUND-016: replaced Vibe-branded DVD/playback-rate wire names with functional names and no legacy aliases, added explicit unknown-property fail-safe tests, passed Core/Android builds, and installed/launched the preserved-data APK on `.25` and `.29`. |

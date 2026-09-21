@@ -4,6 +4,11 @@
 
 ## v0.5.94 - 2026-09-21
 
+- Published the five standard GitHub assets with grouped bullet notes. A fresh
+  Git-less extraction passed the full manifest, tests, validation, clean build,
+  and strict APK inspection. Every downloaded public asset matched its local
+  SHA-256; repository checks and Pages deployment passed, the latest-release
+  API returns `v0.5.94`, and the permanent downloader returns HTTP 200.
 - Prepared the versioned GitHub APK/source release after confirming that the
   five post-v0.5.93 commits contain Android runtime and protocol changes. The
   primary 566 project/static, 91 MCP, Core Java, full validation, 1,466-file

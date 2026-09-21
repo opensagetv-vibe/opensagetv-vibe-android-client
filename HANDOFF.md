@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client handoff
 
-## v0.5.94 release candidate (2026-09-21)
+## v0.5.94 release checkpoint (2026-09-21)
 
 Version 0.5.94 packages the completed post-v0.5.93 stock-server and optional
 DVD-transform compatibility work. It replaces private commissioning events
@@ -16,9 +16,13 @@ Java tests, project validation, the complete 1,466-file manifest, a clean
 60-task APK build, and strict debug-APK inspection. The versioned candidate
 APK SHA-256 is
 `651ffe51a4a76cad75d1820cc9c5f166ce478c2c252c1ba875c3f6161140fd4f`.
-Publication additionally requires independent Git-less source extraction,
-public asset hash verification, successful GitHub checks, and confirmation
-that the Pages download endpoint resolves v0.5.94.
+The exact source ZIP independently passed its Git-less manifest, 566 tests
+with the expected Git-metadata-only skip, 91 MCP tests, Core Java tests, full
+validation, a clean 60-task build, and strict APK inspection. Commit `0e70947`
+and tag `v0.5.94` are public. All five downloaded release assets match their
+local SHA-256 hashes, repository checks and Pages deployment pass, the GitHub
+latest-release API returns `v0.5.94`, and the permanent Pages downloader
+returns HTTP 200.
 
 ## Provider-neutral DVD transform negotiation (2026-09-20)
 
