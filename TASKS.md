@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **64** (2026-09-20)
+Checklist revision: **65** (2026-09-21)
 
 ## Stable checklist rules
 
@@ -643,6 +643,13 @@ explicitly approves publication after the active hardware phases.
   use concise bullet-formatted release notes grouped by Changes, Fixes,
   Compatibility, Validation, and Known limitations; then verify public hashes,
   GitHub checks, and the Pages latest-APK redirect.
+- [ ] **GH-007 - Publish v0.5.94 compatibility update.** Package the completed
+  stock Core MCP bridge, private-event removal, Fixed Transcoding preference
+  migration, functional capability names, and provider-neutral DVD transform
+  negotiation. Run primary and independent Git-less source/APK gates; publish
+  versioned APK/source/checksum/manifest/review assets with grouped bullet
+  notes; verify public hashes, repository checks, and the Pages latest-APK
+  redirect.
 
 ## 5. Deferred cross-device matrix after GitHub release publication
 
@@ -710,6 +717,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 65 | 2026-09-21 | Added GH-007 after confirming that five post-v0.5.93 commits changed Android runtime and protocol code and therefore require a new APK release rather than only a source push. |
 | 64 | 2026-09-20 | Completed FOUND-017: Android now advertises only the provider-neutral `dvd_mpegts_v1` transport and `transformed_main_feature` policy, retains bounded old-value migration compatibility, and passes focused protocol/policy tests against the generic Core SPI and plugin-owned MIM implementation. |
 | 63 | 2026-09-20 | Completed FOUND-016: replaced Vibe-branded DVD/playback-rate wire names with functional names and no legacy aliases, added explicit unknown-property fail-safe tests, passed Core/Android builds, and installed/launched the preserved-data APK on `.25` and `.29`. |
 | 61 | 2026-09-20 | Completed FOUND-014: removed Android/Core private commissioning events 230-232 after their stock-plugin `Watch`, from-beginning, and `ChannelSet` replacements passed on `.175`; routed MCP seek through public `Seek(long)` and physically proved stable ALADDIN DVD Push forward/backward seeks. |

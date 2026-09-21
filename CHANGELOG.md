@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.5.94 - 2026-09-21
+
+- Prepared the versioned GitHub APK/source release after confirming that the
+  five post-v0.5.93 commits contain Android runtime and protocol changes. The
+  primary 566 project/static, 91 MCP, Core Java, full validation, 1,466-file
+  manifest, clean 60-task build, and strict debug-APK inspection gates pass.
+  The versioned candidate APK SHA-256 is
+  `651ffe51a4a76cad75d1820cc9c5f166ce478c2c252c1ba875c3f6161140fd4f`.
+
 - Replaced MIM-specific DVD wire values and diagnostics with the generic
   `dvd_mpegts_v1` transport and `transformed_main_feature` policy. Android
   advertises the optional transport only; updated Core selects a matching

@@ -1,5 +1,25 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.94 release candidate (2026-09-21)
+
+Version 0.5.94 packages the completed post-v0.5.93 stock-server and optional
+DVD-transform compatibility work. It replaces private commissioning events
+230-233 with the authenticated stock-compatible Core MCP bridge and local
+Media3 Surface refresh, migrates legacy Fixed Transcoding preference types,
+and uses functional, provider-neutral `DVD_DISC_*`, `VIDEO_PLAYBACK_RATE`,
+`dvd_mpegts_v1`, and `transformed_main_feature` contracts. Unmodified stock
+Core retains its established fallback behavior; transformed DVD playback is
+advertised only to a matched updated Core with an available plugin provider.
+
+The primary source gate passes 566 project/static tests, 91 MCP tests, Core
+Java tests, project validation, the complete 1,466-file manifest, a clean
+60-task APK build, and strict debug-APK inspection. The versioned candidate
+APK SHA-256 is
+`651ffe51a4a76cad75d1820cc9c5f166ce478c2c252c1ba875c3f6161140fd4f`.
+Publication additionally requires independent Git-less source extraction,
+public asset hash verification, successful GitHub checks, and confirmation
+that the Pages download endpoint resolves v0.5.94.
+
 ## Provider-neutral DVD transform negotiation (2026-09-20)
 
 Android now advertises `native,dvd_mpegts_v1` through
