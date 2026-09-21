@@ -359,14 +359,14 @@
     <string-array name="entries_disc_playback_policy">
         <item>Automatic (recommended)</item>
         <item>Native SageTV DVD</item>
-        <item>Hybrid menus with FFmpeg/MIM feature playback</item>
-        <item>FFmpeg/MIM main feature</item>
+        <item>Hybrid menus with transformed feature playback</item>
+        <item>Transformed main feature</item>
     </string-array>
     <string-array name="entryvalues_disc_playback_policy">
         <item>auto</item>
         <item>native</item>
         <item>hybrid</item>
-        <item>mim_main_feature</item>
+        <item>transformed_main_feature</item>
     </string-array>
 
     <string-array name="entries_disc_mpeg2_timestamp_repair">

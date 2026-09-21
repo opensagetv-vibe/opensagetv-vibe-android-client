@@ -127,7 +127,7 @@ public final class ActivePlayerAdjustmentsDialog
                     @Override public void run()
                     {
                         ActivePlayerSessionOverrides.resetVideo();
-                        DisplayRefreshController.cancelPendingReload();
+                        DisplayRefreshController.cancelPendingRefresh();
                         AppUtil.message("Current-session video overrides cleared");
                         reload(media);
                         reopenVideoMenu();
@@ -311,7 +311,7 @@ public final class ActivePlayerAdjustmentsDialog
     {
         int value = ActivePlayerSessionOverrides.resolveRefreshSettleMs(
                 client.properties().getInt(PrefStore.Keys.playback_refresh_settle_ms, 0));
-        return "HDMI settle before DVD decoder reload (" + value + " ms)";
+        return "HDMI settle before local DVD video refresh (" + value + " ms)";
     }
 
     private String codecQueueingValue()
@@ -1139,11 +1139,11 @@ public final class ActivePlayerAdjustmentsDialog
                                         client.properties().getInt(
                                                 PrefStore.Keys.playback_refresh_settle_ms, 0));
                                 boolean scheduled = result.applied && result.modeChanged
-                                        && DisplayRefreshController.scheduleControlledDvdReload(
+                                        && DisplayRefreshController.scheduleLocalDvdOutputRefresh(
                                                 activity, media, settleMs);
                                 AppUtil.message((result.applied ? "Applied: " : "Not applied: ")
                                         + result.summary() + (scheduled
-                                        ? "; DVD decoder reload in " + settleMs + " ms" : ""));
+                                        ? "; local DVD video refresh in " + settleMs + " ms" : ""));
                             }
                         }, false);
             }
@@ -1156,7 +1156,7 @@ public final class ActivePlayerAdjustmentsDialog
         String[] labels = new String[values.length];
         for (int i = 0; i < values.length; i++)
             labels[i] = values[i] == 0 ? "Off" : values[i] + " ms";
-        chooseVideoChoice("HDMI settle before DVD decoder reload", labels, new ValueSetter()
+        chooseVideoChoice("HDMI settle before local DVD video refresh", labels, new ValueSetter()
         {
             @Override public void set(String index)
             {
@@ -1999,7 +1999,7 @@ public final class ActivePlayerAdjustmentsDialog
     private void reload(MediaCmd media)
     {
         if (media != null && media.requestControlledPlayerReload())
-            AppUtil.message("Rebuilding the DVD decoder at the same SageTV position");
+            AppUtil.message("Refreshing local DVD video without a server seek");
         else
             AppUtil.message("Saved. This transport cannot reload safely in place; it applies to the next video");
     }
@@ -2139,9 +2139,9 @@ public final class ActivePlayerAdjustmentsDialog
         text.append("\nDisplay: ").append(display.summary());
         int settle = ActivePlayerSessionOverrides.resolveRefreshSettleMs(
                 client.properties().getInt(PrefStore.Keys.playback_refresh_settle_ms, 0));
-        if (dvd || settle != 0 || DisplayRefreshController.getPendingReloadMs() != 0)
+        if (dvd || settle != 0 || DisplayRefreshController.getPendingRefreshMs() != 0)
             text.append("\nDVD HDMI settle: ").append(settle).append(" ms / pending ")
-                    .append(DisplayRefreshController.getPendingReloadMs()).append(" ms");
+                    .append(DisplayRefreshController.getPendingRefreshMs()).append(" ms");
         return text.toString();
     }
 

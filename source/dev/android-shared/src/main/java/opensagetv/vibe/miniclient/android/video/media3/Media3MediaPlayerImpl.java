@@ -275,6 +275,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private volatile String activePlaybackUrl;
     private volatile boolean audioPassthroughEnabled;
     private volatile boolean audioOutputRebuildQueued;
+    private volatile boolean localVideoOutputRefreshQueued;
     private volatile boolean exclusiveDiagnosticAudioSuspended;
     private DataSource retainedAudioRebuildDataSource;
     private Media3PcmAudioProcessor pcmAudioProcessor;
@@ -526,7 +527,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             final PlaybackSessionController.Token switchOperation = beginPlaybackOperation(
                     PlaybackSessionController.Operation.LOAD);
             lastUri = urlString;
-            dvdMimTransport = false;
+            dvdTransformedTransport = false;
             lastMediaTime = -1;
             lastStableGrowingPullPositionMs = -1L;
             lastGrowingPullPositionRecoveryMs = -1L;
@@ -763,6 +764,58 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
         }
         return Math.max(0L, bufferedEdgeMs - getPlaybackPosition());
+    }
+
+    /**
+     * Refresh only Media3's local Surface binding. The player, extractor,
+     * Push datasource and DVD logical clock remain alive, so no server seek or
+     * modified MiniClient protocol is needed after an HDMI mode transition.
+     */
+    @Override
+    public boolean refreshVideoOutput()
+    {
+        final ExoPlayer expectedPlayer = player;
+        final PlaybackSessionController.Token expectedSession = currentPlaybackSession();
+        if (expectedPlayer == null || context.getVideoView() == null
+                || !(context.getVideoView() instanceof SurfaceView)
+                || localVideoOutputRefreshQueued)
+            return false;
+        localVideoOutputRefreshQueued = true;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                try
+                {
+                    if (!isCurrentPlaybackSession(expectedSession)
+                            || player != expectedPlayer)
+                        return;
+                    SurfaceView surface = (SurfaceView) context.getVideoView();
+                    long beforeMs = Math.max(0L, expectedPlayer.getCurrentPosition());
+                    boolean resume = expectedPlayer.getPlayWhenReady();
+                    expectedPlayer.clearVideoSurface();
+                    expectedPlayer.setVideoSurfaceView(surface);
+                    // Surface rebinding must not change playback intent. This
+                    // assignment is intentionally idempotent and does not seek.
+                    expectedPlayer.setPlayWhenReady(resume);
+                    PlaybackDebugTrap.recordDetailed("local_video_output_refresh",
+                            Media3MediaPlayerImpl.this,
+                            "positionMs=" + beforeMs + ";dvd=" + dvdPushMode
+                                    + ";transportUnchanged=true");
+                }
+                catch (RuntimeException ex)
+                {
+                    PlaybackDebugTrap.record("local_video_output_refresh_error_"
+                            + ex.getClass().getSimpleName(), Media3MediaPlayerImpl.this);
+                    log.logError("Unable to refresh Media3 video output", ex);
+                }
+                finally
+                {
+                    localVideoOutputRefreshQueued = false;
+                }
+            }
+        });
+        return true;
     }
 
     @Override
@@ -1808,7 +1861,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     return groupIndex;
             }
         }
-        if (dvdMimTransport)
+        if (dvdTransformedTransport)
         {
             DvdAudioStreamCode stream = DvdAudioStreamCode.decode(streamPos);
             int familyOrdinal = 0;
@@ -2598,7 +2651,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 int height = videoSize.height;
                 float pixelWidthHeightRatio = videoSize.pixelWidthHeightRatio;
 
-                if (dvdPushMode && !dvdMimTransport)
+                if (dvdPushMode && !dvdTransformedTransport)
                     dvdSubpictureDecoder.setVideoHeight(height);
 
                 if (VerboseLogging.DETAILED_PLAYER_LOGGING)
@@ -2714,7 +2767,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         log.logWarning("DVD Push datasource was unavailable after player setup; recreating it");
                         dataSource = new Media3PushDataSource();
                     }
-                    if (dvdMimTransport)
+                    if (dvdTransformedTransport)
                     {
                         // MIM emits ordinary H.264/AC-3/DVB-sub MPEG-TS. The
                         // DVD PS/SPU extractor would misidentify this stream.

@@ -107,8 +107,9 @@ final class DebugPlayerConfigCommands
         if (!discPlaybackPolicy.isEmpty())
         {
             String value = discPlaybackPolicy.toLowerCase();
+            if ("mim_main_feature".equals(value)) value = "transformed_main_feature";
             if (!("auto".equals(value) || "native".equals(value)
-                    || "hybrid".equals(value) || "mim_main_feature".equals(value)))
+                    || "hybrid".equals(value) || "transformed_main_feature".equals(value)))
                 throw new IllegalArgumentException("invalid disc playback policy: "
                         + discPlaybackPolicy);
             prefs.setString(PrefStore.Keys.disc_playback_policy, value);

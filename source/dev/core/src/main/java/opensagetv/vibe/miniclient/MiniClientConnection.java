@@ -15,7 +15,6 @@
  */
 package opensagetv.vibe.miniclient;
 
-import java.nio.charset.StandardCharsets;
 
 import opensagetv.vibe.miniclient.events.ConnectionLost;
 import opensagetv.vibe.miniclient.graphics.UnifiedGraphicsCapability;
@@ -29,6 +28,21 @@ import opensagetv.vibe.miniclient.util.Utils;
 
 public class MiniClientConnection implements SageTVInputCallback
 {
+    static String unsupportedGetPropertyValue(String propertyName)
+    {
+        // Unknown capability names are normal when different server/client
+        // generations meet. An empty reply means unsupported and must not
+        // terminate the MiniClient connection.
+        return "";
+    }
+
+    static int unsupportedSetPropertyResult(String propertyName)
+    {
+        // SageTV has historically treated unknown SET_PROPERTY names as
+        // ignorable extensions. Acknowledge and continue instead of throwing.
+        return 0;
+    }
+
 
     /*Containers*/
     public static final String MPEG2_PS = "MPEG2-PS";
@@ -187,11 +201,6 @@ public class MiniClientConnection implements SageTVInputCallback
     public static final int SUBTITLE_UPDATE_REPLY_TYPE = 225;
     public static final int IMAGE_UNLOAD_REPLY_TYPE = 226;
     public static final int OFFLINE_CACHE_CHANGE_REPLY_TYPE = 227;
-    /** OpenSageTV Vibe opt-in server-side Watch(path) commissioning event. */
-    public static final int VIBE_WATCH_FILE_EVENT_REPLY_TYPE = 230;
-    public static final int VIBE_CHANNEL_SET_EVENT_REPLY_TYPE = 231;
-    public static final int VIBE_WATCH_FILE_FROM_BEGINNING_EVENT_REPLY_TYPE = 232;
-    public static final int VIBE_SEEK_EVENT_REPLY_TYPE = 233;
     private volatile String vibeCurrentChannel = "";
     private volatile long vibeChannelAckSequence;
     // Tells the GFX channel to force the media channel to reconnect
@@ -939,7 +948,7 @@ public class MiniClientConnection implements SageTVInputCallback
                 else if (command == GET_PROPERTY_CMD_TYPE) // get property
                 {
                     String propName = new String(cmdbuffer, 0, len);
-                    String propVal = "";
+                    String propVal = unsupportedGetPropertyValue(propName);
                     byte[] propValBytes = null;
                     if ("GFX_TEXTMODE".equals(propName))
                     {
@@ -1053,29 +1062,29 @@ public class MiniClientConnection implements SageTVInputCallback
                         // server-side MIM transform has not been negotiated.
                         propVal = "TRUE";
                     }
-                    else if ("VIBE_DISC_TRANSPORTS".equals(propName))
+                    else if ("DVD_DISC_TRANSPORTS".equals(propName))
                     {
-                        // native is the established MPEG-PS path. mim_ts_v1
-                        // means this client can retain the same DVD control VM
-                        // while decoding a server-side MIM MPEG-TS transform.
-                        propVal = "native,mim_ts_v1";
+                        // This advertises representations the client can
+                        // decode, not a particular server executable/provider.
+                        propVal = "native,dvd_mpegts_v1";
                     }
-                    else if ("VIBE_DISC_POLICY".equals(propName))
+                    else if ("DVD_DISC_POLICY".equals(propName))
                     {
-                        propVal = client.properties().getString(
-                                PrefStore.Keys.disc_playback_policy, "auto");
+                        propVal = opensagetv.vibe.miniclient.video.DiscPlaybackPolicy
+                                .normalizeRequested(client.properties().getString(
+                                        PrefStore.Keys.disc_playback_policy, "auto"));
                     }
-                    else if ("VIBE_DISC_SKIP_MENUS".equals(propName))
+                    else if ("DVD_DISC_SKIP_MENUS".equals(propName))
                     {
                         propVal = client.properties().getBoolean(
                                 PrefStore.Keys.disc_skip_menus, false) ? "TRUE" : "FALSE";
                     }
-                    else if ("VIBE_DISC_SKIP_PREVIEWS".equals(propName))
+                    else if ("DVD_DISC_SKIP_PREVIEWS".equals(propName))
                     {
                         propVal = client.properties().getBoolean(
                                 PrefStore.Keys.disc_skip_previews, false) ? "TRUE" : "FALSE";
                     }
-                    else if ("VIBE_DISC_NATIVE_FALLBACK".equals(propName))
+                    else if ("DVD_DISC_NATIVE_FALLBACK".equals(propName))
                     {
                         propVal = client.properties().getBoolean(
                                 PrefStore.Keys.disc_compatibility_fallback, true) ? "TRUE" : "FALSE";
@@ -1116,7 +1125,7 @@ public class MiniClientConnection implements SageTVInputCallback
                                 client.properties().getString(PrefStore.Keys.gsy_player_engine, "auto"))
                                 ? "TRUE" : "";
                     }
-                    else if ("VIBE_PLAYBACK_RATE".equals(propName))
+                    else if ("VIDEO_PLAYBACK_RATE".equals(propName))
                     {
                         propVal = opensagetv.vibe.miniclient.video.PlaybackRatePolicy.shouldAdvertise(
                                 client.properties().getStreamingMode(),
@@ -1751,7 +1760,8 @@ public class MiniClientConnection implements SageTVInputCallback
                         }
                         else
                         {
-                            retval = 0; // or the error code if it failed the
+                            retval = unsupportedSetPropertyResult(propName);
+                            log.logDebug("Ignoring unsupported SetProperty: " + propName);
                         }
 
                         // set
@@ -2276,71 +2286,6 @@ public class MiniClientConnection implements SageTVInputCallback
         }
     }
 
-    /**
-     * Ask a compatible, explicitly enabled OpenSageTV Vibe server to play the
-     * indexed MediaFile at {@code serverPath} in this MiniClient's UI context.
-     * Older servers safely ignore the unknown event type; callers must verify
-     * that a new playback session actually starts.
-     */
-    public boolean postVibeWatchFileEvent(String serverPath) {
-        return postVibeWatchFileEvent(serverPath, false);
-    }
-
-    /**
-     * Send the opt-in Vibe watch-file request, optionally asking a compatible
-     * server to queue playback at the first media segment instead of applying
-     * SageTV's saved watched position. The separate wire event is deliberately
-     * ignored by older servers rather than changing event 230's path payload.
-     */
-    public boolean postVibeWatchFileEvent(String serverPath, boolean fromBeginning) {
-        if (serverPath == null || serverPath.length() == 0)
-            throw new IllegalArgumentException("serverPath is required");
-        if (serverPath.indexOf('\0') >= 0)
-            throw new IllegalArgumentException("serverPath must not contain NUL");
-        final byte[] pathData = serverPath.getBytes(StandardCharsets.UTF_8);
-        if (pathData.length > 8192)
-            throw new IllegalArgumentException("serverPath UTF-8 payload exceeds 8192 bytes");
-        if (eventChannel == null || reconnectState.isReconnecting() || eventRouterThread == null || eventRouterThread.queue == null)
-            return false;
-
-        // All UI/debug initiated event-channel traffic must be serialized by
-        // the connection's event router. Writing synchronously from Android's
-        // BroadcastReceiver thread can wait behind an in-flight render/input
-        // event and block the ordered broadcast until ADB times out.
-        eventRouterThread.enqueue(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (eventChannel) {
-                    try {
-                        eventChannel.write(fromBeginning
-                                ? VIBE_WATCH_FILE_FROM_BEGINNING_EVENT_REPLY_TYPE
-                                : VIBE_WATCH_FILE_EVENT_REPLY_TYPE);
-                        eventChannel.write((pathData.length >>> 16) & 0xFF);
-                        eventChannel.writeShort(pathData.length & 0xFFFF);
-                        eventChannel.writeInt(0); // timestamp
-                        eventChannel.writeInt(replyCount++);
-                        eventChannel.writeInt(0); // pad
-                        if (encryptEvents && evtEncryptCipher != null)
-                            eventChannel.write(evtEncryptCipher.doFinal(pathData));
-                        else
-                            eventChannel.write(pathData);
-                        eventChannel.flush();
-                    } catch (Exception e) {
-                        log.logError("Error sending Vibe watch-file event", e);
-                        eventChannelError();
-                    }
-                }
-            }
-        });
-        return true;
-    }
-
-    /**
-     * Ask a compatible, explicitly enabled OpenSageTV Vibe server to tune this
-     * MiniClient UI context to one logical channel. The private event keeps the
-     * exact dotted ATSC channel number (for example 2.1); SageCommand numeric
-     * input converts the separator to a dash and is not deterministic here.
-     */
     /** Last logical channel positively acknowledged by the Vibe SageTV server. */
     public String getVibeCurrentChannel() {
         return vibeCurrentChannel;
@@ -2353,83 +2298,6 @@ public class MiniClientConnection implements SageTVInputCallback
      */
     public long getVibeChannelAckSequence() {
         return vibeChannelAckSequence;
-    }
-
-    public boolean postVibeChannelSetEvent(String channel) {
-        if (channel == null || !channel.matches("[0-9]+(?:\\.[0-9]+)?"))
-            throw new IllegalArgumentException("valid dotted channel is required");
-        final byte[] channelData = channel.getBytes(StandardCharsets.UTF_8);
-        if (channelData.length > 32)
-            throw new IllegalArgumentException("channel UTF-8 payload exceeds 32 bytes");
-        if (eventChannel == null || reconnectState.isReconnecting() || eventRouterThread == null || eventRouterThread.queue == null)
-            return false;
-
-        eventRouterThread.enqueue(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (eventChannel) {
-                    try {
-                        eventChannel.write(VIBE_CHANNEL_SET_EVENT_REPLY_TYPE);
-                        eventChannel.write((channelData.length >>> 16) & 0xFF);
-                        eventChannel.writeShort(channelData.length & 0xFFFF);
-                        eventChannel.writeInt(0); // timestamp
-                        eventChannel.writeInt(replyCount++);
-                        eventChannel.writeInt(0); // pad
-                        if (encryptEvents && evtEncryptCipher != null)
-                            eventChannel.write(evtEncryptCipher.doFinal(channelData));
-                        else
-                            eventChannel.write(channelData);
-                        eventChannel.flush();
-                    } catch (Exception e) {
-                        log.logError("Error sending Vibe channel-set event", e);
-                        eventChannelError();
-                    }
-                }
-            }
-        });
-        return true;
-    }
-
-    /**
-     * Reposition a compatible server-owned playback session.  This is needed
-     * for DVD Push because a local decoder seek cannot move MiniDVDPlayer's
-     * reader or cause the server to emit bytes from the requested DVD time.
-     * Older servers safely ignore the private event.
-     */
-    public boolean postVibeSeekEvent(final long targetMs) {
-        if (targetMs < 0)
-            throw new IllegalArgumentException("targetMs must be >= 0");
-        if (eventChannel == null || reconnectState.isReconnecting()
-                || eventRouterThread == null || eventRouterThread.queue == null)
-            return false;
-
-        eventRouterThread.enqueue(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (eventChannel) {
-                    try {
-                        eventChannel.write(VIBE_SEEK_EVENT_REPLY_TYPE);
-                        eventChannel.write(0);
-                        eventChannel.writeShort(8);
-                        eventChannel.writeInt(0);
-                        eventChannel.writeInt(replyCount++);
-                        eventChannel.writeInt(0);
-                        byte[] payload = new byte[8];
-                        for (int i = 7; i >= 0; i--)
-                            payload[7 - i] = (byte) ((targetMs >>> (i * 8)) & 0xFF);
-                        if (encryptEvents && evtEncryptCipher != null)
-                            eventChannel.write(evtEncryptCipher.doFinal(payload));
-                        else
-                            eventChannel.write(payload);
-                        eventChannel.flush();
-                    } catch (Exception e) {
-                        log.logError("Error sending Vibe server-seek event", e);
-                        eventChannelError();
-                    }
-                }
-            }
-        });
-        return true;
     }
 
     public void postSubtitleInfo(long pts, long duration, byte[] data, int flags) {

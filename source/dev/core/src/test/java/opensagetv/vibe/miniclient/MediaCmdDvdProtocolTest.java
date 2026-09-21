@@ -30,13 +30,13 @@ public class MediaCmdDvdProtocolTest
         byte[] response = new byte[16];
         command.ExecuteMediaCommand(MediaCmd.MEDIACMD_INIT, 4, new byte[4], response);
 
-        byte[] open = openUrl("push:dvd?vibe_transport=native&format=mpegps&fallback=mim_failure");
+        byte[] open = openUrl("push:dvd?disc_transport=native&format=mpegps&fallback=transform_failure");
         assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_OPENURL,
                 open.length, open, response));
-        assertEquals(true, command.isDvdMimRuntimeFallback());
+        assertEquals(true, command.isDvdTransformRuntimeFallback());
 
         command.ExecuteMediaCommand(MediaCmd.MEDIACMD_INIT, 4, new byte[4], response);
-        assertEquals(false, command.isDvdMimRuntimeFallback());
+        assertEquals(false, command.isDvdTransformRuntimeFallback());
     }
 
     @Test

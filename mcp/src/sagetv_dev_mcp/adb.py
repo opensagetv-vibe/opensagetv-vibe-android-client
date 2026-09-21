@@ -1212,9 +1212,6 @@ class AdbClient:
     def seek_time(self, target_ms: int) -> dict[str, Any]:
         return self.dev_control("seek_time", target_ms=max(0, int(target_ms)))
 
-    def server_seek_time(self, target_ms: int) -> dict[str, Any]:
-        return self.dev_control("server_seek_time", target_ms=max(0, int(target_ms)))
-
     def show_active_player_adjustments(self) -> dict[str, Any]:
         return self.dev_control("active_player_adjustments")
 
@@ -1236,6 +1233,10 @@ class AdbClient:
             "active_player_overlay",
             visible="true" if visible else "false",
         )
+
+    def refresh_video_output(self) -> dict[str, Any]:
+        """Refresh the local video Surface without changing server transport."""
+        return self.dev_control("refresh_video_output")
 
     def local_player_seek(self, target_ms: int) -> dict[str, Any]:
         # Compatibility alias for older backend-isolation callers.

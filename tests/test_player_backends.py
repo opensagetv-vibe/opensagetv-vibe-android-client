@@ -139,6 +139,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # diagnostics. Playback, datasource ownership, and decoder behavior are
         # unchanged; this is a read-only getter over the OPENURL-derived flag.
         reviewed_dvd_mim_diagnostics_hash = "44e6f299820e26debf4e892eb1b99ad93f9a1aefb4a797901a16ccd4c2765bd3"
+        # Renames the OPENURL-derived transform flag and accepts the generic
+        # provider-neutral transport while retaining receive compatibility
+        # with the previously deployed Vibe URL. No player timing, decoder,
+        # datasource, or rendering behavior changes.
+        reviewed_dvd_transform_transport_hash = "3a7986225cd345a5958c1240d536e52a5d058e7e46e5c2efdb9dcc864e570ebe"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -165,6 +170,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_broadcast_cc_evidence_fallback_hash,
             reviewed_explicit_dvb_caption_owner_hash,
             reviewed_dvd_mim_diagnostics_hash,
+            reviewed_dvd_transform_transport_hash,
         }, rel)
 
     def test_four_backends_have_stable_preference_values(self):

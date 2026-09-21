@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **60** (2026-09-20)
+Checklist revision: **64** (2026-09-20)
 
 ## Stable checklist rules
 
@@ -81,6 +81,27 @@ separately and must not block available work.
   inflation, preserve their exact values and every unrelated setting, make
   runtime integer reads accept both representations, and prove the retained
   `.25` preferences render and remain selectable without a process exit.
+- [x] **FOUND-014 - Stock API commissioning-event replacement.** Remove private
+  MiniClient events 230-232 from Android/Core after exact indexed watch,
+  from-beginning, and dotted-channel controls pass through the stock-compatible
+  Core MCP plugin. Route automation seeks through public `Seek(long)` and prove
+  stable stock DVD Push seeks physically.
+- [x] **FOUND-015 - Stock-compatible local DVD output refresh.** Replace the
+  event-233 server-seek decoder-reload handshake with a bounded Media3 Surface
+  refresh that retains the player, Push datasource, DVD logical clock, audio,
+  and playback intent. Remove event 233 from Android and Core, expose a bounded
+  MCP verification control, and gate it on stock Core with unified graphics
+  disabled.
+- [x] **FOUND-016 - Functional capability protocol names.** Replace the
+  Vibe-branded DVD and general playback-rate properties with the functional
+  `DVD_DISC_*` and `VIDEO_PLAYBACK_RATE` names without legacy wire aliases,
+  make unknown GET/SET properties fail safe, rebuild Core and Android, and
+  install/launch the settings-preserving APK on Pro and non-Pro Fire TVs.
+- [x] **FOUND-017 - Provider-neutral DVD transform.** Replace MIM-specific DVD
+  transport and policy values with `dvd_mpegts_v1` and
+  `transformed_main_feature`, preserve only bounded saved-setting/URL migration
+  compatibility, and prove negotiation and fallback with focused tests. Core
+  owns only the generic SPI; the optional FFmpeg plugin owns MIM execution.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
 
@@ -689,6 +710,10 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 64 | 2026-09-20 | Completed FOUND-017: Android now advertises only the provider-neutral `dvd_mpegts_v1` transport and `transformed_main_feature` policy, retains bounded old-value migration compatibility, and passes focused protocol/policy tests against the generic Core SPI and plugin-owned MIM implementation. |
+| 63 | 2026-09-20 | Completed FOUND-016: replaced Vibe-branded DVD/playback-rate wire names with functional names and no legacy aliases, added explicit unknown-property fail-safe tests, passed Core/Android builds, and installed/launched the preserved-data APK on `.25` and `.29`. |
+| 61 | 2026-09-20 | Completed FOUND-014: removed Android/Core private commissioning events 230-232 after their stock-plugin `Watch`, from-beginning, and `ChannelSet` replacements passed on `.175`; routed MCP seek through public `Seek(long)` and physically proved stable ALADDIN DVD Push forward/backward seeks. |
+| 62 | 2026-09-20 | Completed FOUND-015: replaced event-233 DVD reload with a client-local Media3 Surface refresh that performs no seek or transport replacement, removed the event from Android/Core, and added bounded MCP verification for the stock-server/unified-off physical gate. |
 | 58 | 2026-09-19 | Completed GH-006: pushed implementation/release commits `3cf637d` and `6c4b890`, passed the primary and fresh Git-less source/APK gates, published five v0.5.93 assets with grouped bullet notes, matched every downloaded public asset to its local SHA-256, and verified successful repository checks, Pages deployment, latest-release API, and HTTP 200 downloader. |
 | 57 | 2026-09-19 | Added GH-006 after explicit user approval to publish the accumulated 0.5.93 playback update, including grouped bullet-formatted release notes and public artifact/workflow/Pages verification. |
 | 56 | 2026-09-19 | Completed UI-001: consolidated the long-press Video/Audio/Subtitles-CC/Aspect controls, flattened the Video settings rows, removed duplicate and obsolete shortcuts, added explicit GSY delegate choices, prevented label/value truncation, combined Video Information with Vibe diagnostics, and fixed its themed-context Activity crash. |

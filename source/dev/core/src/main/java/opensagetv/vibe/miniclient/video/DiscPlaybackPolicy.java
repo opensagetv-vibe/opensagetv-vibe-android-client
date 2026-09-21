@@ -3,7 +3,7 @@ package opensagetv.vibe.miniclient.video;
 /** Resolves persisted DISC policy without weakening the stable native default. */
 public final class DiscPlaybackPolicy
 {
-    public enum Effective { NATIVE, HYBRID, MIM_MAIN_FEATURE, UNAVAILABLE }
+    public enum Effective { NATIVE, HYBRID, TRANSFORMED_MAIN_FEATURE, UNAVAILABLE }
 
     public static final class Resolution
     {
@@ -29,31 +29,43 @@ public final class DiscPlaybackPolicy
     private DiscPlaybackPolicy() {}
 
     public static Resolution resolve(String requested, boolean allowNativeFallback,
-            boolean mimDiscAvailable)
+            boolean transformAvailable)
     {
-        String normalized = requested == null ? "auto" : requested.trim().toLowerCase();
+        String normalized = normalizeRequested(requested);
         if ("native".equals(normalized))
             return new Resolution(normalized, Effective.NATIVE, false, "");
         if ("hybrid".equals(normalized))
         {
-            if (mimDiscAvailable)
+            if (transformAvailable)
                 return new Resolution(normalized, Effective.HYBRID, false, "");
             return unavailableOrNative(normalized, allowNativeFallback,
-                    "Hybrid DISC playback requires a compatible server and MIM/FFmpeg");
+                    "Hybrid DISC playback requires a compatible server transform provider");
         }
-        if ("mim_main_feature".equals(normalized))
+        if ("transformed_main_feature".equals(normalized))
         {
-            if (mimDiscAvailable)
-                return new Resolution(normalized, Effective.MIM_MAIN_FEATURE, false, "");
+            if (transformAvailable)
+                return new Resolution(normalized, Effective.TRANSFORMED_MAIN_FEATURE, false, "");
             return unavailableOrNative(normalized, allowNativeFallback,
-                    "MIM main-feature playback requires a compatible server and MIM/FFmpeg");
+                    "Transformed main-feature playback requires a compatible server provider");
         }
         // Auto intentionally remains on the commissioned native path until the
-        // live MIM gate is promoted. Unknown historical values are treated the
+        // optional transform gate is promoted. Unknown historical values are treated the
         // same way so an app update cannot strand ordinary DVD playback.
         return new Resolution("auto", Effective.NATIVE,
                 !"auto".equals(normalized),
                 "auto".equals(normalized) ? "" : "Unknown DISC policy; using native playback");
+    }
+
+    /**
+     * Migrates the former implementation-specific value while advertising
+     * only the provider-neutral policy to updated servers.
+     */
+    public static String normalizeRequested(String requested)
+    {
+        String normalized = requested == null ? "auto" : requested.trim().toLowerCase();
+        if ("mim_main_feature".equals(normalized))
+            return "transformed_main_feature";
+        return normalized;
     }
 
     private static Resolution unavailableOrNative(String requested,

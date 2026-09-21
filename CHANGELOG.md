@@ -2,13 +2,42 @@
 
 ## Unreleased
 
+- Replaced MIM-specific DVD wire values and diagnostics with the generic
+  `dvd_mpegts_v1` transport and `transformed_main_feature` policy. Android
+  advertises the optional transport only; updated Core selects a matching
+  plugin provider or safely retains native DVD. Existing saved
+  `mim_main_feature` preferences and legacy server URL markers are accepted
+  only as receive/migration compatibility and are never advertised.
+  The complete tests, validation, manifest, and clean APK build pass; the
+  resulting debug APK SHA-256 is
+  `6e0b24ce092756ef543aad3f92c149d0c6e8a8ffc71077e0e006f689594ada4d`.
+- Replaced the Vibe-branded DVD and general playback-rate capability properties
+  with `DVD_DISC_TRANSPORTS`, `DVD_DISC_POLICY`,
+  `DVD_DISC_SKIP_MENUS`, `DVD_DISC_SKIP_PREVIEWS`,
+  `DVD_DISC_NATIVE_FALLBACK`, and `VIDEO_PLAYBACK_RATE`. No `VIBE_*` wire
+  alias is retained. Unknown GET properties now explicitly return an empty
+  unsupported value and unknown SET properties are acknowledged and ignored
+  without terminating the connection. Focused protocol tests and the Core
+  Java suite pass; the settings-preserving APK was installed and launched on
+  non-Pro `.25` and Pro `.29` with no new fatal exception.
 - Added bridge-first commissioning control for the stock-compatible Vibe Core
   MCP plugin. When explicitly configured, exact indexed paths, watch,
   media-relative seek, UI commands, channels, captions, scans, and watched
-  state use the authenticated bridge; Sagex/Web and private Vibe events remain
-  safe fallbacks. Non-Pro `.25` passed exact-path MPEG-2/AC-3 Media3 hardware
+  state use the authenticated bridge; verified Sagex/Web operations remain
+  limited fallbacks. Removed Android emitters and debug routes for private
+  commissioning events 230-232 so an unmodified server can no longer appear
+  to accept an event it ignored. Non-Pro `.25` passed exact-path MPEG-2/AC-3 Media3 hardware
   Pull playback, forward/back recovery, pause/resume, fullscreen, crash-log,
   live-TV, and exact-channel gates against unchanged stock `.175`.
+- Routed MCP server-owned seeks exclusively through SageTV's public
+  `Seek(long)` API via the Core bridge or Sagex. Stock `.175` physically moved
+  ALADDIN DVD Push from 621,386 ms to 240,000 ms on the first observation and
+  continued normally. Replaced the remaining event-233 DVD decoder-reload
+  handshake with a client-local Media3 video-output refresh: it preserves the
+  active player, Push datasource, logical DVD clock, audio selection, and
+  play/pause intent while rebinding only the Android Surface. Events 230-233
+  are therefore absent from the Android protocol, and display-mode refreshes
+  work without a modified server or a server seek.
 - Fixed the Fixed Transcoding Settings activity exiting to the Fire TV home
   screen. Legacy builds and the debug commissioning API stored the video/audio
   bitrate selections as integer `SharedPreferences`, but AndroidX
@@ -1223,7 +1252,7 @@
   and GSY/System sessions retain their established behavior. A three-second
   scan cadence lets SMB rebuffer and render between discontinuities; the
   original sub-second cadence was rejected by a physical no-false-pass test.
-  SageTV Core negotiates `VIBE_PLAYBACK_RATE`, so old clients keep the original
+  SageTV Core negotiates `VIDEO_PLAYBACK_RATE`, so old clients keep the original
   one-shot seek fallback. Both Exo backends now honor SageTV's trick-play mute
   command instead of silently ignoring it. The reusable hardware-only gate
   passed Media3 and legacy Exo over Pull and SMB Direct, both GSY delegates over
@@ -1676,8 +1705,8 @@
   stale-SPU clearing on `STP_DSP` so a later highlight cannot resurrect an old
   authored bitmap.
 - Added negotiated DISC policy and option properties between Android and Core:
-  `VIBE_DISC_POLICY`, `VIBE_DISC_SKIP_MENUS`, `VIBE_DISC_SKIP_PREVIEWS`, and
-  `VIBE_DISC_NATIVE_FALLBACK`. An unavailable explicit Hybrid/MIM request now
+  `DVD_DISC_POLICY`, `DVD_DISC_SKIP_MENUS`, `DVD_DISC_SKIP_PREVIEWS`, and
+  `DVD_DISC_NATIVE_FALLBACK`. An unavailable explicit Hybrid/MIM request now
   fails closed without damaging the MiniPlayer session when fallback is off;
   with fallback enabled it returns to Native Media3 playback. Both paths pass
   physical MCP commissioning against the updated Unraid server.

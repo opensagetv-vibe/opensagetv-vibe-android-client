@@ -164,7 +164,7 @@ final class DebugStateProvider
                 ActivePlayerSessionOverrides.resolveRefreshSettleMs(
                         prefs.getInt(PrefStore.Keys.playback_refresh_settle_ms, 0)));
         out.append(";activePlayerRefreshReloadPendingMs=")
-                .append(DisplayRefreshController.getPendingReloadMs());
+                .append(DisplayRefreshController.getPendingRefreshMs());
         out.append(';').append(ConnectionLifecycleDiagnostics.latestCompactWire());
         out.append(';').append(MiniclientApplication.get().getBackgroundSessionOwner().compactWire());
 
@@ -213,24 +213,24 @@ final class DebugStateProvider
                 if (delegate != null)
                     transportPlayer = delegate;
             }
-            boolean mimTransport = transportPlayer instanceof BaseMediaPlayerImpl
+            boolean transformedTransport = transportPlayer instanceof BaseMediaPlayerImpl
                     && ((BaseMediaPlayerImpl<?, ?>) transportPlayer)
-                            .isDvdMimTransportForDebug();
+                            .isDvdTransformedTransportForDebug();
             DiscPlaybackPolicy.Resolution disc = DiscPlaybackPolicy.resolve(
                     prefs.getString(PrefStore.Keys.disc_playback_policy, "auto"),
                     prefs.getBoolean(PrefStore.Keys.disc_compatibility_fallback, true),
-                    mimTransport);
+                    transformedTransport);
             boolean oldServerNativeFallback = disc.effective
                     == DiscPlaybackPolicy.Effective.UNAVAILABLE
                     && (mediaCmd.getDvdPushMediaCount() > 0
                             || mediaCmd.getDvdNewCellCount() > 0);
-            boolean mimRuntimeFallback = mediaCmd.isDvdMimRuntimeFallback();
-            out.append(";discMimTransport=").append(mimTransport);
+            boolean transformRuntimeFallback = mediaCmd.isDvdTransformRuntimeFallback();
+            out.append(";discTransformedTransport=").append(transformedTransport);
             out.append(";discOldServerNativeFallback=").append(oldServerNativeFallback);
-            out.append(";discMimRuntimeFallback=").append(mimRuntimeFallback);
+            out.append(";discTransformRuntimeFallback=").append(transformRuntimeFallback);
             out.append(";discCompatibilityReason=").append(safe(
-                    mimRuntimeFallback
-                            ? "FFmpeg/MIM failed after Hybrid DVD startup; native SageTV DVD playback was restored."
+                    transformRuntimeFallback
+                            ? "DVD transform provider failed after Hybrid startup; native playback was restored."
                             : oldServerNativeFallback ? disc.reason : ""));
         }
 

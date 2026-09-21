@@ -196,8 +196,8 @@ def compact_state(state: dict) -> dict:
         "dvdHighlightVisible", "dvdHighlightX1", "dvdHighlightY1",
         "dvdHighlightX2", "dvdHighlightY2", "dvdHighlightPaletteWord",
         "discPlaybackPolicy", "discCompatibilityFallback",
-        "discMimTransport",
-        "discOldServerNativeFallback", "discMimRuntimeFallback",
+        "discTransformedTransport",
+        "discOldServerNativeFallback", "discTransformRuntimeFallback",
         "discCompatibilityReason",
     )
     return {key: state.get(key) for key in keys if key in state}
@@ -233,7 +233,7 @@ def main() -> int:
     parser.add_argument("--codec-mode", choices=("auto", "async", "sync"),
                         help="Dev-only Media3 codec adapter override for this run")
     parser.add_argument("--disc-policy",
-                        choices=("auto", "native", "hybrid", "mim_main_feature"),
+                        choices=("auto", "native", "hybrid", "transformed_main_feature"),
                         default="native")
     parser.add_argument("--mpeg2-timestamp-repair",
                         choices=("auto", "on", "off"), default="auto")
@@ -679,12 +679,12 @@ def main() -> int:
                 require(not str(state.get("playerError", "")).strip(),
                         f"DVD player error: {state.get('playerError')}")
                 if args.player in ("media3", "exoplayer"):
-                    mim_transport = state.get("discMimTransport") in (True, "true")
-                    if mim_transport:
+                    transformed_transport = state.get("discTransformedTransport") in (True, "true")
+                    if transformed_transport:
                         require(str(state.get("health_videoMime", "")).lower() == "video/avc",
-                                f"DVD MIM did not resolve the negotiated AVC track: {state}")
-                        require(state.get("discMimRuntimeFallback") not in (True, "true"),
-                                f"DVD MIM unexpectedly fell back to Native: {state}")
+                                f"DVD transform did not resolve the negotiated AVC track: {state}")
+                        require(state.get("discTransformRuntimeFallback") not in (True, "true"),
+                                f"DVD transform unexpectedly fell back to Native: {state}")
                     else:
                         require(str(state.get("health_videoMime", "")).lower() == "video/mpeg2",
                                 f"DVD did not resolve an MPEG-2 video track: {state}")

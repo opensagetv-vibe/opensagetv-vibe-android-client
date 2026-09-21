@@ -136,7 +136,7 @@ final class ActivePlayerStatsSnapshot
     long dvdAvDeltaUs = Long.MIN_VALUE;
     int dvdAudioStream = -1;
     int dvdSubtitleStream = -1;
-    boolean dvdMimFallback;
+    boolean dvdTransformFallback;
     boolean dvdTimestampRepair;
 
     String playerError = "";
@@ -193,14 +193,14 @@ final class ActivePlayerStatsSnapshot
                 "getMpeg2InterlaceObservationForDebug", "");
 
         out.dvd = media.isDvdSessionPending();
-        boolean dvdMimTransport = effective instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl
+        boolean dvdTransformedTransport = effective instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl
                 && ((opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl<?, ?>) effective)
-                        .isDvdMimTransportForDebug();
+                        .isDvdTransformedTransportForDebug();
         String configured = client == null ? "unknown" : clean(client.properties().getStreamingMode());
         if (out.dvd)
-            out.transport = media.isDvdMimRuntimeFallback()
-                    ? "DVD Native (MIM fallback)"
-                    : dvdMimTransport ? "DVD Fixed / MIM" : "DVD Native Push";
+            out.transport = media.isDvdTransformRuntimeFallback()
+                    ? "DVD Native (transform fallback)"
+                    : dvdTransformedTransport ? "DVD Transformed Push" : "DVD Native Push";
         else if (out.smb)
             out.transport = "SMB Direct";
         else if (out.push)
@@ -227,7 +227,7 @@ final class ActivePlayerStatsSnapshot
             out.dvdTransientEos = media.getDvdTransientEosCount();
             out.dvdAudioStream = media.getDvdLastAudioStreamPosition();
             out.dvdSubtitleStream = media.getDvdLastSubtitleStreamPosition();
-            out.dvdMimFallback = media.isDvdMimRuntimeFallback();
+            out.dvdTransformFallback = media.isDvdTransformRuntimeFallback();
             out.bufferedAheadMs = media.getDvdDecoderBufferedAheadMs() >= 0
                     ? media.getDvdDecoderBufferedAheadMs() : out.bufferedAheadMs;
             out.dvdCorrections = invokeLongOptional(effective,

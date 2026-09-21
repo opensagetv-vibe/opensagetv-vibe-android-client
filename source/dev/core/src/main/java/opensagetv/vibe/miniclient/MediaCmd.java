@@ -97,7 +97,7 @@ public class MediaCmd
     private volatile int dvdLastSubtitleStreamPosition = -1;
     private volatile long dvdFormatCount;
     private volatile long dvdTransientEosCount;
-    private volatile boolean dvdMimRuntimeFallback;
+    private volatile boolean dvdTransformRuntimeFallback;
     private long dvdDrainSignaledEpochBytes = Long.MIN_VALUE;
     private volatile int lastPushReply;
     private int DESIRED_VIDEO_PREBUFFER_SIZE = 16 * 1024 * 1024;
@@ -126,11 +126,6 @@ public class MediaCmd
     private volatile long detailedPushSampleSequence;
     private volatile long detailedPushSampleMonotonicMs = -1;
     private volatile long detailedPushSampleWallMs = -1;
-    private volatile boolean restartPlayerOnNextFlush;
-    private volatile long controlledReloadTargetMs = -1;
-    private volatile long controlledReloadRequestedMs = -1;
-    private volatile int controlledReloadCorrectionCount;
-    private volatile boolean controlledReloadAwaitingReplacementStc;
     // Bounded debug evidence for the brief OPENURL interval where stock STVs
     // can paint an incorrect end-of-file timeline. The reflective bridge is a
     // no-op in release/desktop builds, and the counter prevents continuous
@@ -331,33 +326,16 @@ public class MediaCmd
     }
 
     /**
-     * Rebuild the Android decoder at the same absolute DVD position.
+     * Refresh the Android DVD video output without seeking or replacing the
+     * server-owned stream.
      *
-     * <p>The actual release is performed by the media-command thread when the
-     * compatible SageTV server sends FLUSH for the seek. This avoids racing an
-     * in-flight PUSHBUFFER on the UI thread. Ordinary Pull/Push sessions are
-     * intentionally rejected until they have an equivalent server-owned
-     * reload handshake.</p>
+     * <p>The player keeps its active datasource, logical DVD clock, queued
+     * audio, and play/pause state. This is therefore safe with an unmodified
+     * SageTV server and cannot reposition the DVD VM.</p>
      */
     public boolean requestControlledPlayerReload()
     {
-        if (!dvdSessionPending || playa == null || myConn == null)
-            return false;
-        long targetMs = Math.max(0L, getMediaTimeMillis());
-        controlledReloadTargetMs = targetMs;
-        controlledReloadRequestedMs = targetMs;
-        controlledReloadCorrectionCount = 0;
-        controlledReloadAwaitingReplacementStc = false;
-        restartPlayerOnNextFlush = true;
-        if (!myConn.postVibeSeekEvent(targetMs))
-        {
-            restartPlayerOnNextFlush = false;
-            controlledReloadTargetMs = -1;
-            controlledReloadRequestedMs = -1;
-            controlledReloadAwaitingReplacementStc = false;
-            return false;
-        }
-        return true;
+        return dvdSessionPending && playa != null && playa.refreshVideoOutput();
     }
 
     public void close()
@@ -436,8 +414,10 @@ public class MediaCmd
                 // An explicit Vibe transport URL changes only the pushed media
                 // representation. It remains the same DVD wire session.
                 dvdSessionPending = lowerUrl.startsWith("push:dvd");
-                dvdMimRuntimeFallback = dvdSessionPending
-                        && lowerUrl.contains("fallback=mim_failure");
+                dvdTransformRuntimeFallback = dvdSessionPending
+                        && (lowerUrl.contains("fallback=transform_failure")
+                        // Receive-only compatibility with already deployed Vibe Core.
+                        || lowerUrl.contains("fallback=mim_failure"));
                 boolean legacyActive = lowerUrl.endsWith(".mpg")
                         || lowerUrl.endsWith(".ts") || lowerUrl.endsWith(".flv");
                 MediaUrlContext mediaContext = MediaUrlContext.parse(urlString, legacyActive);
@@ -580,38 +560,7 @@ public class MediaCmd
                     lastServerFlushSequence++;
                     lastServerFlushMonotonicMs = monotonicMs();
                     PlaybackDebugEventBridge.recordAsync("server_flush_command", playa);
-                    if (restartPlayerOnNextFlush)
-                    {
-                        restartPlayerOnNextFlush = false;
-                        MiniPlayerPlugin replacedPlayer = playa;
-                        playa = null;
-                        replacedPlayer.free();
-                        controlledReloadAwaitingReplacementStc = true;
-                        controlledReloadCorrectionCount++;
-                        // The seek that caused this FLUSH may have delivered
-                        // its STC to the old decoder before the release. Queue
-                        // the same server-owned seek again only after playa is
-                        // null so the resulting metadata/data belong to the
-                        // replacement decoder.
-                        if (!myConn.postVibeSeekEvent(controlledReloadTargetMs))
-                        {
-                            log.warn("Unable to queue post-release DVD position restore target={}",
-                                    controlledReloadTargetMs);
-                            controlledReloadTargetMs = -1;
-                            controlledReloadRequestedMs = -1;
-                            controlledReloadAwaitingReplacementStc = false;
-                        }
-                        else
-                        {
-                            log.info("Queued post-release DVD position restore target={}",
-                                    controlledReloadTargetMs);
-                        }
-                        dvdEpochPushedBytes = 0;
-                        dvdDrainSignaledEpochBytes = Long.MIN_VALUE;
-                        this.setLastServerStartPosition(-1);
-                        log.info("Released active DVD player on server FLUSH for controlled same-position reload");
-                    }
-                    else if (dvdSessionPending && dvdPushedBytes == 0)
+                    if (dvdSessionPending && dvdPushedBytes == 0)
                     {
                         // MiniDVDPlayer flushes the decoder after its initial
                         // empty/drain handshake, before it sends any MPEG data.
@@ -972,7 +921,6 @@ public class MediaCmd
                 {
                     int stc = readInt(0, cmddata);
                     playa.dvdSetStc(stc);
-                    correctControlledReloadLanding(stc);
                 }
                 writeInt(playa == null ? -1 : 0, retbuf, 0);
                 return 4;
@@ -1060,69 +1008,6 @@ public class MediaCmd
             if (playa != null)
                 playa.free();
             playa = null;
-        }
-    }
-
-    /**
-     * A replacement decoder can receive the DVD VM's zero bootstrap STC even
-     * though the seek that caused the replacement targeted the middle of a
-     * title. Reissue the target once after the replacement exists, then use
-     * the same bounded VOBU-anchor correction as the MCP seek gate. This keeps
-     * an on-the-fly decoder change at the user's visible position without
-     * pretending a client-local seek can reposition the server DVD reader.
-     */
-    private void correctControlledReloadLanding(int stc)
-    {
-        long targetMs = controlledReloadTargetMs;
-        if (targetMs < 0 || myConn == null || !controlledReloadAwaitingReplacementStc)
-            return;
-
-        long anchorMs = ((long) stc & 0xFFFFFFFFL) * 1_000L / 45_000L;
-        long errorMs = anchorMs - targetMs;
-        if (Math.abs(errorMs) <= 2_500L)
-        {
-            log.info("Controlled DVD reload retained position target={} anchor={} corrections={}",
-                    targetMs, anchorMs, controlledReloadCorrectionCount);
-            controlledReloadTargetMs = -1;
-            controlledReloadRequestedMs = -1;
-            controlledReloadAwaitingReplacementStc = false;
-            return;
-        }
-        if (controlledReloadCorrectionCount >= 2)
-        {
-            log.warn("Controlled DVD reload position correction exhausted target={} anchor={}",
-                    targetMs, anchorMs);
-            controlledReloadTargetMs = -1;
-            controlledReloadRequestedMs = -1;
-            controlledReloadAwaitingReplacementStc = false;
-            return;
-        }
-
-        long requestedMs;
-        if (targetMs > 30_000L && anchorMs < targetMs / 2L)
-        {
-            // The first STC after constructing a fresh decoder is commonly
-            // the DVD bootstrap value zero. Reissue the original target now
-            // that the replacement player is present.
-            requestedMs = targetMs;
-        }
-        else
-        {
-            requestedMs = Math.max(0L, controlledReloadRequestedMs - errorMs);
-        }
-        controlledReloadRequestedMs = requestedMs;
-        controlledReloadCorrectionCount++;
-        if (!myConn.postVibeSeekEvent(requestedMs))
-        {
-            log.warn("Unable to queue controlled DVD reload correction target={}", requestedMs);
-            controlledReloadTargetMs = -1;
-            controlledReloadRequestedMs = -1;
-            controlledReloadAwaitingReplacementStc = false;
-        }
-        else
-        {
-            log.info("Queued controlled DVD reload correction target={} anchor={} request={} attempt={}",
-                    targetMs, anchorMs, requestedMs, controlledReloadCorrectionCount);
         }
     }
 
@@ -1287,7 +1172,7 @@ public class MediaCmd
         dvdLastSubtitleStreamPosition = -1;
         dvdFormatCount = 0;
         dvdTransientEosCount = 0;
-        dvdMimRuntimeFallback = false;
+        dvdTransformRuntimeFallback = false;
         dvdDrainSignaledEpochBytes = Long.MIN_VALUE;
     }
 
@@ -1337,7 +1222,7 @@ public class MediaCmd
     public int getDvdLastSubtitleStreamPosition() { return dvdLastSubtitleStreamPosition; }
     public long getDvdFormatCount() { return dvdFormatCount; }
     public long getDvdTransientEosCount() { return dvdTransientEosCount; }
-    public boolean isDvdMimRuntimeFallback() { return dvdMimRuntimeFallback; }
+    public boolean isDvdTransformRuntimeFallback() { return dvdTransformRuntimeFallback; }
     public int getLastPushReply() { return lastPushReply; }
     public long getDetailedPushSampleSequence() { return detailedPushSampleSequence; }
     public long getDetailedPushSampleMonotonicMs() { return detailedPushSampleMonotonicMs; }

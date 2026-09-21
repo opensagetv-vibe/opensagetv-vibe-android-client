@@ -269,6 +269,13 @@ class SagexApiClient:
                 }
             raise
 
+    def tune_channel(self, context: str, channel: str) -> Any:
+        """Tune one UI context through SageTV's public ChannelSet API."""
+        requested = str(channel or "").strip()
+        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", requested):
+            raise ValueError("valid dotted channel is required")
+        return self.call("ChannelSet", requested, context=context)
+
     def remote_command(self, context: str, command: str) -> Any:
         """Send a normal STV command through the context-aware Web Remote."""
         explicit = os.environ.get("SAGETV_WEB_BASE", "").strip()
@@ -505,6 +512,12 @@ class SageWebApiClient:
             "returnto": "Home",
         })
         return {"accepted": True, "transport": "sage_web_watch_now"}
+
+    def tune_channel(self, context: str, channel: str) -> Any:
+        raise SagexApiError(
+            "Exact dotted-channel tuning is unavailable through the stock SageTV Web Interface; "
+            "install the Vibe Core MCP plugin or Sagex Remote API"
+        )
 
     def remote_command(self, context: str, command: str) -> Any:
         if not str(context or "").strip():

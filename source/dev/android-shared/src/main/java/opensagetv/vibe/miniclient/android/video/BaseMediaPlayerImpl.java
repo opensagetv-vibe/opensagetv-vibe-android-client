@@ -70,7 +70,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected boolean seekPending = false;
     protected String lastUri;
     /** Server DVD VM is pushing a MIM-produced MPEG-TS representation. */
-    protected boolean dvdMimTransport;
+    protected boolean dvdTransformedTransport;
     private static final int NO_SERVER_SUBPICTURE_COMMAND = Integer.MIN_VALUE;
     private volatile int pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
     protected long lastMediaTime = -1;
@@ -313,8 +313,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             pushMode = true;
         }
-        dvdMimTransport = urlString != null && urlString.startsWith("push:dvd")
-                && urlString.contains("vibe_transport=mim_ts_v1");
+        dvdTransformedTransport = urlString != null && urlString.startsWith("push:dvd")
+                && (urlString.contains("disc_transport=dvd_mpegts_v1")
+                // Receive-only compatibility with already deployed Vibe Core.
+                || urlString.contains("vibe_transport=mim_ts_v1"));
         pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
         lastMediaTime = -1;
         eos = false;
@@ -1395,9 +1397,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     }
 
     /** True only when OPENURL selected the negotiated server MIM DVD transport. */
-    public boolean isDvdMimTransportForDebug()
+    public boolean isDvdTransformedTransportForDebug()
     {
-        return dvdMimTransport;
+        return dvdTransformedTransport;
     }
 
     @Override
@@ -1414,7 +1416,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         // both positive and negative bounded offsets can be honored. Text
         // callbacks on the other paths arrive at presentation time and must
         // not claim an unsupported negative/early offset.
-        return dvdTimingReceived && !dvdMimTransport;
+        return dvdTimingReceived && !dvdTransformedTransport;
     }
 
     @Override
@@ -1451,7 +1453,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 pendingServerSubpictureCommand = streamPosition;
                 applyPendingServerSubpictureStream();
             }
-            else if (dvdMimTransport)
+            else if (dvdTransformedTransport)
                 setSubtitleTrack(streamPosition == 62 || (streamPosition & 0x80) != 0
                         ? DISABLE_TRACK : (streamPosition & 0x1f));
             else

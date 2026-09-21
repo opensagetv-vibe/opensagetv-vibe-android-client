@@ -974,13 +974,14 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
                 client.properties().getString(PrefStore.Keys.disc_playback_policy, "auto"),
                 client.properties().getBoolean(PrefStore.Keys.disc_compatibility_fallback, true),
                 false);
-        boolean mimRuntimeFallback = urlString != null
-                && urlString.contains("fallback=mim_failure");
-        if (mimRuntimeFallback)
+        boolean transformRuntimeFallback = urlString != null
+                && (urlString.contains("fallback=transform_failure")
+                || urlString.contains("fallback=mim_failure"));
+        if (transformRuntimeFallback)
         {
-            log.warn("Hybrid DVD MIM startup failed; native playback was restored");
+            log.warn("Hybrid DVD transform failed; native playback was restored");
             AppUtil.message(activity.getContext().getString(
-                    R.string.msg_disc_mim_runtime_fallback));
+                    R.string.msg_disc_transform_runtime_fallback));
         }
         else if (urlString != null && urlString.contains("push:dvd") && discPolicy.fallback)
             AppUtil.message(activity.getContext().getString(
@@ -989,7 +990,7 @@ public class MiniClientGDXRenderer implements ApplicationListener, UIRenderer<Gd
                 && discPolicy.effective == DiscPlaybackPolicy.Effective.UNAVAILABLE)
         {
             // Older Core builds can force MiniDVDPlayer globally without
-            // querying VIBE_DISC_POLICY. Preserve their native stream and tell
+            // querying DVD_DISC_POLICY. Preserve their native stream and tell
             // the user that the requested extension was not honored.
             log.warn("Older server ignored unavailable DISC policy {}; using native DVD", discPolicy.requested);
             AppUtil.message(activity.getContext().getString(

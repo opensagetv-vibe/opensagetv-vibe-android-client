@@ -170,6 +170,15 @@ public interface MiniPlayerPlugin extends Runnable
     /** Resolved active content frame rate, or a non-positive value if unknown. */
     default float getContentFrameRateHz() { return -1f; }
 
+    /**
+     * Rebind or refresh the active local video output without reopening or
+     * repositioning the SageTV transport. Implementations must leave the
+     * incoming byte stream, logical media clock, play/pause state, and audio
+     * selection intact. This is primarily used after an HDMI display-mode
+     * transition where Android may need its Surface/decoder output refreshed.
+     */
+    default boolean refreshVideoOutput() { return false; }
+
     void seek(long timeMS);
 
     /**

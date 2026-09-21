@@ -897,13 +897,14 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
                 client.properties().getString(PrefStore.Keys.disc_playback_policy, "auto"),
                 client.properties().getBoolean(PrefStore.Keys.disc_compatibility_fallback, true),
                 false);
-        boolean mimRuntimeFallback = urlString != null
-                && urlString.contains("fallback=mim_failure");
-        if (mimRuntimeFallback)
+        boolean transformRuntimeFallback = urlString != null
+                && (urlString.contains("fallback=transform_failure")
+                || urlString.contains("fallback=mim_failure"));
+        if (transformRuntimeFallback)
         {
-            log.warn("Hybrid DVD MIM startup failed; native playback was restored");
+            log.warn("Hybrid DVD transform failed; native playback was restored");
             AppUtil.message(activity.getContext().getString(
-                    R.string.msg_disc_mim_runtime_fallback));
+                    R.string.msg_disc_transform_runtime_fallback));
         }
         else if (urlString != null && urlString.contains("push:dvd") && discPolicy.fallback)
             AppUtil.message(activity.getContext().getString(
@@ -911,7 +912,7 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
         else if (urlString != null && urlString.contains("push:dvd")
                 && discPolicy.effective == DiscPlaybackPolicy.Effective.UNAVAILABLE)
         {
-            // An older Core does not query VIBE_DISC_POLICY and an administrator
+            // An older Core does not query DVD_DISC_POLICY and an administrator
             // may have globally enabled MiniDVDPlayer.  If it sends the legacy
             // native stream anyway, retaining that working stream is safer than
             // wedging its DVD VM; make the compatibility fallback explicit.

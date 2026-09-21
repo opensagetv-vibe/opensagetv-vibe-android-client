@@ -192,11 +192,11 @@ stale authored overlay. These files are
 
 ## Policy and backend commissioning
 
-Android exposes Native, Hybrid, and MIM-main-feature requests, while Core
-queries the exact client properties before choosing the server path. Because
-MIM is still disabled and does not advertise a commissioned DISC capability,
-Hybrid with native fallback physically returns to Native; Hybrid with fallback
-disabled refuses startup safely. Skip menus uses the longest authored title
+Android exposes Native, Hybrid, and transformed-main-feature requests, while
+Core queries the exact client properties before choosing the server path. When
+no matching provider is installed or enabled, Hybrid with native fallback
+returns to Native and Hybrid with fallback disabled refuses startup safely.
+Skip menus uses the longest authored title
 measured by the Ogle VM, while skip previews jumps to the authored root menu.
 These are distinct operations and both were confirmed by physical screenshots.
 Direct legacy Exo DVD startup passed only two of six representative structures,

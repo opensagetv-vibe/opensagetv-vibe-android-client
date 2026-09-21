@@ -181,23 +181,16 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         )
         self.assertIn("Activity resume can request a repaint from Android's main thread", repaint)
 
-    def test_vibe_exact_path_event_is_bounded_and_verifiable(self):
-        self.assertIn("VIBE_WATCH_FILE_EVENT_REPLY_TYPE = 230", self.connection)
-        self.assertIn("VIBE_WATCH_FILE_FROM_BEGINNING_EVENT_REPLY_TYPE = 232", self.connection)
-        self.assertIn("VIBE_SEEK_EVENT_REPLY_TYPE = 233", self.connection)
-        self.assertIn("postVibeWatchFileEvent(String serverPath)", self.connection)
-        self.assertIn("postVibeWatchFileEvent(String serverPath, boolean fromBeginning)", self.connection)
-        self.assertIn("postVibeSeekEvent(final long targetMs)", self.connection)
-        self.assertIn("StandardCharsets.UTF_8", self.connection)
-        self.assertIn("pathData.length > 8192", self.connection)
-        self.assertIn("evtEncryptCipher.doFinal(pathData)", self.connection)
+    def test_private_commissioning_and_runtime_seek_events_are_removed(self):
+        self.assertNotIn("VIBE_WATCH_FILE_EVENT_REPLY_TYPE = 230", self.connection)
+        self.assertNotIn("VIBE_WATCH_FILE_FROM_BEGINNING_EVENT_REPLY_TYPE = 232", self.connection)
+        self.assertNotIn("VIBE_CHANNEL_SET_EVENT_REPLY_TYPE = 231", self.connection)
+        self.assertNotIn("VIBE_SEEK_EVENT_REPLY_TYPE = 233", self.connection)
+        self.assertNotIn("postVibeWatchFileEvent(String serverPath)", self.connection)
+        self.assertNotIn("postVibeChannelSetEvent(String channel)", self.connection)
+        self.assertNotIn("postVibeSeekEvent(final long targetMs)", self.connection)
 
-    def test_vibe_exact_channel_event_preserves_dotted_channel(self):
-        self.assertIn("VIBE_CHANNEL_SET_EVENT_REPLY_TYPE = 231", self.connection)
-        self.assertIn("postVibeChannelSetEvent(String channel)", self.connection)
-        self.assertIn('channel.matches("[0-9]+(?:\\\\.[0-9]+)?")', self.connection)
-        self.assertIn("channelData.length > 32", self.connection)
-        self.assertIn("evtEncryptCipher.doFinal(channelData)", self.connection)
+    def test_server_channel_acknowledgement_remains_for_media_identity(self):
         self.assertIn("lastOpenChannel", self.media)
         self.assertIn("mediaContext.getChannelHint()", self.media)
 
@@ -262,6 +255,12 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
         self.assertIn("mediaContext.getMajorTypeHint()", self.media)
         self.assertIn("mediaContext.getBufferSize()", self.media)
         self.assertIn("boolean isActive = mediaContext.isActive();", self.media)
+
+    def test_unknown_properties_are_fail_safe(self):
+        self.assertIn("unsupportedGetPropertyValue(propName)", self.connection)
+        self.assertIn("unsupportedSetPropertyResult(propName)", self.connection)
+        self.assertIn("return \"\";", self.connection)
+        self.assertIn("Ignoring unsupported SetProperty", self.connection)
 
     def test_lifecycle_connect_and_pause_sequence_is_preserved(self):
         assert_in_order(

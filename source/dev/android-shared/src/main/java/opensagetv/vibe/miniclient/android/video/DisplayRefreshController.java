@@ -25,8 +25,8 @@ public final class DisplayRefreshController
 
     private static volatile int restoreModeId;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
-    private static Runnable pendingReload;
-    private static volatile long pendingReloadDeadlineMs;
+    private static Runnable pendingRefresh;
+    private static volatile long pendingRefreshDeadlineMs;
 
     private DisplayRefreshController() { }
 
@@ -108,21 +108,21 @@ public final class DisplayRefreshController
     }
 
     /**
-     * Delay only the server-owned DVD decoder replacement after a real HDMI
-     * mode change. Ordinary playback is never locally paused or desynchronized.
+     * Delay only the local DVD video-output refresh after a real HDMI mode
+     * change. The active player and server-owned stream remain continuous.
      */
-    public static synchronized boolean scheduleControlledDvdReload(
+    public static synchronized boolean scheduleLocalDvdOutputRefresh(
             Activity activity, MediaCmd media, int delayMs)
     {
-        cancelPendingReload();
+        cancelPendingRefresh();
         final int bounded = Math.max(0, Math.min(1_500, delayMs));
         if (bounded <= 0 || activity == null || media == null
                 || !media.isDvdSessionPending())
             return false;
         final WeakReference<Activity> owner = new WeakReference<Activity>(activity);
         final WeakReference<MediaCmd> command = new WeakReference<MediaCmd>(media);
-        pendingReloadDeadlineMs = android.os.SystemClock.elapsedRealtime() + bounded;
-        pendingReload = new Runnable()
+        pendingRefreshDeadlineMs = android.os.SystemClock.elapsedRealtime() + bounded;
+        pendingRefresh = new Runnable()
         {
             @Override public void run()
             {
@@ -130,10 +130,10 @@ public final class DisplayRefreshController
                 MediaCmd currentMedia = command.get();
                 synchronized (DisplayRefreshController.class)
                 {
-                    if (pendingReload != this)
+                    if (pendingRefresh != this)
                         return;
-                    pendingReload = null;
-                    pendingReloadDeadlineMs = 0L;
+                    pendingRefresh = null;
+                    pendingRefreshDeadlineMs = 0L;
                 }
                 if (currentOwner == null || currentOwner.isFinishing()
                         || currentMedia == null || !currentMedia.isDvdSessionPending())
@@ -141,21 +141,21 @@ public final class DisplayRefreshController
                 currentMedia.requestControlledPlayerReload();
             }
         };
-        MAIN.postDelayed(pendingReload, bounded);
+        MAIN.postDelayed(pendingRefresh, bounded);
         return true;
     }
 
-    public static synchronized void cancelPendingReload()
+    public static synchronized void cancelPendingRefresh()
     {
-        if (pendingReload != null)
-            MAIN.removeCallbacks(pendingReload);
-        pendingReload = null;
-        pendingReloadDeadlineMs = 0L;
+        if (pendingRefresh != null)
+            MAIN.removeCallbacks(pendingRefresh);
+        pendingRefresh = null;
+        pendingRefreshDeadlineMs = 0L;
     }
 
-    public static long getPendingReloadMs()
+    public static long getPendingRefreshMs()
     {
-        long deadline = pendingReloadDeadlineMs;
+        long deadline = pendingRefreshDeadlineMs;
         return deadline <= 0L ? 0L : Math.max(0L,
                 deadline - android.os.SystemClock.elapsedRealtime());
     }

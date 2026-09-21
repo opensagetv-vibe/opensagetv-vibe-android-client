@@ -1,13 +1,53 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Provider-neutral DVD transform negotiation (2026-09-20)
+
+Android now advertises `native,dvd_mpegts_v1` through
+`DVD_DISC_TRANSPORTS` and sends the provider-neutral
+`transformed_main_feature` policy. Updated Core selects a matching optional
+plugin provider; absent, unavailable, or failed providers retain or restore
+native DVD. Android has no MIM executable or server-process dependency.
+
+Saved `mim_main_feature` preferences and the former server URL marker are
+accepted only for bounded migration/receive compatibility. New preferences,
+wire values, diagnostics, and MCP state use transform terminology. Focused
+protocol and policy tests cover negotiation, migration, and safe fallback.
+The full gate passes: 566 Python tests, 91 supplemental tests, Core Java tests,
+project validation, manifest verification, and a clean 60-task debug APK build.
+The APK SHA-256 is
+`6e0b24ce092756ef543aad3f92c149d0c6e8a8ffc71077e0e006f689594ada4d`.
+
+## Functional MiniClient capability names (2026-09-20)
+
+The optional DVD and playback-rate negotiation no longer exposes Vibe-branded
+wire properties. Updated Core queries `DVD_DISC_TRANSPORTS`,
+`DVD_DISC_POLICY`, `DVD_DISC_SKIP_MENUS`, `DVD_DISC_SKIP_PREVIEWS`,
+`DVD_DISC_NATIVE_FALLBACK`, and `VIDEO_PLAYBACK_RATE`; Android answers only
+those functional names. There are deliberately no `VIBE_*` aliases, so these
+optional capabilities require a matched updated Core/client pair. Unmodified
+stock Core continues through the existing safe fallback paths.
+
+Unknown capability GET requests return an empty unsupported value. Unknown
+SET requests are acknowledged and ignored without throwing or closing the
+connection. Ninety-seven focused protocol tests and the Android Core Java
+suite pass. The clean 60-task APK has SHA-256
+`ad37ccee5abd02a027641b5302edc4c4f2951ffd0ecda6bef01affe446e6c4e0`.
+It was installed with `-r` and launched successfully on non-Pro `.25` and Pro
+`.29`; both retained their original install dates and reported
+`0.5.93-DEV-DEBUG`, with no new fatal exception in the bounded post-launch
+log check.
+
 ## Stock Core MCP bridge integration (2026-09-20)
 
 The commissioning MCP now prefers the sibling stock-compatible Core MCP bridge
 when a server explicitly configures `core_mcp_enabled`, its base URL, and its
 local bearer token. The adapter uses the bridge for exact paths, watch, seek,
 UI commands, channel tune, caption state, library scans, diagnostics, and
-watched-state clearing while retaining existing Sagex/Web and private-event
-fallback behavior when the bridge is absent.
+watched-state clearing while retaining only operations that Sagex/Web can
+actually verify when the bridge is absent. Android emitters and debug receiver
+routes for private commissioning events 230-232 are removed; exact-path
+requests now fail clearly if the bridge is unavailable instead of treating an
+unknown event as accepted.
 
 On non-Pro Fire TV `.25` against unmodified stock `.175`, Media3 hardware Pull
 passed exact fixture start, from-beginning, advancing 1080i MPEG-2 and AC-3,
@@ -15,6 +55,17 @@ fullscreen, forward/back recovery, pause/resume, and an empty crash-log gate.
 Live TV and bridge-driven exact channel `2.1` also passed. The `.175`
 `Sage.jar` SHA-256 remained
 `d76ded981b9bc51e25b9cec821b6abeb771b46c2996dc45e453349b5e703fcb0`.
+
+The stock plugin now resolves DVD parent roots as aliases of indexed
+`VIDEO_TS` media. Public `Seek(long)` physically repositioned ALADDIN DVD Push
+from 621,386 ms to 240,000 ms immediately and continued normally; additional
+stable forward/backward targets passed. MCP automation therefore no longer
+uses private event 233. The normal DVD display-mode recovery path is now local:
+Media3 keeps the same player, Push datasource, logical clock, audio selection,
+and play/pause intent while it rebinds the Android video Surface. It neither
+seeks nor asks the server to recreate the stream. Private events 230-233 are
+therefore removed from the Android protocol and the matching Vibe Core
+handlers; stock Core is the primary gate with unified graphics disabled.
 
 ## Fixed-transcoding settings crash closure (2026-09-20)
 
@@ -38,20 +89,19 @@ to strings, the activity and bitrate chooser rendered, focus stayed on the
 activity, and logcat contained no fatal exception. No preference reset or app
 data clear was used.
 
-## DVD MIM plugin integration checkpoint (2026-09-20)
+## Historical DVD MIM plugin integration checkpoint (2026-09-20)
 
-Explicit `mim_main_feature` now passes on non-Pro Fire TV `.25` against
-isolated Vibe server `.232`. Updated Core resolves the DVD transcoder through
-SageTV's stock `FFMPEGTranscoder.getTranscoderPath()` precedence, so the
-installed FFmpeg plugin's `SageTVTranscoder` bridge receives the job without
-replacing stock `ffmpeg`. MIM reported VAAPI `h264_vaapi`; Android reported
+The first explicit `mim_main_feature` gate passed on non-Pro Fire TV `.25`
+against isolated Vibe server `.232`. That Core-owned transform has since been
+replaced by the provider-neutral contract above; the physical evidence remains
+valid for the MIM media path. MIM reported VAAPI `h264_vaapi`; Android reported
 `video/avc` through `OMX.MTK.VIDEO.DECODER.AVC`, 92,659,936 pushed bytes,
 1.002x cadence, 675 video outputs, 704 audio outputs, zero dropped video
 frames, and no runtime/native fallback. Pause/play, FF, REW, chapter-up, STOP,
 and teardown all recovered.
 
-Debug state now reports `discMimTransport`, Playback Stats labels the transport
-`DVD Fixed / MIM`, and `mcp_disc_test.py` applies the correct transport-specific
+Current debug state reports `discTransformedTransport`; Playback Stats and
+`mcp_disc_test.py` apply the correct transport-specific
 gate: hardware AVC/no runtime fallback for MIM versus MPEG-2 sequence and
 interlace evidence for Native. Final evidence is
 `artifacts/firetv/ffmpeg-plugin-dvd-mim-main-feature-20260920.json`; independent
@@ -59,8 +109,8 @@ generated-content HDMI evidence is
 `artifacts/firetv/ffmpeg-plugin-dvd-mim-hdmi-20260920.mp4`.
 
 Stock `.175` was not changed. Ordinary Fixed/MIM plugin playback remains
-compatible with stock SageTV, but DVD MIM needs the optional updated Vibe Core
-because unmodified stock Core does not invoke the plugin for DVD transport.
+compatible with stock SageTV; transformed DVD playback needs updated Core's
+optional provider SPI because stock Core has no discovery hook.
 
 ## v0.5.93 release checkpoint (2026-09-19)
 
@@ -1688,8 +1738,10 @@ process overlay with deterministic MCP show/hide control. Physical `.25`
 evidence proves the overlay reports live player/buffer/subtitle state without
 reloading the decoder, then removes itself while playback remains active. A
 0-1500 ms HDMI settle setting is also live and bounded; it delays only a
-server-owned DVD decoder replacement after a real display-mode change. No
-generic local pause/resume is used. PCM gain/downmix/audio delay is not exposed
+client-local Media3 Surface refresh after a real display-mode change. The
+player, datasource, server stream, DVD clock, audio, and play/pause intent are
+retained; no server seek or generic local pause/resume is used. PCM
+gain/downmix/audio delay is not exposed
 until an output-sink implementation can prove correct clock accounting;
 encoded AC-3 and unsupported outputs continue to fail closed.
 

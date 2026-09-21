@@ -204,7 +204,7 @@ def _compact_state(state: dict) -> dict:
         "dvdStcCount", "dvdStreamCount", "dvdLastStreamType",
         "dvdLastStreamPosition", "dvdLastAudioStreamPosition",
         "dvdLastSubtitleStreamPosition", "dvdFormatCount", "dvdTransientEosCount",
-        "discMimTransport", "discOldServerNativeFallback", "discMimRuntimeFallback",
+        "discTransformedTransport", "discOldServerNativeFallback", "discTransformRuntimeFallback",
         "discCompatibilityReason",
         "dvdRequestedAudioStream", "dvdAppliedAudioStream",
         "dvdSelectedAudioFormatId", "dvdAvailableAudioFormatIds",
@@ -1681,10 +1681,9 @@ def dev_wait_for_playback_started(
 def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int = 3000) -> dict:
     """Tune live TV to an exact dotted channel and verify its identity plus advancing A/V.
 
-    This uses the opt-in OpenSageTV Vibe MiniClient protocol extension so an
-    ATSC channel such as ``2.1`` is not rewritten to the legacy ``2-1`` numeric
-    UI form. The server must set
-    ``miniclient/enable_vibe_channel_set_event=true``.
+    The stock-compatible Vibe Core MCP plugin is preferred. Sagex Remote API
+    is a compatible fallback because both invoke SageTV's public ``ChannelSet``
+    API in the exact MiniClient UI context. No private MiniClient event is sent.
     """
     requested = str(channel).strip()
     if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", requested):
@@ -1714,18 +1713,13 @@ def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int =
             "request": {"skipped": True, "reason": "requested_channel_already_active"},
             "playback": playback,
             "transport": "sagetv_media_state_url",
-            "serverProperty": "miniclient/enable_vibe_channel_set_event=true",
+            "serverProperty": None,
         }
 
     server_address = str(before.get("serverAddress", "")).strip()
     client_id = str(before.get("clientId", "")).strip()
     sage_control, sage_context = _sage_control_session(server_address, client_id)
-    core_mcp_control = isinstance(sage_control, CoreMcpApiClient)
-    request = (
-        sage_control.tune_channel(sage_context, requested)
-        if core_mcp_control
-        else adb.dev_control("set_live_channel", channel=requested)
-    )
+    request = sage_control.tune_channel(sage_context, requested)
 
     deadline = time.monotonic() + timeout_s
     changed_state: dict = {}
@@ -1753,9 +1747,9 @@ def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int =
     legacy_transition_confirmed = not changed_channel and media_changed
     transition_confirmed = media_changed or flush_changed or ack_changed
     acknowledged_already_active = channel_confirmed and ack_changed and not before_channel
-    if (not core_mcp_control and not channel_confirmed and not legacy_transition_confirmed) or (
+    if (not channel_confirmed and not legacy_transition_confirmed) or (
             not transition_confirmed and not acknowledged_already_active):
-        if core_mcp_control and bool(request.get("accepted", False)):
+        if isinstance(request, dict) and bool(request.get("accepted", False)):
             transition_confirmed = True
         else:
             return {
@@ -1771,7 +1765,7 @@ def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int =
                 "afterAckSequence": int(changed_state.get("vibeChannelAckSequence", 0) or 0),
                 "request": request,
                 "state": _compact_state(changed_state),
-                "serverProperty": "miniclient/enable_vibe_channel_set_event=true",
+                "transport": getattr(sage_control, "transport", "sagex_channel_set"),
             }
 
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
@@ -1794,8 +1788,8 @@ def dev_set_live_channel(channel: str, timeout_s: float = 60.0, verify_ms: int =
         "afterMediaUri": changed_uri,
         "request": request,
         "playback": playback,
-        "transport": sage_control.transport if core_mcp_control else "miniclient_vibe_channel_set_event",
-        "serverProperty": None if core_mcp_control else "miniclient/enable_vibe_channel_set_event=true",
+        "transport": getattr(sage_control, "transport", "sagex_channel_set"),
+        "serverProperty": None,
     }
 
 
@@ -2163,10 +2157,11 @@ def dev_play_server_path(
 ) -> dict:
     """Play one exact indexed SageTV MediaFile path in this MiniClient UI session.
 
-    The stock-compatible Core MCP plugin is preferred when commissioned. Vibe's
-    opt-in private watch-file event remains a compatibility fallback for an
-    extended server that does not have the plugin. A pre-existing playback
-    session is stopped first so an ignored request cannot produce a false pass.
+    Exact-path playback requires the stock-compatible Core MCP plugin. Title
+    lookup remains available separately through ``dev_play_video`` for servers
+    with only Sagex or the historical Web Interface. No private MiniClient
+    event is sent. A pre-existing playback session is stopped first so a failed
+    request cannot produce a false pass.
     """
     requested = str(server_path).strip()
     if not requested:
@@ -2184,6 +2179,11 @@ def dev_play_server_path(
         )
     sage_control, sage_context = _sage_control_session(server_address, client_id)
     core_mcp_control = isinstance(sage_control, CoreMcpApiClient)
+    if not core_mcp_control:
+        raise RuntimeError(
+            "Exact server-path playback requires the stock-compatible Vibe Core MCP plugin; "
+            "use title-based dev_play_video when only Sagex/Web control is available"
+        )
 
     stop_result: dict | None = None
     stopped_state = state
@@ -2236,21 +2236,13 @@ def dev_play_server_path(
                     "state": _compact_state(stopped_state),
                 }
 
-    resolved_media: dict | None = None
-    if core_mcp_control:
-        resolved_media = sage_control.resolve_exact_path(requested)
-        media_file_id = int(resolved_media.get("mediaFileId", 0) or 0)
-        if media_file_id <= 0:
-            raise RuntimeError(f"Core MCP exact-path lookup returned no MediaFile ID: {resolved_media}")
-        request = sage_control.watch(
-            sage_context, media_file_id, from_beginning=bool(restart_from_beginning)
-        )
-    else:
-        request = adb.dev_control(
-            "watch_server_file",
-            server_path=requested,
-            restart_from_beginning="true" if restart_from_beginning else "false",
-        )
+    resolved_media = sage_control.resolve_exact_path(requested)
+    media_file_id = int(resolved_media.get("mediaFileId", 0) or 0)
+    if media_file_id <= 0:
+        raise RuntimeError(f"Core MCP exact-path lookup returned no MediaFile ID: {resolved_media}")
+    request = sage_control.watch(
+        sage_context, media_file_id, from_beginning=bool(restart_from_beginning)
+    )
     queued_fullscreen = {"requested": False, "reason": "deferred_until_active_preview"}
     early_fullscreen = _request_fullscreen_when_player_active()
     resume_prompt = _resolve_resume_restart_prompt(
@@ -2266,8 +2258,8 @@ def dev_play_server_path(
         "passed": passed,
         "reason": "ok" if passed else "server_path_playback_not_started",
         "requestedServerPath": requested,
-        "transport": sage_control.transport if core_mcp_control else "miniclient_vibe_watch_file_event",
-        "serverProperty": None if core_mcp_control else "miniclient/enable_vibe_watch_file_event=true",
+        "transport": sage_control.transport,
+        "serverProperty": None,
         "uiContext": sage_context,
         "resolvedMedia": resolved_media,
         "stopResult": stop_result,
@@ -3076,29 +3068,13 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     if not server_address or not client_id:
         raise RuntimeError(f"Playback snapshot is missing server/client identity: {_compact_state(before)}")
 
-    server_config = load_test_environment().server_for_address(server_address)
-    core_mcp_enabled = bool(
-        os.environ.get("SAGETV_CORE_MCP_BASE", "").strip()
-        and os.environ.get("SAGETV_CORE_MCP_TOKEN", "").strip()
-    ) or server_config.get("core_mcp_enabled") is True
-    use_vibe_event = bool(server_config.get("vibe_sage_jar", False)) and not core_mcp_enabled
-    seek_transport = "stock_sagex_videoframe_seek"
-    sage_control = None
-    sage_context = ""
-    if not use_vibe_event:
-        # An unmodified SageTV server does not consume Vibe's private client
-        # event. Prefer Sagex's stock VideoFrame Seek API when it is available;
-        # this still repositions the server-owned DVD VM and outgoing Push
-        # bytes, unlike a client-local player seek.
-        sage_control, sage_context = _sage_control_session(server_address, client_id)
-        seek_transport = getattr(sage_control, "transport", "stock_sagex_videoframe_seek")
-    else:
-        seek_transport = "miniclient_vibe_seek_event"
+    # Always use SageTV's public VideoFrame Seek API through the bounded Core
+    # MCP bridge or Sagex. This repositions a server-owned DVD VM and outgoing
+    # Push bytes without a commissioning-only MiniClient event.
+    sage_control, sage_context = _sage_control_session(server_address, client_id)
+    seek_transport = getattr(sage_control, "transport", "stock_sagex_videoframe_seek")
 
     def issue_server_seek(value_ms: int) -> dict:
-        if use_vibe_event:
-            return adb.server_seek_time(value_ms)
-        assert sage_control is not None
         reply = sage_control.seek(sage_context, value_ms)
         return reply if isinstance(reply, dict) else {
             "accepted": True, "reply": reply,
@@ -3187,6 +3163,24 @@ def dev_set_active_player_overlay(visible: bool = True, mode: str = "") -> dict:
     shows the bounded 30-second detailed panel and visible=false hides it.
     """
     return adb.set_active_player_overlay(visible=visible, mode=mode)
+
+
+@mcp.tool()
+def dev_refresh_video_output() -> dict:
+    """Refresh the active local video Surface without a seek or transport rebuild."""
+    before = adb.player_state_snapshot()
+    reply = adb.refresh_video_output()
+    time.sleep(0.75)
+    after = adb.player_state_snapshot()
+    return {
+        "accepted": bool(reply.get("accepted", reply.get("ok", False))),
+        "transportUnchanged": bool(reply.get("transportUnchanged", True)),
+        "serverSeek": bool(reply.get("serverSeek", False)),
+        "reply": reply,
+        "before": _compact_state(before),
+        "state": _compact_state(after),
+        "measurement": "local_video_surface_refresh",
+    }
 
 
 @mcp.tool()

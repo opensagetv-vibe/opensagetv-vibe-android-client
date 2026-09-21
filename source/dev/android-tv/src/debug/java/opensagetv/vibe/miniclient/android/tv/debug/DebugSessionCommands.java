@@ -224,62 +224,19 @@ final class DebugSessionCommands
                 : "op=active_player_overlay;requestedVisible=" + visible;
     }
 
-    static String watchServerFile(Context context, Intent intent)
+    static String refreshVideoOutput(Context context)
     {
         MiniClient client = requireConnectedClient(context);
-        if (client.getCurrentConnection() == null)
-            throw new IllegalStateException("no active connection");
-        String serverPath = text(intent.getStringExtra("server_path"));
-        if (serverPath.isEmpty())
-            throw new IllegalArgumentException("server_path is required");
-        boolean fromBeginning = "true".equalsIgnoreCase(clean(
-                intent.getStringExtra("restart_from_beginning")));
-        boolean accepted = client.getCurrentConnection().postVibeWatchFileEvent(
-                serverPath, fromBeginning);
+        if (client.getCurrentConnection() == null
+                || client.getCurrentConnection().getMediaCmd() == null)
+            throw new IllegalStateException("no active media session");
+        boolean accepted = client.getCurrentConnection().getMediaCmd()
+                .requestControlledPlayerReload();
         if (!accepted)
-            throw new IllegalStateException("Vibe watch-file event could not be sent");
-        return "op=watch_server_file;accepted=true"
-                + ";serverPath=" + safe(serverPath)
-                + ";restartFromBeginning=" + fromBeginning
-                + ";inputPath=miniclient_vibe_watch_file_event"
-                + ";requiresServerProperty=miniclient/enable_vibe_watch_file_event";
-    }
-
-    static String setLiveChannel(Context context, Intent intent)
-    {
-        MiniClient client = requireConnectedClient(context);
-        if (client.getCurrentConnection() == null)
-            throw new IllegalStateException("no active connection");
-        String channel = text(intent.getStringExtra("channel"));
-        if (!channel.matches("[0-9]+(?:\\.[0-9]+)?"))
-            throw new IllegalArgumentException("valid dotted channel is required");
-        boolean accepted = client.getCurrentConnection().postVibeChannelSetEvent(channel);
-        if (!accepted)
-            throw new IllegalStateException("Vibe channel-set event could not be sent");
-        return "op=set_live_channel;accepted=true"
-                + ";channel=" + safe(channel)
-                + ";inputPath=miniclient_vibe_channel_set_event"
-                + ";requiresServerProperty=miniclient/enable_vibe_channel_set_event";
-    }
-
-    static String seekServerTime(Context context, Intent intent)
-    {
-        MiniClient client = requireConnectedClient(context);
-        if (client.getCurrentConnection() == null)
-            throw new IllegalStateException("no active connection");
-        String targetText = clean(intent.getStringExtra("target_ms"));
-        if (targetText.isEmpty())
-            throw new IllegalArgumentException("target_ms is required");
-        long targetMs = Long.parseLong(targetText);
-        if (targetMs < 0)
-            throw new IllegalArgumentException("target_ms must be >= 0");
-        boolean accepted = client.getCurrentConnection().postVibeSeekEvent(targetMs);
-        if (!accepted)
-            throw new IllegalStateException("Vibe server-seek event could not be sent");
-        return "op=server_seek_time;accepted=true"
-                + ";targetMs=" + targetMs
-                + ";inputPath=miniclient_vibe_seek_event"
-                + ";requiresServerProperty=miniclient/enable_vibe_watch_file_event";
+            throw new IllegalStateException(
+                    "active transport/backend cannot refresh video output locally");
+        return "op=refresh_video_output;accepted=true"
+                + ";transportUnchanged=true;serverSeek=false";
     }
 
     static String inputTextNative(Context context, Intent intent)

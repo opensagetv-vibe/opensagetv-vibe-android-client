@@ -1,6 +1,6 @@
 # Server-controlled DVD and Blu-ray playback proposal
 
-Status: active. Native Media3/hardware DVD and explicit MIM main-feature
+Status: active. Native Media3/hardware DVD and explicit transformed main-feature
 playback are physically commissioned. Old-component fallback and non-Media3
 Native commissioning are complete; physical Blu-ray remains incomplete.
 Blu-ray main-title support remains the existing SageTV path;
@@ -9,11 +9,12 @@ no lawful BDMV/ISO fixture. BD-J and full HDMV menu execution remain deferred.
 
 ## DVD implementation
 
-- Explicit MIM main-feature playback uses updated Vibe Core's DVD transform and
-  SageTV's stock `FFMPEGTranscoder.getTranscoderPath()` precedence to reach the
-  optional FFmpeg plugin bridge. The plugin does not replace stock `ffmpeg`.
-  This DVD integration needs updated Vibe Core; ordinary recorded/live plugin
-  playback remains compatible with an unmodified stock `Sage.jar`.
+- Explicit transformed main-feature playback uses updated Core's
+  provider-neutral `DVDStreamTransformProvider` SPI. Android advertises
+  `dvd_mpegts_v1`; the optional FFmpeg plugin owns the MIM capability probe and
+  process. Core has no FFmpeg/MIM dependency and stays native when no provider
+  matches. Ordinary recorded/live plugin playback remains compatible with an
+  unmodified stock `Sage.jar`.
 
 - Supporting Android clients advertise `DVD_REMOTE_NAV=TRUE`; updated Core
   selects `MiniDVDPlayer` only for that negotiated remote client. Windows local
@@ -236,9 +237,10 @@ authoritative unless the STV issues a specific disc control.
 ## Implemented Native policy boundary
 
 Core owns the Java/Ogle VM and Android owns presentation/decoding. Hybrid and
-MIM-main-feature are capability-gated; until MIM advertises a commissioned
-DISC capability they either fall back to Native or fail closed according to
-the client preference. `Auto` never silently promotes experimental MIM. Native
+transformed-main-feature modes are capability-gated; until an installed
+provider advertises a commissioned DISC transport, they either fall back to
+Native or fail closed according to the client preference. `Auto` never
+silently promotes an optional transform. Native
 DVD resolves to Media3 because a physical six-disc direct legacy-Exo matrix was
 not reliable. Skip menus selects the longest authored VM title, whereas skip
 previews enters the authored root menu and retains navigation.

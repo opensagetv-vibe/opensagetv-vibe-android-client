@@ -98,7 +98,7 @@
     <string name="disc_mpeg2_timestamp_repair_summary">Complete missing DVD P-picture timestamps from MPEG-2 GOP order. Automatic applies the guarded Kodi-derived workaround to MediaTek and NVIDIA hardware decoders; Off preserves stock Media3 behavior.</string>
     <string name="msg_disc_backend_fallback">%1$s is not commissioned for authored DVDs. Using %2$s for this disc.</string>
     <string name="msg_disc_policy_fallback">%1$s. Using native SageTV DVD playback.</string>
-    <string name="msg_disc_mim_runtime_fallback">FFmpeg/MIM could not start this DVD title. Native SageTV DVD playback was restored.</string>
+    <string name="msg_disc_transform_runtime_fallback">The DVD transform provider could not start this title. Native SageTV DVD playback was restored.</string>
     <string name="msg_disc_old_server_native">%1$s. This server does not negotiate DISC policies and started compatible native DVD playback instead.</string>
     <string name="resume_background_playback_title">Resume playback on return</string>
     <string name="resume_background_playback_summary">Resume only when Home interrupted actively playing media. User-paused and idle sessions remain paused.</string>

@@ -29,7 +29,7 @@ class PlaybackRateProtocolTests(unittest.TestCase):
             "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/gsy/GSYMediaPlayerImpl.java"
         )
         self.assertIn("MEDIACMD_SETRATE = 30", media)
-        self.assertIn('"VIBE_PLAYBACK_RATE"', connection)
+        self.assertIn('"VIDEO_PLAYBACK_RATE"', connection)
         self.assertIn("default float setPlaybackRate(float rate)", plugin)
         self.assertIn("d().setPlaybackRate(rate)", gsy)
         self.assertIn("d().getPlaybackRate()", gsy)

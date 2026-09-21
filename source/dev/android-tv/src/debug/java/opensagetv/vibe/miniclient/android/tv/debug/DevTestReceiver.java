@@ -133,17 +133,9 @@ public final class DevTestReceiver extends BroadcastReceiver
                 DebugDiagnosticCommands.execute(context, intent, goAsync());
                 return;
             }
-            else if ("watch_server_file".equals(op))
+            else if ("refresh_video_output".equals(op))
             {
-                ok(DebugSessionCommands.watchServerFile(context, intent));
-            }
-            else if ("set_live_channel".equals(op))
-            {
-                ok(DebugSessionCommands.setLiveChannel(context, intent));
-            }
-            else if ("server_seek_time".equals(op))
-            {
-                ok(DebugSessionCommands.seekServerTime(context, intent));
+                ok(DebugSessionCommands.refreshVideoOutput(context));
             }
             else if ("input_text_native".equals(op))
             {

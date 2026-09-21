@@ -306,6 +306,10 @@ def main() -> int:
             # transport flag already selected from OPENURL and changes no
             # playback, datasource, scheduling, or decoder behavior.
             "44e6f299820e26debf4e892eb1b99ad93f9a1aefb4a797901a16ccd4c2765bd3",
+            # Reviewed provider-neutral DVD transport naming. This accepts the
+            # generic dvd_mpegts_v1 OPENURL marker plus the former marker for
+            # receive-only compatibility and changes no timing or decoder path.
+            "3a7986225cd345a5958c1240d536e52a5d058e7e46e5c2efdb9dcc864e570ebe",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

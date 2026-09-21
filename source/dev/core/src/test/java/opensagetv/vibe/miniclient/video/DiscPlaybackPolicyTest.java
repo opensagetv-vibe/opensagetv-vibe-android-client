@@ -25,7 +25,7 @@ public class DiscPlaybackPolicyTest
         assertTrue(fallback.advertisesRemoteNavigation());
 
         DiscPlaybackPolicy.Resolution closed =
-                DiscPlaybackPolicy.resolve("mim_main_feature", false, false);
+                DiscPlaybackPolicy.resolve("transformed_main_feature", false, false);
         assertEquals(DiscPlaybackPolicy.Effective.UNAVAILABLE, closed.effective);
         assertFalse(closed.fallback);
         assertFalse(closed.advertisesRemoteNavigation());
@@ -35,7 +35,9 @@ public class DiscPlaybackPolicyTest
     {
         assertEquals(DiscPlaybackPolicy.Effective.HYBRID,
                 DiscPlaybackPolicy.resolve("hybrid", true, true).effective);
-        assertEquals(DiscPlaybackPolicy.Effective.MIM_MAIN_FEATURE,
-                DiscPlaybackPolicy.resolve("mim_main_feature", true, true).effective);
+        assertEquals(DiscPlaybackPolicy.Effective.TRANSFORMED_MAIN_FEATURE,
+                DiscPlaybackPolicy.resolve("transformed_main_feature", true, true).effective);
+        assertEquals("transformed_main_feature",
+                DiscPlaybackPolicy.normalizeRequested("mim_main_feature"));
     }
 }

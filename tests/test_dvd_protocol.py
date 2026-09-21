@@ -169,12 +169,12 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("details = text(10.5f, Typeface.NORMAL, Color.WHITE)", overlay)
         self.assertNotIn("details.setTypeface(Typeface.MONOSPACE)", overlay)
 
-    def test_hdmi_settle_is_bounded_and_only_schedules_server_owned_dvd_reload(self):
+    def test_hdmi_settle_is_bounded_and_only_schedules_local_dvd_output_refresh(self):
         dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
         controller = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/DisplayRefreshController.java").read_text(encoding="utf-8")
         overrides = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/ActivePlayerSessionOverrides.java").read_text(encoding="utf-8")
-        self.assertIn("HDMI settle before DVD decoder reload", dialog)
-        self.assertIn("scheduleControlledDvdReload", controller)
+        self.assertIn("HDMI settle before local DVD video refresh", dialog)
+        self.assertIn("scheduleLocalDvdOutputRefresh", controller)
         self.assertIn("!media.isDvdSessionPending()", controller)
         self.assertIn("Math.max(0, Math.min(1_500, delayMs))", controller)
         self.assertIn("currentMedia.requestControlledPlayerReload()", controller)
@@ -228,9 +228,9 @@ class DvdProtocolTests(unittest.TestCase):
             "discSkipMenus",
             "discSkipPreviews",
             "discCompatibilityFallback",
-            "discMimTransport",
+            "discTransformedTransport",
             "discOldServerNativeFallback",
-            "discMimRuntimeFallback",
+            "discTransformRuntimeFallback",
             "discCompatibilityReason",
         ):
             self.assertIn(field, provider)
@@ -241,8 +241,8 @@ class DvdProtocolTests(unittest.TestCase):
         ):
             self.assertIn(option, harness)
         self.assertIn('"discOldServerNativeFallback"', harness)
-        self.assertIn('"discMimRuntimeFallback"', harness)
-        self.assertIn('"discMimTransport"', harness)
+        self.assertIn('"discTransformRuntimeFallback"', harness)
+        self.assertIn('"discTransformedTransport"', harness)
         self.assertIn('"video/avc"', harness)
         self.assertIn('"discCompatibilityReason"', harness)
 
@@ -342,16 +342,16 @@ class DvdProtocolTests(unittest.TestCase):
         connection = CONNECTION.read_text(encoding="utf-8")
         self.assertIn('"DVD_REMOTE_NAV".equals(propName)', connection)
         dvd_nav = connection.split('"DVD_REMOTE_NAV".equals(propName)', 1)[1].split(
-            'else if ("VIBE_DISC_TRANSPORTS"', 1
+            'else if ("DVD_DISC_TRANSPORTS"', 1
         )[0]
         self.assertIn('propVal = "TRUE"', dvd_nav)
-        self.assertIn('"VIBE_DISC_TRANSPORTS".equals(propName)', connection)
-        self.assertIn('propVal = "native,mim_ts_v1"', connection)
+        self.assertIn('"DVD_DISC_TRANSPORTS".equals(propName)', connection)
+        self.assertIn('propVal = "native,dvd_mpegts_v1"', connection)
         for prop in (
-            "VIBE_DISC_POLICY",
-            "VIBE_DISC_SKIP_MENUS",
-            "VIBE_DISC_SKIP_PREVIEWS",
-            "VIBE_DISC_NATIVE_FALLBACK",
+            "DVD_DISC_POLICY",
+            "DVD_DISC_SKIP_MENUS",
+            "DVD_DISC_SKIP_PREVIEWS",
+            "DVD_DISC_NATIVE_FALLBACK",
         ):
             self.assertIn(prop, connection)
 
@@ -390,8 +390,8 @@ class DvdProtocolTests(unittest.TestCase):
             self.assertIn("PlayerFactory.resolveForUrl(requestedBackend, urlString)", text)
             self.assertIn("msg_disc_backend_fallback", text)
             self.assertIn("msg_disc_old_server_native", text)
-            self.assertIn("msg_disc_mim_runtime_fallback", text)
-            self.assertIn('urlString.contains("fallback=mim_failure")', text)
+            self.assertIn("msg_disc_transform_runtime_fallback", text)
+            self.assertIn('urlString.contains("fallback=transform_failure")', text)
             self.assertIn("DiscPlaybackPolicy.Effective.UNAVAILABLE", text)
 
     def test_dvd_private_ac3_is_split_and_access_unit_aligned(self):
@@ -436,7 +436,7 @@ class DvdProtocolTests(unittest.TestCase):
         debug = DEBUG_STATE.read_text(encoding="utf-8")
         mcp = MCP_SERVER.read_text(encoding="utf-8")
         self.assertIn('"discOldServerNativeFallback"', mcp)
-        self.assertIn('"discMimRuntimeFallback"', mcp)
+        self.assertIn('"discTransformRuntimeFallback"', mcp)
         self.assertIn('"discCompatibilityReason"', mcp)
         self.assertIn("getDvdSubpictureDiagnosticsForDebug", base)
         for field in (
@@ -1040,23 +1040,27 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("capture_hdmi_validation.py", wrapper)
         self.assertNotIn("powershell", wrapper.lower())
 
-    def test_controlled_dvd_reload_reseeks_only_after_replacement_release(self):
+    def test_dvd_output_refresh_keeps_transport_and_server_position_unchanged(self):
         media = MEDIA.read_text(encoding="utf-8")
+        plugin = PLUGIN.read_text(encoding="utf-8")
+        media3 = MEDIA3.read_text(encoding="utf-8")
         request = media.split("public boolean requestControlledPlayerReload()", 1)[1].split(
             "public void close()", 1
         )[0]
-        flush = media.split("if (restartPlayerOnNextFlush)", 1)[1].split(
-            "else if (dvdSessionPending", 1
+        refresh = media3.split("public boolean refreshVideoOutput()", 1)[1].split(
+            "public void pushData", 1
         )[0]
-        correction = media.split("private void correctControlledReloadLanding", 1)[1].split(
-            "static boolean containsMpegPsPackHeader", 1
-        )[0]
-        self.assertIn("controlledReloadAwaitingReplacementStc = false", request)
-        self.assertLess(flush.index("replacedPlayer.free()"),
-                        flush.index("postVibeSeekEvent(controlledReloadTargetMs)"))
-        self.assertIn("controlledReloadAwaitingReplacementStc", correction)
-        self.assertIn("Math.abs(errorMs) <= 2_500L", correction)
-        self.assertIn("controlledReloadCorrectionCount >= 2", correction)
+        self.assertIn("default boolean refreshVideoOutput()", plugin)
+        self.assertIn("playa.refreshVideoOutput()", request)
+        self.assertNotIn("postVibeSeekEvent", request)
+        self.assertIn("expectedPlayer.clearVideoSurface()", refresh)
+        self.assertIn("expectedPlayer.setVideoSurfaceView(surface)", refresh)
+        self.assertIn("transportUnchanged=true", refresh)
+        self.assertNotIn("seekTo(", refresh)
+        self.assertNotIn(".release()", refresh)
+        self.assertNotIn(".stop()", refresh)
+        self.assertNotIn("postVibeSeekEvent", media)
+        self.assertNotIn("correctControlledReloadLanding", media)
 
     def test_active_adjustments_use_bounded_real_dvd_subtitle_offset(self):
         plugin = PLUGIN.read_text(encoding="utf-8")
@@ -1067,7 +1071,7 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("supportsAudioOffset", plugin)
         self.assertIn("presentationTimeUs + subtitleOffsetMs * 1_000L", base)
         self.assertIn("Math.max(-2_000, Math.min(2_000, offsetMs))", base)
-        self.assertIn("return dvdTimingReceived && !dvdMimTransport", base)
+        self.assertIn("return dvdTimingReceived && !dvdTransformedTransport", base)
         self.assertIn("-2000, -1000, -500, -250, 0, 250, 500, 1000, 2000", dialog)
         self.assertIn("offset is unsupported by this active output", dialog)
         self.assertIn("subtitleOffsetMs", overrides)

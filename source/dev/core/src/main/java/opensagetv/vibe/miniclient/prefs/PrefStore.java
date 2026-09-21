@@ -199,7 +199,7 @@ public interface PrefStore
         /** Seconds before an enabled preserved background session is disconnected; zero disables the timeout. */
         String background_session_timeout_seconds = "background_session_timeout_seconds";
 
-        /** Disc/DVD playback policy: auto, native, hybrid, or mim_main_feature. */
+        /** Disc/DVD playback policy: auto, native, hybrid, or transformed_main_feature. */
         String disc_playback_policy = "disc_playback_policy";
 
         /** Ask a capable SageTV server to start the DVD main feature instead of its menu. */
@@ -306,7 +306,7 @@ public interface PrefStore
         /** Active display matching: off, seamless, or always. */
         String playback_refresh_rate_matching = "playback_refresh_rate_matching";
 
-        /** Delay before a server-owned DVD decoder reload after a display-mode change. */
+        /** Delay before a local DVD output refresh after a display-mode change. */
         String playback_refresh_settle_ms = "playback_refresh_settle_ms";
 
         /**
