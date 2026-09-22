@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **70** (2026-09-22)
+Checklist revision: **71** (2026-09-22)
 
 ## Stable checklist rules
 
@@ -667,7 +667,7 @@ explicitly approves publication after the active hardware phases.
     a bounded MPEG-TS PTS span, with raw fallback and no remote-key changes.
   - [ ] Obtain final user-visible Pro acceptance for exact skip/Comskip landing;
     USB HDMI was not routed to `.29` during the corrected stress run.
-- [ ] **GH-008 - Publish v0.5.95 focus and Push-timeline update.** Package the
+- [x] **GH-008 - Publish v0.5.95 focus and Push-timeline update.** Package the
   Fire TV SMB D-pad focus correction, settings-preserving automated-test
   transaction, ordinary-Push FLUSH continuity, and bounded MPEG-TS mux-end
   calibration. Run primary and independent Git-less source/APK gates; publish
@@ -742,6 +742,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 71 | 2026-09-22 | Completed GH-008: pushed implementation/release commits `f203a1f` and `98ad7f6`, passed primary and independent Git-less source/APK gates, published five v0.5.95 assets with grouped bullet notes, matched every downloaded public asset hash, and verified successful repository checks, Pages deployment, latest-release API, tag target, and HTTP 200 downloader. SEEK-001 retains final visible Pro Comskip landing acceptance as an explicit open item. |
 | 70 | 2026-09-22 | Added GH-008 to publish the completed SMB focus, settings-preserving automation, and two bounded ordinary-Push timeline corrections as v0.5.95 while retaining the final user-visible Pro Comskip landing acceptance as an explicit open gate. |
 | 69 | 2026-09-21 | Corrected the remaining SEEK-001 timeline basis without changing keys. Stock SageTV reports detailed Push mux time at the end of the queued bytes, while Android players report from the start of the post-FLUSH epoch; the client now subtracts a bounded MPEG-TS PES-PTS span, emits raw/effective anchor evidence, and safely retains the old value for DVD Push, Pull/SMB, malformed, discontinuous, or non-TS input. Core unit tests cover the estimator and end-to-end GETMEDIATIME result; Pro user acceptance remains open. |
 | 68 | 2026-09-21 | Completed SMB-002 and implemented the shared SEEK-001 correction. Server and mapping editors now enter every enabled control by D-pad on Pro `.29`. Ordinary Push now holds only its last backend-proven media time between FLUSH and the replacement timestamp anchor, preventing a rapid second skip from being based on transitional zero; Pull/SMB, initial loads, and DVD Push retain existing semantics. Pro stock-server stress produced one bounded hold for each of 10 sampled FLUSHes and sustained A/V after 20 physical FF/REW commands; the affected `.25` Fixed/Push FF, REW, large-jump, and both Comskip reference session completed without a crash. Exact user-visible Pro landing acceptance remains open because HDMI was not routed to `.29`. |

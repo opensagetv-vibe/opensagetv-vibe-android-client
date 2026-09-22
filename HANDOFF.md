@@ -55,6 +55,17 @@ a clean 60-task APK build, and strict debug-APK inspection. The `0.5.95` debug
 APK SHA-256 is
 `33dda07567abb008dcd4cec2ecff412d81f29a140f541f72701347d94586a6c4`.
 
+Commits `f203a1f` and `98ad7f6` are public, and tag `v0.5.95` resolves to the
+release-preparation commit. The exact Git-less source archive independently
+passed its 1,473-file manifest, 571 tests with the expected Git-metadata-only
+skip, 91 MCP tests, Core Java tests, full validation, a clean 60-task build,
+and strict APK inspection. All five downloaded public assets matched their
+local SHA-256 values. Both repository-check runs passed; one of the duplicate
+Pages runs was superseded/cancelled and the other passed. The latest-release
+API returns `v0.5.95`, and the permanent Pages downloader returns HTTP 200.
+The public release is
+`https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.95`.
+
 ## v0.5.94 release checkpoint (2026-09-21)
 
 Version 0.5.94 packages the completed post-v0.5.93 stock-server and optional

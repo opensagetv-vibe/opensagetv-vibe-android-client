@@ -4,6 +4,12 @@
 
 ## v0.5.95 - 2026-09-22
 
+- Published the five standard GitHub assets with grouped bullet notes. The
+  exact source archive independently passed its manifest, tests, validation,
+  clean build, and strict APK inspection. Every downloaded public asset
+  matched its local SHA-256; repository checks and Pages deployment passed,
+  the latest-release API returns `v0.5.95`, and the permanent downloader
+  returns HTTP 200.
 - Added a private, device-local settings transaction around official automated
   MCP playback tests. Interrupted checkpoints are recovered before a run, and
   client ID, player, transport, decoder, SMB, caption, DVD, and diagnostic
