@@ -1357,6 +1357,18 @@ def dev_set_datasource_capture(enabled: bool = True) -> dict:
 
 
 @mcp.tool()
+def dev_checkpoint_settings() -> dict:
+    """Checkpoint all current app preferences privately before an automated test."""
+    return adb.checkpoint_settings()
+
+
+@mcp.tool()
+def dev_restore_settings() -> dict:
+    """Restore the exact private preference checkpoint after an automated test."""
+    return adb.restore_settings()
+
+
+@mcp.tool()
 def dev_set_unified_graphics(enabled: bool = True) -> dict:
     """Enable or disable the opt-in HD200/HD300 unified graphics capability.
 

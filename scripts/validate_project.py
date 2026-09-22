@@ -310,6 +310,17 @@ def main() -> int:
             # generic dvd_mpegts_v1 OPENURL marker plus the former marker for
             # receive-only compatibility and changes no timing or decoder path.
             "3a7986225cd345a5958c1240d536e52a5d058e7e46e5c2efdb9dcc864e570ebe",
+            # Reviewed ordinary-Push FLUSH timeline continuity. Until the
+            # replacement mux anchor arrives, retain only a time already
+            # proven by the active backend. New OPENURL, initial startup,
+            # Pull/SMB, and DVD Push keep their previous zero/VM semantics.
+            "709ee87b2af9a7c245d923a80fb45278d78b296370fc963cbc58d57e3336d80e",
+            # Reviewed rapid-seek continuation. Once the first replacement
+            # PUSHBUFFER supplies its positive mux anchor, report that new
+            # anchor immediately rather than the pre-seek stable value. This
+            # permits both forward and backward chained seeks without changing
+            # Pull/SMB, initial startup, or DVD Push timeline ownership.
+            "b0325f89b65b004222699656d6cabf470b51e8560067effd9846edfebfce861d",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

@@ -695,6 +695,14 @@ class AdbClient:
             enabled="true" if enabled else "false",
         )
 
+    def checkpoint_settings(self) -> dict[str, Any]:
+        """Keep an exact private device-local preference checkpoint for one test."""
+        return self.dev_control("settings_checkpoint")
+
+    def restore_settings(self) -> dict[str, Any]:
+        """Restore and remove the private device-local test preference checkpoint."""
+        return self.dev_control("settings_restore")
+
     def set_player_config(
         self,
         *,

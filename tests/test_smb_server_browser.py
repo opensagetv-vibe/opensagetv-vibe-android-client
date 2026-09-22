@@ -78,6 +78,19 @@ class SmbServerBrowserContracts(unittest.TestCase):
         self.assertIn("synchronizeBoundDestinations", fragment)
         self.assertIn("replaceMapping", fragment)
 
+    def test_tv_remote_focus_enters_server_and_mapping_editor_fields(self):
+        fragment = self.read_java("ui/settings/SmbProfileSettingsFragment.java")
+        self.assertNotIn("form.requestFocus()", fragment)
+        self.assertNotIn("form.setFocusableInTouchMode(true)", fragment)
+        self.assertGreaterEqual(fragment.count("form.setFocusable(false)"), 2)
+        self.assertIn("scroll.setFocusable(false)", fragment)
+        self.assertIn("name.requestFocus()", fragment)
+        self.assertIn("source.requestFocus()", fragment)
+        self.assertIn("configureServerEditorFocus", fragment)
+        self.assertIn("credentials.setNextFocusDownId(username.getId())", fragment)
+        self.assertIn("credentials.setNextFocusDownId(save.getId())", fragment)
+        self.assertIn("server.setNextFocusDownId(folder.isEnabled()", fragment)
+
     def test_media_mappings_select_credentials_by_server_and_share(self):
         config = self.read_java("video/smb/SmbDirectConfig.java")
         session = self.read_java("video/smb/SmbDirectSession.java")

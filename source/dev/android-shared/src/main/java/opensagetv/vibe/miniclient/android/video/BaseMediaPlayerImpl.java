@@ -74,6 +74,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     private static final int NO_SERVER_SUBPICTURE_COMMAND = Integer.MIN_VALUE;
     private volatile int pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
     protected long lastMediaTime = -1;
+    /** True only after the active backend has returned a real media time. */
+    protected boolean hasStableMediaTime = false;
+    /** Prevent detailed diagnostics from repeating on every GETMEDIATIME poll. */
+    private boolean pushTimelineHoldReported = false;
     protected boolean flushed = false;
     protected VideoInfo videoInfo = null;
 
@@ -319,6 +323,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 || urlString.contains("vibe_transport=mim_ts_v1"));
         pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
         lastMediaTime = -1;
+        hasStableMediaTime = false;
+        pushTimelineHoldReported = false;
         eos = false;
         seekPending = false;
         flushed = false;
@@ -957,10 +963,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
-                log.debug("getMediaTimeMillis(): Player not ready, returning 0");
+                log.debug("getMediaTimeMillis(): Player not ready; preserving an eligible Push anchor");
             }
-            // NOTE: SageTV generally expects 0 during seek/flush calls
-            return 0;
+            return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
 
         // NOTE: when using seekPending check here, ijkplayer tends to send back
@@ -969,10 +974,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
-                log.debug("getMediaTimeMillis(): Player seeking or waiting for data, returning 0");
+                log.debug("getMediaTimeMillis(): Player seeking or waiting for data; preserving an eligible Push anchor");
             }
-            // NOTE: SageTV generally expects 0 during seek/flush calls
-            return 0;
+            return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
         //JVL - Removing this state so that you can seek on pause || state == PAUSE_STAT
         if (state == STOPPED_STATE || state == EOS_STATE)
@@ -989,10 +993,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
-                log.debug("getMediaTimeMillis(): Player State Not Ready {} returning 0", state);
+                log.debug("getMediaTimeMillis(): Player State Not Ready {}; preserving an eligible Push anchor", state);
             }
 
-            return 0;
+            return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
 
         long mt = getPlayerMediaTimeMillis(lastServerTime);
@@ -1000,16 +1004,43 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
-                log.debug("getMediaTimeMillis() is {} after a flush/seek.  Using 0, until data shows up.", mt);
+                log.debug("getMediaTimeMillis() is {} after a flush/seek; preserving an eligible Push anchor until data shows up.", mt);
             }
 
-            return 0;
+            return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
         // we have some data, so we are not flushing/seeking
         lastMediaTime = mt;
+        hasStableMediaTime = true;
+        pushTimelineHoldReported = false;
         teletextLegacyBridge.drainTo(mt);
         teletextClockLastMediaTimeMs = mt;
         return mt;
+    }
+
+    /**
+     * SageTV replaces an ordinary Push stream's timestamp anchor after FLUSH.
+     * Keep the last backend-proven absolute time visible until that new anchor
+     * arrives so a second remote skip cannot accidentally use zero. A new
+     * OPENURL is still protected by {@code loadTransitionToken} above, and DVD
+     * Push retains its independent VM timeline behavior.
+     */
+    private long mediaTimeWhilePushAnchorPending(long replacementServerAnchorMs)
+    {
+        boolean dvdPush = lastUri != null && lastUri.startsWith("push:dvd");
+        long pendingTime = PushTimelineContinuity.pendingMediaTime(
+                pushMode, dvdPush, replacementServerAnchorMs,
+                hasStableMediaTime, lastMediaTime);
+        if (pendingTime > 0L && !pushTimelineHoldReported)
+        {
+            pushTimelineHoldReported = true;
+            PlaybackDebugTrap.recordDetailed("push_media_time_held_during_flush", this,
+                    "reportedMs=" + pendingTime
+                            + ",replacementAnchorMs=" + replacementServerAnchorMs
+                            + ",previousStableMs=" + lastMediaTime
+                            + ",state=" + state + ",flushed=" + flushed);
+        }
+        return pendingTime;
     }
 
     @Override
@@ -1244,6 +1275,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
 
         flushed = true;
+        pushTimelineHoldReported = false;
         TeletextSubtitleEngine.discontinuity("player-flush");
         teletextLegacyBridge.clearPending();
         postTeletextFlush();

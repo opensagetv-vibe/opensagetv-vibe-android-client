@@ -187,8 +187,31 @@ run_automated_mcp_test() {
 
   echo "TEST CLIENT ID ($id_source): $client_id"
   echo "NOTE: first-time MiniClient setup must already be complete before automated testing."
+
+  # Recover a checkpoint left by an interrupted prior test, then protect the
+  # device's complete current configuration before changing Client ID, player,
+  # transport, decoder, SMB, caption, DVD, or diagnostic preferences. The
+  # checkpoint remains private on-device and is restored for PASS and FAIL.
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" restore
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" checkpoint
+
+  local test_status=0
+  local restore_status=0
+  set +e
   dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_client_id.py" --ensure "$client_id" --quiet
-  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/$script" "${filtered[@]}"
+  test_status=$?
+  if ((test_status == 0)); then
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/$script" "${filtered[@]}"
+    test_status=$?
+  fi
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" restore
+  restore_status=$?
+  set -e
+  if ((restore_status != 0)); then
+    echo "ERROR: automated test settings could not be restored" >&2
+  fi
+  if ((test_status != 0)); then return "$test_status"; fi
+  return "$restore_status"
 }
 
 case "${1:-help}" in

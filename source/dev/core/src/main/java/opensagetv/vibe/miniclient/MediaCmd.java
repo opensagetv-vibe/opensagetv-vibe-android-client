@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import opensagetv.vibe.miniclient.media.MediaUrlContext;
+import opensagetv.vibe.miniclient.media.PushTimelineAnchorEstimator;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.uibridge.Rectangle;
@@ -113,6 +114,11 @@ public class MediaCmd
     private long lastServerFlushMonotonicMs = -1;
     private long lastServerAnchorSequence = 0;
     private long lastServerAnchorMonotonicMs = -1;
+    private final PushTimelineAnchorEstimator pushTimelineAnchorEstimator =
+            new PushTimelineAnchorEstimator();
+    /** Epoch-start anchor derived from MPEG-TS PTS; -1 preserves raw fallback. */
+    private long correctedPushTimelineStartMs = -1L;
+    private boolean correctedPushTimelineReported;
     private volatile String lastOpenUrl = "";
     private volatile String lastOpenChannel = "";
     private volatile int serverChannelBandwidthKbps = -1;
@@ -394,6 +400,7 @@ public class MediaCmd
 
             case MEDIACMD_OPENURL:
                 this.setLastServerStartPosition(-1);
+                resetPushTimelineAnchor();
                 resetDetailedPushStats();
                 startupMediaTimeTraceDeadlineMs = monotonicMs() + 4_000L;
                 startupMediaTimeTraceRemaining = 12;
@@ -586,6 +593,7 @@ public class MediaCmd
                         dvdDrainSignaledEpochBytes = Long.MIN_VALUE;
                     }
                     this.setLastServerStartPosition(-1);
+                    resetPushTimelineAnchor();
                 }
 
                 return 4;
@@ -612,6 +620,24 @@ public class MediaCmd
                     statsStreamBWKbps = Math.max(0, (int) readShort(10, cmddata));
                     statsTargetBWKbps = Math.max(0, (int) readShort(12, cmddata));
                     statsServerMuxTimeMs = readInt(14, cmddata);
+
+                    // Stock SageTV defines this timestamp as the end of the
+                    // bytes currently being pushed. Exo/Media3 positions are
+                    // relative to the beginning of the post-FLUSH byte epoch,
+                    // so calibrate that epoch from the MPEG-TS PES PTS range.
+                    // Unknown/non-TS streams retain the historical raw anchor.
+                    if (pushMode && !dvdSessionPending)
+                    {
+                        pushTimelineAnchorEstimator.observe(
+                                cmddata, bufDataOffset, buffSize);
+                        if (correctedPushTimelineStartMs < 0L)
+                        {
+                            long estimatedStart = pushTimelineAnchorEstimator
+                                    .estimateStartMs(statsServerMuxTimeMs);
+                            if (estimatedStart >= 0L)
+                                correctedPushTimelineStartMs = estimatedStart;
+                        }
+                    }
                     statsClientMediaTimeMs = playa == null ? -1 : getMediaTimeMillis();
 
                     if (playa != null)
@@ -626,7 +652,24 @@ public class MediaCmd
                         {
                             log.debug("Flush - Last server time is -1, and serverMuxtime > 0.  ServerMuxTime: {}", Utils.toHHMMSS(statsServerMuxTimeMs, true));
                             this.setLastServerStartPosition(statsServerMuxTimeMs);
-                            PlaybackDebugEventBridge.recordAsync("server_anchor_set", playa);
+                            PlaybackDebugEventBridge.recordAsyncDetailed(
+                                    "server_anchor_set", playa,
+                                    "anchorMs=" + statsServerMuxTimeMs
+                                            + ";timelineStartMs=" + getEffectiveServerStartPosition()
+                                            + ";ptsSpanMs=" + pushTimelineAnchorEstimator.getPtsSpanMs()
+                                            + ";anchorSequence=" + lastServerAnchorSequence
+                                            + ";flushSequence=" + lastServerFlushSequence);
+                        }
+                        if (correctedPushTimelineStartMs >= 0L
+                                && !correctedPushTimelineReported)
+                        {
+                            correctedPushTimelineReported = true;
+                            PlaybackDebugEventBridge.recordAsyncDetailed(
+                                    "server_push_timeline_calibrated", playa,
+                                    "muxEndMs=" + statsServerMuxTimeMs
+                                            + ";timelineStartMs=" + correctedPushTimelineStartMs
+                                            + ";ptsSpanMs=" + pushTimelineAnchorEstimator.getPtsSpanMs()
+                                            + ";ptsCount=" + pushTimelineAnchorEstimator.getPtsCount());
                         }
                         if (VerboseLogging.DETAILED_PUSHBUFFER_LOGGING)
                         {
@@ -1053,7 +1096,7 @@ public class MediaCmd
     {
         if (playa != null)
         {
-            return playa.getMediaTimeMillis(this.getLastServerStartPosition());
+            return playa.getMediaTimeMillis(getEffectiveServerStartPosition());
         }
 
         return lastServerStartTime;
@@ -1071,6 +1114,21 @@ public class MediaCmd
         {
             lastServerAnchorMonotonicMs = -1;
         }
+    }
+
+    private long getEffectiveServerStartPosition()
+    {
+        if (lastServerStartTime < 0L)
+            return 0L;
+        return correctedPushTimelineStartMs >= 0L
+                ? correctedPushTimelineStartMs : lastServerStartTime;
+    }
+
+    private void resetPushTimelineAnchor()
+    {
+        pushTimelineAnchorEstimator.reset();
+        correctedPushTimelineStartMs = -1L;
+        correctedPushTimelineReported = false;
     }
 
     private static long monotonicMs()

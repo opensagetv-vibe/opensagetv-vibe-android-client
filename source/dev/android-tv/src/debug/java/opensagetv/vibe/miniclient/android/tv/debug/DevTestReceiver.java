@@ -65,6 +65,14 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugPlayerConfigCommands.configure(context, intent));
             }
+            else if ("settings_checkpoint".equals(op))
+            {
+                ok(DebugSettingsCheckpoint.checkpoint(context));
+            }
+            else if ("settings_restore".equals(op))
+            {
+                ok(DebugSettingsCheckpoint.restore(context));
+            }
             else if ("tuning".equals(op))
             {
                 ok(DebugTuningCommands.configure(intent));

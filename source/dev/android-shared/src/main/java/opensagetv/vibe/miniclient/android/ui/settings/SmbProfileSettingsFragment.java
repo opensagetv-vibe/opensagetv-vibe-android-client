@@ -329,7 +329,7 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
 
         LinearLayout form = new LinearLayout(requireContext());
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setFocusableInTouchMode(true);
+        form.setFocusable(false);
         int pad = dp(24);
         form.setPadding(pad, dp(8), pad, dp(8));
         addLabeledRow(form, "Server name", name);
@@ -339,16 +339,9 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
         addLabeledRow(form, "Username", username);
         addLabeledRow(form, "Password", password);
         addLabeledRow(form, "Domain", domain);
-        View.OnClickListener updateAuth = view ->
-        {
-            boolean enabled = credentials.isChecked();
-            username.setEnabled(enabled);
-            password.setEnabled(enabled);
-            domain.setEnabled(enabled);
-        };
-        credentials.setOnClickListener(updateAuth);
-        updateAuth.onClick(credentials);
+        setServerAuthenticationFieldsEnabled(credentials.isChecked(), username, password, domain);
         ScrollView scroll = new ScrollView(requireContext());
+        scroll.setFocusable(false);
         scroll.addView(form);
 
         AlertDialog editor = new AlertDialog.Builder(requireContext())
@@ -359,11 +352,21 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
                 .create();
         editor.setOnShowListener(dialog ->
         {
-            form.requestFocus();
             if (editor.getWindow() != null)
                 editor.getWindow().setSoftInputMode(
                         android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-            editor.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view ->
+            final Button saveButton = editor.getButton(AlertDialog.BUTTON_POSITIVE);
+            final Button cancelButton = editor.getButton(AlertDialog.BUTTON_NEGATIVE);
+            credentials.setOnCheckedChangeListener((button, checked) ->
+            {
+                setServerAuthenticationFieldsEnabled(checked, username, password, domain);
+                configureServerEditorFocus(name, endpoint, share, credentials, username, password,
+                        domain, saveButton, cancelButton);
+            });
+            configureServerEditorFocus(name, endpoint, share, credentials, username, password,
+                    domain, saveButton, cancelButton);
+            name.requestFocus();
+            saveButton.setOnClickListener(view ->
                 {
                     char[] secret = password.getText().toString().toCharArray();
                     try
@@ -386,6 +389,55 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
                 });
         });
         editor.show();
+    }
+
+    private void setServerAuthenticationFieldsEnabled(boolean enabled, EditText username,
+                                                       EditText password, EditText domain)
+    {
+        username.setEnabled(enabled);
+        password.setEnabled(enabled);
+        domain.setEnabled(enabled);
+    }
+
+    /** Keep TV-remote focus inside the editor fields instead of its layout or button panel. */
+    private void configureServerEditorFocus(EditText name, EditText endpoint, EditText share,
+                                            CheckBox credentials, EditText username,
+                                            EditText password, EditText domain,
+                                            Button save, Button cancel)
+    {
+        for (View view : new View[]{name, endpoint, share, credentials, username, password,
+                domain, save, cancel}) ensureViewId(view);
+
+        name.setNextFocusDownId(endpoint.getId());
+        endpoint.setNextFocusUpId(name.getId());
+        endpoint.setNextFocusDownId(share.getId());
+        share.setNextFocusUpId(endpoint.getId());
+        share.setNextFocusDownId(credentials.getId());
+        credentials.setNextFocusUpId(share.getId());
+
+        if (credentials.isChecked())
+        {
+            credentials.setNextFocusDownId(username.getId());
+            username.setNextFocusUpId(credentials.getId());
+            username.setNextFocusDownId(password.getId());
+            password.setNextFocusUpId(username.getId());
+            password.setNextFocusDownId(domain.getId());
+            domain.setNextFocusUpId(password.getId());
+            domain.setNextFocusDownId(save.getId());
+            save.setNextFocusUpId(domain.getId());
+            cancel.setNextFocusUpId(domain.getId());
+        }
+        else
+        {
+            credentials.setNextFocusDownId(save.getId());
+            save.setNextFocusUpId(credentials.getId());
+            cancel.setNextFocusUpId(credentials.getId());
+        }
+    }
+
+    private static void ensureViewId(View view)
+    {
+        if (view.getId() == View.NO_ID) view.setId(View.generateViewId());
     }
 
     private EditText editorField(String hint, int inputType, String value)
@@ -673,7 +725,7 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
 
         LinearLayout form = new LinearLayout(requireContext());
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setFocusableInTouchMode(true);
+        form.setFocusable(false);
         int pad = dp(24);
         form.setPadding(pad, dp(8), pad, dp(8));
         addLabeledRow(form, "SageTV server folder", source);
@@ -693,6 +745,10 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
             selectedServerId[0] = profileId;
             selectedFolder[0] = "";
             updateMappingButtons(server, folder, profileId, "");
+            configureMappingEditorFocus(source, server, folder,
+                    mappingDialog.getButton(AlertDialog.BUTTON_POSITIVE),
+                    mappingDialog.getButton(AlertDialog.BUTTON_NEUTRAL),
+                    mappingDialog.getButton(AlertDialog.BUTTON_NEGATIVE));
         }));
         folder.setOnClickListener(view ->
         {
@@ -706,15 +762,24 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
                 selectedServerId[0] = profileId;
                 selectedFolder[0] = selected;
                 updateMappingButtons(server, folder, profileId, selected);
+                configureMappingEditorFocus(source, server, folder,
+                        mappingDialog.getButton(AlertDialog.BUTTON_POSITIVE),
+                        mappingDialog.getButton(AlertDialog.BUTTON_NEUTRAL),
+                        mappingDialog.getButton(AlertDialog.BUTTON_NEGATIVE));
             });
         });
         mappingDialog.setOnShowListener(dialog ->
         {
-            form.requestFocus();
             if (mappingDialog.getWindow() != null)
                 mappingDialog.getWindow().setSoftInputMode(
                         android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-            mappingDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view ->
+            final Button applyButton = mappingDialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            final Button testButton = mappingDialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            final Button cancelButton = mappingDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            configureMappingEditorFocus(source, server, folder, applyButton, testButton,
+                    cancelButton);
+            source.requestFocus();
+            applyButton.setOnClickListener(view ->
             {
                 String value = source.getText().toString().trim();
                 if (value.isEmpty() || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0)
@@ -736,7 +801,7 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
                 mappingDialog.dismiss();
                 showMediaMappingMenu();
             });
-            mappingDialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view ->
+            testButton.setOnClickListener(view ->
             {
                 if (selectedServerId[0].isEmpty())
                 {
@@ -747,6 +812,22 @@ public final class SmbProfileSettingsFragment extends PreferenceFragmentCompat
             });
         });
         mappingDialog.show();
+    }
+
+    private void configureMappingEditorFocus(EditText source, Button server, Button folder,
+                                             Button apply, Button test, Button cancel)
+    {
+        if (apply == null || test == null || cancel == null) return;
+        for (View focusView : new View[]{source, server, folder, apply, test, cancel})
+            ensureViewId(focusView);
+        source.setNextFocusDownId(server.getId());
+        server.setNextFocusUpId(source.getId());
+        server.setNextFocusDownId(folder.isEnabled() ? folder.getId() : apply.getId());
+        folder.setNextFocusUpId(server.getId());
+        folder.setNextFocusDownId(apply.getId());
+        apply.setNextFocusUpId(folder.isEnabled() ? folder.getId() : server.getId());
+        test.setNextFocusUpId(folder.isEnabled() ? folder.getId() : server.getId());
+        cancel.setNextFocusUpId(folder.isEnabled() ? folder.getId() : server.getId());
     }
 
     private MappingTarget mappingTarget(MediaMapping mapping)
