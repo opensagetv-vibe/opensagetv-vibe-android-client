@@ -144,6 +144,16 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # with the previously deployed Vibe URL. No player timing, decoder,
         # datasource, or rendering behavior changes.
         reviewed_dvd_transform_transport_hash = "3a7986225cd345a5958c1240d536e52a5d058e7e46e5c2efdb9dcc864e570ebe"
+        # During an ordinary Push FLUSH, retain only the last backend-proven
+        # absolute media time until the replacement mux anchor arrives. This
+        # prevents a rapid second skip/Comskip request from calculating from
+        # transitional zero while leaving initial, Pull/SMB, and DVD Push
+        # timeline semantics unchanged.
+        reviewed_push_flush_timeline_hash = "709ee87b2af9a7c245d923a80fb45278d78b296370fc963cbc58d57e3336d80e"
+        # Once a replacement PUSHBUFFER anchor exists, prefer it immediately
+        # over the pre-seek hold. This keeps rapid forward/backward seeks and
+        # Commercial Skip chained from the newest server-selected position.
+        reviewed_rapid_push_seek_anchor_hash = "b0325f89b65b004222699656d6cabf470b51e8560067effd9846edfebfce861d"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -171,7 +181,21 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_explicit_dvb_caption_owner_hash,
             reviewed_dvd_mim_diagnostics_hash,
             reviewed_dvd_transform_transport_hash,
+            reviewed_push_flush_timeline_hash,
+            reviewed_rapid_push_seek_anchor_hash,
         }, rel)
+
+    def test_push_flush_timeline_hold_is_bounded_to_established_non_dvd_push(self):
+        base = (SHARED / "video/BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
+        policy = (SHARED / "video/PushTimelineContinuity.java").read_text(encoding="utf-8")
+
+        self.assertIn("hasStableMediaTime = true;", base)
+        self.assertIn('lastUri.startsWith("push:dvd")', base)
+        self.assertIn("return mediaTimeWhilePushAnchorPending(lastServerTime);", base)
+        self.assertIn('"push_media_time_held_during_flush"', base)
+        self.assertIn("if (!pushMode || dvdPush)", policy)
+        self.assertIn("if (replacementServerAnchorMs > 0L)", policy)
+        self.assertIn("return replacementServerAnchorMs;", policy)
 
     def test_four_backends_have_stable_preference_values(self):
         text = (SHARED / "video/PlayerBackend.java").read_text(encoding="utf-8")
@@ -278,7 +302,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.94")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.95")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")

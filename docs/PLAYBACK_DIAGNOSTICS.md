@@ -329,6 +329,40 @@ record the requested target, actual backend landing position, applicable server
 anchor, duration/live edge, and timestamps for invoke, return, discontinuity,
 READY, first frame, and resumed audio.
 
+### Ordinary Push FLUSH continuity
+
+For ordinary Push playback, SageTV can issue FLUSH before the replacement mux
+timestamp reaches the client. A backend position of zero during that short
+interval is transitional and must not become the basis of a second remote skip
+or Commercial Skip request. The client therefore retains the last
+backend-proven media time until playback supplies a replacement time. A
+`push_media_time_held_during_flush` trace event is emitted once per hold
+interval; repeated `GETMEDIATIME` polling must not flood the trace.
+
+This policy is deliberately narrow. A new OPENURL and initial playback still
+report zero until their new player is established. Pull/SMB retain datasource
+timeline ownership, and DVD Push retains its VM timeline. Do not infer an
+absolute program landing from Fixed-transcode backend positions because each
+replacement stream can restart its local player clock; use the server target
+and mux anchor when they are available, plus advancing A/V and the visible
+program position.
+
+### Ordinary Push mux-end calibration
+
+Stock SageTV's detailed PUSHBUFFER timestamp is the mux time at the end of the
+bytes currently being pushed. Media3 and legacy ExoPlayer positions are
+relative to the start of the byte epoch created by OPENURL or FLUSH. The
+client therefore subtracts a proven, bounded first-to-last MPEG-TS PES-PTS
+span before supplying the anchor to a player. This keeps SageMC's next/previous
+commercial-marker calculation on the same timeline as the recording.
+
+`server_anchor_set` records both the raw `anchorMs` and effective
+`timelineStartMs`. `server_push_timeline_calibrated` records the mux end,
+effective start, PTS span, and sample count once per epoch. If the payload is
+not recognizable 188-byte MPEG-TS, has fewer than two timestamps, or has an
+implausible span, the historical raw anchor is retained. The estimator resets
+on OPENURL and FLUSH and never applies to DVD Push, Pull, or SMB playback.
+
 For a same-file MPEG-TS cache comparison, keep one player session alive and use
 the tuning matrix's `--check absolute_seek --repeat-count N` mode. It seeks to
 `--target-ms`, moves `--repeat-away-ms` away, then returns to the identical

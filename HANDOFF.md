@@ -1,5 +1,60 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.95 release candidate checkpoint (2026-09-22)
+
+The reusable SMB server and media-mapping editors no longer allow their form
+or scroll container to take Fire TV remote focus. The server path is explicit
+for anonymous and authenticated profiles, the mapping path adapts when a
+server/folder becomes available, and both dialogs initially focus their first
+editable field. A settings-preserving install on Pro `.29` physically reached
+the name, endpoint, share, authentication, credential, folder, and action
+controls. The screenshot evidence is
+`artifacts/firetv/pro-smb-add-focus-fixed.png`.
+
+The Pro skip report was traced to ordinary Push playback returning zero while
+SageTV replaced its mux timestamp after FLUSH. A rapid second skip could then
+be calculated from the recording start. `PushTimelineContinuity` now retains
+only the last backend-proven media time during that bounded interval. It does
+not apply to a new OPENURL, initial playback, Pull/SMB, or DVD Push. Unit and
+static policy tests cover those exclusions. On Pro `.29` against stock `.175`,
+the corrected trace produced 10 `push_media_time_held_during_flush` events for
+10 sampled FLUSHes; 20 physical FF/REW key commands retained hardware video,
+audio, a valid surface, zero player errors, and zero retries. The broad Pro
+bundle is `artifacts/firetv/20260921-182306_pro-seek-after-fix_*`. Non-Pro
+`.25` then completed the affected Media3 hardware Fixed/Push FF, REW, large
+jump, and both Comskip reference session without a crash. Fixed transcoding
+restarts its local stream clock, so backend-relative values from that mode are
+not misrepresented as absolute program landing evidence.
+
+A second review of the user's exact Comskip sequence found an independent
+ordinary-Push offset. Stock Core's `MiniPlayer.pushBuffer0` explicitly sends
+the mux time at the *end* of the bytes in the current PUSHBUFFER command, but
+Media3 and legacy Exo report a position relative to the *start* of the
+post-FLUSH byte epoch. Adding those directly advances SageMC's visible time by
+the queued media duration, so its correct commercial-marker calculation can
+request the wrong marker. `PushTimelineAnchorEstimator` now measures the
+bounded first-to-last MPEG-TS PES-PTS span and converts the raw mux-end value
+to the decoder epoch start. Unknown, malformed, discontinuous, non-TS, DVD
+Push, Pull, and SMB paths retain their previous behavior. Core unit tests
+cover fragmented input, reset/fallback boundaries, and the complete
+PUSHBUFFER-to-GETMEDIATIME result. The remote key mappings were deliberately
+not changed. Physical Pro acceptance remains required after installing the
+new settings-preserving build. The pre-version-bump clean 60-task debug APK
+build passed; its SHA-256 was
+`72a4cb0470f75fbce97c458786ed95eb43a3ac7e812af3f5563f52120a7ef035`.
+
+Version 0.5.95 also wraps every official automated MCP playback test in a
+private device-local preference transaction. It restores stale checkpoints
+before a run and restores all supported preference types after both success
+and failure. Credentials and preference values never leave app-private
+storage. GH-008 owns the final reproducible source/APK gates and publication;
+SEEK-001 remains open only for the user's final visible Pro Comskip landing
+acceptance. The versioned primary gate passes the 1,473-file manifest, 571
+project/static tests, 91 MCP tests, Core Java tests, full project validation,
+a clean 60-task APK build, and strict debug-APK inspection. The `0.5.95` debug
+APK SHA-256 is
+`33dda07567abb008dcd4cec2ecff412d81f29a140f541f72701347d94586a6c4`.
+
 ## v0.5.94 release checkpoint (2026-09-21)
 
 Version 0.5.94 packages the completed post-v0.5.93 stock-server and optional

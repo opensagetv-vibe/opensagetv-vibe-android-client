@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## v0.5.95 - 2026-09-22
+
+- Added a private, device-local settings transaction around official automated
+  MCP playback tests. Interrupted checkpoints are recovered before a run, and
+  client ID, player, transport, decoder, SMB, caption, DVD, and diagnostic
+  preferences are restored on both success and failure without exporting
+  credentials.
+- Fixed Fire TV remote focus in the SMB server and media-path mapping editors.
+  Focus now starts on the first editable field, follows the enabled anonymous
+  or authenticated field path, reaches every action button, and no longer gets
+  captured by the form or scroll container. Existing profiles, mappings,
+  credentials, and normal settings-preserving APK updates are unchanged.
+- Prevented rapid server-owned Push skips and Commercial Skip operations from
+  calculating a subsequent target from a transient zero timeline. During the
+  bounded interval between a FLUSH and its replacement timestamp anchor, the
+  client now reports only the last media time already proven by the active
+  backend. New loads, initial playback, Pull/SMB, and DVD Push preserve their
+  prior behavior. The Pro trace recorded 10 bounded holds for 10 sampled
+  FLUSHes; Pro remote-key stress and the affected non-Pro stock-server
+  Fixed/Push reference completed with sustained A/V and no crash.
+- Corrected the remaining ordinary-Push Comskip landing error without changing
+  remote mappings. Stock SageTV's detailed-buffer timestamp describes the end
+  of the bytes being pushed, while Media3 and legacy Exo report from the start
+  of the post-FLUSH byte epoch. The client now derives that epoch start from a
+  bounded MPEG-TS PES-PTS span and retains the old timestamp when the stream
+  cannot be proven. DVD Push, Pull, SMB, and non-TS fallback are unchanged.
+
 ## v0.5.94 - 2026-09-21
 
 - Published the five standard GitHub assets with grouped bullet notes. A fresh
