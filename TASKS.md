@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **82** (2026-09-29)
+Checklist revision: **83** (2026-09-29)
 
 ## Stable checklist rules
 
@@ -772,6 +772,11 @@ explicitly approves publication after the active hardware phases.
     and fall back safely without a crash, black screen, or lost session.
   - [ ] Complete clean stock-Windows, legacy-client/extender, growing-media,
     channel/program-transition, and remaining codec/caption lifecycle rows.
+- [x] **GH-009 - Publish v0.5.96 Direct fallback update.** Build and inspect
+  the affected APK/AAB boundaries, run only impacted source/MCP/player/Core
+  gates, publish the APK/source/manifest/review assets with bullet-formatted
+  notes, verify every downloaded hash and successful repository/Pages checks,
+  and confirm the latest-release API plus permanent downloader endpoint.
 
 ## 5. Deferred cross-device matrix after GitHub release publication
 
@@ -839,6 +844,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 83 | 2026-09-29 | Completed GH-009: published v0.5.96 after the focused late-Direct-fallback physical gate, affected APK/AAB/source/MCP/player/Core validation, and deterministic packaging. All downloaded public assets match local SHA-256 values; repository and Pages checks pass; the latest-release API returns v0.5.96; and the permanent downloader returns HTTP 200. The release policy now defaults every future release to affected gates only unless a full matrix is explicitly requested. |
 | 82 | 2026-09-29 | Closed the MIMFIX-003 late-start fallback row. A pre-first-frame Direct/Pull failure now retires Direct only for the current connection and uses the existing native MiniClient GFX/media reconnect to renegotiate ordinary Fixed/Pull without replacing the Activity, UI, or watch session. The one-shot debug fault passed physically on non-Pro `.25` / `.232` with `connectionGeneration=1`, reconnect activity, `SAGETV_PULL`, advancing hardware video/audio, no crash/exit, and restoration of all 103 preferences. The exact-path MCP verifier was narrowed to wait through only the named reconnect state; its 18 focused playback-health tests pass. Added the workspace-wide impact-based release rule: rerun affected gates by default and full matrices only by explicit request or documented broad-change necessity. |
 | 81 | 2026-09-28 | Added the missing persistent `Deinterlace` selector to Fixed Transcoding Settings. Its saved Auto/On/Off value is the baseline sent to each new plugin-owned Direct Transcode session; the live Video-menu selection remains an explicit current-session override. The settings-preserving APK build passed, was installed on non-Pro `.25`, and the physical preference screen showed the selector and current Auto value. All 575 Android/source tests, 99 MCP tests, Core JUnit, the strict validator, the 1,483-file manifest, and diff checks pass. |
 | 80 | 2026-09-28 | Added and physically validated Fixed/MIM deinterlace Auto/On/Off. Direct Transcode with Off reached full-GPU VAAPI on Linux `.232` and full-GPU QSV on Windows `.185`; non-Pro `.25` passed owned startup, hardware decode, seek, pause/resume, and crash gates on both. Fixed a Linux-only duplicate-caption race by reapplying the server-published STV CC state when Fixed side-channel evidence arrives and disabling the preserved local CEA renderer. Event-225 CC1/CC2/Off cycling and visual CC1/Off evidence pass with empty local cue state, clean teardown, zero orphan sessions/processes, and all 102 settings restored. Windows AC standby was restored to 10 minutes and only the two verified deinterlace staging files were removed. |

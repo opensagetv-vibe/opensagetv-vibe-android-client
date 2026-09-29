@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client handoff
 
-## Direct late-fallback checkpoint (2026-09-29)
+## v0.5.96 public release (2026-09-29)
 
 The remaining MIMFIX-003 late-start black-screen gap is closed. If Direct
 session creation fails and the original exposed Pull source also fails before
@@ -34,6 +34,12 @@ affected MCP/ADB/playback-health tests, eight changed Java policy/client test
 classes, and the Core MiniDVDPlayer compile/test boundary. The unrelated full
 device and legacy DVD matrices remain deferred rather than being represented
 as rerun for this release.
+
+The public v0.5.96 release contains the versioned APK, source archive, review
+bundle, release manifest, and SHA-256 list with bullet-formatted release notes.
+Every downloaded asset matches its local hash, current repository and Pages
+workflows pass, the latest-release API returns v0.5.96, and the permanent Pages
+download endpoint returns HTTP 200.
 
 ## Direct full-hardware/deinterlace checkpoint (2026-09-28)
 
