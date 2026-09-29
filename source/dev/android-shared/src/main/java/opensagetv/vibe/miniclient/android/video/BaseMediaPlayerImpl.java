@@ -383,7 +383,11 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
         String effectiveUrl = urlString;
         mimDirectMediaUrlActive = false;
-        String directUrl = mimDirectController().open(this, urlString);
+        // Preserve Core's active/growing declaration at the server-owned
+        // transport boundary. MIM uses it for follow/probe/live decode policy;
+        // omitting it can let a newly tuned TS hit its current edge during GPU
+        // startup and expose a short undecodable segment.
+        String directUrl = mimDirectController().open(this, urlString, timeshifted);
         if (directUrl != null)
         {
             effectiveUrl = directUrl;
@@ -1332,6 +1336,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             return true;
         final String replacementUrl = mimDirectController().restart(this, timeInMS);
         if (replacementUrl == null) return false;
+        if (mimDirectController().lastRestartWasClamped(this))
+            PlaybackDebugTrap.record("seek_clamped_live_edge", this);
         final long rebindGeneration = ++mimDirectRebindGeneration;
         fixedCaptionAttached = fixedCaptionController().attach(
                 this, fixedCaptionBridge);

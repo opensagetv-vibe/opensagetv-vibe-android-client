@@ -7,6 +7,10 @@ import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.text;
 import android.content.Context;
 import android.content.Intent;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+
 import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
@@ -19,6 +23,18 @@ import opensagetv.vibe.miniclient.uibridge.EventRouter;
 /** Synchronous debug-only player controls with the existing wire contract. */
 final class DebugPlayerCommands
 {
+    private static final ExecutorService OWNED_SEEK_EXECUTOR =
+            Executors.newSingleThreadExecutor(new ThreadFactory()
+            {
+                @Override public Thread newThread(Runnable task)
+                {
+                    Thread thread = new Thread(task,
+                            "vibe-debug-owned-seek");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+            });
+
     private DebugPlayerCommands()
     {
     }
@@ -54,12 +70,13 @@ final class DebugPlayerCommands
         long beforePlayerMs = currentPlayerPositionMs(mediaCmd, player);
         long beforeTimelineMs = currentSageTimelineMs(mediaCmd, player);
         long targetPlayerMs = Math.max(0, beforePlayerMs + deltaMs);
-        player.seek(targetPlayerMs);
+        boolean queued = dispatchSeek(context, player, targetPlayerMs);
         return "op=seek_relative;deltaMs=" + deltaMs
                 + ";beforePlayerMs=" + beforePlayerMs
                 + ";beforeTimelineMs=" + beforeTimelineMs
                 + ";targetPlayerMs=" + targetPlayerMs
-                + ";accepted=true;inputPath=android_debug_direct_player_seek";
+                + ";accepted=true;queued=" + queued
+                + ";inputPath=android_debug_direct_player_seek";
     }
 
     static String frameStep(Context context, Intent intent)
@@ -231,13 +248,37 @@ final class DebugPlayerCommands
             throw new IllegalArgumentException("target_ms must be >= 0");
         long beforePlayerMs = currentPlayerPositionMs(mediaCmd, player);
         long beforeTimelineMs = currentSageTimelineMs(mediaCmd, player);
-        player.seek(targetMs);
+        boolean queued = dispatchSeek(context, player, targetMs);
         return "op=" + safe(operation)
                 + ";targetMs=" + targetMs
                 + ";beforePlayerMs=" + beforePlayerMs
                 + ";beforeTimelineMs=" + beforeTimelineMs
                 + ";accepted=true"
+                + ";queued=" + queued
                 + ";note=debug_local_player_seek_time";
+    }
+
+    private static boolean dispatchSeek(Context context,
+                                        final MiniPlayerPlugin player,
+                                        final long targetMs)
+    {
+        // BroadcastReceiver callbacks run on Android's main thread. Ordinary
+        // player seeks are safe there, but an owned MIM seek first performs a
+        // bounded HTTP replacement request. Dispatch only that network-backed
+        // path to the same ordered worker semantics as a real MiniClient media
+        // command so the physical harness cannot create a false
+        // NetworkOnMainThreadException.
+        if (!MiniclientApplication.get(context).getMimDirectSession()
+                .owns(player))
+        {
+            player.seek(targetMs);
+            return false;
+        }
+        OWNED_SEEK_EXECUTOR.execute(new Runnable()
+        {
+            @Override public void run() { player.seek(targetMs); }
+        });
+        return true;
     }
 
     static String fastSwitchFile(Context context, Intent intent)

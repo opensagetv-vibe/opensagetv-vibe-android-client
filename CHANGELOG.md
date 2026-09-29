@@ -2,6 +2,17 @@
 
 ## v0.5.96 - 2026-09-29
 
+- Fixed MIM Direct active/growing playback and timeline anchoring. The client
+  sends the existing timeshifted state to the optional plugin, consumes the
+  plugin's effective seek offset instead of retaining an impossible request,
+  and reports a live-edge clamp across the owned-stream player rebuild. Debug
+  seek commands that may restart an owned producer now run off Android's
+  BroadcastReceiver main thread.
+- Physically validated only the affected `.232` / non-Pro `.25` gates: Direct
+  Transcode started with hardware video/audio, a 24-hour request clamped to the
+  playable live edge, REW moved about 29.8 seconds backward, FF moved about
+  6.5 seconds forward, and two channel changes retained `active_transcode`.
+  Teardown left zero plugin sessions and restored all 103 settings.
 - Rebuilt the release candidate with impact-based validation. The debug APK,
   debug/release-candidate AABs, and universal debug APK set pass Gradle,
   bundletool, source-contract, changed Java policy/client, and affected MCP

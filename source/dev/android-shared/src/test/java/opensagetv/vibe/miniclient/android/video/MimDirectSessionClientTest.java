@@ -51,12 +51,33 @@ public class MimDirectSessionClientTest
         assertTrue(MimDirectSessionClient.canRelease(null, new Object()));
     }
 
+    @Test public void directStartPreservesGrowingMediaState() throws Exception
+    {
+        String growing = MimDirectSessionClient.startRequestPath(
+                "/var/media/live.ts", "transcode", "off", true);
+        assertTrue(growing.contains("mode=transcode"));
+        assertTrue(growing.contains("deinterlace=off"));
+        assertTrue(growing.contains("active=true"));
+        assertTrue(growing.endsWith("startMs=0"));
+        assertTrue(MimDirectSessionClient.startRequestPath(
+                "/var/media/complete.ts", "copy", "auto", false)
+                .contains("active=false"));
+    }
+
     @Test public void onlyBoundedNonNegativeStartupSeekAgesAreAccepted()
     {
         assertTrue(MimDirectSessionClient.isStartupSeekAge(0L));
         assertTrue(MimDirectSessionClient.isStartupSeekAge(5_000_000_000L));
         assertFalse(MimDirectSessionClient.isStartupSeekAge(-1L));
         assertFalse(MimDirectSessionClient.isStartupSeekAge(5_000_000_001L));
+    }
+
+    @Test public void parsesEffectiveDirectSeekOffset()
+    {
+        assertEquals(56000L, MimDirectSessionClient.longValue(
+                "{\"requestedStartMs\":86400000,\"startMs\":56000}",
+                "startMs", -1L));
+        assertEquals(7L, MimDirectSessionClient.longValue("{}", "startMs", 7L));
     }
 
     @Test public void legacyIjkRetainsCopyButFallsBackFromDirectTranscode()

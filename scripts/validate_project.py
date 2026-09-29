@@ -408,6 +408,16 @@ def main() -> int:
             # generation guard, 24-check bound, consecutive-sample rule, and
             # one-toggle limit remain authoritative.
             "411cd77d75b5692fe45dd07d9c6004524846ea34709aee7aad41d893e68709d0",
+            # Reviewed Direct growing-source propagation. The existing
+            # SageTV active/timeshifted declaration is passed only to the
+            # optional MIM Direct session so its server-side follower and
+            # live decoder policy match the media Core actually opened.
+            "09e0b084e3bf3c147cbea6716866d453bf6a37b6521d7d94962caa3cc729a63c",
+            # Reviewed MIM Direct live-edge clamp evidence. The plugin's
+            # effective seek offset is retained as the timeline anchor and
+            # the existing debug trace records when it differs from SageTV's
+            # requested position; ordinary player seeks are unchanged.
+            "e02435aa0f010e691efa29c7e631b5116b58cf947149d69c05361e9a76760448",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **86** (2026-09-29)
+Checklist revision: **87** (2026-09-29)
 
 ## Stable checklist rules
 
@@ -770,8 +770,12 @@ explicitly approves publication after the active hardware phases.
   - [x] Run DVD owned-stream failure gates with the plugin unavailable and with
     deliberate session-start/runtime failure. Preserve menu/control authority
     and fall back safely without a crash, black screen, or lost session.
-  - [ ] Complete clean stock-Windows, legacy-client/extender, growing-media,
-    channel/program-transition, and remaining codec/caption lifecycle rows.
+  - [x] Complete the Linux growing-media and channel-transition row. Non-Pro
+    `.25` / `.232` passed active Direct Transcode startup, hardware A/V, a
+    bounded 24-hour live-edge request, REW/FF recovery, two channel changes,
+    retained ownership, clean teardown, and 103-setting restoration.
+  - [ ] Complete clean stock-Windows, legacy-client/extender, and remaining
+    codec/caption lifecycle rows.
 - [x] **GH-009 - Publish v0.5.96 Direct fallback update.** Build and inspect
   the affected APK/AAB boundaries, run only impacted source/MCP/player/Core
   gates, publish the APK/source/manifest/review assets with bullet-formatted
@@ -844,6 +848,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 87 | 2026-09-29 | Closed the Linux MIMFIX-003 growing/transition row with impact-only validation. The plugin now receives active-file state, retries one stale active hint, rejects incomplete/unreadable startup media, accepts valid duplicate MPEG-TS FFprobe records, and returns an effective bounded live-edge offset. Non-Pro `.25` / `.232` passed hardware Direct Transcode startup, a 24-hour live-edge clamp, REW/FF recovery, two owned channel transitions, zero-session teardown, and restoration of all 103 settings. |
 | 86 | 2026-09-29 | Ran only the focused clean-Windows DVD ownership boundary instead of repeating the completed Windows/general or Linux/device matrices. Stock-Core `.185` started the authored DVD through the Core-MCP `Watch` path, but did not negotiate `DVD_DISC_*`; the client correctly remained native hardware MPEG-2 with `discTransformedTransport=false`. The no-false-pass gate rejected the 0.168x native cadence as not being plugin-owned Direct Transcode, restored all 103 settings, and leaves the Windows DVD portion explicitly open without weakening the already-passed ordinary-video QSV Direct result. |
 | 85 | 2026-09-29 | Closed the DVD-specific MIMFIX-003 failure row. Against unmodified stock `.175` with no FFmpeg plugin, a requested Direct Copy reported `unavailable_stock_fixed`, retained native hardware-decoded MPEG-2, and passed authored menu activation plus pause/resume. On `.232`, a guarded DVD-only provider shim first exited before input and then, in a separate gate, consumed 2 MiB before failing; both conditions set `discTransformRuntimeFallback`, restored native MPEG-2 with advancing A/V and working pause/resume, produced no crash/black screen, and restored all 103 settings. The original MIM executable was restored at mode 755 and its exact SHA-256 reverified. |
 | 84 | 2026-09-29 | Closed the four locally executable MIMFIX-003 owned-DVD success rows on non-Pro `.25` / `.232`. Direct Copy passed authored root/submenu highlight and repeated navigation, menu/title/return transitions, main-title STOP/restart, chapters, repeated FF/REW, exact seek, pause/resume, and clean session reuse. STV-issued track commands selected Spanish audio `48513`, English subpicture `64`, Spanish `65`, then Spanish-off `129` without changing audio, with A/V recovery after every flush/reseek. Direct Copy reported execution path `copy`; Direct Transcode reported `full_gpu`, transport `dvd_mim_transcode_v1`, AVC output, 1.009x 30-second cadence with advancing video/audio, clean STOP, and restoration of all 103 settings. Per release policy, these were the affected DVD gates; no unrelated full matrix was rerun. |

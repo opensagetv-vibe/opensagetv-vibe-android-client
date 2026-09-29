@@ -33,6 +33,8 @@ public final class MimDirectSessionClient
     private static final long REDUNDANT_STARTUP_SEEK_NS = 5_000_000_000L;
     private static final Pattern STRING_FIELD = Pattern.compile(
             "\\\"%s\\\"\\s*:\\s*\\\"([^\\\"\\r\\n]*)\\\"");
+    private static final Pattern LONG_FIELD = Pattern.compile(
+            "\\\"%s\\\"\\s*:\\s*(-?[0-9]+)");
 
     private final Object lock = new Object();
     /**
@@ -58,6 +60,7 @@ public final class MimDirectSessionClient
     private String sessionToken = "";
     private Object owner;
     private long startOffsetMs;
+    private boolean lastRestartClamped;
     private long openedAtNanos;
     private long lifecycleGeneration;
     /** One connection-scoped escape hatch; never changes the saved preference. */
@@ -149,6 +152,12 @@ public final class MimDirectSessionClient
     /** Create an owned stream for an original SageTV source path. */
     public String open(Object playbackOwner, String sourceUrl)
     {
+        return open(playbackOwner, sourceUrl, false);
+    }
+
+    /** Create an owned stream and preserve SageTV's growing-file declaration. */
+    public String open(Object playbackOwner, String sourceUrl, boolean active)
+    {
         String source = serverPath(sourceUrl);
         final String base;
         final String mode;
@@ -188,9 +197,7 @@ public final class MimDirectSessionClient
                 }
             }
             String deinterlace = currentDeinterlace();
-            String path = "/v1/direct/start?source=" +
-                    URLEncoder.encode(source, "UTF-8") + "&mode=" + mode +
-                    "&deinterlace=" + deinterlace + "&startMs=0";
+            String path = startRequestPath(source, mode, deinterlace, active);
             Response response = request("POST", base, path, 1500, 20000);
             if (response.status != 200) throw new IOException("direct start rejected");
             String token = token(response.body, "sessionToken");
@@ -315,6 +322,16 @@ public final class MimDirectSessionClient
                 ? normalized : "auto";
     }
 
+    static String startRequestPath(String source, String mode,
+                                   String deinterlace, boolean active)
+            throws IOException
+    {
+        return "/v1/direct/start?source=" +
+                URLEncoder.encode(source, "UTF-8") + "&mode=" + mode +
+                "&deinterlace=" + deinterlace + "&active=" + active +
+                "&startMs=0";
+    }
+
     private static String currentDeinterlace()
     {
         return normalizedDeinterlace(
@@ -346,6 +363,7 @@ public final class MimDirectSessionClient
             if (!canRelease(owner, playbackOwner)) return;
             base = baseUrl; token = sessionToken;
             owner = null; sessionToken = ""; startOffsetMs = 0L;
+            lastRestartClamped = false;
             openedAtNanos = 0L;
             lifecycleGeneration++;
             releaseGeneration = lifecycleGeneration;
@@ -396,6 +414,8 @@ public final class MimDirectSessionClient
                     throw new IOException("direct restart rejected");
                 String replacementToken = token(response.body, "sessionToken");
                 String media = stringValue(response.body, "mediaUrl", "");
+                long effectiveStartMs = longValue(response.body, "startMs",
+                        Math.max(0L, requestedStartMs));
                 String captionToken = optionalToken(response.body,
                         "captionSessionToken");
                 if (!media.startsWith("/v1/direct/media/"))
@@ -408,7 +428,8 @@ public final class MimDirectSessionClient
                     if (accepted)
                     {
                         sessionToken = replacementToken;
-                        startOffsetMs = Math.max(0L, requestedStartMs);
+                        startOffsetMs = Math.max(0L, effectiveStartMs);
+                        lastRestartClamped = startOffsetMs != Math.max(0L, requestedStartMs);
                         openedAtNanos = System.nanoTime();
                     }
                 }
@@ -483,6 +504,11 @@ public final class MimDirectSessionClient
     public boolean owns(Object playbackOwner)
     {
         synchronized (lock) { return owner == playbackOwner && !sessionToken.isEmpty(); }
+    }
+
+    public boolean lastRestartWasClamped(Object playbackOwner)
+    {
+        synchronized (lock) { return owner == playbackOwner && lastRestartClamped; }
     }
 
     public long adjustPosition(Object playbackOwner, long playerPositionMs)
@@ -570,6 +596,15 @@ public final class MimDirectSessionClient
         Matcher matcher = Pattern.compile(String.format(STRING_FIELD.pattern(),
                 Pattern.quote(name))).matcher(body == null ? "" : body);
         return matcher.find() ? matcher.group(1) : fallback;
+    }
+
+    static long longValue(String body, String name, long fallback)
+    {
+        Matcher matcher = Pattern.compile(String.format(LONG_FIELD.pattern(),
+                Pattern.quote(name))).matcher(body == null ? "" : body);
+        if (!matcher.find()) return fallback;
+        try { return Long.parseLong(matcher.group(1)); }
+        catch (NumberFormatException invalid) { return fallback; }
     }
 
     private static Response request(String method, String base, String path,

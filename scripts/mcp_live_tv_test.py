@@ -49,6 +49,32 @@ def tune_channel(client: MCPProcess, channel: str, timeout_s: float, verify_ms: 
     return result
 
 
+def require_mim_direct_ownership(client: MCPProcess, mode: str, label: str) -> dict:
+    """Reject a healthy-looking stock fallback when Direct ownership is required."""
+    state = call_dict(client, "dev_player_state", timeout=30.0)
+    expected_state = "active_" + mode
+    accepted_states = {expected_state, expected_state + "_startup_seek_suppressed"}
+    data_source = str(state.get("health_dataSourceClass", ""))
+    failures: list[str] = []
+    if str(state.get("mimDirectNegotiatedMode", "")) != mode:
+        failures.append("negotiated=" + str(state.get("mimDirectNegotiatedMode", "")))
+    if str(state.get("mimDirectSessionState", "")) not in accepted_states:
+        failures.append("session=" + str(state.get("mimDirectSessionState", "")))
+    if str(state.get("playbackSource", "")) != "MIM_DIRECT":
+        failures.append("source=" + str(state.get("playbackSource", "")))
+    if not data_source.endswith("Media3MimDirectHttpDataSource"):
+        failures.append("dataSource=" + data_source)
+    require(
+        not failures,
+        f"{label} did not retain MIM Direct {mode} ownership: " + ", ".join(failures),
+    )
+    print(
+        f"PASS: {label} retained MIM Direct {mode} ownership "
+        f"({state.get('mimDirectSessionState')})"
+    )
+    return state
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android server-driven live-TV physical gate")
     parser.add_argument("--server-address", default=default_server_address())
@@ -62,6 +88,23 @@ def main() -> int:
     )
     parser.add_argument("--streaming", choices=("dynamic", "pull", "fixed"), default="pull")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
+    parser.add_argument(
+        "--mim-direct-mode",
+        choices=("off", "copy", "transcode"),
+        default="off",
+        help="Optional FFmpeg-plugin-owned Fixed transport policy",
+    )
+    parser.add_argument(
+        "--mim-direct-deinterlace",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="MIM-owned Transcode deinterlace policy",
+    )
+    parser.add_argument(
+        "--require-mim-direct-owned",
+        action="store_true",
+        help="Fail if Live TV falls back from the requested plugin-owned HTTP session",
+    )
     add_fixed_encoding_args(parser)
     configured_channels = ",".join(default_test_value("live_channels", ["2.1", "5.1"]))
     parser.add_argument("--channels", type=parse_channels, default=parse_channels(configured_channels),
@@ -100,6 +143,12 @@ def main() -> int:
     args.channel_changes = max(0, min(args.channel_changes, 10))
     if args.current_channel_only and args.channel_changes:
         parser.error("--current-channel-only cannot be combined with --channel-changes")
+    if args.require_mim_direct_owned and args.mim_direct_mode == "off":
+        parser.error("--require-mim-direct-owned requires --mim-direct-mode copy or transcode")
+    if args.require_mim_direct_owned and args.streaming != "fixed":
+        parser.error("--require-mim-direct-owned requires --streaming fixed")
+    if args.require_mim_direct_owned and args.player != "media3":
+        parser.error("strict owned-transport proof currently requires --player media3")
     fixed_config = fixed_config_from_args(args)
     try:
         validate_fixed_config(fixed_config)
@@ -122,6 +171,8 @@ def main() -> int:
             "decoding": args.decoding,
             "gsy_engine": args.gsy_engine,
             "gsy_system_probe": args.gsy_system_probe,
+            "mim_direct_mode": args.mim_direct_mode,
+            "mim_direct_deinterlace": args.mim_direct_deinterlace,
             **fixed_config,
         })
         call_dict(client, "dev_connect_server", {
@@ -171,6 +222,9 @@ def main() -> int:
         wait_for_av(client, args.timeout_s, args.verify_ms)
         print("PASS: Live TV is visibly promoted to the stable full-screen playback destination")
 
+        if args.require_mim_direct_owned:
+            require_mim_direct_ownership(client, args.mim_direct_mode, "initial Live TV session")
+
         active_state = call_dict(client, "dev_player_state", timeout=30.0)
         if args.player == "gsyplayer" and args.gsy_engine == "system" and args.gsy_system_probe:
             backend_class = str(active_state.get("health_backendClass", ""))
@@ -214,7 +268,10 @@ def main() -> int:
                     "commands": [command],
                     "expected_net_ms": expected_ms,
                     "tolerance_ms": 30_000,
-                    "recovery_timeout_ms": min(60_000, int(args.timeout_s * 1000)),
+                    # The debug receiver reserves a 45-second ordered-broadcast
+                    # budget so Fire OS can always deliver its result. Keep the
+                    # requested recovery window below that hard device limit.
+                    "recovery_timeout_ms": min(40_000, int(args.timeout_s * 1000)),
                     "verify_playback_ms": args.verify_ms,
                 }, timeout=min(60.0, args.timeout_s) + 30.0)
                 require(bool(result.get("passed")),
@@ -232,6 +289,12 @@ def main() -> int:
         for iteration in range(1, args.channel_changes + 1):
             channel = args.channels[iteration % len(args.channels)]
             tune_channel(client, channel, args.timeout_s, args.verify_ms)
+            if args.require_mim_direct_owned:
+                require_mim_direct_ownership(
+                    client,
+                    args.mim_direct_mode,
+                    f"channel transition {iteration}/{args.channel_changes}",
+                )
             print(f"PASS: live channel change {iteration}/{args.channel_changes} to {channel}")
 
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)

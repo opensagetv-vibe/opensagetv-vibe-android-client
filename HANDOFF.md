@@ -1,5 +1,25 @@
 # OpenSageTV Vibe Android Client handoff
 
+## MIM Direct growing-stream checkpoint (2026-09-29)
+
+The Android client now propagates SageTV's existing timeshifted state to the
+optional MIM Direct start request and uses the plugin-returned effective seek
+offset as its timeline anchor. An out-of-range growing seek therefore no longer
+leaves SageTV at the impossible requested time after the owned HLS
+representation is rebuilt. The existing playback trace records the clamp, and
+the debug-only exact-seek receiver dispatches an owned producer restart off the
+BroadcastReceiver main thread. Ordinary player seeks and stock/plugin-absent
+fallback behavior are unchanged.
+
+The focused physical gates pass on non-Pro `.25` against `.232`: Media3 Direct
+Transcode produced hardware H.264 plus advancing AC-3, clamped a 24-hour seek
+to playable live media and recovered, then a separate bounded run proved REW
+(-29,807 ms), FF (+6,463 ms), and two 5.1/2.1 channel transitions while every
+stage retained `active_transcode`. The harness restored all 103 settings and
+the plugin ended with zero active sessions. The tested debug APK SHA-256 is
+`78661e9f899e6cf96b46f8a30365725ff95d28c5b3599804028c9756611345ea`.
+Only affected tests were run; no unrelated full matrix was repeated.
+
 ## Owned-stream DVD success-gate checkpoint (2026-09-29)
 
 The four locally executable MIMFIX-003 owned-DVD success rows now pass on the
