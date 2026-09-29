@@ -1,5 +1,14 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.97 release preparation (2026-09-29)
+
+Version 0.5.97 packages the already-validated MIM Direct growing-stream client
+fix described below. Release validation is intentionally impact-based: the
+affected source contracts, MIM Direct client tests, MCP playback-health tests,
+manifest, clean APK build, strict APK inspection, and independent source
+archive gate are required; unrelated completed device/DVD matrices remain
+retained evidence rather than being rerun.
+
 ## MIM Direct growing-stream checkpoint (2026-09-29)
 
 The Android client now propagates SageTV's existing timeshifted state to the

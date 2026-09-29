@@ -781,6 +781,11 @@ explicitly approves publication after the active hardware phases.
   gates, publish the APK/source/manifest/review assets with bullet-formatted
   notes, verify every downloaded hash and successful repository/Pages checks,
   and confirm the latest-release API plus permanent downloader endpoint.
+- [ ] **GH-010 - Publish v0.5.97 growing-stream update.** Package the validated
+  MIM Direct active/growing client correction, run only its affected
+  source/MCP/player/build/archive gates, publish the versioned APK and source
+  assets with grouped bullet notes, and verify public hashes, repository and
+  Pages checks, the latest-release API, and permanent downloader endpoint.
 
 ## 5. Deferred cross-device matrix after GitHub release publication
 

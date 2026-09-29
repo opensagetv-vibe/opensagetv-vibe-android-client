@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.97 - 2026-09-29
+
+- Fixed plugin-owned Direct Transcode for active and growing recordings. The
+  client now propagates SageTV's existing timeshifted state, adopts the
+  plugin-returned effective seek anchor after a bounded live-edge clamp, and
+  keeps owned producer restarts off Android's broadcast main thread.
+- Physically validated the affected non-Pro Fire TV and Linux `.232` path with
+  hardware H.264/AC-3 startup, an out-of-range 24-hour seek clamped to playable
+  media, REW/FF recovery, two channel transitions, clean teardown, and exact
+  restoration of all 103 client settings.
+- Retains stock-server and plugin-absent fallback behavior. No private Core
+  event or mandatory `Sage.jar` change was added, and unrelated completed
+  device/DVD matrices were not rerun under the impact-based release policy.
+
 ## v0.5.96 - 2026-09-29
 
 - Fixed MIM Direct active/growing playback and timeline anchoring. The client
