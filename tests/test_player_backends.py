@@ -213,6 +213,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # This lets the player route preserved Teletext packets through the
         # existing caption bridge without observing unrelated HTTP media.
         reviewed_mim_direct_segment_observer_hash = "288aeb3e3273e2def32e35f5a1043d768669b438e8cb8358a5119a670eee2fd1"
+        # The plugin-returned effective offset is now the timeline anchor for
+        # an owned live-edge rebuild. The trace records only a proven clamp;
+        # ordinary player seek behavior and stock fallback are unchanged.
+        reviewed_mim_direct_live_edge_hash = "e02435aa0f010e691efa29c7e631b5116b58cf947149d69c05361e9a76760448"
         # Clears old geometry before queuing a replacement but preserves a
         # new-generation SETVIDEORECT that arrives while the UI-thread release
         # is pending. This prevents Direct playback from remaining in SageTV's
@@ -260,6 +264,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_direct_stv_single_renderer_hash,
             reviewed_mim_direct_stock_fixed_reconnect_hash,
             reviewed_mim_direct_segment_observer_hash,
+            reviewed_mim_direct_live_edge_hash,
             reviewed_load_rectangle_race_hash,
         }, rel)
 
