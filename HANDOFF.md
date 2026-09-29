@@ -1,5 +1,59 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Owned-stream DVD success-gate checkpoint (2026-09-29)
+
+The four locally executable MIMFIX-003 owned-DVD success rows now pass on the
+non-Pro Fire TV `.25` against Vibe server `.232`. Direct Copy exercised the
+authored root and Languages submenu, highlight placement, activation, repeated
+entry, returns, menu/title transitions, and end-of-title behavior. Main-title
+controls passed STOP/restart, chapter next/previous, repeated FF/REW, exact
+seek, pause/resume, and a fresh playback after clean teardown without a stale
+session or incorrect timeline landing.
+
+STV-issued DVD commands selected Spanish audio selector `48513`, English
+subpicture `64`, Spanish `65`, and Spanish-off `129`; audio remained `48513`
+through every subtitle selection. Each server flush/reseek recovered advancing
+video and audio, while DVD sample diagnostics retained timestamp/sync evidence.
+Direct Copy reported `copy` and `dvd_mim_copy_v1`. Direct Transcode reported
+`full_gpu` and `dvd_mim_transcode_v1`, exposed AVC to Android hardware decode,
+and completed a 30-second cadence gate at 1.009x real time with 937 additional
+video outputs and 977 additional audio outputs. Every run stopped cleanly and
+restored all 103 private client settings.
+
+Evidence is retained under `artifacts/firetv/` as
+`mimfix003-dvd-menu-direct-copy-20260929.json`,
+`mimfix003-dvd-controls-direct-copy-20260929.json`,
+`mimfix003-dvd-stop-restart-direct-copy-20260929.json`,
+`mimfix003-dvd-audio-subpicture-authority-direct-copy-pass-20260929.json`, and
+`mimfix003-dvd-direct-transcode-cadence-20260929.json`.
+
+The DVD-specific failure/fallback row also passes. With the plugin unavailable
+on unmodified stock `.175`, Direct Copy reported `unavailable_stock_fixed` and
+native hardware MPEG-2 retained menu activation plus pause/resume. On `.232`,
+a guarded DVD-only provider shim separately failed before input and after
+consuming 2 MiB. Both failures set the runtime-fallback diagnostic, restored
+native MPEG-2 with advancing A/V and working pause/resume, and avoided a crash,
+black screen, or lost session. The original MIM executable was restored at
+mode 755 and its exact SHA-256 was reverified. Failure evidence is
+`mimfix003-dvd-plugin-unavailable-stock-fallback-20260929.json`,
+`mimfix003-dvd-provider-start-failure-fallback-20260929.json`, and
+`mimfix003-dvd-provider-runtime-failure-fallback-20260929.json` in the same
+artifact directory. The broader Windows/legacy/growing/transition row remains
+open. Release validation continues to rerun only affected gates unless a full
+matrix is explicitly requested.
+
+A focused follow-up on clean stock-Core Windows `.185` proved the boundary that
+must remain open: the authored DVD starts through the stock-compatible Core-MCP
+`Watch` path, but an old Core never queries the optional `DVD_DISC_*` contract.
+The session therefore remained native DVD Push (`discTransformedTransport=false`,
+hardware MPEG-2) even when Direct Transcode was requested. The no-false-pass
+cadence gate rejected it at 0.168x instead of reporting plugin ownership. This
+does not invalidate the already-passed Windows QSV Direct gate for ordinary
+video; it proves that plugin-owned DVD transport still requires the negotiated
+Core DVD contract or a future stock-compatible design. Evidence is
+`mimfix003-windows-dvd-direct-transcode-20260929.json`. Client settings were
+restored after the failed gate.
+
 ## v0.5.96 public release (2026-09-29)
 
 The remaining MIMFIX-003 late-start black-screen gap is closed. If Direct
