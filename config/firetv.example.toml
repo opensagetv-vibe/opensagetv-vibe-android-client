@@ -55,6 +55,7 @@ web_control_mode = "none"
 vibe_sage_jar = true
 vibe_mim = true
 vibe_ffmpeg = true
+ffmpeg_plugin_api_port = 31910
 # Optional stock-API control plugin. When enabled, the commissioning MCP uses
 # this authenticated bridge before Sagex/Web or private MiniClient test events.
 core_mcp_enabled = false

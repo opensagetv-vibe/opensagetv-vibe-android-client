@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import java.io.File;
+import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 
@@ -64,6 +65,13 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("config".equals(op))
             {
                 ok(DebugPlayerConfigCommands.configure(context, intent));
+            }
+            else if ("mim_direct_late_fallback_fault".equals(op))
+            {
+                boolean enabled = parseBoolean(clean(intent.getStringExtra("enabled")), true);
+                ok("op=mim_direct_late_fallback_fault;" + MiniclientApplication
+                        .get(context).getMimDirectSession()
+                        .setDebugLateFallbackFailure(enabled));
             }
             else if ("settings_checkpoint".equals(op))
             {
@@ -188,6 +196,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("subtitle_control".equals(op))
             {
                 ok(DebugPlayerCommands.subtitle(context, intent));
+            }
+            else if ("caption_mode".equals(op))
+            {
+                ok(DebugPlayerCommands.captionMode(context, intent));
             }
             else if ("audio_adjustment".equals(op))
             {

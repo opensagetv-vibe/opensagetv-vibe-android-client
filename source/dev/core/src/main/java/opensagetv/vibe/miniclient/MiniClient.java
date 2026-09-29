@@ -53,6 +53,7 @@ public class MiniClient
     private ExecutorService backgroundService = null;
     private ServerInfo connectedServer;
     private ImageCache imageCache;
+    private volatile String mimDirectTransportMode = MimDirectTransportPolicy.OFF;
 
     public MiniClient(MiniClientOptions options, ILogger logger)
     {
@@ -72,6 +73,17 @@ public class MiniClient
 
     public ServerInfo getConnectedServerInfo() {
         return connectedServer;
+    }
+
+    public void setMimDirectTransportMode(String mode)
+    {
+        mimDirectTransportMode = MimDirectTransportPolicy.isActive(mode)
+                ? mode : MimDirectTransportPolicy.OFF;
+    }
+
+    public String getMimDirectTransportMode()
+    {
+        return mimDirectTransportMode;
     }
 
     /**

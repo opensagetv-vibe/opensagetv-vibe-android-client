@@ -136,7 +136,7 @@ final class DebugStateProvider
                 && popupName.isEmpty()
                 && "Main Menu".equalsIgnoreCase(menuName);
         int imeVisibility = UIActivityLifeCycleHandler.getImeVisibilityForDebug();
-        out.append(";debugStatusVersion=21");
+        out.append(";debugStatusVersion=22");
         out.append(";maxRecoveryWatchdogMs=").append(maxRecoveryWatchdogMs);
         out.append(";uiState=").append(uiState);
         out.append(";automationReady=").append(automationReady);
@@ -167,6 +167,18 @@ final class DebugStateProvider
                 .append(DisplayRefreshController.getPendingRefreshMs());
         out.append(';').append(ConnectionLifecycleDiagnostics.latestCompactWire());
         out.append(';').append(MiniclientApplication.get().getBackgroundSessionOwner().compactWire());
+        out.append(";fixedCaptionSideChannelState=").append(safe(
+                MiniclientApplication.get().getFixedCaptionSideChannel()
+                        .stateForDiagnostics()));
+        out.append(";mimDirectRequestedMode=").append(safe(
+                prefs.getString(PrefStore.Keys.mim_direct_mode, "off")));
+        out.append(";mimDirectDeinterlace=").append(safe(
+                prefs.getString(PrefStore.Keys.mim_direct_deinterlace, "auto")));
+        out.append(";mimDirectNegotiatedMode=").append(safe(
+                client == null ? "" : client.getMimDirectTransportMode()));
+        out.append(";mimDirectSessionState=").append(safe(
+                MiniclientApplication.get().getMimDirectSession()
+                        .stateForDiagnostics()));
 
         // The DVD server VM can wait or loop before a player exists. Keep the
         // handshake visible in that exact failure state rather than hiding it
@@ -213,9 +225,20 @@ final class DebugStateProvider
                 if (delegate != null)
                     transportPlayer = delegate;
             }
-            boolean transformedTransport = transportPlayer instanceof BaseMediaPlayerImpl
-                    && ((BaseMediaPlayerImpl<?, ?>) transportPlayer)
-                            .isDvdTransformedTransportForDebug();
+            BaseMediaPlayerImpl<?, ?> dvdPlayer =
+                    transportPlayer instanceof BaseMediaPlayerImpl
+                            ? (BaseMediaPlayerImpl<?, ?>) transportPlayer : null;
+            boolean transformedTransport = dvdPlayer != null
+                    && dvdPlayer.isDvdTransformedTransportForDebug();
+            String ownedDvdMode = dvdPlayer == null ? ""
+                    : dvdPlayer.getDvdOwnedTransportModeForDebug();
+            out.append(";mimDvdOwnedState=").append(safe(ownedDvdMode.isEmpty()
+                    ? "" : "active_" + ownedDvdMode));
+            out.append(";mimDvdOwnedExecutionPath=").append(safe(
+                    "copy".equals(ownedDvdMode) ? "copy"
+                            : ownedDvdMode.isEmpty() ? "" : "pending"));
+            out.append(";mimDvdOwnedBytesRelayed=").append(
+                    ownedDvdMode.isEmpty() ? 0L : mediaCmd.getDvdPushedBytes());
             DiscPlaybackPolicy.Resolution disc = DiscPlaybackPolicy.resolve(
                     prefs.getString(PrefStore.Keys.disc_playback_policy, "auto"),
                     prefs.getBoolean(PrefStore.Keys.disc_compatibility_fallback, true),
@@ -657,6 +680,18 @@ final class DebugStateProvider
                         .append(base.getTeletextClockDrainCountForDebug());
                 out.append(";teletextClockLastMediaTimeMs=")
                         .append(base.getTeletextClockLastMediaTimeMsForDebug());
+                out.append(";fixedCaptionAttached=")
+                        .append(base.isFixedCaptionAttachedForDebug());
+                out.append(";fixedCaptionForwarding=")
+                        .append(base.isFixedCaptionForwardingForDebug());
+                out.append(";fixedCaptionClockUpdateCount=")
+                        .append(base.getFixedCaptionClockUpdateCountForDebug());
+                out.append(";fixedCaptionEvidenceRefreshCount=")
+                        .append(base.getFixedCaptionEvidenceRefreshCountForDebug());
+                out.append(";fixedCaptionEvidenceRefreshState=")
+                        .append(safe(base.getFixedCaptionEvidenceRefreshStateForDebug()));
+                out.append(";pendingServerSubpictureCommand=")
+                        .append(base.getPendingServerSubpictureCommandForDebug());
             }
             if (telemetryPlayer instanceof Media3MediaPlayerImpl)
             {
@@ -758,6 +793,12 @@ final class DebugStateProvider
                 + ";fixedAudioChannels=" + safe(audioChannels)
                 + ";fixedRemuxingPreference=" + safe(prefs.getFixedRemuxingPreference())
                 + ";fixedRemuxingFormat=" + safe(prefs.getFixedRemuxingFormat())
+                + ";fixedCaptionSideChannelEnabled="
+                + prefs.getBoolean(PrefStore.Keys.fixed_caption_side_channel_enabled, false)
+                + ";fixedCaptionSideChannelPort="
+                + prefs.getInt(PrefStore.Keys.fixed_caption_side_channel_port, 31910)
+                + ";mimDirectRequestedMode="
+                + safe(prefs.getString(PrefStore.Keys.mim_direct_mode, "off"))
                 + ";keepSessionInBackground="
                 + prefs.getBoolean(PrefStore.Keys.keep_session_in_background, false)
                 + ";resumeBackgroundPlayback="

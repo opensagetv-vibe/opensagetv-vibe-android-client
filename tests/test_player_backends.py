@@ -154,6 +154,70 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # over the pre-seek hold. This keeps rapid forward/backward seeks and
         # Commercial Skip chained from the newest server-selected position.
         reviewed_rapid_push_seek_anchor_hash = "b0325f89b65b004222699656d6cabf470b51e8560067effd9846edfebfce861d"
+        # Explicit Android Off/CC1/CC2/DVB selections remain client-owned
+        # after asynchronous track discovery; only STV mode follows the
+        # server's VIDEO_CC_STATE. Transport and player lifecycle are unchanged.
+        reviewed_local_caption_authority_hash = "ba481dbbfb8b90e9ae635991190b10a7de9ee63916982ba333fbd1fb9e5afb6b"
+        # Adds capability-gated ownership of a plugin-produced HLS media URL
+        # while the stock MiniClient connection remains authoritative for UI,
+        # watched state, and commands. The optional path is disabled unless
+        # Fixed plus Direct Copy/Transcode is explicitly selected and the
+        # plugin contract is proven before connection negotiation.
+        reviewed_mim_direct_transport_hash = "554fb67ccbb147d812b77f1726361d916e16d939c9b81ba1225e549bc1eee6ef"
+        # Suppresses only same-position startup seeks during the bounded MIM
+        # Direct open/restart window. Different or later seeks still rebuild
+        # the server-owned representation at the requested absolute time.
+        reviewed_mim_direct_startup_seek_hash = "1785d2a400d632ac33230bbe27eda69eed404204ba29520b4a47de3b137326bc"
+        # Direct Transcode now hands its already-claimed original-video
+        # caption tap to the existing caption bridge. GPU decode/filter/encode
+        # stays independent of extraction and no second slot is reserved.
+        reviewed_mim_direct_caption_tap_hash = "d6e887e3afa9ba3222bed7ab44685e5b77de5e53dfca4fba3365fb2e92fef9c9"
+        # Once the server commits a replacement Direct session, a following
+        # PLAY/PAUSE must not cancel the UI rebind and strand the player on the
+        # retired playlist. Newer seeks and newer sessions still supersede it.
+        reviewed_mim_direct_rebind_hash = "4989d92a5440bc7ba57fecdea6a491f332348ab605daa79c2986a0e1d7d4b032"
+        # Direct Transcode's claimed original-video caption bridge is also
+        # valid CEA evidence for Auto CC-slot selection. This avoids rejecting
+        # a real CEA track merely because the player-local extractor bridge is
+        # not the owner of the plugin's caption tap.
+        reviewed_mim_direct_caption_evidence_hash = "0851c8997972830bdd0c77d5c5459fd35c7ed5cd0af1058f672ccd80cddd9b5f"
+        # Track discovery can precede the first side-channel CEA packet. The
+        # first proven Direct CEA sample schedules one CC-slot refresh, with
+        # the guard reset at the established load/seek flush boundary.
+        reviewed_mim_direct_caption_evidence_refresh_hash = "add85e50b1a2d0a329a26835ee1a85087b8a8c6e0234c4164e99390949863457"
+        # Direct caption evidence can arrive before Media3 publishes its
+        # track inventory. Arm the one-shot refresh only after the configured
+        # slot resolves, so asynchronous discovery gets one safe retry.
+        reviewed_mim_direct_caption_inventory_refresh_hash = "b8d9c7151bc380fe4eeac72e614b2c00239c77fa79e61e5a1e1bcd5f8de5c5de"
+        # The decoder clock, rather than optional STV GETMEDIATIME polling,
+        # now drains both Teletext and Direct Fixed caption queues.
+        reviewed_independent_direct_caption_clock_hash = "2c9f64058ce252ec684c09bec9376ea682632bbe6135c6f1ebc796261230f7ee"
+        # Bounded, on-request diagnostics expose the Direct caption clock,
+        # evidence refresh, and competing subpicture command without adding
+        # playback callbacks or continuous logging.
+        reviewed_direct_caption_refresh_diagnostics_hash = "b9eebcfe5fb6e445619931bbb689ad31ae7b5836990685d14690921abadf7d82"
+        # When the authenticated Fixed side channel actively forwards CEA to
+        # SageTV event 225 in STV mode, disable the preserved media CEA track
+        # locally. The same evidence refresh also follows the server-published
+        # STV CC1/CC2 state; explicit Android modes and stock fallback retain
+        # their established renderer ownership.
+        reviewed_direct_stv_single_renderer_hash = "c87e135beda0d711e5f41de6303f06c8a4ea9e13af077bd6f8150343099cae09"
+        # Reviewed late Direct-start/Pull-start recovery. Before the first
+        # rendered frame only, a failed original Pull fallback posts one
+        # connection-level request that renegotiates ordinary stock Fixed.
+        # The saved Direct preference is unchanged and the controller prevents
+        # a reconnect loop.
+        reviewed_mim_direct_stock_fixed_reconnect_hash = "395593645c2a5a8bacb151853cf98e45196cc71a14e7e8d6535ed58a2fb6a7f9"
+        # Direct MIM HLS segments now identify their playback source while
+        # retaining the same bounded diagnostics and lifecycle behavior.
+        # This lets the player route preserved Teletext packets through the
+        # existing caption bridge without observing unrelated HTTP media.
+        reviewed_mim_direct_segment_observer_hash = "288aeb3e3273e2def32e35f5a1043d768669b438e8cb8358a5119a670eee2fd1"
+        # Clears old geometry before queuing a replacement but preserves a
+        # new-generation SETVIDEORECT that arrives while the UI-thread release
+        # is pending. This prevents Direct playback from remaining in SageTV's
+        # embedded preview on backends with slower asynchronous replacement.
+        reviewed_load_rectangle_race_hash = "69d4ad1fe65168340dceee60ff479c56543c871ac46f564eae6202c3e7c62ce1"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -183,6 +247,20 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_dvd_transform_transport_hash,
             reviewed_push_flush_timeline_hash,
             reviewed_rapid_push_seek_anchor_hash,
+            reviewed_local_caption_authority_hash,
+            reviewed_mim_direct_transport_hash,
+            reviewed_mim_direct_startup_seek_hash,
+            reviewed_mim_direct_caption_tap_hash,
+            reviewed_mim_direct_rebind_hash,
+            reviewed_mim_direct_caption_evidence_hash,
+            reviewed_mim_direct_caption_evidence_refresh_hash,
+            reviewed_mim_direct_caption_inventory_refresh_hash,
+            reviewed_independent_direct_caption_clock_hash,
+            reviewed_direct_caption_refresh_diagnostics_hash,
+            reviewed_direct_stv_single_renderer_hash,
+            reviewed_mim_direct_stock_fixed_reconnect_hash,
+            reviewed_mim_direct_segment_observer_hash,
+            reviewed_load_rectangle_race_hash,
         }, rel)
 
     def test_push_flush_timeline_hold_is_bounded_to_established_non_dvd_push(self):
@@ -302,7 +380,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.95")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.96")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -358,6 +436,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertEqual(load.count("eos = false;"), 3)
         self.assertIn("if (loadTransitionToken != null)\n            return 0;", media_time)
         self.assertIn("if (loadTransitionToken == null)", release)
+        self.assertLess(load.index("videoInfo.reset();"), load.index("final String finalUrl;"))
+        self.assertIn("if (loadTransitionToken == null)\n            videoInfo.reset();", release)
         self.assertIn("if (loadTransitionToken == loadSession)", base)
 
     def test_phase_a_exo_seek_is_async_allows_zero_and_completes_on_seek_discontinuity(self):

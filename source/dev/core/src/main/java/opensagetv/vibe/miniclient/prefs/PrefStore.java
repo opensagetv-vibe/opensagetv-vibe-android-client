@@ -387,6 +387,21 @@ public interface PrefStore
         /** Wait for playback before presenting the first media-player OSD frame. */
         String wait_for_playback_before_first_osd = "wait_for_playback_before_first_osd";
 
+        /** Opt in to the Standard FFmpeg plugin's authenticated Fixed-caption service. */
+        String fixed_caption_side_channel_enabled =
+                "fixed_caption_side_channel/enabled";
+
+        /** TCP port of the optional Standard FFmpeg plugin caption API. */
+        String fixed_caption_side_channel_port =
+                "fixed_caption_side_channel/port";
+
+
+        /** Optional plugin-owned Fixed media policy: off, copy, or transcode. */
+        String mim_direct_mode = "mim_direct/mode";
+
+        /** MIM-owned Transcode deinterlace policy: auto, on, or off. */
+        String mim_direct_deinterlace = "mim_direct/deinterlace";
+
         String exit_on_standby = "exit_on_standby";
 
         /**

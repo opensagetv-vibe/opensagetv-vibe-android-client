@@ -19,6 +19,10 @@ final class DebugAsyncPlayerChecks
 {
     private static final int RESULT_OK = 1;
     private static final int RESULT_ERROR = -1;
+    // Fire OS terminates an ordered broadcast at roughly 60 seconds. Reserve
+    // enough time to deliver the result instead of turning a slow physical seek
+    // probe into an application-not-responding dialog.
+    private static final long BROADCAST_OPERATION_BUDGET_MS = 45000L;
 
     private DebugAsyncPlayerChecks()
     {
@@ -27,6 +31,7 @@ final class DebugAsyncPlayerChecks
     static void run(BroadcastReceiver receiver, Context context, Intent intent, int maxRecoveryWatchdogMs)
     {
         final BroadcastReceiver.PendingResult pending = receiver.goAsync();
+        final long receiverStartedMs = SystemClock.elapsedRealtime();
         final Context appContext = context.getApplicationContext();
         final String operation = clean(intent.getStringExtra("op"));
         final String requestedCommandsText = clean(intent.getStringExtra("commands"));
@@ -45,6 +50,7 @@ final class DebugAsyncPlayerChecks
             {
                 try
                 {
+                    final long operationDeadlineMs = receiverStartedMs + BROADCAST_OPERATION_BUDGET_MS;
                     MiniClient client = requireConnectedClient(appContext);
                     boolean comskipCheck = "comskip_check".equals(operation);
                     boolean relativeSeekCheck = "relative_seek_check".equals(operation);
@@ -105,7 +111,7 @@ final class DebugAsyncPlayerChecks
                         }
                         sentCount++;
                         if (delayMs > 0)
-                            SystemClock.sleep(delayMs);
+                            sleepWithinBroadcastBudget(delayMs, operationDeadlineMs);
                     }
 
                     if (sentCount == 0)
@@ -117,7 +123,7 @@ final class DebugAsyncPlayerChecks
                     PlaybackHealthProbe.Snapshot healthPostCommand = PlaybackHealthProbe.capture(postCommandPlayer);
 
                     if (settleMs > 0)
-                        SystemClock.sleep(settleMs);
+                        sleepWithinBroadcastBudget(settleMs, operationDeadlineMs);
 
                     boolean healthCheckPerformed = beforeState == MiniPlayerPlugin.PLAY_STATE
                             && healthBefore.supported && healthPostCommand.supported;
@@ -156,7 +162,8 @@ final class DebugAsyncPlayerChecks
 
                     if (healthCheckPerformed)
                     {
-                        long recoveryDeadline = commandsFinishedMs + recoveryTimeoutMs;
+                        long recoveryDeadline = Math.min(
+                                commandsFinishedMs + recoveryTimeoutMs, operationDeadlineMs);
                         while (SystemClock.elapsedRealtime() <= recoveryDeadline)
                         {
                             MediaCmd currentMediaCmd = requireMediaCmd(client);
@@ -200,7 +207,7 @@ final class DebugAsyncPlayerChecks
                                 recoveryMs = SystemClock.elapsedRealtime() - commandsFinishedMs;
                                 break;
                             }
-                            SystemClock.sleep(healthPollMs);
+                            sleepWithinBroadcastBudget(healthPollMs, operationDeadlineMs);
                         }
                     }
 
@@ -208,11 +215,12 @@ final class DebugAsyncPlayerChecks
                     boolean videoStillAdvancing = !videoExpected;
                     boolean audioStillAdvancing = !audioExpected;
                     boolean surfaceStillHealthy = !videoExpected;
+                    int verificationRecoveryPollCount = 0;
                     PlaybackHealthProbe.Snapshot healthFinal;
 
                     if (healthCheckPerformed && recovered != null)
                     {
-                        SystemClock.sleep(verifyPlaybackMs);
+                        sleepWithinBroadcastBudget(verifyPlaybackMs, operationDeadlineMs);
                         MediaCmd finalHealthMediaCmd = requireMediaCmd(client);
                         MiniPlayerPlugin finalHealthPlayer = requirePlayer(finalHealthMediaCmd);
                         healthFinal = PlaybackHealthProbe.capture(finalHealthPlayer);
@@ -233,6 +241,40 @@ final class DebugAsyncPlayerChecks
                         audioStillAdvancing = !audioExpected
                                 || PlaybackHealthProbe.audioOutputAdvanced(recovered, healthFinal);
                         surfaceStillHealthy = PlaybackHealthProbe.surfaceHealthy(healthFinal);
+
+                        // A segmented Direct/MIM seek can briefly enter BUFFERING after both
+                        // decoders have already resumed, especially while the next HLS segment
+                        // becomes visible. Do not fail on that single sampling instant. Keep the
+                        // strict output/surface/error requirements, but allow the player to
+                        // return to READY+playing within the existing recovery budget.
+                        long verificationRecoveryDeadlineMs = Math.min(operationDeadlineMs,
+                                commandsFinishedMs + recoveryTimeoutMs);
+                        while (!stillPlaying && !playerErrorSeen
+                                && SystemClock.elapsedRealtime() < verificationRecoveryDeadlineMs)
+                        {
+                            sleepWithinBroadcastBudget(healthPollMs, operationDeadlineMs);
+                            finalHealthMediaCmd = requireMediaCmd(client);
+                            finalHealthPlayer = requirePlayer(finalHealthMediaCmd);
+                            healthFinal = PlaybackHealthProbe.capture(finalHealthPlayer);
+                            verificationRecoveryPollCount++;
+                            boolean retryBuffering = PlaybackHealthProbe.isBuffering(healthFinal);
+                            bufferingSeen = bufferingSeen || retryBuffering;
+                            loadingSeen = loadingSeen || healthFinal.isLoading;
+                            if (retryBuffering)
+                                bufferingPollCount++;
+                            if (!healthFinal.playerError.isEmpty())
+                            {
+                                playerErrorSeen = true;
+                                if (firstPlayerError.isEmpty())
+                                    firstPlayerError = healthFinal.playerError;
+                            }
+                            stillPlaying = PlaybackHealthProbe.readyAndPlaying(healthFinal);
+                            videoStillAdvancing = !videoExpected
+                                    || PlaybackHealthProbe.videoOutputAdvanced(recovered, healthFinal);
+                            audioStillAdvancing = !audioExpected
+                                    || PlaybackHealthProbe.audioOutputAdvanced(recovered, healthFinal);
+                            surfaceStillHealthy = PlaybackHealthProbe.surfaceHealthy(healthFinal);
+                        }
                     }
                     else
                     {
@@ -366,6 +408,7 @@ final class DebugAsyncPlayerChecks
                             + ";loadingSeen=" + loadingSeen
                             + ";healthPollCount=" + healthPollCount
                             + ";bufferingPollCount=" + bufferingPollCount
+                            + ";verificationRecoveryPollCount=" + verificationRecoveryPollCount
                             + ";healthFailureReason=" + safe(healthFailure.toString())
                             + ";playerErrorSeen=" + playerErrorSeen
                             + ";firstPlayerError=" + safe(firstPlayerError)
@@ -403,6 +446,16 @@ final class DebugAsyncPlayerChecks
                 }
             }
         });
+    }
+
+    private static void sleepWithinBroadcastBudget(long requestedMs, long deadlineMs)
+    {
+        long remainingMs = deadlineMs - SystemClock.elapsedRealtime();
+        if (remainingMs <= 0)
+            throw new IllegalStateException("debug broadcast time budget exhausted");
+        SystemClock.sleep(Math.min(requestedMs, remainingMs));
+        if (SystemClock.elapsedRealtime() >= deadlineMs)
+            throw new IllegalStateException("debug broadcast time budget exhausted");
     }
 
     private static long timestampAtOrAfter(long candidate, long lowerBound)

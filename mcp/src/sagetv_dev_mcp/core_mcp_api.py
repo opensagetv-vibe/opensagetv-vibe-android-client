@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -53,7 +54,13 @@ class CoreMcpApiClient:
         client.health()
         return client
 
-    def _request(self, action: str, **parameters: Any) -> dict[str, Any]:
+    def _request(
+        self,
+        action: str,
+        *,
+        request_timeout_s: float | None = None,
+        **parameters: Any,
+    ) -> dict[str, Any]:
         values: dict[str, str] = {"action": action}
         for key, value in parameters.items():
             if value is None:
@@ -70,7 +77,10 @@ class CoreMcpApiClient:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_s) as response:
+            timeout_s = self.timeout_s if request_timeout_s is None else max(
+                self.timeout_s, float(request_timeout_s)
+            )
+            with urlopen(request, timeout=timeout_s) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -130,7 +140,25 @@ class CoreMcpApiClient:
         return self._legacy_client().find_media_many(video_names, max_items, page_size)
 
     def resolve_exact_path(self, path: str) -> dict[str, Any]:
-        return self._request("media.resolve_exact_path", path=path)
+        # A cold Windows server may need to build the plugin's bounded media
+        # path index before answering the first exact lookup.  Do not fall back
+        # to title/UI search merely because that one deterministic operation
+        # legitimately exceeds the ordinary control-call timeout.
+        # A newly connected MiniClient can also overlap the server's UI/STV
+        # initialization. The stock API can transiently reject that first
+        # lookup with HTTP 400 even though the same exact path resolves moments
+        # later. Retry only that bounded transient; all other failures remain
+        # immediate and visible.
+        for attempt in range(4):
+            try:
+                return self._request(
+                    "media.resolve_exact_path", request_timeout_s=180.0, path=path
+                )
+            except CoreMcpApiError as exc:
+                if "HTTP 400:" not in str(exc) or attempt >= 3:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+        raise AssertionError("unreachable")
 
     def refresh_media_index(self, wait_until_done: bool = False) -> dict[str, Any]:
         return self._request("library.scan", wait_until_done=wait_until_done)
@@ -139,7 +167,8 @@ class CoreMcpApiClient:
               from_beginning: bool = False) -> dict[str, Any]:
         return self._request(
             "media.watch", context=context, media_id=int(media_file_id),
-            from_beginning=from_beginning,
+            from_beginning=from_beginning, wait_ms=60000,
+            request_timeout_s=75.0,
         )
 
     def remote_command(self, context: str, command: str) -> dict[str, Any]:
@@ -147,6 +176,16 @@ class CoreMcpApiClient:
 
     def seek(self, context: str, target_ms: int) -> dict[str, Any]:
         return self._request("media.seek", context=context, target_ms=int(target_ms))
+
+    def media_control(
+        self,
+        context: str,
+        operation: str,
+        rate: float | None = None,
+    ) -> dict[str, Any]:
+        return self._request(
+            "media.control", context=context, operation=operation, rate=rate
+        )
 
     def tune_channel(self, context: str, channel: str) -> dict[str, Any]:
         return self._request("channel.tune", context=context, channel=channel)

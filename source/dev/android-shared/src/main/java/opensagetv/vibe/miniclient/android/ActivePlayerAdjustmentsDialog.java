@@ -107,6 +107,8 @@ public final class ActivePlayerAdjustmentsDialog
                 { @Override public void run() { chooseDecoding(); } });
         addVideoRow(panel, holder, "Codec Queueing", codecQueueingValue(), new Runnable()
                 { @Override public void run() { chooseCodecQueueing(); } });
+        addVideoRow(panel, holder, "Deinterlace", deinterlaceValue(), new Runnable()
+                { @Override public void run() { chooseDeinterlace(); } });
         addVideoRow(panel, holder, "Source buffering", bufferPresetValue(), new Runnable()
                 { @Override public void run() { chooseBufferPreset(media); } });
         addVideoRow(panel, holder, "Display", refreshValue(active), new Runnable()
@@ -146,6 +148,7 @@ public final class ActivePlayerAdjustmentsDialog
                 "Player  " + playerValue(),
                 "Decoding  " + DecodingMethod.fromPreference(decoding).displayName(),
                 "Codec Queueing  " + codecQueueingValue(),
+                "Deinterlace  " + deinterlaceValue(),
                 "Source buffering  " + bufferPresetValue(),
                 "Display  " + refreshValue(active),
                 "DVD playback  " + dvdRepairValue() + " / settle " + refreshSettleValue(),
@@ -347,6 +350,16 @@ public final class ActivePlayerAdjustmentsDialog
         return ActivePlayerSessionOverrides.resolveDvdTimestampRepair(
                 client.properties().getString(
                         PrefStore.Keys.disc_mpeg2_timestamp_repair, "auto"));
+    }
+
+    private String deinterlaceValue()
+    {
+        String value = ActivePlayerSessionOverrides.resolveMimDirectDeinterlace(
+                client.properties().getString(
+                        PrefStore.Keys.mim_direct_deinterlace, "auto"));
+        if ("on".equals(value)) return "On";
+        if ("off".equals(value)) return "Off";
+        return "Auto";
     }
 
     private String bufferPresetValue()
@@ -1279,6 +1292,25 @@ public final class ActivePlayerAdjustmentsDialog
                         {
                             @Override public void set(String selectedValue)
                             { ActivePlayerSessionOverrides.setDvdTimestampRepair(selectedValue); }
+                        }, true);
+            }
+        });
+    }
+
+    private void chooseDeinterlace()
+    {
+        final String[] labels = { "Auto", "On", "Off" };
+        final String[] values = { "auto", "on", "off" };
+        chooseVideoChoice("MIM-owned Transcode deinterlace", labels, new ValueSetter()
+        {
+            @Override public void set(String index)
+            {
+                final String value = values[Integer.parseInt(index)];
+                chooseScope("Deinterlace", PrefStore.Keys.mim_direct_deinterlace,
+                        value, new ValueSetter()
+                        {
+                            @Override public void set(String selectedValue)
+                            { ActivePlayerSessionOverrides.setMimDirectDeinterlace(selectedValue); }
                         }, true);
             }
         });

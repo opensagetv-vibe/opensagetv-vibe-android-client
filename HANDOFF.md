@@ -1,5 +1,247 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Direct late-fallback checkpoint (2026-09-29)
+
+The remaining MIMFIX-003 late-start black-screen gap is closed. If Direct
+session creation fails and the original exposed Pull source also fails before
+the first rendered frame, the client suppresses Direct only for the current
+connection and closes the existing GFX socket through the MiniClient's native
+reconnect mechanism. SageTV then renegotiates capabilities and opens ordinary
+Fixed/Pull while retaining the same Activity, UI/watch session, and connection
+generation. The saved Direct preference is not changed. A bounded fresh-
+Activity fallback remains only for platforms where the native reconnect cannot
+be requested.
+
+The debug APK includes a release-excluded one-shot fault that forces both
+failure stages. On non-Pro `.25` against `.232`, the focused physical gate
+passed with `connectionGeneration=1`, reconnect activity on the GFX/media
+sockets, `mimDirectSessionState=late_failure_stock_fixed_reconnect`, empty
+negotiated Direct mode, `playbackSource=SAGETV_PULL`, advancing hardware video
+and audio, fullscreen playback, and no process exit or crash. The harness
+cleared the fault and restored all 103 private preferences. The exact-path MCP
+launch verifier now ignores a transient player error only while that named
+handoff is active; 18 focused playback-health tests prove the recovery case
+and an unrelated-error negative control. Per the workspace release rule, only
+affected gates are rerun unless a full matrix is explicitly requested or a
+broad dependency change requires one with a documented reason.
+
+The v0.5.96 release candidate was rebuilt after that physical gate. Its debug
+APK SHA-256 is
+`b6fb14b8262643fa5f3098d974d916a224827fa4f142df0bfa0e5e9fc5f7ecba`.
+Impact-based release validation passed the 60-task APK build, 149-task AAB
+build and bundletool inspection, 213 affected source-contract tests, 78
+affected MCP/ADB/playback-health tests, eight changed Java policy/client test
+classes, and the Core MiniDVDPlayer compile/test boundary. The unrelated full
+device and legacy DVD matrices remain deferred rather than being represented
+as rerun for this release.
+
+## Direct full-hardware/deinterlace checkpoint (2026-09-28)
+
+Fixed Transcoding Settings now exposes the persistent Fixed/MIM deinterlace
+baseline as `Auto`, `On`, or `Off`. The active-player Video menu exposes the
+same choices as a current-session override, which survives Direct start, seek
+rebind, and restart but is cleared with the playback session. With `Off`, the
+plugin reported `full_gpu` using VAAPI on
+Linux `.232` and QSV on stock Windows `.185`. Non-Pro Fire TV `.25` passed
+owned-stream startup, MediaTek hardware AVC decode, FF/REW, pause/resume, and
+crash checks against both servers. Linux also reports full-GPU VAAPI for Auto
+and On; Windows Haswell Auto/On accurately retain the mixed fallback because
+its QSV VPP deinterlacer rejects the surface contract.
+
+The Linux caption gate exposed and corrected a distinct ownership race. MIM
+Direct preserved the CEA track and simultaneously forwarded decoded CEA over
+the Fixed side channel. In STV authority, arrival of side-channel evidence now
+reapplies the server-published CC1/CC2 state and disables the local Media3 text
+renderer, leaving event 225 as the only renderer. The generated fixture passed
+Off/CC1/CC2/Off/CC1 cycling; debug state kept local cue text empty, CC1 was
+visible, and Off was clear. Evidence is
+`artifacts/firetv/20260929-025928_caption-media3-fixed-stv-1-off.png` through
+`20260929-025953_caption-media3-fixed-legacy-callback.png`.
+
+The current settings-preserving APK SHA-256 is
+`ce08a5df807776859233626c9cf58fb5db6952756d5893a003192b5aceacede0`.
+It was installed with settings preserved and the harness restored all 102
+preferences. The persistent deinterlace selector was then physically verified
+on non-Pro `.25` with `Auto (server chooses)` displayed. All 575 Android/source
+tests, 99 MCP tests, Core JUnit, strict validation, the 1,483-file manifest,
+and diff checks pass. `.232` ended with zero caption/Direct sessions and no MIM or
+FFmpeg process. Windows `.185` AC standby was restored to ten minutes; the two
+verified temporary deinterlace deployment artifacts were removed. MIMFIX-003
+remains open for the DVD, growing/transition, legacy-client, and late-fallback
+rows listed in `TASKS.md`.
+
+## Stock-compatible Fixed caption and Direct transport checkpoint (2026-09-28)
+
+MIMFIX-001 and MIMFIX-002 are complete. The optional FFmpeg Standard plugin is
+discovered over its tokenless LAN-scoped API and uses opaque, bounded
+reservation/session handles. Direct Copy performs no video/audio decode or
+encode. Direct Transcode uses the plugin/MIM negotiated GPU, mixed, or software
+fallback. Neither mode changes `Sage.jar`, and an absent or unavailable plugin
+restores ordinary stock Fixed behavior.
+
+The Direct service now publishes a bounded live playlist of MPEG-TS segments
+instead of asking FFmpeg's HLS muxer to convert DVB/Teletext to WebVTT. This
+preserves CEA, Teletext, DVB bitmap streams, language descriptors, and timing.
+Media3 wraps only those Direct segment requests with a passive byte observer;
+the established Teletext PES probe and local Teletext/DVB rendering paths
+therefore receive the same source packets without continuously instrumenting
+other playback modes. Playback diagnostics identify this source as
+`MIM_DIRECT`.
+
+On non-Pro Fire TV `.25` against `.232`, Direct Copy, full-GPU Direct
+Transcode, CEA Off/On, Teletext CC1/CC2/Off/CC1, DVB Off/On, pause/resume,
+repeated start, reconnect, teardown, and settings restoration passed. Direct
+and Pull displayed the same DVB multi-region composition. The current plugin
+JAR deployed to `.232` has SHA-256
+`35352767f1954c49782d23646f1f38da907c8ec4adab9709ed05e16e7eb473f9`.
+
+The cross-player portion of MIMFIX-003 is also complete. Media3, legacy Exo,
+GSY Media3, and GSY legacy Exo passed both Direct modes with advancing A/V,
+pause recovery, crash checks, and clean exit. IJK passed Direct Copy. Physical
+Direct Transcode evidence showed IJK 0.8.8 repeatedly entering an illegal
+MediaCodec state without advancing playback, so the concrete-player boundary
+now rejects only that combination and reports
+`mimDirectSessionState=unsupported_player_stock_fixed`. The same request then
+passed through ordinary `SAGETV_PUSH`, including advancing A/V and pause
+recovery. No device-specific profile was added.
+
+The same matrix exposed a shared old-player/new-player ordering race: a late
+release could reset video geometry after the next load had already received
+`SETVIDEORECT`. New-load generation state now invalidates stale geometry before
+queued replacement, and old-player release preserves new-generation geometry.
+Legacy Exo and both GSY delegates consequently reached stable full-screen video.
+
+Against unmodified stock `.175` with `vibe_ffmpeg=false`, an explicit Direct
+Transcode request reported `mimDirectSessionState=unavailable_stock_fixed` and
+continued through ordinary `SAGETV_PUSH`; hardware AVC, AAC output,
+pause/resume, repeated source start, settings restoration, and the crash check
+all passed. Exact-path control correctly required the optional Core MCP plugin;
+the documented unique-title Sagex fallback selected
+`Breakfast-26711345-0`. MIMFIX-003 remains open for Windows,
+legacy-client, growing-media, transition, and the remaining media/lifecycle
+matrix; the Android cross-player portion is complete.
+
+The `.232` compatibility conditions are now physically separated and proven.
+With the caption service disabled, and again with a real pre-Direct plugin JAR
+that exposed caption contract v1 but no `mimDirect` member, the current client
+reported `unavailable_stock_fixed`, negotiated no Direct mode, and used
+ordinary `SAGETV_PUSH`. Both passed advancing A/V, pause recovery, crash/exit,
+and restoration of all 102 client settings; the disabled run also passed
+STOP/restart. For the distinct late-start case, the current plugin continued
+to advertise Direct while `ffmpeg_MIM` was temporarily made non-executable.
+Session creation failed as intended, the client reported
+`start_failed_pull_fallback`, and the already exposed source played through
+`SAGETV_PULL` with FF/REW and pause recovery. The original INI/JAR SHA-256,
+MIM executable SHA-256/mode `755`, and API availability were verified after
+restoration; temporary commissioning backups were removed.
+
+That late-start evidence also identifies the remaining fallback gap precisely.
+Direct negotiation suppresses SageTV's Fixed push-format declaration so the
+server supplies an original Pull path. A session-creation failure can use that
+path immediately when the Android backend supports it, but it has not restored
+ordinary Fixed if that source is itself unplayable. MIMFIX-003 must retain this
+open row until a bounded reconnect/re-watch path renegotiates with Direct off.
+
+Direct-transcode caption selection and seek continuity now pass on non-Pro
+`.25` against `.232`. The generated MPEG-2/AC-3/CEA fixture first exposed that
+Media3/legacy Exo could accept native track `0`, then immediately replace it
+with an unrelated persisted DVB choice during asynchronous track publication.
+Explicit active-session selections now win that lifecycle race. A Direct seek
+then exposed a second boundary: the replacement backend inherited the old
+applied track number even though its renderer override and subtitle view no
+longer existed. Backend release now clears only applied selection state while
+preserving the requested track, which is rebound when the replacement track
+map appears. Timestamped rendering, same-session Off/On, continuous cues, FF
+A/V recovery, post-seek caption recovery, crash-free teardown, and restoration
+of all 102 settings pass. Evidence is under
+`artifacts/android/mimfix003/`; the repository-wide manifest/final gate remains
+pending until the remaining MIMFIX-003 work is complete.
+
+The user-requested owned-stream DVD gate is now explicit in `TASKS.md`: menu
+and submenu navigation/highlights, repeated entry/return, main-title and
+chapter/seek/STOP controls, audio/subpicture selection and Off behavior,
+timestamp/sync evidence, Copy versus Transcode policy/stage proof,
+menu/title/end transitions, cadence, teardown, and unavailable/failed-plugin
+fallback all remain required before MIMFIX-003 can close.
+
+The final source gate passed 573 static/scaffold tests, 97 MCP tests, Core
+JUnit, complete validation, and a clean 60-task Android build. The resulting
+debug APK SHA-256 is
+`02f025515ca398dce35dd546f17bb838c974d2cfe2691687417d12ecc4ac12b5`.
+
+## Growing-recording stale-duration correction (2026-09-27)
+
+The supplied BargainHunt log and screen capture proved that the spontaneous
+rewind was not a SageTV seek. Media3 1.11's
+`StuckPlayingNotEndingDetector` fired after playback continued beyond the
+finite TS duration discovered at initial OPEN, raised `ERROR_CODE_TIMEOUT`,
+and the generic recovery reprepared from 392,261 ms at an earlier 332,272 ms
+sync point.
+
+`Media3PullDataSource` now resolves ambiguous stock-server growth before the
+player builder runs, using a separate one-shot MediaServer connection that is
+explicitly released and cannot mutate the real session-owned Pull datasource.
+Only a proven growing, non-SMB MediaServer Pull source receives the largest
+positive Media3 playing-not-ending timeout; buffering, no-progress,
+suppression, and all other stuck-player detectors remain at their defaults.
+Probe failure safely retains default Media3 behavior. Push, Fixed/MIM, SMB,
+completed files, and explicit seeks are excluded.
+
+The focused policy test and clean APK build pass. The completed
+`BargainHunt-Naseby31-26776208-0` recording then passed Media3 Pull/hardware
+playback on non-Pro `.25` against stock `.175`/SageMC with hardware AVC,
+advancing AC-3 audio, completed-source classification, zero player error, and
+zero retry. A real stock-server Live TV recording subsequently remained
+healthy beyond the former 60-second boundary with advancing A/V and no timeout
+or jump-back. Both settings transactions restored all 98 preferences. The
+installed debug APK SHA-256 is
+`ad6ddc256534bfaeb3ad6d8b85b925a504583bdb8fabe2762aaf327841f68651`.
+
+## Physical-test artifact cleanup (2026-09-27)
+
+The non-Pro Fire TV `.25` shared-storage root had accumulated 282 generated
+screenshots, UI XML dumps, text traces, and two screen recordings from earlier
+manual physical tests. They were verified as test artifacts and removed; Vibe
+settings, private diagnostics, unrelated media, Android application folders,
+and the JVL client were untouched. Available `/data` space increased from
+about 122 MB to 324 MB, then to 335 MB after removing the separately verified
+`/data/local/tmp/dalvik-cache` generated by test tooling.
+
+`AdbClient.screenrecord()` now stages each capture under the unique path
+`/sdcard/OpenSageTV_Vibe_Test_Temp/screenrecord-<id>.mp4`. A `finally` block
+removes that file after success or failure and non-recursively removes the
+directory only when empty, so concurrent or unexpected files are never
+deleted. Screenshots already use `adb exec-out` and create no device file.
+Fifty MCP ADB tests pass, including failed-pull cleanup, and a physical
+one-second `.25` capture proved the remote directory was absent afterward.
+
+## Default Vibe test server `.232` (2026-09-27)
+
+The ignored local `config/firetv.toml` now selects server alias `vibe`
+(`192.168.10.232`) as the default for further commissioning. Its authenticated
+Core MCP plugin is enabled on the LAN listener and the non-Pro Fire TV `.25`
+resolves as UI context `444556303031`. Keep `.185` configured as the stock
+Windows comparison target; it is no longer the default. Real credentials and
+the Core MCP token remain only in the ignored local configuration.
+
+## Stock Windows `.185` acceptance (2026-09-26)
+
+Non-Pro Fire TV `.25` completed the Windows FFmpeg-plugin acceptance matrix
+against an unchanged stock `Sage.jar`. Fixed QSV and forced server-side
+software/libx264 playback passed startup, audio, pause/resume, FF/REW, skips,
+Comskip, restart, clean exit, and crash checks. Separate CEA callback,
+Teletext, and DVB bitmap gates passed. Authored-DVD native menus/title and real
+ALADDIN native MPEG-2/AC-3 playback also passed; stock Windows Core's public
+DVD `Seek(long)` accepted but did not accurately land an exact 480-second
+request and is documented as a stock DVD-reader boundary.
+
+The DVD harness now reconnects after its deliberate cold-start discard before
+performing the measured retry, and waits for server-owned title/menu state to
+settle before an optional exact positioning seek. Targeted DVD tests pass 79
+of 79. The `.25` user profile was restored to GSYVideoPlayer/system, Dynamic
+Push, hardware decoding, native DVD, automatic timestamp repair, and automatic
+caption service 1 after commissioning.
+
 ## v0.5.95 release candidate checkpoint (2026-09-22)
 
 The reusable SMB server and media-mapping editors no longer allow their form

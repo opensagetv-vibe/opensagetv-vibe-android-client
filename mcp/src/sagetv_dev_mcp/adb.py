@@ -120,6 +120,9 @@ def parse_broadcast_result(text: str) -> dict[str, Any]:
 KEYS = {
     "UP": "KEYCODE_DPAD_UP", "DOWN": "KEYCODE_DPAD_DOWN", "LEFT": "KEYCODE_DPAD_LEFT",
     "RIGHT": "KEYCODE_DPAD_RIGHT", "SELECT": "KEYCODE_DPAD_CENTER", "CENTER": "KEYCODE_DPAD_CENTER",
+    "DPAD_UP": "KEYCODE_DPAD_UP", "DPAD_DOWN": "KEYCODE_DPAD_DOWN",
+    "DPAD_LEFT": "KEYCODE_DPAD_LEFT", "DPAD_RIGHT": "KEYCODE_DPAD_RIGHT",
+    "DPAD_CENTER": "KEYCODE_DPAD_CENTER",
     "BACK": "KEYCODE_BACK", "HOME": "KEYCODE_HOME", "MENU": "KEYCODE_MENU",
     "ENTER": "KEYCODE_ENTER", "NEXT": "KEYCODE_ENTER",
     "PLAY": "KEYCODE_MEDIA_PLAY", "PAUSE": "KEYCODE_MEDIA_PAUSE", "PLAY_PAUSE": "KEYCODE_MEDIA_PLAY_PAUSE",
@@ -695,6 +698,13 @@ class AdbClient:
             enabled="true" if enabled else "false",
         )
 
+    def set_mim_direct_late_fallback_fault(self, enabled: bool = True) -> dict[str, Any]:
+        """Arm the debug APK's one-shot Direct->Pull->Fixed recovery proof."""
+        return self.dev_control(
+            "mim_direct_late_fallback_fault",
+            enabled="true" if enabled else "false",
+        )
+
     def checkpoint_settings(self) -> dict[str, Any]:
         """Keep an exact private device-local preference checkpoint for one test."""
         return self.dev_control("settings_checkpoint")
@@ -732,6 +742,10 @@ class AdbClient:
         fixed_audio_channels: str = "",
         fixed_remuxing_preference: str = "",
         fixed_remuxing_format: str = "",
+        fixed_caption_side_channel_enabled: bool | None = None,
+        fixed_caption_side_channel_port: int | str = "",
+        mim_direct_mode: str = "",
+        mim_direct_deinterlace: str = "",
         smb_mappings: str = "",
         smb_username: str = "",
         smb_password: str = "",
@@ -793,6 +807,12 @@ class AdbClient:
             "fixed_audio_channels": fixed_audio_channels,
             "fixed_remuxing_preference": fixed_remuxing_preference,
             "fixed_remuxing_format": fixed_remuxing_format,
+            "fixed_caption_side_channel_enabled": (
+                "true" if fixed_caption_side_channel_enabled else "false"
+            ) if isinstance(fixed_caption_side_channel_enabled, bool) else "",
+            "fixed_caption_side_channel_port": fixed_caption_side_channel_port,
+            "mim_direct_mode": mim_direct_mode,
+            "mim_direct_deinterlace": mim_direct_deinterlace,
             "smb_mappings": smb_mappings,
             "smb_username": smb_username,
             "smb_password": smb_password,
@@ -1065,6 +1085,12 @@ class AdbClient:
             raise ValueError("subtitle index must be -1 (off) or >= 0")
         return self.dev_control("subtitle_control", foreground=False, index=value)
 
+    def set_caption_mode(self, mode: str) -> dict[str, Any]:
+        value = str(mode).strip().lower()
+        if value not in {"off", "cc1", "cc2", "stv", "dvb"}:
+            raise ValueError("caption mode must be off, cc1, cc2, stv, or dvb")
+        return self.dev_control("caption_mode", foreground=False, mode=value)
+
     def set_active_audio(
         self,
         output: str | None = None,
@@ -1318,14 +1344,28 @@ class AdbClient:
     def screenrecord(self, path: Path, seconds: int = 15) -> Path:
         seconds = max(1, min(int(seconds), 180))
         path.parent.mkdir(parents=True, exist_ok=True)
-        remote = "/sdcard/sagetv_dev_test.mp4"
-        self.shell(f"rm -f {remote}")
-        self.shell(f"screenrecord --time-limit {seconds} {remote}", timeout=seconds + 20)
-        cp = self.run(["pull", remote, str(path)], timeout=90)
-        self.shell(f"rm -f {remote}")
-        if not path.exists():
-            raise RuntimeError(f"screenrecord pull failed: {cp.stdout} {cp.stderr}")
-        return path
+        # Device-side captures are temporary transport files, not durable test
+        # artifacts.  Keep them out of the shared-storage root and clean them
+        # even when screenrecord, adb pull, or the host-side verification fails.
+        remote_dir = "/sdcard/OpenSageTV_Vibe_Test_Temp"
+        remote = f"{remote_dir}/screenrecord-{time.time_ns()}.mp4"
+        quoted_dir = shlex.quote(remote_dir)
+        quoted_remote = shlex.quote(remote)
+        try:
+            self.shell(f"mkdir -p {quoted_dir}")
+            self.shell(
+                f"screenrecord --time-limit {seconds} {quoted_remote}",
+                timeout=seconds + 20,
+            )
+            cp = self.run(["pull", remote, str(path)], timeout=90)
+            if not path.exists():
+                raise RuntimeError(f"screenrecord pull failed: {cp.stdout} {cp.stderr}")
+            return path
+        finally:
+            self.shell(f"rm -f {quoted_remote}", check=False)
+            # rmdir is intentionally non-recursive: a concurrent capture or an
+            # unexpected file must never be removed by another test session.
+            self.shell(f"rmdir {quoted_dir}", check=False)
 
     def dumpsys_media_codec(self) -> str:
         # Command availability varies by Fire OS build; return best available diagnostic text.

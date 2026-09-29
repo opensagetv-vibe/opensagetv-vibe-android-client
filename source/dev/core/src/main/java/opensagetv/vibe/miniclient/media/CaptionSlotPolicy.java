@@ -81,7 +81,16 @@ public final class CaptionSlotPolicy
             String actualLanguage = reliableLanguage(track);
             if (!language.isEmpty()
                     && !TrackPreferencePolicy.languageMatches(language, actualLanguage))
-                continue;
+            {
+                // CEA-608 carries no authoritative per-service language.
+                // Treat its unlabeled primary compatibility service as the
+                // English/default fallback, but never guess that it matches
+                // an explicitly requested non-English language.
+                boolean unlabeledEnglishCea608Fallback =
+                        track.getSubtitleCodec() == SubtitleCodec.CEA608
+                        && actualLanguage.isEmpty() && isEnglishLanguage(language);
+                if (!unlabeledEnglishCea608Fallback) continue;
+            }
 
             int score = codecScore(track.getSubtitleCodec());
             if (!language.isEmpty()) score += 100;

@@ -120,7 +120,7 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn('DebugTuningCommands.configure(intent)', receiver)
         self.assertIn('PlayerRuntimeTuning.configure(', tuning_commands)
         self.assertIn('"op=tuning;" + PlayerRuntimeTuning.compactWire()', tuning_commands)
-        self.assertIn('debugStatusVersion=21', state_provider)
+        self.assertIn('debugStatusVersion=22', state_provider)
         self.assertIn('PlayerRuntimeTuning.compactWire()', receiver)
 
     def test_each_player_captures_one_backend_neutral_runtime_config(self):
@@ -162,6 +162,21 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn('String exo2_codec_mode = "exo2_codec_mode"', pref_store)
         self.assertIn('PrefStore.Keys.media3_codec_mode', media3)
         self.assertIn('PrefStore.Keys.exo2_codec_mode', exo2)
+
+    def test_fixed_transcoding_exposes_persistent_deinterlace_default(self):
+        prefs = (ROOT / "source/dev/android-shared/src/main/res/xml/transcoding_prefs.xml").read_text()
+        arrays = (ROOT / "source/dev/android-shared/src/main/res/values/arrays.xml").read_text()
+        fragment = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings/FixedTranscodingFragment.java").read_text()
+        session = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/ActivePlayerSessionOverrides.java").read_text()
+        direct = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/MimDirectSessionClient.java").read_text()
+        self.assertIn('android:key="mim_direct/deinterlace"', prefs)
+        self.assertIn('android:defaultValue="auto"', prefs)
+        self.assertIn('@array/entries_mim_direct_deinterlace', prefs)
+        self.assertIn('<item>Off (preserve interlacing)</item>', arrays)
+        self.assertIn('PrefStore.Keys.mim_direct_deinterlace), "auto"', fragment)
+        self.assertIn('ListPreference.SimpleSummaryProvider.getInstance()', fragment)
+        self.assertIn('resolveMimDirectDeinterlace(String persisted)', session)
+        self.assertIn('PrefStore.Keys.mim_direct_deinterlace, "auto"', direct)
 
     def test_tuning_matrix_connects_adb_before_first_case(self):
         matrix = (SCRIPTS / "mcp_player_tuning_matrix.py").read_text()

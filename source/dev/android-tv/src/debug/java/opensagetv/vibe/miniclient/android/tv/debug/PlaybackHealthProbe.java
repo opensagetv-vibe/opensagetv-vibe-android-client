@@ -125,6 +125,7 @@ final class PlaybackHealthProbe
             out.flushed = health.isFlushed();
             out.errorState = health.isErrorState();
             out.retryCount = health.getRetryCount();
+            out.playbackSource = health.getPlaybackSource();
             dataSource = health.getDataSource();
             backendPlayer = health.getBackendPlayer();
         }
@@ -164,6 +165,14 @@ final class PlaybackHealthProbe
             else
                 captureLegacySmbDataSource(dataSource, out);
         }
+        // HLS creates and replaces child datasources independently of the
+        // top-level player load. The retained child type is therefore the
+        // strongest ownership evidence during startup/reprepare windows where
+        // the player URL flag may already have been reset for replacement.
+        if ((out.playbackSource == null || out.playbackSource.isEmpty()
+                || "UNKNOWN".equals(out.playbackSource))
+                && out.dataSourceClass.endsWith(".Media3MimDirectHttpDataSource"))
+            out.playbackSource = "MIM_DIRECT";
         // Push and Fixed/MIM datasources predate the Pull/SMB source telemetry
         // interface. The transport is nevertheless unambiguous from the player
         // contract, so do not report an active SageTV Push stream as UNKNOWN.
@@ -279,7 +288,18 @@ final class PlaybackHealthProbe
 
     private static void captureLegacySmbDataSource(Object source, Snapshot out)
     {
-        out.playbackSource = invokeStringOptional(source, "getPlaybackSource", "UNKNOWN");
+        String reflectedSource = invokeStringOptional(
+                source, "getPlaybackSource", "UNKNOWN");
+        // The typed player snapshot already identifies MIM Direct even though
+        // its HLS child datasource intentionally implements only Media3's
+        // DataSource contract. Do not replace that authoritative value with
+        // the reflection fallback merely because the child has no optional
+        // getPlaybackSource() method.
+        if (!"UNKNOWN".equals(reflectedSource)
+                || out.playbackSource == null
+                || out.playbackSource.isEmpty()
+                || "UNKNOWN".equals(out.playbackSource))
+            out.playbackSource = reflectedSource;
         out.sageOriginalPath = invokeStringOptional(source, "getSageOriginalPath", "");
         out.smbMappedPath = invokeStringOptional(source, "getSmbMappedPath", "");
         out.smbConnected = invokeBooleanOptional(source, "isSmbConnected", false);

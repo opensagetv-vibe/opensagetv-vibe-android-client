@@ -16,7 +16,7 @@ class ClientIdCliTests(unittest.TestCase):
         self.assertIn('prefs.setString(PrefStore.Keys.client_id, id);', client_commands)
         self.assertIn('client.getCurrentConnection().getClientID()', client_commands)
         self.assertIn('out.append(";configuredClientId=")', state_provider)
-        self.assertIn('out.append(";debugStatusVersion=21")', state_provider)
+        self.assertIn('out.append(";debugStatusVersion=22")', state_provider)
         self.assertIn('DebugStateProvider.snapshot(context, MAX_RECOVERY_WATCHDOG_MS)', receiver)
         self.assertNotIn('DEV_FIXED_CLIENT_ID', receiver)
 

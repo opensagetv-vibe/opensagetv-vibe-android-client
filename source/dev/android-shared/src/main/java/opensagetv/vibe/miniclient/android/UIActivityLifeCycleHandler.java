@@ -44,6 +44,7 @@ import opensagetv.vibe.miniclient.android.events.HideKeyboardEvent;
 import opensagetv.vibe.miniclient.android.events.HideNavigationEvent;
 import opensagetv.vibe.miniclient.android.events.HideSystemUIEvent;
 import opensagetv.vibe.miniclient.android.events.MessageEvent;
+import opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.ui.MiniClientKeyListener;
@@ -130,6 +131,8 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     });
     private Future<?> connectionFuture;
     private volatile boolean destroyed;
+    private static final long MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS = 100L;
+    private Intent pendingMimDirectFallbackActivity;
     private BackgroundSessionOwner backgroundSessionOwner;
     private boolean keepSessionInBackground;
     private boolean resumeBackgroundPlayback;
@@ -295,7 +298,12 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
             {
                 // Preserve the historical teardown policy for users who have
                 // not explicitly enabled bounded background sessions.
-                if (client.getCurrentConnection() != null && client.getCurrentConnection().getMediaCmd() != null)
+                // A pending MIM fallback is a connection/renderer handoff,
+                // not a user STOP. Preserve SageTV's watch state so the same
+                // client ID can restore it through ordinary Fixed.
+                if (pendingMimDirectFallbackActivity == null
+                        && client.getCurrentConnection() != null
+                        && client.getCurrentConnection().getMediaCmd() != null)
                 {
                     if (client.getCurrentConnection().getMediaCmd().getPlaya() != null)
                     {
@@ -444,6 +452,15 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                     MiniClientConnection connection = null;
                     try
                     {
+                        // Reserve the optional Standard-plugin caption slot
+                        // before Core can choose and launch a Fixed/MIM job.
+                        // The controller is a no-op unless Fixed, opt-in and a
+                        // valid local token are all present.
+                        client.setMimDirectTransportMode(MiniclientApplication.get()
+                                .getMimDirectSession().prepare(si, client.properties()));
+                        if (client.getMimDirectTransportMode().isEmpty())
+                            MiniclientApplication.get().getFixedCaptionSideChannel()
+                                    .start(si, client.properties());
                         // Network connections must not run on the main thread.
                         connection = client.connectConnection(si, UIActivityLifeCycleHandler.this);
                         if (!isConnectionTaskActive(generation))
@@ -460,6 +477,9 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                             connection.close();
                         if (!isConnectionTaskActive(generation))
                             return;
+                        MiniclientApplication.get().getFixedCaptionSideChannel().stop();
+                        MiniclientApplication.get().getMimDirectSession().stop();
+                        client.setMimDirectTransportMode("");
                         runOnUiThread(new Runnable()
                         {
                             @Override
@@ -554,6 +574,9 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     public void onDestroy()
     {
         log.debug("Closing MiniClient Connection");
+        MiniclientApplication.get().getFixedCaptionSideChannel().stop();
+        MiniclientApplication.get().getMimDirectSession().stop();
+        client.setMimDirectTransportMode("");
         ActivePlayerProcessOverlay.hide();
         cancelPendingBackgroundResume();
         cancelKeyboardTask();
@@ -592,6 +615,19 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
         catch (Throwable t)
         {
             log.error("Error shutting down client", t);
+        }
+        final Intent fallbackActivity = pendingMimDirectFallbackActivity;
+        pendingMimDirectFallbackActivity = null;
+        if (fallbackActivity != null)
+        {
+            final Context appContext = activity.getApplicationContext();
+            mainHandler.postDelayed(new Runnable()
+            {
+                @Override public void run()
+                {
+                    appContext.startActivity(fallbackActivity);
+                }
+            }, MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS);
         }
     }
 
@@ -895,6 +931,48 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
             message("SageTV Connection Closed.");
             finish();
         }
+    }
+
+    @Override
+    public void onMimDirectFallbackReconnect(MimDirectFallbackReconnectEvent event)
+    {
+        if (destroyed)
+            return;
+        final ServerInfo server = client.getConnectedServerInfo();
+        if (server == null)
+        {
+            log.warn("Cannot recover MIM Direct fallback without server identity");
+            return;
+        }
+        log.warn("MIM Direct and Pull startup failed; reconnecting once for ordinary Fixed ({})",
+                event.reason);
+        MiniClientConnection connection = client.getCurrentConnection();
+        client.setMimDirectTransportMode("");
+        if (connection != null && connection.requestTransportRenegotiationReconnect())
+        {
+            MiniclientApplication.get().getMimDirectSession()
+                    .useInPlaceStockFixedReconnect();
+            log.warn("Using SageTV's native MiniClient reconnect for ordinary Fixed fallback");
+            return;
+        }
+        restartMiniClientActivityForStockFixed(server);
+    }
+
+    /**
+     * A MiniClient connection owns its GFX renderer, and closing it correctly
+     * deinitializes (and finishes) that renderer Activity. Therefore a late
+     * transport renegotiation must use a fresh Activity rather than trying to
+     * attach a second connection to the retired renderer. The application
+     * controller retains the one-shot Direct suppression across this bounded
+     * teardown; the same client ID lets stock SageTV restore the watch session.
+     */
+    private void restartMiniClientActivityForStockFixed(final ServerInfo server)
+    {
+        final Intent replacement = new Intent(activity, activity.getClass());
+        replacement.putExtra(ARG_SERVER_INFO, server);
+        replacement.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        pendingMimDirectFallbackActivity = replacement;
+        activity.finish();
     }
 
     boolean hideNavigationDialog()

@@ -41,6 +41,59 @@ def teletext_callback_active(state: dict) -> bool:
     return value.startswith("active=true") and match is not None and int(match.group(1)) > 0
 
 
+def fixed_caption_callback_active(state: dict) -> bool:
+    """Return whether an owned Fixed/MIM side channel is producing event 225.
+
+    Unlike extractor callbacks, Direct-transcode captions are decoded from the
+    original source by the server plugin and delivered over its bounded side
+    channel.  They therefore do not increment the local extractor callback
+    counters, but they do share the same standard MiniClient event-225 wire
+    path used by the SageTV STV renderer.
+    """
+    return (
+        str(state.get("fixedCaptionSideChannelState", "")) == "active"
+        and bool(state.get("fixedCaptionAttached", False))
+        and bool(state.get("fixedCaptionForwarding", False))
+    )
+
+
+def subtitle_track_rows(state: dict) -> list[tuple[int, str]]:
+    """Return the player's raw track id and codec for each displayed row."""
+    rows: list[tuple[int, str]] = []
+    for encoded in str(state.get("subtitleTracks", "")).split("|"):
+        fields = encoded.split(":", 2)
+        if len(fields) < 2:
+            continue
+        try:
+            rows.append((int(fields[0]), fields[1].strip().upper()))
+        except ValueError:
+            continue
+    return rows
+
+
+def resolve_requested_track_raw(state: dict, requested: int) -> int:
+    """Resolve a menu row to the raw player id used by debug state.
+
+    Teletext services use their PID-derived raw id (for example 21504), while
+    the user-facing track list and this gate address them by row. CEA/DVB rows
+    commonly have matching small ids, so preserve an exact raw-id request
+    first and otherwise translate the requested row.
+    """
+    rows = subtitle_track_rows(state)
+    if any(raw_id == requested for raw_id, _ in rows):
+        return requested
+    if 0 <= requested < len(rows):
+        return rows[requested][0]
+    return requested
+
+
+def subtitle_track_codec(state: dict, raw_id: int) -> str:
+    for candidate, codec in subtitle_track_rows(state):
+        if candidate == raw_id:
+            return codec
+    return ""
+
+
 def wait_snapshot(client: MCPProcess, predicate, description: str, timeout_s: float) -> dict:
     deadline = time.monotonic() + timeout_s
     last: dict = {}
@@ -85,6 +138,18 @@ def main() -> int:
     )
     parser.add_argument("--streaming", choices=("dynamic", "push", "pull", "fixed"), default="pull")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
+    parser.add_argument(
+        "--mim-direct-mode",
+        choices=("off", "copy", "transcode"),
+        default="off",
+        help="Optional plugin-owned Fixed transport used for this caption gate",
+    )
+    parser.add_argument(
+        "--mim-direct-deinterlace",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="MIM-owned Transcode deinterlace policy",
+    )
     add_fixed_encoding_args(parser)
     parser.add_argument("--track-index", type=int, default=0)
     parser.add_argument(
@@ -93,6 +158,14 @@ def main() -> int:
         help=(
             "Disable and re-enable the selected caption track during the same "
             "media session, then require new non-empty cues without restarting playback"
+        ),
+    )
+    parser.add_argument(
+        "--verify-local-stv-handoff",
+        action="store_true",
+        help=(
+            "During one playback session, change an explicit local CC/DVB mode to "
+            "STV/CC1 and back, proving that only one caption renderer owns each phase"
         ),
     )
     parser.add_argument(
@@ -109,6 +182,16 @@ def main() -> int:
         default="auto",
     )
     parser.add_argument("--preferred-caption-service", type=int, default=1)
+    parser.add_argument(
+        "--legacy-server-caption-mode",
+        choices=("off", "cc1", "cc2", "stv", "dvb"),
+        default="",
+        help="Optional Android caption authority for this run",
+    )
+    parser.add_argument("--caption-cc1-type", default="")
+    parser.add_argument("--caption-cc1-language", default="")
+    parser.add_argument("--caption-cc2-type", default="")
+    parser.add_argument("--caption-cc2-language", default="")
     parser.add_argument(
         "--authority",
         choices=("stv", "debug"),
@@ -195,6 +278,18 @@ def main() -> int:
     args = parser.parse_args()
     if args.legacy_extender_callback and args.expect_no_legacy_callback:
         parser.error("--legacy-extender-callback and --expect-no-legacy-callback are mutually exclusive")
+    if args.verify_local_stv_handoff:
+        if args.authority != "stv":
+            parser.error("--verify-local-stv-handoff requires --authority stv")
+        if args.legacy_server_caption_mode not in {"cc1", "cc2", "dvb"}:
+            parser.error(
+                "--verify-local-stv-handoff requires an initial explicit "
+                "--legacy-server-caption-mode cc1, cc2, or dvb"
+            )
+        if args.legacy_extender_callback or args.expect_no_legacy_callback:
+            parser.error(
+                "--verify-local-stv-handoff cannot be combined with a callback-only gate"
+            )
     fixed_config = fixed_config_from_args(args)
     try:
         validate_fixed_config(fixed_config)
@@ -216,10 +311,17 @@ def main() -> int:
             "gsy_engine": args.gsy_engine,
             "streaming": args.streaming,
             "decoding": args.decoding,
+            "mim_direct_mode": args.mim_direct_mode,
+            "mim_direct_deinterlace": args.mim_direct_deinterlace,
             "preferred_audio_language": args.preferred_audio_language,
             "preferred_subtitle_language": args.preferred_subtitle_language,
             "preferred_caption_standard": args.preferred_caption_standard,
             "preferred_caption_service": args.preferred_caption_service,
+            "legacy_server_caption_mode": args.legacy_server_caption_mode,
+            "caption_cc1_type": args.caption_cc1_type,
+            "caption_cc1_language": args.caption_cc1_language,
+            "caption_cc2_type": args.caption_cc2_type,
+            "caption_cc2_language": args.caption_cc2_language,
             **fixed_config,
         })
         call_dict(client, "dev_connect_server", {
@@ -341,10 +443,16 @@ def main() -> int:
                             and int(state.get("legacyCaptionCallbackBytes", 0)) > 0
                         )
                         or teletext_callback_active(state)
+                        or fixed_caption_callback_active(state)
                     )
                     and int(state.get("legacyCaptionWireEventCount", 0)) > before_wire_events
                     and int(state.get("legacyCaptionWireBytes", 0)) > 0
-                    and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
+                    # Media3 may retain decoded cue text for diagnostics while
+                    # SageTV owns rendering through event 225.  Renderer
+                    # exclusivity is determined by the actual overlay
+                    # attachment/visibility state, not the telemetry cache.
+                    and not bool(state.get("subtitleOverlayAttached", False))
+                    and not bool(state.get("teletextOverlayVisible", False)),
                 "legacy-extender or Teletext compatibility callbacks on event 225",
                 args.cue_timeout_s,
             )
@@ -354,6 +462,7 @@ def main() -> int:
                 f"decodedBytes={callback_state.get('legacyCaptionCallbackBytes')} "
                 f"wireEvents={callback_state.get('legacyCaptionWireEventCount')} "
                 f"wireBytes={callback_state.get('legacyCaptionWireBytes')} "
+                f"fixedSideChannel={callback_state.get('fixedCaptionSideChannelState')} "
                 f"teletext={callback_state.get('teletextDecoder')} "
                 f"localCueText={callback_state.get('currentSubtitleCueText')!r}"
             )
@@ -419,11 +528,23 @@ def main() -> int:
                         expected_token in reported.casefold(),
                         f"SageTV reported {reported!r} after requesting {requested_state}",
                     )
+                    # Legacy extenders continue supplying decoded caption
+                    # packets through event 225 while the STV's Off/CC1/CC2
+                    # state controls whether SageTV paints them.  Therefore
+                    # every state must retain callback continuity while the
+                    # Android-local overlays remain detached.  Decoded cue
+                    # text may remain available strictly as telemetry.
                     callback_state = wait_snapshot(
                         client,
-                        lambda state: int(state.get("legacyCaptionWireEventCount", 0))
-                            > before_cycle_wire
-                            and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
+                        lambda state: int(state.get(
+                            "legacyCaptionWireEventCount", 0
+                        )) > before_cycle_wire
+                            and not bool(state.get(
+                                "subtitleOverlayAttached", False
+                            ))
+                            and not bool(state.get(
+                                "teletextOverlayVisible", False
+                            )),
                         f"event-225 continuity while SageTV captions are {requested_state}",
                         args.cue_timeout_s,
                     )
@@ -467,8 +588,10 @@ def main() -> int:
                         and (
                             bool(state.get("legacyCaptionCallbackActive", False))
                             or teletext_callback_active(state)
+                            or fixed_caption_callback_active(state)
                         )
-                        and not bool(str(state.get("currentSubtitleCueText", "")).strip()),
+                        and not bool(state.get("subtitleOverlayAttached", False))
+                        and not bool(state.get("teletextOverlayVisible", False)),
                     f"legacy caption callback recovery after seek {seek_index} ({command})",
                     args.cue_timeout_s,
                 )
@@ -496,12 +619,13 @@ def main() -> int:
             print(f"ANDROID LEGACY CAPTION CALLBACKS ({args.player}): PASS")
             return 0
         before_updates = int(tracks.get("subtitleCueUpdateCount", 0))
+        before_teletext_updates = int(tracks.get("teletextCueUpdateCount", 0))
         if args.authority == "debug":
             selected = call_dict(client, "dev_set_subtitle_track", {"index": args.track_index}, timeout=30.0)
             require(bool(selected.get("accepted")), f"Caption track selection was rejected: {selected}")
             selected_player_index = int(selected.get("playerIndex", args.track_index))
         else:
-            selected_player_index = args.track_index
+            selected_player_index = resolve_requested_track_raw(tracks, args.track_index)
             print("PASS: Android subtitle selector was not invoked; waiting for SageTV STV authority")
         selected_state = wait_snapshot(
             client,
@@ -509,23 +633,42 @@ def main() -> int:
             f"{args.authority} caption track selection",
             10.0,
         )
-        rendered = wait_snapshot(
-            client,
-            lambda state: int(state.get("subtitleCueUpdateCount", 0)) > before_updates
-                and int(state.get("subtitleNonEmptyCueCount", 0)) > 0
-                and (bool(str(state.get("currentSubtitleCueText", "")).strip())
-                     or int(state.get("currentSubtitleCueCount", 0)) > 0)
-                and bool(state.get("subtitleOverlayAttached", False)),
-            "a non-empty caption cue on an attached overlay",
-            args.cue_timeout_s,
-        )
+        selected_codec = subtitle_track_codec(selected_state, selected_player_index)
+        if selected_codec == "TELETEXT":
+            rendered = wait_snapshot(
+                client,
+                lambda state: int(state.get("selectedSubtitleTrackRaw", -1)) == selected_player_index
+                    and int(state.get("teletextCueUpdateCount", 0)) > before_teletext_updates
+                    and bool(str(state.get("currentTeletextCueText", "")).strip())
+                    and bool(state.get("teletextOverlayVisible", False)),
+                "a non-empty Teletext cue on the Teletext overlay",
+                args.cue_timeout_s,
+            )
+        else:
+            rendered = wait_snapshot(
+                client,
+                lambda state: int(state.get("subtitleCueUpdateCount", 0)) > before_updates
+                    and int(state.get("subtitleNonEmptyCueCount", 0)) > 0
+                    and (bool(str(state.get("currentSubtitleCueText", "")).strip())
+                         or int(state.get("currentSubtitleCueCount", 0)) > 0)
+                    and bool(state.get("subtitleOverlayAttached", False)),
+                "a non-empty caption cue on an attached overlay",
+                args.cue_timeout_s,
+            )
+        rendered_text = (rendered.get("currentTeletextCueText")
+                         if selected_codec == "TELETEXT"
+                         else rendered.get("currentSubtitleCueText"))
+        rendered_overlay = (rendered.get("teletextOverlayVisible")
+                            if selected_codec == "TELETEXT"
+                            else rendered.get("subtitleOverlayAttached"))
         print(
             "PASS: caption cues rendered "
             f"updates={rendered.get('subtitleCueUpdateCount')} "
             f"nonEmpty={rendered.get('subtitleNonEmptyCueCount')} "
             f"bitmap={rendered.get('subtitleBitmapCueCount', 0)} "
-            f"text={rendered.get('currentSubtitleCueText')!r} "
-            f"overlayAttached={rendered.get('subtitleOverlayAttached')}"
+            f"teletextUpdates={rendered.get('teletextCueUpdateCount', 0)} "
+            f"text={rendered_text!r} "
+            f"overlayAttached={rendered_overlay}"
         )
         print(
             "AUDIO: "
@@ -534,11 +677,123 @@ def main() -> int:
             f"mime={rendered.get('health_audioMime')!r} "
             f"decoder={rendered.get('health_audioDecoder')!r}"
         )
+        if args.verify_local_stv_handoff:
+            initial_mode = args.legacy_server_caption_mode
+            initial_raw_track = selected_player_index
+            initial_codec = selected_codec
+
+            # Establish STV authority before asking SageTV for CC1. This order
+            # prevents the server from painting a new callback caption while
+            # the prior Android-local renderer still intentionally owns the
+            # stream during the test transition itself.
+            stv_mode = call_dict(
+                client, "dev_set_caption_mode", {"mode": "stv"}, timeout=30.0
+            )
+            require(bool(stv_mode.get("accepted")), f"STV mode was rejected: {stv_mode}")
+            before_stv_wire = int(rendered.get("legacyCaptionWireEventCount", 0))
+            stv_cc1 = call_dict(
+                client, "dev_set_stv_caption_state", {"state": "CC1"}, timeout=30.0
+            )
+            require(
+                "cc1" in str(stv_cc1.get("state", "")).casefold(),
+                f"SageTV did not enter CC1: {stv_cc1}",
+            )
+            stv_rendered = wait_snapshot(
+                client,
+                # selectedSubtitleTrack is the public disabled value (-1).
+                # selectedSubtitleTrackRaw can legitimately retain Media3's
+                # disabled override id (8192), so it is diagnostic only here.
+                lambda state: int(state.get("selectedSubtitleTrack", 0)) == -1
+                    and not bool(str(state.get("currentSubtitleCueText", "")).strip())
+                    and not bool(state.get("teletextOverlayVisible", False))
+                    and int(state.get("legacyCaptionWireEventCount", 0)) > before_stv_wire,
+                "exclusive SageTV callback caption ownership after local -> STV",
+                args.cue_timeout_s,
+            )
+            stv_capture = tool_call(
+                client,
+                "take_screenshot",
+                {"label": f"caption-{args.player}-{args.streaming}-handoff-stv-only"},
+                timeout=30.0,
+            )
+            print(
+                "PASS: local -> STV handoff disabled the Android-local renderer "
+                f"selectedRaw={stv_rendered.get('selectedSubtitleTrackRaw')} "
+                f"wireEvents={stv_rendered.get('legacyCaptionWireEventCount')} "
+                f"capture={compact_tool_result(stv_capture)}"
+            )
+
+            before_local_updates = int(stv_rendered.get(
+                "teletextCueUpdateCount" if initial_codec == "TELETEXT"
+                else "subtitleCueUpdateCount", 0
+            ))
+            local_mode = call_dict(
+                client, "dev_set_caption_mode", {"mode": initial_mode}, timeout=30.0
+            )
+            require(bool(local_mode.get("accepted")), f"Local mode was rejected: {local_mode}")
+            if initial_codec == "TELETEXT":
+                rendered = wait_snapshot(
+                    client,
+                    lambda state: int(state.get("selectedSubtitleTrackRaw", -1))
+                        == initial_raw_track
+                        and int(state.get("teletextCueUpdateCount", 0))
+                        > before_local_updates
+                        and bool(state.get("teletextOverlayVisible", False)),
+                    "exclusive local Teletext ownership after STV -> local",
+                    args.cue_timeout_s,
+                )
+            else:
+                rendered = wait_snapshot(
+                    client,
+                    lambda state: int(state.get("selectedSubtitleTrackRaw", -1))
+                        == initial_raw_track
+                        and int(state.get("subtitleCueUpdateCount", 0))
+                        > before_local_updates
+                        and bool(state.get("subtitleOverlayAttached", False)),
+                    "exclusive local subtitle ownership after STV -> local",
+                    args.cue_timeout_s,
+                )
+            # Permit the single empty event-225 flush to settle, then prove the
+            # callback bridge stays quiet while the local renderer owns DVB or
+            # Teletext. A growing counter here would recreate duplicate CC.
+            time.sleep(0.75)
+            quiet_start = call_dict(client, "dev_player_state", timeout=30.0)
+            quiet_wire = int(quiet_start.get("legacyCaptionWireEventCount", 0))
+            time.sleep(2.0)
+            quiet_end = call_dict(client, "dev_player_state", timeout=30.0)
+            require(
+                int(quiet_end.get("legacyCaptionWireEventCount", 0)) == quiet_wire,
+                "Legacy callback output continued beside the Android-local caption renderer: "
+                f"before={quiet_wire} after={quiet_end.get('legacyCaptionWireEventCount')}",
+            )
+            local_capture = tool_call(
+                client,
+                "take_screenshot",
+                {"label": f"caption-{args.player}-{args.streaming}-handoff-local-only"},
+                timeout=30.0,
+            )
+            print(
+                "PASS: STV -> local handoff stopped event-225 and restored one local renderer "
+                f"selectedRaw={quiet_end.get('selectedSubtitleTrackRaw')} "
+                f"wireEvents={quiet_wire} capture={compact_tool_result(local_capture)}"
+            )
         if args.toggle_off_on:
-            if args.authority != "debug":
-                raise RuntimeError("--toggle-off-on requires --authority debug")
             before_toggle_updates = int(rendered.get("subtitleCueUpdateCount", 0))
-            disabled = call_dict(client, "dev_set_subtitle_track", {"index": -1}, timeout=30.0)
+            before_toggle_teletext_updates = int(
+                rendered.get("teletextCueUpdateCount", 0)
+            )
+            if args.authority == "debug":
+                disabled = call_dict(
+                    client, "dev_set_subtitle_track", {"index": -1}, timeout=30.0
+                )
+            else:
+                require(
+                    args.legacy_server_caption_mode in {"cc1", "cc2", "dvb"},
+                    "STV-authority Off -> On requires an explicit cc1, cc2, or dvb mode",
+                )
+                disabled = call_dict(
+                    client, "dev_set_caption_mode", {"mode": "off"}, timeout=30.0
+                )
             require(bool(disabled.get("accepted")), f"Caption disable was rejected: {disabled}")
             wait_snapshot(
                 client,
@@ -554,28 +809,52 @@ def main() -> int:
                 timeout=30.0,
             )
             print(f"PASS: captions disabled in the active session: {compact_tool_result(off_capture)}")
-            enabled = call_dict(
-                client, "dev_set_subtitle_track", {"index": args.track_index}, timeout=30.0
-            )
+            if args.authority == "debug":
+                enabled = call_dict(
+                    client, "dev_set_subtitle_track", {"index": args.track_index}, timeout=30.0
+                )
+            else:
+                enabled = call_dict(
+                    client,
+                    "dev_set_caption_mode",
+                    {"mode": args.legacy_server_caption_mode},
+                    timeout=30.0,
+                )
             require(bool(enabled.get("accepted")), f"Caption re-enable was rejected: {enabled}")
-            rendered = wait_snapshot(
-                client,
-                lambda state: int(state.get("selectedSubtitleTrack", -1)) == args.track_index
-                    and int(state.get("subtitleCueUpdateCount", 0)) > before_toggle_updates
-                    and (bool(str(state.get("currentSubtitleCueText", "")).strip())
-                         or int(state.get("currentSubtitleCueCount", 0)) > 0)
-                    and bool(state.get("subtitleOverlayAttached", False)),
-                "caption cues after same-session Off -> On",
-                args.cue_timeout_s,
-            )
+            if selected_codec == "TELETEXT":
+                rendered = wait_snapshot(
+                    client,
+                    lambda state: int(state.get("selectedSubtitleTrackRaw", -1))
+                        == selected_player_index
+                        and int(state.get("teletextCueUpdateCount", 0))
+                        > before_toggle_teletext_updates
+                        and bool(str(state.get("currentTeletextCueText", "")).strip())
+                        and bool(state.get("teletextOverlayVisible", False)),
+                    "Teletext cues after same-session Off -> On",
+                    args.cue_timeout_s,
+                )
+            else:
+                rendered = wait_snapshot(
+                    client,
+                    lambda state: int(state.get("selectedSubtitleTrackRaw", -1))
+                        == selected_player_index
+                        and int(state.get("subtitleCueUpdateCount", 0)) > before_toggle_updates
+                        and (bool(str(state.get("currentSubtitleCueText", "")).strip())
+                             or int(state.get("currentSubtitleCueCount", 0)) > 0)
+                        and bool(state.get("subtitleOverlayAttached", False)),
+                    "caption cues after same-session Off -> On",
+                    args.cue_timeout_s,
+                )
             print(
                 "PASS: captions resumed without restarting playback "
-                f"updates={rendered.get('subtitleCueUpdateCount')} "
-                f"text={rendered.get('currentSubtitleCueText')!r}"
+                f"updates={rendered.get('teletextCueUpdateCount') if selected_codec == 'TELETEXT' else rendered.get('subtitleCueUpdateCount')} "
+                f"text={(rendered.get('currentTeletextCueText') if selected_codec == 'TELETEXT' else rendered.get('currentSubtitleCueText'))!r}"
             )
             continuity_start = time.monotonic()
             continuity_deadline = continuity_start + max(2.0, args.continuity_window_s)
-            last_non_empty_count = int(rendered.get("subtitleNonEmptyCueCount", 0))
+            progress_key = ("teletextCueUpdateCount" if selected_codec == "TELETEXT"
+                            else "subtitleNonEmptyCueCount")
+            last_non_empty_count = int(rendered.get(progress_key, 0))
             initial_non_empty_count = last_non_empty_count
             initial_media_time = int(rendered.get("mediaTimeMs", 0))
             last_progress = continuity_start
@@ -584,7 +863,7 @@ def main() -> int:
                 time.sleep(min(0.25, continuity_deadline - time.monotonic()))
                 sample = call_dict(client, "dev_player_state", timeout=30.0)
                 now = time.monotonic()
-                non_empty_count = int(sample.get("subtitleNonEmptyCueCount", 0))
+                non_empty_count = int(sample.get(progress_key, 0))
                 if non_empty_count > last_non_empty_count:
                     longest_progress_gap_s = max(longest_progress_gap_s, now - last_progress)
                     last_progress = now
@@ -723,14 +1002,12 @@ def main() -> int:
                     # Test-only OSD keepalive. MEDIA_PAUSE is idempotent and does
                     # not alter normal SageTV timeout behavior outside this run.
                     tool_call(client, "firetv_key", {"key": "PAUSE"}, timeout=30.0)
-        if args.authority == "debug":
-            call_dict(client, "dev_set_subtitle_track", {"index": -1}, timeout=30.0)
-            wait_snapshot(
-                client,
-                lambda state: int(state.get("selectedSubtitleTrack", 0)) == -1,
-                "caption disable",
-                10.0,
-            )
+        # Do not turn the final visual-evidence gate into an implicit Off test.
+        # When SageTV has published an enabled VIDEO_CC_STATE, the STV remains
+        # authoritative and can immediately reapply its virtual CC slot after
+        # a debug-only direct-track disable. Off -> On behavior is exercised
+        # explicitly by --toggle-off-on; ordinary DVB/Teletext rendering gates
+        # should finish after proving the selected track and cue continuity.
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
         print(f"ANDROID CAPTIONS ({args.player}): PASS")

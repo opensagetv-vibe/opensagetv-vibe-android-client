@@ -321,6 +321,93 @@ def main() -> int:
             # permits both forward and backward chained seeks without changing
             # Pull/SMB, initial startup, or DVD Push timeline ownership.
             "b0325f89b65b004222699656d6cabf470b51e8560067effd9846edfebfce861d",
+            # Reviewed caption-authority correction. Explicit Android Off,
+            # CC1, CC2, and DVB modes remain client-owned after asynchronous
+            # track discovery; only STV mode consumes VIDEO_CC_STATE. This
+            # changes no playback-session, transport, or decoder lifecycle.
+            "ba481dbbfb8b90e9ae635991190b10a7de9ee63916982ba333fbd1fb9e5afb6b",
+            # Reviewed local-to-STV caption ownership handoff. When an STV
+            # Teletext callback takes ownership after local DVB/Teletext, the
+            # previously selected local subtitle renderer is disabled before
+            # returning to event-225 delivery. This prevents simultaneous
+            # bitmap/local and SageTV-rendered captions after a live mode
+            # change and leaves video/audio transport untouched.
+            # Hashes in this set are calculated after normalizing the Vibe
+            # Java namespace to the frozen upstream namespace. Keep the
+            # reviewed caption-handoff pin in that same canonical form.
+            "dd0fe29e57ebd55cf77395faf34266c490d7763298bceb51656c0ba0b8a26f1a",
+            # Reviewed optional Fixed caption-session lifecycle. A separately
+            # authenticated FFmpeg-plugin session attaches only in explicit
+            # Fixed mode, forwards timed CEA records through the established
+            # legacy-extender callback bridge, resets on the existing
+            # seek/FLUSH boundaries, and detaches on FREE. Plugin absence or
+            # failure leaves the established media transport unchanged.
+            "c69eda0822db8a9aafb1984e9879112ca88bc3eb59629f38ba78c83372caf637",
+            # Reviewed optional MIM Direct transport. Fixed playback switches
+            # to the plugin-owned HLS URL only after the LAN-scoped plugin
+            # contract is proven before connection negotiation; ordinary
+            # Fixed remains unchanged when the option or endpoint is absent.
+            "554fb67ccbb147d812b77f1726361d916e16d939c9b81ba1225e549bc1eee6ef",
+            # Reviewed MIM Direct no-op startup-seek guard. Bounded redundant
+            # same-position seeks sent immediately after OPENURL are consumed
+            # before they can retire the playlist being opened; later or
+            # different-position seeks keep the normal restart path.
+            "1785d2a400d632ac33230bbe27eda69eed404204ba29520b4a47de3b137326bc",
+            # Reviewed Direct Transcode caption tap handoff. The plugin owns
+            # one original-video caption session and the client attaches that
+            # claimed token to the established caption bridge; the media URL,
+            # decoder lifecycle, and stock-server fallback remain unchanged.
+            "d6e887e3afa9ba3222bed7ab44685e5b77de5e53dfca4fba3365fb2e92fef9c9",
+            # Reviewed Direct seek/rebind ordering. PLAY/PAUSE may follow a
+            # committed server-side replacement without canceling its UI
+            # rebind; a newer seek or playback session still supersedes it.
+            "4989d92a5440bc7ba57fecdea6a491f332348ab605daa79c2986a0e1d7d4b032",
+            # Reviewed Direct caption evidence integration. The already
+            # claimed original-video bridge can prove CEA data for Auto slot
+            # selection without changing Teletext/DVB preference ordering.
+            "0851c8997972830bdd0c77d5c5459fd35c7ed5cd0af1058f672ccd80cddd9b5f",
+            # Reviewed one-shot Direct caption evidence refresh. Async track
+            # publication can precede the first CEA sample, so that first
+            # sample reapplies the configured CC slot once per load/seek.
+            "add85e50b1a2d0a329a26835ee1a85087b8a8c6e0234c4164e99390949863457",
+            # Reviewed delayed-inventory Direct caption refresh. Do not
+            # consume the one-shot evidence refresh before Media3 publishes
+            # a track that the configured virtual CC slot can resolve.
+            "b8d9c7151bc380fe4eeac72e614b2c00239c77fa79e61e5a1e1bcd5f8de5c5de",
+            # Reviewed independent Direct caption clock. Fixed side-channel
+            # captions must continue to drain after the STV hides its OSD and
+            # stops issuing GETMEDIATIME requests.
+            "2c9f64058ce252ec684c09bec9376ea682632bbe6135c6f1ebc796261230f7ee",
+            # Reviewed on-request Direct caption refresh diagnostics. These
+            # counters are sampled only by the debug receiver and do not add
+            # callbacks or continuous telemetry to playback.
+            "b9eebcfe5fb6e445619931bbb689ad31ae7b5836990685d14690921abadf7d82",
+            # Reviewed single-renderer ownership for Direct captions. When an
+            # authenticated Fixed/MIM side channel actively forwards CEA data
+            # to SageTV event 225 in STV mode, the preserved media CEA track is
+            # disabled locally. Explicit Android CC/DVB choices and every
+            # stock/plugin-absent fallback retain their established behavior.
+            "c87e135beda0d711e5f41de6303f06c8a4ea9e13af077bd6f8150343099cae09",
+            # Reviewed late Direct-start/Pull-start recovery. It is bounded to
+            # pre-first-frame failure, requests one stock-compatible reconnect,
+            # and suppresses Direct for only that replacement connection.
+            "395593645c2a5a8bacb151853cf98e45196cc71a14e7e8d6535ed58a2fb6a7f9",
+            # Reviewed Direct MIM segment observation. Playback source state
+            # is explicit and only plugin-owned MPEG-TS segment bytes enter
+            # the existing Teletext bridge; unrelated HTTP media is ignored.
+            "288aeb3e3273e2def32e35f5a1043d768669b438e8cb8358a5119a670eee2fd1",
+            "69d4ad1fe65168340dceee60ff479c56543c871ac46f564eae6202c3e7c62ce1",
+            # Reviewed provider-owned DVD transport selection. The shared
+            # lifecycle records only the negotiated Copy/Transcode transport
+            # carried by the server-owned DVD VM; menu navigation, timing,
+            # seeking, and fallback remain under the existing DVD session.
+            "77798f00a04ec505154351958d6178da6ab5ed0bf2da0782a8d57c3ba98b9871",
+            # Reviewed bounded fullscreen transient retry. A temporary popup or
+            # incomplete SETVIDEORECT no longer consumes the only opportunity
+            # to promote a later stable embedded preview. The existing
+            # generation guard, 24-check bound, consecutive-sample rule, and
+            # one-toggle limit remain authoritative.
+            "411cd77d75b5692fe45dd07d9c6004524846ea34709aee7aad41d893e68709d0",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

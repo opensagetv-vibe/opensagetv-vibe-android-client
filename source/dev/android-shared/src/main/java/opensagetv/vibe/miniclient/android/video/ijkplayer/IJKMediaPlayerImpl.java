@@ -434,6 +434,9 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return true;
                     PlaybackDebugTrap.record("player_error_" + what + "_" + extra, IJKMediaPlayerImpl.this);
                     log.error("IjkPlayer onERROR: {}, {}", what, extra);
+                    if (requestStockFixedReconnectForMimPullFailure(
+                            "ijk_" + what + "_" + extra))
+                        return true;
                     playerFailed();
                     // We fully handle the error here. Returning false can cause IJK to also
                     // deliver completion after playerFailed(), producing a second stop path.
@@ -608,6 +611,8 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     public void seek(long timeInMS)
     {
         super.seek(timeInMS);
+        if (consumeMimDirectSeekHandled())
+            return;
         if (player == null || stoppedForResume || state == NO_STATE || state == LOADED_STATE || state == STOPPED_STATE)
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)

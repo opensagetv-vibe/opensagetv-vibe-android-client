@@ -8,6 +8,31 @@ DEBUG = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/
 
 
 class ConnectionLifecycleDiagnosticsTests(unittest.TestCase):
+    def test_mim_direct_late_failure_reconnect_is_typed_bounded_and_stock_compatible(self):
+        lifecycle = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/UIActivityLifeCycleHandler.java").read_text()
+        listener = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/VibeEventListener.java").read_text()
+        bus = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/VibeEventBus.java").read_text()
+        base = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/BaseMediaPlayerImpl.java").read_text()
+        direct = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/MimDirectSessionClient.java").read_text()
+        self.assertIn("MimDirectFallbackReconnectEvent", listener)
+        self.assertIn("event instanceof MimDirectFallbackReconnectEvent", bus)
+        self.assertIn("restartMiniClientActivityForStockFixed(server)", lifecycle)
+        self.assertIn("requestTransportRenegotiationReconnect()", lifecycle)
+        self.assertIn("useInPlaceStockFixedReconnect()", lifecycle)
+        self.assertIn("pendingMimDirectFallbackActivity", lifecycle)
+        self.assertIn("MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS", lifecycle)
+        self.assertIn("pendingMimDirectFallbackActivity == null", lifecycle)
+        self.assertIn("new Intent(activity, activity.getClass())", lifecycle)
+        self.assertIn("appContext.startActivity(fallbackActivity)", lifecycle)
+        self.assertIn("hasRenderedFirstVideoFrame()", base)
+        self.assertIn("requestStockFixedReconnectForUnplayablePull()", base)
+        self.assertIn('"start_failed_pull_fallback".equals(value)', direct)
+        self.assertIn("suppressNextPrepareForStockFixed = false", direct)
+        self.assertIn("late_failure_stock_fixed_reconnect", direct)
+        self.assertIn("debugForceNextDirectStartFailure", direct)
+        self.assertIn("debugFallbackPullUrl", base)
+        receiver = (DEBUG / "DevTestReceiver.java").read_text()
+        self.assertIn('"mim_direct_late_fallback_fault".equals(op)', receiver)
     def test_diagnostics_are_bounded_and_payload_free(self):
         source = (CORE / "ConnectionLifecycleDiagnostics.java").read_text()
         self.assertIn("MAX_EVENTS = 64", source)
@@ -43,7 +68,7 @@ class ConnectionLifecycleDiagnosticsTests(unittest.TestCase):
         provider = (DEBUG / "DebugStateProvider.java").read_text()
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text()
         self.assertIn("ConnectionLifecycleDiagnostics.latestCompactWire()", provider)
-        self.assertIn('out.append(";debugStatusVersion=21")', provider)
+        self.assertIn('out.append(";debugStatusVersion=22")', provider)
         self.assertIn('"connectionGeneration"', server)
         self.assertIn('"connectionRecent"', server)
 

@@ -664,6 +664,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             }
         });
 
+        // Preserve the requested track across a Direct/MIM seek, but never
+        // claim that a newly created ExoPlayer already has the old renderer
+        // override. Track publication will reapply it and recreate the view.
+        selectedSubtitleTrack = DISABLE_TRACK;
         this.RemoveSubTitleView();
     }
 
@@ -1150,6 +1154,9 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             log.logDebug("Seek - pushmode: " + pushMode + ", timeinMS " + timeInMS + ", playerReady " + playerReady);
 
             super.seek(timeInMS);
+
+            if (consumeMimDirectSeekHandled())
+                return;
 
             if (playerReady)
             {
@@ -1687,8 +1694,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     {
         initialAudioTrackIndex = -1;
         dvdPushMode = "push:dvd".equals(lastUri)
+                || (lastUri != null && lastUri.startsWith("push:dvd"))
                 || (sageTVurl != null && (sageTVurl.startsWith("push:dvd")
-                || sageTVurl.endsWith("/push:dvd")));
+                || sageTVurl.endsWith("/push:dvd")
+                || sageTVurl.contains("/push:dvd?")));
 
         if (player != null)
         {
@@ -1926,9 +1935,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
                 {
                     decoderAttemptTelemetry.recordTrackChange();
-                    // Caption tracks may arrive after prepare. Reapply the
-                    // persisted virtual slot without requiring menu input.
-                    applyConfiguredClosedCaptionSlot();
+                    applyPublishedSubtitleSelection();
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
                         return;
                     log.logDebug("Track map changed - debugging available tracks in file");
@@ -1967,6 +1974,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     decoderAttemptTelemetry.recordAudioOutputError(error.getErrorCodeName());
                 decoderAttemptTelemetry.recordFallback(failure.kind.name(),
                         failure.recovery.name());
+
+                if (requestStockFixedReconnectForMimPullFailure(
+                        "exo2_" + error.getErrorCodeName()))
+                    return;
 
                 if (retryCount == 0 && failure.showToUser)
                 {
@@ -2086,7 +2097,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
                     // Apply persisted DVB/CC slots after the final track map
                     // is ready; no second menu selection should be needed.
-                    boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();
+                    boolean configuredCaptionApplied = applyPublishedSubtitleSelection();
                     if (!configuredCaptionApplied && requestedSubtitleTrack == PREFERRED_TRACK)
                     {
                         setPreferredSubtitleTrack();
@@ -2358,6 +2369,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     long currentPositionMs = listenerPlayer.getCurrentPosition();
                     Exo2MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
                     scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
+                    updateFixedCaptionClock(currentPositionMs);
                     progressHandler.postDelayed(sessionProgress[0], 500);
                 }
                 else if (isCurrentPlaybackSession(listenerSession))
@@ -2520,6 +2532,28 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 }
             }
         });
+    }
+
+    /**
+     * Reconciles asynchronous ExoPlayer track publication without replacing
+     * an explicit active-session selection. Persisted virtual CC/DVB settings
+     * remain the initial default, but they must not turn off a native track
+     * selected from the long-press UI or commissioning API.
+     */
+    private boolean applyPublishedSubtitleSelection()
+    {
+        int requestedTrack = requestedSubtitleTrack;
+        if (requestedTrack != DISABLE_TRACK && requestedTrack != PREFERRED_TRACK)
+        {
+            if (selectedSubtitleTrack != requestedTrack)
+            {
+                log.logDebug("Applying explicit active-session subtitle track: "
+                        + requestedTrack);
+                setSubtitleTrack(requestedTrack);
+            }
+            return true;
+        }
+        return applyConfiguredClosedCaptionSlot();
     }
 
     /**

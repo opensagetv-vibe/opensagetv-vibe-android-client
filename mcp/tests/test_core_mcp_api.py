@@ -38,6 +38,36 @@ class CoreMcpApiClientTest(unittest.TestCase):
         client = CoreMcpApiClient("http://server:8270", "secret")
         self.assertEqual(client.current_media_file_id("444556303031"), 42)
 
+    @patch("sagetv_dev_mcp.core_mcp_api.urlopen")
+    def test_exact_path_uses_cold_index_timeout(self, opened):
+        opened.return_value = _Response({"ok": True, "mediaFileId": 42})
+        client = CoreMcpApiClient("http://server:8270", "secret", timeout_s=15.0)
+        client.resolve_exact_path(r"V:\OpenSageTV_Vibe_Tests\fixture.ts")
+        self.assertEqual(opened.call_args.kwargs["timeout"], 180.0)
+
+    @patch("sagetv_dev_mcp.core_mcp_api.time.sleep")
+    def test_exact_path_retries_transient_post_connect_http_400(self, sleeping):
+        client = CoreMcpApiClient("http://server:8270", "secret", timeout_s=15.0)
+        client._request = MagicMock(side_effect=[
+            CoreMcpApiError("HTTP 400: UI is still initializing"),
+            {"ok": True, "mediaFileId": 42},
+        ])
+        self.assertEqual(client.resolve_exact_path(r"V:\fixture.ts")["mediaFileId"], 42)
+        self.assertEqual(client._request.call_count, 2)
+        sleeping.assert_called_once_with(0.5)
+
+    @patch("sagetv_dev_mcp.core_mcp_api.urlopen")
+    def test_watch_uses_bounded_server_wait_and_media_control_is_direct(self, opened):
+        opened.return_value = _Response({"ok": True, "accepted": True})
+        client = CoreMcpApiClient("http://server:8270", "secret", timeout_s=15.0)
+        client.watch("444556303031", 42, from_beginning=True)
+        self.assertEqual(opened.call_args.kwargs["timeout"], 75.0)
+        self.assertIn(b"wait_ms=60000", opened.call_args.args[0].data)
+        client.media_control("444556303031", "play")
+        request = opened.call_args.args[0]
+        self.assertIn(b"action=media.control", request.data)
+        self.assertIn(b"operation=play", request.data)
+
     def test_resolve_context_uses_only_unique_context(self):
         client = CoreMcpApiClient("http://server:8270", "secret")
         client.ui_context_names = MagicMock(return_value=["SAGETV_PROCESS_LOCAL_UI", "444556303031"])

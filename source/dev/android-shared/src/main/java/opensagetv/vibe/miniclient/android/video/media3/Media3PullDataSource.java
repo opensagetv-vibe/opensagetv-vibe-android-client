@@ -389,6 +389,40 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
         return effectivelyGrowing;
     }
 
+    /**
+     * Resolves SageTV's growing-file contract before ExoPlayer is built.
+     *
+     * <p>Media3 configures its stuck-playing detectors only on the builder. A
+     * stock SageTV OPENURL does not distinguish a completed recording from one
+     * still being written, so the normal {@link #open(DataSpec)} SIZE-growth
+     * classification would otherwise happen too late. This bounded preflight
+     * uses a separate MediaServer connection so it cannot open, close, or
+     * otherwise mutate the session-owned datasource that Media3 will use. The
+     * resolved growth policy is retained for the real player open.</p>
+     */
+    public boolean classifyGrowthBeforePlayerBuild(Uri sourceUri) throws IOException
+    {
+        if (sourceUri == null) throw new IllegalArgumentException("sourceUri is required");
+        if (smbConfig != null)
+            throw new IllegalStateException("Prebuild growth classification is only valid for MediaServer Pull");
+
+        RetainedBufferedPullDataSource probe =
+                new RetainedBufferedPullDataSource(host, pullReadBytes);
+        try
+        {
+            long size = probe.open(sourceUri.toString());
+            effectivelyGrowing = growthPolicy.resolve(probe, size);
+            return effectivelyGrowing;
+        }
+        finally
+        {
+            // RetainedBufferedPullDataSource.close() intentionally preserves
+            // its connection for range reuse. A one-shot probe must release
+            // the connection explicitly.
+            probe.release();
+        }
+    }
+
     /** Restores the normal unknown-length contract after the first post-seek frame. */
     public void endSeekableSnapshotPreparation()
     {

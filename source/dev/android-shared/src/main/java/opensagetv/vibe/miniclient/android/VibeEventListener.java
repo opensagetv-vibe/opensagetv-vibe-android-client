@@ -7,6 +7,7 @@ import opensagetv.vibe.miniclient.android.events.HideKeyboardEvent;
 import opensagetv.vibe.miniclient.android.events.HideNavigationEvent;
 import opensagetv.vibe.miniclient.android.events.HideSystemUIEvent;
 import opensagetv.vibe.miniclient.android.events.MessageEvent;
+import opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
 import opensagetv.vibe.miniclient.android.ui.keymaps.DebugKeyEvent;
 import opensagetv.vibe.miniclient.events.ConnectedEvent;
@@ -32,6 +33,7 @@ public interface VibeEventListener
     default void handleOnHideNavigation(HideNavigationEvent event) { }
     default void handleOnHideSystemUI(HideSystemUIEvent event) { }
     default void onMessage(MessageEvent event) { }
+    default void onMimDirectFallbackReconnect(MimDirectFallbackReconnectEvent event) { }
     default void onToggleAspectRatio(ToggleAspectRatioEvent event) { }
     default void onDebugKey(DebugKeyEvent event) { }
     default void refresh(VideoInfoRefresh event) { }

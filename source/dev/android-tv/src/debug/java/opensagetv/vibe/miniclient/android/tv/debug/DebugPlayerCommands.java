@@ -143,6 +143,24 @@ final class DebugPlayerCommands
                 + ";accepted=true;inputPath=android_debug_direct_player_api";
     }
 
+    /** Exercise the same caption-authority path used by the long-press menu. */
+    static String captionMode(Context context, Intent intent)
+    {
+        MiniClient client = requireConnectedClient(context);
+        MediaCmd mediaCmd = requireMediaCmd(client);
+        requirePlayer(mediaCmd);
+        String mode = clean(intent.getStringExtra("mode"));
+        if (!("off".equals(mode) || "cc1".equals(mode) || "cc2".equals(mode)
+                || "stv".equals(mode) || "dvb".equals(mode)))
+            throw new IllegalArgumentException(
+                    "caption mode must be off, cc1, cc2, stv, or dvb");
+        String before = mediaCmd.getLegacyServerCaptionMode();
+        mediaCmd.setLegacyServerCaptionMode(mode);
+        return "op=caption_mode;mode=" + safe(mode)
+                + ";beforeMode=" + safe(before)
+                + ";accepted=true;inputPath=android_debug_media_cmd_caption_authority";
+    }
+
     static String audioAdjustment(Context context, Intent intent)
     {
         MiniClient client = requireConnectedClient(context);

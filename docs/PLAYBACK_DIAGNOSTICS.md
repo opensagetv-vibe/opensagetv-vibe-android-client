@@ -5,6 +5,23 @@ OpenSageTV Vibe Android playback. Active work is tracked only in `TASKS.md`.
 Historical implementation results remain in `CHANGELOG.md`, `HANDOFF.md`, and
 the versioned matrix-review documents.
 
+## Direct/MIM subtitle selection and seek replacement
+
+An explicit subtitle/caption track chosen during an active session has higher
+priority than a persisted CC/DVB default when Media3 or legacy Exo publishes a
+new track map. On a Direct seek, the backend wrapper retains the requested
+track but clears the released backend's applied selection. The replacement
+backend must report the requested raw track again, recreate the overlay when
+Android owns presentation, and resume non-empty cues.
+
+The physical commissioning gate uses the generated timestamped CEA fixture and
+requires all of the following: track discovery, raw-track selection, non-empty
+cues, Off/On without restart, continuing cues, advancing A/V after seek,
+post-seek cue updates, attached overlay, no player error, and settings
+restoration. The debug seek sampler may wait through transient segmented-stream
+BUFFERING only inside the existing recovery deadline; decoder/audio progress,
+surface validity, and error checks are not relaxed.
+
 ## Safety boundary
 
 - Test only `opensagetv.vibe.miniclient.debug`.
@@ -248,6 +265,14 @@ All public workflow screenshots are tightly cropped captures made while the
 project-generated Vibe fixture is playing. They contain no broadcast, movie,
 or user recording frame.
 
+Physical-test evidence must not remain in Android shared storage after it has
+been pulled to the workspace. Use the MCP screenshot operation, which streams
+PNG bytes directly through `adb exec-out`, and the MCP screen-record operation,
+which uses `/sdcard/OpenSageTV_Vibe_Test_Temp` and removes its unique remote
+file in `finally` handling. Ad-hoc `screencap`, `uiautomator dump`, trace, or
+`screenrecord` commands must follow the same dedicated-directory and
+pull-then-clean rule; never write test artifacts into `/storage/emulated/0`.
+
 If one of these sources is unavailable, record it as unavailable rather than
 inferring a cause from another layer.
 
@@ -316,6 +341,60 @@ The server owns mux/transcode and feed timing. Distinguish a genuine
 server-originated seek/flush/rebase sequence from a debug-only local player
 seek. Do not generalize Push results to Pull-only buffer, read-size, timestamp
 search, or seek-policy settings.
+
+### Optional MIM Direct Fixed
+
+MIM Direct is an explicitly selected, capability-negotiated Fixed transport
+owned by the optional stock-compatible FFmpeg Standard plugin. `Direct Copy`
+must report no video/audio decode or encode; `Direct Transcode` must report its
+actual full-GPU, mixed, or software stage. The plugin API is tokenless and
+LAN-scoped, but source starts remain SageTV-authorized and later operations use
+opaque bounded session handles.
+
+The Direct playlist contains MPEG-TS segments so CEA, Teletext, DVB bitmap,
+language, and timing metadata survive. Media3 observes only the bytes read from
+those Direct `.ts` segments and feeds them to the existing bounded Teletext PES
+probe/local caption engine. It does not inspect M3U8 bytes or instrument Push,
+Pull, SMB, or ordinary Fixed playback. Diagnostics identify the source as
+`MIM_DIRECT`.
+
+Fixed/MIM exposes `Auto`, `On`, and `Off` deinterlacing because the optional
+plugin owns that server-side filter stage. This is not an Android MediaCodec
+deinterlacer. Record the plugin's actual execution path: on the commissioned
+hosts, Linux VAAPI is full-GPU for all three policies, while Windows Haswell
+QSV is full-GPU with Off and truthfully falls back to a mixed path for Auto/On
+when its VPP deinterlacer rejects the input surface contract.
+
+In STV caption authority, an active Fixed caption side channel is the sole
+producer for SageTV event 225. The same Direct transport may preserve a CEA
+track for explicit Android-local modes, but that track must remain disabled
+locally while the side channel is forwarding. A physical gate must require
+advancing event-225 counters, detached local subtitle and Teletext overlays,
+visible CC1, clear Off, and zero active sessions after teardown. Merely seeing
+a caption track in Media3 is not proof of correct single-renderer ownership.
+
+When the plugin is absent, old, disabled, or unreachable before capability
+negotiation, the client must report the Direct state and retain ordinary stock
+Fixed without losing the SageTV session. A stock fallback gate must prove
+advancing A/V and lifecycle recovery, not merely the expected diagnostic
+string.
+
+A failure after Direct negotiation is a different phase. SageTV has already
+been told that the client can Pull the original source, so a failed plugin
+session currently reports `start_failed_pull_fallback` and opens that source
+through ordinary `SAGETV_PULL`. This is physically proven for a playable H.264
+TS source, including FF/REW and pause recovery. It is not equivalent to
+renegotiating Fixed: when the original source cannot be decoded directly, the
+client still needs a bounded reconnect/re-watch with Direct disabled. Keep that
+case open and never report the late-start gate as ordinary Fixed/Push.
+
+The frozen IJK 0.8.8 backend is physically supported for `Direct Copy`, but not
+for `Direct Transcode`: its MediaCodec path enters a repeated illegal state on
+the proven Transcode output. The client therefore reports
+`unsupported_player_stock_fixed` and keeps ordinary Fixed/Push for that one
+combination. Media3, legacy Exo, and the GSY Media3/legacy-Exo delegates are
+physically proven in both Direct modes on the non-Pro reference device. Do not
+classify the IJK fallback as a server or device-profile failure.
 
 ## Timeline fields
 
@@ -479,6 +558,17 @@ Media3 1.11 may then report `StuckPlayingNotEnding` after 60 seconds. A recovery
 must capture the current position before changing player state and must not
 silently reopen at zero.
 
+Media3 configures that detector only on its builder, before its normal
+datasource OPEN can verify whether an ambiguous stock-server recording is
+still growing. Perform the bounded SIZE-growth classification through a
+separate, explicitly released MediaServer connection before building the
+player. Never open and close the retained playback datasource for this probe:
+its logical range close intentionally preserves the underlying connection and
+will make the real OPEN fail as an already-open source. Relax only Media3's
+playing-not-ending detector, only for proven growing plain Pull; retain the
+default timeout when the probe fails and preserve every other stuck-player
+detector.
+
 For a live-program transition, a new `OPENURL` owns a new playback generation.
 Media3 fast replacement is prohibited when the current item is growing, and
 late prepared/completion/error/seek callbacks from IJK or Android System must
@@ -507,6 +597,7 @@ following narrower mappings:
 | Audio amplification and centre-channel downmix | Offer only when the active backend is producing decoded PCM and can prove the adjustment is applied. Hide/disable during encoded passthrough rather than silently changing the output path. |
 | Video stream selection | Enumerate actual alternate video streams or DVD angles only when both Media3 and the SageTV DVD session expose them. Never present a synthetic selector. |
 | Video cache/read-ahead sizing | Source-scoped `Low latency`, `Balanced`, and `Resilient` presets. Raw unbounded byte/time controls remain debug-only. |
+| Deinterlace | Fixed Transcoding Settings stores the `Auto`, `On`, or `Off` baseline for new plugin-owned Fixed/MIM sessions. The active-player Video menu can override it for only the current playback. The server filter stage and its GPU/mixed/software result must be proven; other Android transports remain diagnostic/read-only. |
 | Preferred/default audio language | Preferred language plus prefer-authored-default behavior, without overriding an explicit SageTV track command. |
 | Subtitle language/forced-only and subtitle style | `Off`, `Forced only`, preferred language, and authored/default selection. Position, size, background, and opacity apply only to text captions/subtitles. Authored DVD SPU and PGS bitmap overlays retain their authored geometry and palette. |
 | Player process information | Live audio/video queue, datasource rate/wait, bitrate, A/V correction, decoder, dropped/rendered frames, content FPS, display Hz, transport, and buffering state, with an export action. |
@@ -516,8 +607,9 @@ Kodi options deliberately not exposed are its local subtitle browser/search,
 brightness/contrast/gamma without a controlled shader path, stereoscopic and
 orientation controls, desktop display calibration, desktop software post-processing,
 noise/sharpness filters, arbitrary codec parameters, decoder filters, and
-deinterlace modes Android does not reliably control. Interlace and HDR state
-are diagnostic/read-only unless the Android platform exposes a verified control.
+Android-side deinterlace modes the platform does not reliably control.
+Interlace and HDR state remain diagnostic/read-only outside the verified
+plugin-owned Fixed/MIM filter stage.
 Kodi's speed-based sync-to-display remains experimental because it changes
 program speed and conflicts with encoded-audio passthrough. SageTV/STV
 continues to own skip intervals and the caption on/off state.

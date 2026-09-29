@@ -12,6 +12,7 @@ import opensagetv.vibe.miniclient.android.events.HideKeyboardEvent;
 import opensagetv.vibe.miniclient.android.events.HideNavigationEvent;
 import opensagetv.vibe.miniclient.android.events.HideSystemUIEvent;
 import opensagetv.vibe.miniclient.android.events.MessageEvent;
+import opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent;
 import opensagetv.vibe.miniclient.android.events.ToggleAspectRatioEvent;
 import opensagetv.vibe.miniclient.android.ui.keymaps.DebugKeyEvent;
 import opensagetv.vibe.miniclient.events.ConnectedEvent;
@@ -75,6 +76,7 @@ public final class VibeEventBus implements IBus
                 || event instanceof ChangePlayerOneTime || event instanceof CloseAppEvent
                 || event instanceof HideKeyboardEvent || event instanceof HideNavigationEvent
                 || event instanceof HideSystemUIEvent || event instanceof MessageEvent
+                || event instanceof MimDirectFallbackReconnectEvent
                 || event instanceof ToggleAspectRatioEvent || event instanceof DebugKeyEvent
                 || event instanceof VideoInfoRefresh || event instanceof VideoInfoShow;
     }
@@ -93,6 +95,8 @@ public final class VibeEventBus implements IBus
         else if (event instanceof HideNavigationEvent) listener.handleOnHideNavigation((HideNavigationEvent) event);
         else if (event instanceof HideSystemUIEvent) listener.handleOnHideSystemUI((HideSystemUIEvent) event);
         else if (event instanceof MessageEvent) listener.onMessage((MessageEvent) event);
+        else if (event instanceof MimDirectFallbackReconnectEvent)
+            listener.onMimDirectFallbackReconnect((MimDirectFallbackReconnectEvent) event);
         else if (event instanceof ToggleAspectRatioEvent) listener.onToggleAspectRatio((ToggleAspectRatioEvent) event);
         else if (event instanceof DebugKeyEvent) listener.onDebugKey((DebugKeyEvent) event);
         else if (event instanceof VideoInfoRefresh) listener.refresh((VideoInfoRefresh) event);

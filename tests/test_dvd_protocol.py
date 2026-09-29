@@ -347,6 +347,9 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn('propVal = "TRUE"', dvd_nav)
         self.assertIn('"DVD_DISC_TRANSPORTS".equals(propName)', connection)
         self.assertIn('propVal = "native,dvd_mpegts_v1"', connection)
+        self.assertIn('propVal = "native,dvd_mim_copy_v1"', connection)
+        self.assertIn('propVal = "native,dvd_mim_transcode_v1"', connection)
+        self.assertIn('client.getMimDirectTransportMode()', connection)
         for prop in (
             "DVD_DISC_POLICY",
             "DVD_DISC_SKIP_MENUS",
@@ -368,6 +371,17 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn('"push:dvd".equals(lastUri)', media3)
         self.assertIn('sageTVurl.endsWith("/push:dvd")', media3)
         self.assertIn("new DvdPsExtractor(state, subpictureDecoder,", factory)
+
+    def test_owned_dvd_modes_are_distinct_from_mpegts_transform(self):
+        base = BASE.read_text(encoding="utf-8")
+        provider = DEBUG_STATE.read_text(encoding="utf-8")
+        self.assertIn('disc_transport=dvd_mim_copy_v1', base)
+        self.assertIn('disc_transport=dvd_mim_transcode_v1', base)
+        self.assertIn('dvdOwnedTransportMode = dvdOwnedCopy ? "copy"', base)
+        self.assertIn('getDvdOwnedTransportModeForDebug', base)
+        self.assertIn('mimDvdOwnedState', provider)
+        self.assertIn('mimDvdOwnedExecutionPath', provider)
+        self.assertIn('mimDvdOwnedBytesRelayed', provider)
 
     def test_legacy_exo_bypasses_generic_sniffing_for_dvd_push_epochs(self):
         legacy = LEGACY_EXO.read_text(encoding="utf-8")

@@ -17,7 +17,9 @@ import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.SageCommand;
 import opensagetv.vibe.miniclient.android.AppUtil;
+import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.R;
+import opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.dvd.DvdDiagnostics;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
@@ -42,6 +44,7 @@ import opensagetv.vibe.miniclient.util.VideoInfo;
 import opensagetv.vibe.miniclient.video.HasVideoInfo;
 import opensagetv.vibe.miniclient.video.TeletextCea608Bridge;
 import opensagetv.vibe.miniclient.video.FullscreenPlaybackPolicy;
+import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.VideoInfoResponse;
 
@@ -71,6 +74,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected String lastUri;
     /** Server DVD VM is pushing a MIM-produced MPEG-TS representation. */
     protected boolean dvdTransformedTransport;
+    /** Explicit MIM ownership selected for the server-owned DVD title stream. */
+    protected String dvdOwnedTransportMode = "";
     private static final int NO_SERVER_SUBPICTURE_COMMAND = Integer.MIN_VALUE;
     private volatile int pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
     protected long lastMediaTime = -1;
@@ -154,6 +159,20 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                         connection.postSubtitleInfo(pts45Khz, duration45Khz, data, flags);
                 }
             });
+    private final LegacyExtenderCaptionBridge fixedCaptionBridge;
+    private volatile boolean fixedCaptionAttached;
+    private volatile boolean fixedCaptionEvidenceRefreshRequested;
+    private volatile long fixedCaptionClockUpdateCount;
+    private volatile long fixedCaptionEvidenceRefreshCount;
+    private volatile String fixedCaptionEvidenceRefreshState = "idle";
+    private volatile boolean mimDirectSeekHandled;
+    private volatile boolean mimDirectMediaUrlActive;
+    /**
+     * Orders UI-thread player rebinds after the server has committed a new
+     * MIM Direct session. PLAY/PAUSE commonly follows SEEK and must not cancel
+     * that committed rebind; a newer seek or playback session must.
+     */
+    private volatile long mimDirectRebindGeneration;
     private final TeletextSubtitleEngine.Listener teletextListener =
             new TeletextSubtitleEngine.Listener()
             {
@@ -185,6 +204,18 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     public BaseMediaPlayerImpl(AndroidUIController activity, boolean createPlayerOnUI, boolean waitForPlayer)
     {
         this.context = activity;
+        fixedCaptionBridge = new LegacyExtenderCaptionBridge(
+                new LegacyExtenderCaptionBridge.Sink()
+                {
+                    @Override public void postSubtitleInfo(long pts45Khz,
+                            long duration45Khz, byte[] data, int flags)
+                    {
+                        MiniClientConnection connection = BaseMediaPlayerImpl.this.context
+                                .getClient().getCurrentConnection();
+                        if (connection != null)
+                            connection.postSubtitleInfo(pts45Khz, duration45Khz, data, flags);
+                    }
+                });
         this.createPlayerOnUI = createPlayerOnUI;
         this.waitForPlayer = waitForPlayer;
         state = NO_STATE;
@@ -272,6 +303,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void free()
     {
+        mimDirectController().release(this);
+        mimDirectMediaUrlActive = false;
+        fixedCaptionController().detach(this, true);
+        fixedCaptionAttached = false;
         loadTransitionToken = null;
         playbackSessions.endSession(PlaybackSessionController.Operation.FREE);
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
@@ -293,6 +328,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     {
         final PlaybackSessionController.Token loadSession = playbackSessions.beginSession();
         loadTransitionToken = loadSession;
+        fixedCaptionAttached = fixedCaptionController().attach(this, fixedCaptionBridge);
+        if (fixedCaptionAttached)
+            postFixedCaptionFlush();
         onPlaybackLoadStarted();
         lastPlaybackOperation = loadSession;
         fullscreenPromotionSent = false;
@@ -306,6 +344,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         // value from the player this LOAD is about to release. Otherwise a
         // replacement can promote/accept the previous file's rectangle.
         playerReady = false;
+        // Clear the previous generation's destination synchronously. SageTV
+        // may send the new SETVIDEORECT while player replacement is still
+        // queued on Android's UI thread; releasePlayer() must not erase that
+        // newer rectangle after it arrives.
+        videoInfo.reset();
+        uiAspectChanged = true;
         final String finalUrl;
 
         lastUri = urlString;
@@ -317,8 +361,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             pushMode = true;
         }
-        dvdTransformedTransport = urlString != null && urlString.startsWith("push:dvd")
-                && (urlString.contains("disc_transport=dvd_mpegts_v1")
+        boolean dvdUrl = urlString != null && urlString.startsWith("push:dvd");
+        boolean dvdOwnedCopy = dvdUrl
+                && urlString.contains("disc_transport=dvd_mim_copy_v1");
+        boolean dvdOwnedTranscode = dvdUrl
+                && urlString.contains("disc_transport=dvd_mim_transcode_v1");
+        dvdOwnedTransportMode = dvdOwnedCopy ? "copy"
+                : dvdOwnedTranscode ? "transcode" : "";
+        dvdTransformedTransport = dvdUrl
+                && (dvdOwnedTranscode
+                || urlString.contains("disc_transport=dvd_mpegts_v1")
                 // Receive-only compatibility with already deployed Vibe Core.
                 || urlString.contains("vibe_transport=mim_ts_v1"));
         pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
@@ -329,8 +381,27 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         seekPending = false;
         flushed = false;
 
-        String url = urlString;
-        httpls = urlString.startsWith("http://");
+        String effectiveUrl = urlString;
+        mimDirectMediaUrlActive = false;
+        String directUrl = mimDirectController().open(this, urlString);
+        if (directUrl != null)
+        {
+            effectiveUrl = directUrl;
+            mimDirectMediaUrlActive = true;
+            pushMode = false;
+            if (!fixedCaptionAttached)
+                fixedCaptionAttached = fixedCaptionController().attach(
+                        this, fixedCaptionBridge);
+        }
+        else
+        {
+            // A debug-build-only receiver can replace exactly the original
+            // Pull attempt after an injected Direct start failure. In normal
+            // operation this method is an identity function.
+            effectiveUrl = mimDirectController().debugFallbackPullUrl(effectiveUrl);
+        }
+        String url = effectiveUrl;
+        httpls = effectiveUrl.startsWith("http://") || effectiveUrl.startsWith("https://");
         if (httpls)
         {
             if (url.contains("HOSTNAME"))
@@ -340,9 +411,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         }
         else
         {
-            if (!urlString.startsWith("stv://"))
+            if (!effectiveUrl.startsWith("stv://"))
             {
-                url = "stv://" + context.getClient().getConnectedServerInfo().address + "/" + urlString;
+                url = "stv://" + context.getClient().getConnectedServerInfo().address + "/" + effectiveUrl;
             }
         }
         finalUrl = url;
@@ -541,12 +612,46 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         applyTeletextCcMappings();
         SubtitleTrack track = resolveCaptionSlotTrack(channel, type, language);
         if (track == null) return false;
+        MiniClientConnection connection = context.getClient().getCurrentConnection();
+        if (!isExplicitLocalCaptionAuthority(connection)
+                && connection != null && connection.isSubtitleCallbackEnabled()
+                && fixedCaptionAttached
+                && fixedCaptionBridge.isForwardingCurrentStream())
+        {
+            /*
+             * MIM Direct preserves a CEA track in the media representation and
+             * independently publishes the decoded captions through the Fixed
+             * side channel.  In STV authority the side channel is the source
+             * for the legacy event-225 renderer.  Selecting the preserved CEA
+             * track locally as well produces two simultaneous captions.  The
+             * ownership decision must be based on active side-channel evidence,
+             * not merely on the advertised extractor track, because Copy and
+             * stock fallback paths can expose the same track without a usable
+             * callback producer.
+             */
+            if (getSelectedSubtitleTrack() != DISABLE_TRACK)
+                setSubtitleTrack(DISABLE_TRACK);
+            return true;
+        }
         if (track.getSubtitleCodec() == SubtitleCodec.TELETEXT)
         {
             if (!mapSubtitleTrackToClosedCaptionChannel(channel, track.getIndex())) return false;
-            MiniClientConnection connection = context.getClient().getCurrentConnection();
             if (!isExplicitLocalCaptionAuthority(connection)
-                    && connection != null && connection.isSubtitleCallbackEnabled()) return true;
+                    && connection != null && connection.isSubtitleCallbackEnabled())
+            {
+                /*
+                 * STV authority renders the Teletext service after it crosses
+                 * the legacy event-225 callback.  A preceding Android-local
+                 * DVB/Teletext selection can still be active on the player,
+                 * however.  Disable that local renderer before returning to
+                 * the callback path; otherwise changing DVB -> STV/CC1/CC2
+                 * leaves both the bitmap overlay and the SageTV caption on
+                 * screen until the next media teardown.
+                 */
+                if (getSelectedSubtitleTrack() != DISABLE_TRACK)
+                    setSubtitleTrack(DISABLE_TRACK);
+                return true;
+            }
         }
         setSubtitleTrack(track.getIndex());
         return true;
@@ -572,6 +677,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (track != null && CaptionSlotPolicy.TYPE_AUTO.equals(
                 CaptionSlotPolicy.normalizeType(slotType))
                 && !hasObservedCeaCaptionData()
+                && !fixedCaptionBridge.isForwardingCurrentStream()
                 && (track.getSubtitleCodec() == SubtitleCodec.CEA608
                 || track.getSubtitleCodec() == SubtitleCodec.CEA708))
         {
@@ -605,6 +711,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (connection == null || connection.getMediaCmd() == null) return false;
         PrefStore prefs = context.getClient().properties();
         String mode = prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv");
+        if ("off".equals(mode))
+        {
+            if (getSelectedSubtitleTrack() != DISABLE_TRACK)
+                setSubtitleTrack(DISABLE_TRACK);
+            return true;
+        }
         if ("dvb".equals(mode))
         {
             // Keep generic preferred-track resolution from accidentally
@@ -613,6 +725,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             return true;
         }
         int channel = "cc1".equals(mode) ? 1 : "cc2".equals(mode) ? 2 : 0;
+        if (channel != 0)
+        {
+            boolean applied = applyClosedCaptionSlot(channel,
+                    prefs.getString(channel == 1 ? PrefStore.Keys.caption_cc1_type
+                                    : PrefStore.Keys.caption_cc2_type,
+                            CaptionSlotPolicy.TYPE_AUTO),
+                    captionSlotLanguage(prefs, channel));
+            if (!applied) setSubtitleTrack(DISABLE_TRACK);
+            return true;
+        }
         if (connection.getMediaCmd().hasSageTvClosedCaptionState())
         {
             // STV owns the enabled/disabled state. Resolve every enabled
@@ -637,10 +759,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             }
             return false;
         }
-        if (channel == 0) return false;
-        return applyClosedCaptionSlot(channel, prefs.getString(channel == 1
-                        ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
-                        CaptionSlotPolicy.TYPE_AUTO), captionSlotLanguage(prefs, channel));
+        return false;
     }
 
     private static String captionSlotLanguage(PrefStore prefs, int channel)
@@ -739,8 +858,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     private boolean isExplicitLocalCaptionAuthority(MiniClientConnection connection)
     {
         if (connection == null || connection.getMediaCmd() == null) return false;
-        if (connection.getMediaCmd().hasSageTvClosedCaptionState()) return false;
         String mode = connection.getMediaCmd().getLegacyServerCaptionMode();
+        // Off/CC1/CC2/DVB are explicit Android choices even when a Vibe
+        // server has also published VIDEO_CC_STATE.  The published value is
+        // retained for the next time the user selects STV; it must not leave
+        // SageTV's legacy event-225 renderer active beside the Android local
+        // overlay.  That produced two simultaneous caption renderings on UK
+        // streams containing DVB bitmap and Teletext services.
         return "cc1".equals(mode) || "cc2".equals(mode) || "dvb".equals(mode);
     }
 
@@ -875,18 +999,50 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         return teletextClockLastMediaTimeMs;
     }
 
+    public final boolean isFixedCaptionAttachedForDebug()
+    {
+        return fixedCaptionAttached;
+    }
+
+    public final boolean isFixedCaptionForwardingForDebug()
+    {
+        return fixedCaptionBridge.isForwardingCurrentStream();
+    }
+
+    public final long getFixedCaptionClockUpdateCountForDebug()
+    {
+        return fixedCaptionClockUpdateCount;
+    }
+
+    public final long getFixedCaptionEvidenceRefreshCountForDebug()
+    {
+        return fixedCaptionEvidenceRefreshCount;
+    }
+
+    public final String getFixedCaptionEvidenceRefreshStateForDebug()
+    {
+        return fixedCaptionEvidenceRefreshState;
+    }
+
+    public final int getPendingServerSubpictureCommandForDebug()
+    {
+        return pendingServerSubpictureCommand;
+    }
+
     /**
-     * Drive queued Teletext independently of SageTV's GETMEDIATIME cadence.
+     * Drive queued broadcast captions independently of SageTV's GETMEDIATIME cadence.
      *
      * <p>Stock STVs stop polling media time once their OSD is hidden. Using
-     * that request as the only caption clock therefore freezes Teletext until
-     * another UI action wakes the OSD. The decoder's own player clock remains
-     * authoritative and advances without an on-screen timeline.</p>
+     * that request as the only caption clock therefore freezes Teletext and
+     * the optional Fixed side channel until another UI action wakes the OSD.
+     * The decoder's own player clock remains authoritative and advances
+     * without an on-screen timeline.</p>
      */
     private synchronized void scheduleTeletextClock()
     {
         if (teletextClockScheduled || state != PLAY_STATE
-                || teletextServices.length == 0 || context.getVideoView() == null)
+                || (!fixedCaptionAttached && teletextServices.length == 0)
+                || context.getVideoView() == null)
             return;
         final long generation = teletextOverlayGeneration;
         teletextClockScheduled = true;
@@ -896,14 +1052,21 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             {
                 teletextClockScheduled = false;
                 if (generation != teletextOverlayGeneration || state != PLAY_STATE
-                        || player == null || eos || teletextServices.length == 0)
+                        || player == null || eos
+                        || (!fixedCaptionAttached && teletextServices.length == 0))
                     return;
-                long mediaTimeMs = getPlayerMediaTimeMillis(teletextClockServerBaseMs);
+                long mediaTimeMs = mimDirectController().adjustPosition(
+                        BaseMediaPlayerImpl.this,
+                        getPlayerMediaTimeMillis(teletextClockServerBaseMs));
                 if (mediaTimeMs >= 0L)
                 {
-                    teletextLegacyBridge.drainTo(mediaTimeMs);
-                    teletextClockDrainCount++;
+                    if (teletextServices.length > 0)
+                    {
+                        teletextLegacyBridge.drainTo(mediaTimeMs);
+                        teletextClockDrainCount++;
+                    }
                     teletextClockLastMediaTimeMs = mediaTimeMs;
+                    updateFixedCaptionClock(mediaTimeMs);
                 }
                 scheduleTeletextClock();
             }
@@ -925,6 +1088,24 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         releasePlayer();
         notifySageTVStop();
         message(context.getContext().getString(R.string.msg_player_failed, lastUri));
+    }
+
+    /**
+     * Escalate only the proven two-stage startup failure: optional Direct
+     * creation failed, then the original Pull source failed before rendering a
+     * frame. The controller enforces one reconnect and suppresses Direct only
+     * for that replacement connection; no preference or server Core changes.
+     */
+    protected final boolean requestStockFixedReconnectForMimPullFailure(String reason)
+    {
+        if (hasRenderedFirstVideoFrame()
+                || !mimDirectController().requestStockFixedReconnectForUnplayablePull())
+            return false;
+        String safeReason = reason == null ? "unknown" : reason;
+        PlaybackDebugTrap.record("mim_direct_pull_failed_stock_fixed_reconnect", this);
+        context.getClient().eventbus().post(
+                new MimDirectFallbackReconnectEvent(safeReason));
+        return true;
     }
 
     protected void notifySageTVStop()
@@ -999,7 +1180,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
 
-        long mt = getPlayerMediaTimeMillis(lastServerTime);
+        long mt = mimDirectController().adjustPosition(
+                this, getPlayerMediaTimeMillis(lastServerTime));
         if (mt <= 0)
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
@@ -1015,6 +1197,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         pushTimelineHoldReported = false;
         teletextLegacyBridge.drainTo(mt);
         teletextClockLastMediaTimeMs = mt;
+        updateFixedCaptionClock(mt);
         return mt;
     }
 
@@ -1068,6 +1251,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         // MEDIACMD_DEINIT -> free() remains the true session boundary.
         beginPlaybackOperation(PlaybackSessionController.Operation.STOP);
         state = STOPPED_STATE;
+        fixedCaptionController().setPaused(this, true);
         endTeletextPresentation();
         context.removeVideoFrame();
     }
@@ -1096,6 +1280,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     {
         beginPlaybackOperation(PlaybackSessionController.Operation.PAUSE);
         state = PAUSE_STATE;
+        fixedCaptionController().setPaused(this, true);
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.debug("Pause was called");
@@ -1107,6 +1292,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     {
         beginPlaybackOperation(PlaybackSessionController.Operation.PLAY);
         state = PLAY_STATE;
+        fixedCaptionController().setPaused(this, false);
         scheduleTeletextClock();
         scheduleFullscreenPromotionCheck();
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
@@ -1118,15 +1304,65 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void seek(long timeInMS)
     {
-        beginPlaybackOperation(PlaybackSessionController.Operation.SEEK);
+        final PlaybackSessionController.Token seekOperation = beginPlaybackOperation(
+                PlaybackSessionController.Operation.SEEK);
         TeletextSubtitleEngine.setPlaybackAnchor(timeInMS);
         teletextLegacyBridge.clearPending();
         postTeletextFlush();
+        resetFixedCaptionForDiscontinuity();
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.debug("SEEK: {}", timeInMS);
         }
         seekPending = true;
+        mimDirectSeekHandled = rebindMimDirectForSeek(timeInMS, seekOperation);
+    }
+
+    protected final boolean consumeMimDirectSeekHandled()
+    {
+        boolean handled = mimDirectSeekHandled;
+        mimDirectSeekHandled = false;
+        return handled;
+    }
+
+    private boolean rebindMimDirectForSeek(final long timeInMS,
+            final PlaybackSessionController.Token seekOperation)
+    {
+        if (mimDirectController().consumeRedundantStartupSeek(this, timeInMS))
+            return true;
+        final String replacementUrl = mimDirectController().restart(this, timeInMS);
+        if (replacementUrl == null) return false;
+        final long rebindGeneration = ++mimDirectRebindGeneration;
+        fixedCaptionAttached = fixedCaptionController().attach(
+                this, fixedCaptionBridge);
+        loadTransitionToken = seekOperation;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (!isCurrentPlaybackSession(seekOperation) ||
+                        mimDirectRebindGeneration != rebindGeneration)
+                {
+                    finishLoadTransition(seekOperation);
+                    return;
+                }
+                try
+                {
+                    // Preserve a PLAY/PAUSE that followed SEEK while the
+                    // plugin prepared the replacement representation.
+                    final int requestedState = state;
+                    releasePlayer();
+                    eos = false;
+                    state = requestedState;
+                    playerReady = false;
+                    context.setupVideoFrame();
+                    setupPlayer(replacementUrl);
+                    startTeletextSession();
+                }
+                finally { finishLoadTransition(seekOperation); }
+            }
+        });
+        return true;
     }
 
     @Override
@@ -1279,6 +1515,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         TeletextSubtitleEngine.discontinuity("player-flush");
         teletextLegacyBridge.clearPending();
         postTeletextFlush();
+        resetFixedCaptionForDiscontinuity();
     }
 
     @Override
@@ -1331,7 +1568,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         dvdSubpictureDecoder.reset();
         player = null;
         playerReady = false;
-        videoInfo.reset();
+        // A LOAD transition cleared the old geometry before queuing player
+        // replacement. Preserve any new-generation SETVIDEORECT that arrived
+        // while the UI-thread release was pending. Ordinary Stop/DEINIT still
+        // clears all geometry here.
+        if (loadTransitionToken == null)
+            videoInfo.reset();
         releaseDataSource();
         dataSource = null;
         if (loadTransitionToken == null)
@@ -1356,6 +1598,115 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         {
             // Connection shutdown owns the event channel; there is nothing to flush.
         }
+    }
+
+    /** Supplies the independent player clock used by the Fixed caption service. */
+    protected final void updateFixedCaptionClock(long positionMs)
+    {
+        if (fixedCaptionAttached && positionMs >= 0L)
+        {
+            fixedCaptionClockUpdateCount++;
+            fixedCaptionController().updatePlaybackClock(this, positionMs);
+            if (!fixedCaptionEvidenceRefreshRequested &&
+                    fixedCaptionBridge.isForwardingCurrentStream())
+            {
+                PrefStore prefs = context.getClient().properties();
+                String mode = prefs.getString(
+                        PrefStore.Keys.legacy_server_caption_mode, "stv");
+                int refreshChannel = "cc1".equals(mode) ? 1
+                        : "cc2".equals(mode) ? 2 : 0;
+                if (refreshChannel == 0 && "stv".equals(mode))
+                {
+                    MiniClientConnection connection =
+                            context.getClient().getCurrentConnection();
+                    if (connection != null && connection.getMediaCmd() != null
+                            && connection.getMediaCmd().hasSageTvClosedCaptionState())
+                    {
+                        int serverState = connection.getMediaCmd()
+                                .getSageTvClosedCaptionState();
+                        if (serverState == 1 || serverState == 2)
+                            refreshChannel = serverState;
+                    }
+                }
+                if (refreshChannel != 0)
+                {
+                    final int channel = refreshChannel;
+                    final String refreshState = "stv".equals(mode)
+                            ? "stv_cc" + channel : mode;
+                    String type = prefs.getString(channel == 1
+                                    ? PrefStore.Keys.caption_cc1_type
+                                    : PrefStore.Keys.caption_cc2_type,
+                            CaptionSlotPolicy.TYPE_AUTO);
+                    // Direct Fixed caption evidence can precede Media3's
+                    // asynchronous track publication. Do not consume the
+                    // one-shot refresh until the configured slot resolves to
+                    // a real track; the next player-clock update will retry
+                    // after onTracksChanged() publishes the inventory.
+                    if (resolveCaptionSlotTrack(channel, type,
+                            captionSlotLanguage(prefs, channel)) == null)
+                    {
+                        fixedCaptionEvidenceRefreshState =
+                                "waiting_track_" + refreshState;
+                        return;
+                    }
+                    fixedCaptionEvidenceRefreshRequested = true;
+                    fixedCaptionEvidenceRefreshState =
+                            "scheduled_" + refreshState;
+                    context.runOnUiThread(new Runnable()
+                    {
+                        @Override public void run()
+                        {
+                            fixedCaptionEvidenceRefreshCount++;
+                            applyConfiguredClosedCaptionSlot();
+                            fixedCaptionEvidenceRefreshState =
+                                    "applied_" + refreshState;
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    private void resetFixedCaptionForDiscontinuity()
+    {
+        if (!fixedCaptionAttached)
+            return;
+        fixedCaptionController().discontinuity(this);
+        postFixedCaptionFlush();
+    }
+
+    private void postFixedCaptionFlush()
+    {
+        fixedCaptionEvidenceRefreshRequested = false;
+        fixedCaptionEvidenceRefreshState = "flushed";
+        fixedCaptionBridge.clearPending();
+        try
+        {
+            context.getClient().getBackgroundService().execute(new Runnable()
+            {
+                @Override public void run() { fixedCaptionBridge.postFlush(); }
+            });
+        }
+        catch (RuntimeException ignored)
+        {
+            // Connection shutdown owns the event channel.
+        }
+    }
+
+    private FixedCaptionSideChannelClient fixedCaptionController()
+    {
+        return MiniclientApplication.get().getFixedCaptionSideChannel();
+    }
+
+    private MimDirectSessionClient mimDirectController()
+    {
+        return MiniclientApplication.get().getMimDirectSession();
+    }
+
+    /** True only while this player owns the plugin-provided Direct media URL. */
+    protected final boolean isMimDirectMediaUrlActive()
+    {
+        return mimDirectMediaUrlActive;
     }
 
     private void finishLoadTransition(PlaybackSessionController.Token loadSession)
@@ -1431,7 +1782,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** True only when OPENURL selected the negotiated server MIM DVD transport. */
     public boolean isDvdTransformedTransportForDebug()
     {
-        return dvdTransformedTransport;
+        return dvdTransformedTransport || !dvdOwnedTransportMode.isEmpty();
+    }
+
+    public String getDvdOwnedTransportModeForDebug()
+    {
+        return dvdOwnedTransportMode;
     }
 
     @Override
@@ -1670,7 +2026,18 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 }
                 else
                 {
+                    // A resume prompt, a zero/temporary destination, or an STV
+                    // layout transition can coincide with the last sample that
+                    // would otherwise promote a preview. These states are not a
+                    // final decision: require a new consecutive stable-preview
+                    // window and keep polling within the existing bounded
+                    // maximum. Without this retry SageMC can remain windowed for
+                    // the whole title even though the later destination is a
+                    // stable embedded preview.
+                    fullscreenPromotionStablePreviewCount = 0;
+                    fullscreenPromotionStableFullscreenCount = 0;
                     fullscreenPromotionLastDecision = "not_embedded_or_popup_present";
+                    scheduleFullscreenPromotionCheck();
                 }
             }
         }, FULLSCREEN_PROMOTION_DELAY_MS);

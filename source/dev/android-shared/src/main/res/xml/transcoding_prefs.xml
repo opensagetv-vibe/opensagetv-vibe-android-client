@@ -4,6 +4,37 @@
     <PreferenceCategory android:title="General Settings">
 
         <ListPreference
+            android:defaultValue="off"
+            android:dialogTitle="MIM Direct media policy"
+            android:entries="@array/entries_mim_direct_mode"
+            android:entryValues="@array/entryvalues_mim_direct_mode"
+            android:key="mim_direct/mode"
+            android:summary="Optional FFmpeg-plugin-owned media stream. Off preserves ordinary SageTV Fixed behavior."
+            android:title="MIM Direct media"/>
+
+        <ListPreference
+            android:defaultValue="auto"
+            android:dialogTitle="Fixed/MIM deinterlace"
+            android:entries="@array/entries_mim_direct_deinterlace"
+            android:entryValues="@array/entryvalues_mim_direct_deinterlace"
+            android:key="mim_direct/deinterlace"
+            android:title="Deinterlace"/>
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="fixed_caption_side_channel/enabled"
+            android:summary="Preserve CEA-608/708 before server GPU decoding when the separately installed Vibe FFmpeg plugin is available. Missing or failed service keeps ordinary Fixed playback."
+            android:title="Preserve broadcast captions"/>
+
+        <EditTextPreference
+            android:defaultValue="31910"
+            android:dialogTitle="Caption API port"
+            android:inputType="number"
+            android:key="fixed_caption_side_channel/port"
+            android:summary="Standard FFmpeg plugin caption API port (default 31910)"
+            android:title="Caption API port"/>
+
+        <ListPreference
             android:dialogTitle="@string/dialog_title_list_transcoding_setting_preference"
             android:entries="@array/entries_list_transcoding_setting_preference"
             android:entryValues="@array/entryvalues_list_transcoding_setting_preference"

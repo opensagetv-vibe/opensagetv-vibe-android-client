@@ -156,6 +156,8 @@ def _compact_state(state: dict) -> dict:
         "gsyResolvedEngine", "gsySystemFallbackCount", "gsySystemFallbackReason",
         "preferredAudioLanguage", "preferredSubtitleLanguage",
         "preferredCaptionStandard", "preferredCaptionService",
+        "legacyServerCaptionMode", "captionCc1Type", "captionCc1Language",
+        "captionCc2Type", "captionCc2Language",
         "keepSessionInBackground", "resumeBackgroundPlayback",
         "backgroundSessionTimeoutSeconds",
         "discPlaybackPolicy", "discSkipMenus", "discSkipPreviews",
@@ -190,6 +192,8 @@ def _compact_state(state: dict) -> dict:
         "appStartedActivityCount", "appBackground",
         "backgroundSessionTimeoutMs", "backgroundSessionTimeoutDeadlineMonotonicMs",
         "backgroundSessionTimeoutCount",
+        "fixedCaptionSideChannelState", "mimDirectRequestedMode",
+        "mimDirectNegotiatedMode", "mimDirectSessionState",
         "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "playbackRate", "timelineSource", "serverAnchorMs",
         "serverRequestedSeekMs", "serverSeekSequence", "serverSeekMonotonicMs", "serverSeekWallMs", "serverSeekAgeMs",
         "serverFlushSequence", "serverFlushMonotonicMs", "serverFlushAgeMs",
@@ -242,6 +246,9 @@ def _compact_state(state: dict) -> dict:
         "subtitleTrackCount", "selectedSubtitleTrack", "selectedSubtitleTrackRaw", "subtitleTracks",
         "teletextDecoder", "teletextCueUpdateCount",
         "teletextClockDrainCount", "teletextClockLastMediaTimeMs",
+        "fixedCaptionAttached", "fixedCaptionForwarding",
+        "fixedCaptionClockUpdateCount", "fixedCaptionEvidenceRefreshCount",
+        "fixedCaptionEvidenceRefreshState", "pendingServerSubpictureCommand",
         "currentTeletextCueText",
         "teletextOverlayVisible",
         "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "subtitleBitmapCueCount",
@@ -506,6 +513,20 @@ def _startup_terminal_failure(state: dict) -> dict | None:
     return None
 
 
+def _is_mim_late_fixed_reconnect_state(state: dict) -> bool:
+    """Recognize only the bounded Direct-to-stock-Fixed startup handoff.
+
+    A deliberately failed Direct start can briefly leave the retiring player
+    in an error state while the existing MiniClient connection reconnects its
+    GFX/media sockets and SageTV opens ordinary Fixed/Pull.  That transient is
+    not a terminal launch failure, but no other player error is suppressed.
+    """
+    return str(state.get("mimDirectSessionState") or "") in {
+        "late_failure_stock_fixed_reconnect_requested",
+        "late_failure_stock_fixed_reconnect",
+    }
+
+
 def _is_resume_restart_prompt(state: dict) -> bool:
     popup = str(state.get("popupName") or "").lower()
     return "resume" in popup and "restart" in popup
@@ -559,6 +580,7 @@ def _wait_for_playback(
     verify_ms: int = 1500,
     expect_video: bool = True,
     expect_audio: bool = True,
+    allow_mim_late_fixed_reconnect: bool = False,
 ) -> dict:
     timeout_s = max(1.0, min(float(timeout_s), 300.0))
     verify_ms = max(250, min(int(verify_ms), 10000))
@@ -572,10 +594,17 @@ def _wait_for_playback(
         baseline_crash_probe = {"unavailable": True, "error": str(exc)}
     last = {}
     last_health = {}
+    mim_late_fixed_reconnect_observed = False
     while time.monotonic() < deadline:
         first = adb.player_state_snapshot()
         last = first
         terminal_failure = _startup_terminal_failure(first)
+        if (terminal_failure
+                and allow_mim_late_fixed_reconnect
+                and (_is_mim_late_fixed_reconnect_state(first)
+                     or mim_late_fixed_reconnect_observed)):
+            mim_late_fixed_reconnect_observed = True
+            terminal_failure = None
         if terminal_failure:
             return {
                 "passed": False,
@@ -584,6 +613,7 @@ def _wait_for_playback(
                 "state": _compact_state(first),
                 "baselineCrashProbe": baseline_crash_probe,
                 "longWaitProbes": long_wait_probes,
+                "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
             }
         static_menu_healthy, static_menu_details = _dvd_static_menu_health(first)
         if static_menu_healthy:
@@ -595,6 +625,7 @@ def _wait_for_playback(
                 "after": _compact_state(first),
                 "baselineCrashProbe": baseline_crash_probe,
                 "longWaitProbes": long_wait_probes,
+                "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
             }
         probe_available = bool(first.get("health_probeSupported", False))
         candidate_active = bool(first.get("playerActive")) and int(first.get("state", -1)) == 2
@@ -602,6 +633,12 @@ def _wait_for_playback(
             time.sleep(verify_ms / 1000.0)
             second = adb.player_state_snapshot()
             terminal_failure = _startup_terminal_failure(second)
+            if (terminal_failure
+                    and allow_mim_late_fixed_reconnect
+                    and (_is_mim_late_fixed_reconnect_state(second)
+                         or mim_late_fixed_reconnect_observed)):
+                mim_late_fixed_reconnect_observed = True
+                terminal_failure = None
             if terminal_failure:
                 return {
                     "passed": False,
@@ -610,6 +647,7 @@ def _wait_for_playback(
                     "state": _compact_state(second),
                     "baselineCrashProbe": baseline_crash_probe,
                     "longWaitProbes": long_wait_probes,
+                    "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
                 }
             healthy, details = _playback_health_from_pair(
                 first,
@@ -628,6 +666,7 @@ def _wait_for_playback(
                     "after": _compact_state(second),
                     "baselineCrashProbe": baseline_crash_probe,
                     "longWaitProbes": long_wait_probes,
+                    "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
                 }
             completed, completed_details = _completed_short_media_health(
                 second,
@@ -643,6 +682,7 @@ def _wait_for_playback(
                     "after": _compact_state(second),
                     "baselineCrashProbe": baseline_crash_probe,
                     "longWaitProbes": long_wait_probes,
+                    "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
                 }
 
         elapsed_ms = int(round((time.monotonic() - started) * 1000.0))
@@ -676,6 +716,7 @@ def _wait_for_playback(
                     "crashDetails": entry,
                     "baselineCrashProbe": baseline_crash_probe,
                     "longWaitProbes": long_wait_probes,
+                    "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
                 }
         time.sleep(0.25)
     return {
@@ -696,6 +737,7 @@ def _wait_for_playback(
         "crashDetected": False,
         "baselineCrashProbe": baseline_crash_probe,
         "longWaitProbes": long_wait_probes,
+        "mimLateFixedReconnectObserved": mim_late_fixed_reconnect_observed,
     }
 
 
@@ -718,6 +760,22 @@ def _is_fullscreen_playback(state: dict) -> bool:
         return False
     embedded = width * 100 < screen_width * 75 and height * 100 < screen_height * 75
     return not embedded
+
+
+def _client_fullscreen_command_sent(state: dict) -> bool:
+    """Return whether the Android client's guarded TV promotion already fired.
+
+    ``TV`` is a toggle, so the MCP recovery path must never send another one
+    while the client-owned promotion is already in flight.  Older APKs do not
+    expose these counters; their absent values correctly mean that MCP may use
+    its single bounded recovery command after the passive observation window.
+    """
+    if bool(state.get("fullscreenPromotionSent")):
+        return True
+    try:
+        return int(state.get("fullscreenPromotionCommandCount", 0) or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _send_playback_osd(server_api=None, ui_context: str = "") -> dict:
@@ -812,7 +870,10 @@ def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
         time.sleep(0.10)
 
     commands = []
-    if allow_command and time.monotonic() < deadline and not _is_fullscreen_playback(last):
+    client_command_in_flight = _client_fullscreen_command_sent(last)
+    if (allow_command and time.monotonic() < deadline
+            and not _is_fullscreen_playback(last)
+            and not client_command_in_flight):
         commands.append(_send_playback_osd(server_api, ui_context))
     stable_since = None
     while time.monotonic() < deadline:
@@ -838,6 +899,7 @@ def _promote_preview_to_fullscreen(timeout_s: float = 12.0, server_api=None,
         "reason": ("fullscreen_surface_not_observed" if allow_command
                    else "client_owned_fullscreen_surface_not_observed"),
         "commands": commands,
+        "clientCommandInFlight": client_command_in_flight,
         "state": _compact_state(last),
     }
 
@@ -1369,6 +1431,17 @@ def dev_restore_settings() -> dict:
 
 
 @mcp.tool()
+def dev_set_mim_direct_late_fallback_fault(enabled: bool = True) -> dict:
+    """Arm/clear the debug APK's one-shot late Fixed fallback fault.
+
+    The next eligible MIM Direct playback forces Direct creation and its
+    original Pull fallback to fail. The client must reconnect once with Direct
+    suppressed for that connection and resume through ordinary SageTV Fixed.
+    """
+    return adb.set_mim_direct_late_fallback_fault(enabled)
+
+
+@mcp.tool()
 def dev_set_unified_graphics(enabled: bool = True) -> dict:
     """Enable or disable the opt-in HD200/HD300 unified graphics capability.
 
@@ -1406,6 +1479,10 @@ def dev_set_player_config(
     fixed_audio_channels: str = "",
     fixed_remuxing_preference: str = "",
     fixed_remuxing_format: str = "",
+    fixed_caption_side_channel_enabled: bool | None = None,
+    fixed_caption_side_channel_port: int = 0,
+    mim_direct_mode: str = "",
+    mim_direct_deinterlace: str = "",
     smb_mappings: str = "",
     smb_username: str = "",
     smb_password: str = "",
@@ -1475,6 +1552,10 @@ def dev_set_player_config(
         fixed_audio_channels=fixed_audio_channels,
         fixed_remuxing_preference=fixed_remuxing_preference,
         fixed_remuxing_format=fixed_remuxing_format,
+        fixed_caption_side_channel_enabled=fixed_caption_side_channel_enabled,
+        fixed_caption_side_channel_port=fixed_caption_side_channel_port or "",
+        mim_direct_mode=mim_direct_mode,
+        mim_direct_deinterlace=mim_direct_deinterlace,
         smb_mappings=smb_mappings,
         smb_username=smb_username,
         smb_password=smb_password,
@@ -2013,7 +2094,7 @@ def dev_play_media_file_id(
             time.sleep(0.1)
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
     fullscreen = _promote_preview_to_fullscreen(
-        server_api=sagex, ui_context=context, allow_command=False
+        server_api=sagex, ui_context=context, allow_command=True
     ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
@@ -2126,7 +2207,7 @@ def dev_play_video(
     )
     playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
     fullscreen = _promote_preview_to_fullscreen(
-        server_api=sagex, ui_context=context, allow_command=False
+        server_api=sagex, ui_context=context, allow_command=True
     ) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
@@ -2200,6 +2281,7 @@ def dev_play_server_path(
     stop_result: dict | None = None
     stopped_state = state
     retained_stopped_player = False
+    retained_close_result: dict | None = None
     stop_popup_dismissal: dict | None = None
     if bool(state.get("playerActive")):
         stop_result = adb.dev_control("command", command="stop")
@@ -2248,6 +2330,34 @@ def dev_play_server_path(
                     "state": _compact_state(stopped_state),
                 }
 
+        if retained_stopped_player:
+            # Stock VideoFrame keeps the stopped MiniPlayer as the current
+            # MediaFile. A subsequent Watch(the same MediaFile) is therefore a
+            # successful no-op: no OPENURL reaches Android and Exo remains in
+            # its stopped/idle state. Close only this already-proven quiescent
+            # session through SageTV's public CloseAndWaitUntilClosed API, then
+            # require Android to observe teardown before the exact Watch. This
+            # is deterministic commissioning control, not a private MiniClient
+            # protocol event, and works with an otherwise stock sage.jar.
+            retained_close_result = sage_control.media_control(sage_context, "stop")
+            close_deadline = time.monotonic() + min(
+                15.0, max(3.0, float(timeout_s) / 3.0)
+            )
+            while time.monotonic() < close_deadline:
+                stopped_state = adb.player_state_snapshot()
+                if not bool(stopped_state.get("playerActive")):
+                    break
+                time.sleep(0.2)
+            if bool(stopped_state.get("playerActive")):
+                return {
+                    "passed": False,
+                    "reason": "retained_playback_did_not_close",
+                    "requestedServerPath": requested,
+                    "stopResult": stop_result,
+                    "retainedCloseResult": retained_close_result,
+                    "state": _compact_state(stopped_state),
+                }
+
     resolved_media = sage_control.resolve_exact_path(requested)
     media_file_id = int(resolved_media.get("mediaFileId", 0) or 0)
     if media_file_id <= 0:
@@ -2261,8 +2371,17 @@ def dev_play_server_path(
         timeout_s=min(8.0, timeout_s),
         restart_from_beginning=bool(restart_from_beginning),
     )
-    playback = _wait_for_playback(timeout_s=timeout_s, verify_ms=verify_ms)
-    fullscreen = _promote_preview_to_fullscreen(allow_command=False) if bool(playback.get("passed", False)) else {
+    # Watch(fromBeginning) may leave a retained MiniPlayer paused after its
+    # initial Seek.  Use the plugin's direct stock Play API rather than a
+    # generic SageCommand("Play"): SageMC can interpret the latter as start
+    # of its saved Now Playing playlist, replacing the exact requested file.
+    media_play = sage_control.media_control(sage_context, "play")
+    playback = _wait_for_playback(
+        timeout_s=timeout_s,
+        verify_ms=verify_ms,
+        allow_mim_late_fixed_reconnect=True,
+    )
+    fullscreen = _promote_preview_to_fullscreen(allow_command=True) if bool(playback.get("passed", False)) else {
         "passed": False, "reason": "playback_not_healthy"
     }
     passed = bool(playback.get("passed", False)) and bool(fullscreen.get("passed", False))
@@ -2276,11 +2395,13 @@ def dev_play_server_path(
         "resolvedMedia": resolved_media,
         "stopResult": stop_result,
         "retainedStoppedPlayer": retained_stopped_player,
+        "retainedCloseResult": retained_close_result,
         "stopPopupDismissal": stop_popup_dismissal,
         "request": request,
         "queuedFullscreen": queued_fullscreen,
         "earlyFullscreen": early_fullscreen,
         "resumePrompt": resume_prompt,
+        "mediaPlay": media_play,
         "restartFromBeginning": bool(restart_from_beginning),
         "fullscreen": fullscreen,
         "playback": playback,
@@ -2592,6 +2713,12 @@ def dev_set_subtitle_track(index: int) -> dict:
 
 
 @mcp.tool()
+def dev_set_caption_mode(mode: str) -> dict:
+    """Set active Off/CC1/CC2/STV/DVB authority through the real MediaCmd path."""
+    return adb.set_caption_mode(mode)
+
+
+@mcp.tool()
 def dev_search_text(
     text: str,
     submit: bool = False,
@@ -2801,6 +2928,29 @@ def dev_send_sequence(sequence: str) -> dict:
 def dev_sage_command(command: str) -> dict:
     """Send an exact SageTV command by SageCommand key (for example ff, rew, ff_2, rew_2, pause, play, play_pause, stop)."""
     return adb.sage_command(command)
+
+
+@mcp.tool()
+def dev_server_media_control(operation: str, rate: float | None = None) -> dict:
+    """Control the active media player through the stock-compatible Core MCP API.
+
+    This avoids STV-dependent generic Play/Stop command semantics during exact
+    fixture tests. It fails closed when the connected server does not provide
+    the Core MCP plugin.
+    """
+    state = adb.player_state_snapshot()
+    server_address = str(state.get("serverAddress", "")).strip()
+    client_id = str(state.get("clientId", "")).strip()
+    if not bool(state.get("connected")) or not server_address or not client_id:
+        raise RuntimeError("MiniClient must be connected before server media control")
+    sage_control, sage_context = _sage_control_session(server_address, client_id)
+    if not isinstance(sage_control, CoreMcpApiClient):
+        raise RuntimeError(
+            "Server media control requires the stock-compatible Vibe Core MCP plugin"
+        )
+    result = sage_control.media_control(sage_context, operation, rate=rate)
+    result["transport"] = sage_control.transport
+    return result
 
 @mcp.tool()
 def dev_sage_command_sequence(commands: list[str], delay_ms: int = 350, settle_ms: int = 1500) -> dict:

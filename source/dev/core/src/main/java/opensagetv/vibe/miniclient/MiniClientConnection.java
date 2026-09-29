@@ -1064,9 +1064,18 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                     else if ("DVD_DISC_TRANSPORTS".equals(propName))
                     {
-                        // This advertises representations the client can
-                        // decode, not a particular server executable/provider.
-                        propVal = "native,dvd_mpegts_v1";
+                        // The DVD VM remains server-owned, but a Fixed MIM
+                        // Direct choice must select the matching provider-owned
+                        // title representation. Keep the legacy generic
+                        // transport when Direct is not negotiated so existing
+                        // Hybrid installations remain compatible.
+                        String directMode = client.getMimDirectTransportMode();
+                        if (MimDirectTransportPolicy.COPY.equals(directMode))
+                            propVal = "native,dvd_mim_copy_v1";
+                        else if (MimDirectTransportPolicy.TRANSCODE.equals(directMode))
+                            propVal = "native,dvd_mim_transcode_v1";
+                        else
+                            propVal = "native,dvd_mpegts_v1";
                     }
                     else if ("DVD_DISC_POLICY".equals(propName))
                     {
@@ -1185,7 +1194,8 @@ public class MiniClientConnection implements SageTVInputCallback
                     else if ("VIDEO_CODECS".equals(propName))
                     {
                         if (client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
-                                && (client.properties().getStreamingMode()).equalsIgnoreCase("fixed"))
+                                && (client.properties().getStreamingMode()).equalsIgnoreCase("fixed")
+                                && !isMimDirectTransportActive())
                         {
                             propVal = "NONE";
                         }
@@ -1200,7 +1210,8 @@ public class MiniClientConnection implements SageTVInputCallback
                     else if ("AUDIO_CODECS".equals(propName))
                     {
                         if (client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
-                                && (client.properties().getStreamingMode()).equalsIgnoreCase("fixed"))
+                                && (client.properties().getStreamingMode()).equalsIgnoreCase("fixed")
+                                && !isMimDirectTransportActive())
                         {
                             propVal = "NONE";
                         }
@@ -1216,7 +1227,14 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                     else if ("PUSH_AV_CONTAINERS".equals(propName))
                     {
-                        if (((client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
+                        if (isMimDirectTransportActive())
+                        {
+                            // The plugin owns the opted-in media representation.
+                            // Ask stock Core for the original source path instead
+                            // of starting a second Push/Fixed transcoder.
+                            propVal = "NONE";
+                        }
+                        else if (((client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
                             || client.properties().getFixedRemuxingPreference().equalsIgnoreCase("always"))
                                 && (client.properties().getStreamingMode()).equalsIgnoreCase("fixed")))
                         {
@@ -1250,7 +1268,12 @@ public class MiniClientConnection implements SageTVInputCallback
                         PULL - Containers we can read without transcoding.
                         Set this to empty if we are remote or if we are fixed and preference is to always transcode or always remux
                         */
-                        if (!canDoPullStreaming
+                        if (isMimDirectTransportActive())
+                        {
+                            propVal = capabilityProfile.pushFormats() + "," +
+                                    capabilityProfile.pullFormats();
+                        }
+                        else if (!canDoPullStreaming
                                 || ((client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
                                 || client.properties().getFixedRemuxingPreference().equalsIgnoreCase("always"))
                                 && "fixed".equalsIgnoreCase(client.properties().getStreamingMode())))
@@ -1281,7 +1304,11 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                     else if ("FIXED_PUSH_MEDIA_FORMAT".equals(propName))
                     {
-                        if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode()))
+                        if (isMimDirectTransportActive())
+                        {
+                            propVal = "";
+                        }
+                        else if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode()))
                         {
                             String format = client.properties().getFixedEncodingContainerFormat();
                             
@@ -1356,7 +1383,11 @@ public class MiniClientConnection implements SageTVInputCallback
                     else if ("FIXED_PUSH_REMUX_FORMAT".equals(propName))
                     {
                         //If we are using fixed streaming mode and
-                        if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode()))
+                        if (isMimDirectTransportActive())
+                        {
+                            propVal = "";
+                        }
+                        else if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode()))
                         {
                             if(!client.properties().getFixedRemuxingPreference().equalsIgnoreCase("off"))
                             {
@@ -2720,6 +2751,25 @@ public class MiniClientConnection implements SageTVInputCallback
             close();
     }
 
+    /**
+     * Reuse SageTV's established extender reconnect path after a client-side
+     * transport policy changes. This preserves the server UI/watch session and
+     * causes capabilities to be queried again without a private wire command.
+     */
+    public boolean requestTransportRenegotiationReconnect() {
+        if (!reconnectState.canReconnect(alive, encryptEvents))
+            return false;
+        java.net.Socket socket = connectionWorkers.gfxSocket();
+        if (socket == null)
+            return false;
+        try {
+            socket.close();
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
     public String getServerName() {
         return msi.address;
     }
@@ -2769,6 +2819,11 @@ public class MiniClientConnection implements SageTVInputCallback
     public boolean isAudioCodecSupported(String codecName)
     {
         return true;
+    }
+
+    private boolean isMimDirectTransportActive()
+    {
+        return MimDirectTransportPolicy.isActive(client.getMimDirectTransportMode());
     }
     
 }

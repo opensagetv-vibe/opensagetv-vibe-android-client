@@ -51,6 +51,26 @@ def main() -> int:
     parser.add_argument("--streaming", type=normalize_streaming, choices=STREAMING_SELECTIONS, default=default_test_value("streaming", "pull"), help="Streaming selection: push, pull, fixed (legacy dynamic accepted)")
     parser.add_argument("--decoding", type=normalize_decoding, choices=DECODING_SELECTIONS, default=default_test_value("decoding", "hardware"), help="Decoding selection: hardware, software, fallback (legacy hardware_preferred accepted)")
     add_fixed_encoding_args(parser)
+    parser.add_argument(
+        "--mim-direct-mode",
+        choices=("off", "copy", "transcode"),
+        default="off",
+        help="Optional FFmpeg-plugin-owned Fixed transport policy",
+    )
+    parser.add_argument(
+        "--mim-direct-deinterlace",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="MIM-owned Transcode deinterlace policy",
+    )
+    parser.add_argument(
+        "--require-mim-direct-owned",
+        action="store_true",
+        help=(
+            "Fail unless playback is using the requested owned HTTP session "
+            "instead of a safe SageTV Pull/Fixed fallback"
+        ),
+    )
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="")
     parser.add_argument(
         "--smb-mappings",
@@ -92,8 +112,30 @@ def main() -> int:
     parser.add_argument("--run-pause-health", action="store_true", help="Run SageTV pause/play and require A/V recovery")
     parser.add_argument("--run-repeated-start", type=int, default=0, help="Restart the exact recording this many times and require advancing A/V")
     parser.add_argument("--run-stop-restart", action="store_true", help="Stop through SageTV, restart the exact recording, and require advancing A/V")
-    parser.add_argument("--require-captions", action="store_true", help="Require STV-selected, non-empty rendered captions before and after navigation")
+    parser.add_argument(
+        "--require-captions",
+        action="store_true",
+        help="Require non-empty locally rendered captions before and after navigation",
+    )
+    parser.add_argument(
+        "--caption-mode",
+        choices=("cc1", "cc2", "dvb"),
+        default="cc1",
+        help=(
+            "Deterministic Android caption mode used with --require-captions "
+            "(default: cc1; use dvb for bitmap-subtitle fixtures)"
+        ),
+    )
     parser.add_argument("--recovery-timeout-ms", type=int, default=30000, help="Per-operation A/V recovery budget (default: 30000 ms)")
+    parser.add_argument(
+        "--seek-settle-ms",
+        type=int,
+        default=None,
+        help=(
+            "Wait after each seek before judging sustained output. The default is "
+            "5000 ms for Fixed/MIM (stock SageTV restarts the transcoder) and 300 ms otherwise."
+        ),
+    )
     parser.add_argument("--run-comskip", choices=("", "right", "left", "both"), default="")
     parser.add_argument("--exit", choices=("session", "stop", "none"), default="session")
     args = parser.parse_args()
@@ -106,10 +148,16 @@ def main() -> int:
         parser.error(str(exc))
     if not 1000 <= args.recovery_timeout_ms <= 300000:
         parser.error("--recovery-timeout-ms must be between 1000 and 300000")
+    if args.seek_settle_ms is not None and not 0 <= args.seek_settle_ms <= 30000:
+        parser.error("--seek-settle-ms must be between 0 and 30000")
     if not 0 <= args.run_repeated_start <= 10:
         parser.error("--run-repeated-start must be between 0 and 10")
     if args.start_ms < -1:
         parser.error("--start-ms must be -1 (preserve resume position) or non-negative")
+    if args.require_mim_direct_owned and args.mim_direct_mode == "off":
+        parser.error("--require-mim-direct-owned requires --mim-direct-mode copy or transcode")
+    if args.require_mim_direct_owned and args.player != "media3":
+        parser.error("strict owned-transport proof currently requires --player media3")
 
     client = MCPProcess()
     try:
@@ -135,6 +183,15 @@ def main() -> int:
             "streaming": streaming_preference(args.streaming) if args.streaming else "",
             "decoding": decoding_preference(args.decoding) if args.decoding else "",
             "gsy_engine": args.gsy_engine,
+            "mim_direct_mode": args.mim_direct_mode,
+            "mim_direct_deinterlace": args.mim_direct_deinterlace,
+            # Caption rendering cannot be inferred from the user's preserved
+            # setting: a previous DVB choice is valid for a UK fixture but
+            # intentionally selects nothing in a CEA-only fixture.  Make the
+            # requested gate deterministic, then let settings_restore return
+            # the exact original mode in finally.
+            "legacy_server_caption_mode": args.caption_mode
+                if args.require_captions else "",
             "smb_mappings": args.smb_mappings,
             "smb_username": args.smb_username,
             "smb_password": args.smb_password,
@@ -198,11 +255,58 @@ def main() -> int:
             raise RuntimeError(f"Video did not start with verified A/V playback: {started.get('reason')}")
         print("PASS: requested video started on this MiniClient and real playback is advancing")
 
+        if args.require_mim_direct_owned:
+            owned = call_dict(client, "dev_player_state", timeout=30.0)
+            expected_state = "active_" + args.mim_direct_mode
+            data_source = str(owned.get("health_dataSourceClass", ""))
+            failures = []
+            if str(owned.get("mimDirectNegotiatedMode", "")) != args.mim_direct_mode:
+                failures.append(
+                    "negotiated=" + str(owned.get("mimDirectNegotiatedMode", ""))
+                )
+            session_state = str(owned.get("mimDirectSessionState", ""))
+            accepted_states = {
+                expected_state,
+                expected_state + "_startup_seek_suppressed",
+            }
+            # The startup-seek suppression suffix is an active owned-stream
+            # state, not a fallback.  It means the client deliberately ignored
+            # SageTV's redundant zero-position seek immediately after opening
+            # the newly owned HTTP session.  Ownership is independently proven
+            # below by the negotiated mode, MIM_DIRECT source, and exact data
+            # source class, so rejecting this state produced a false failure
+            # after otherwise healthy playback had already advanced.
+            if session_state not in accepted_states:
+                failures.append(
+                    "session=" + session_state
+                )
+            if str(owned.get("playbackSource", "")) != "MIM_DIRECT":
+                failures.append("source=" + str(owned.get("playbackSource", "")))
+            if not data_source.endswith("Media3MimDirectHttpDataSource"):
+                failures.append("dataSource=" + data_source)
+            print("MIM DIRECT OWNERSHIP: " + json.dumps({
+                "requestedMode": args.mim_direct_mode,
+                "negotiatedMode": owned.get("mimDirectNegotiatedMode"),
+                "sessionState": owned.get("mimDirectSessionState"),
+                "playbackSource": owned.get("playbackSource"),
+                "dataSourceClass": data_source,
+            }, indent=2, sort_keys=True))
+            if failures:
+                raise RuntimeError(
+                    "requested MIM Direct mode fell back or lacks owned-source proof: "
+                    + ", ".join(failures)
+                )
+            print("PASS: client is consuming the FFmpeg-plugin-owned HTTP stream")
+
         def normalize_start(label: str) -> dict:
             if args.start_ms < 0:
                 return {}
             print(f"STEP: normalize {label} to deterministic start {args.start_ms} ms")
-            normalized = call_dict(client, "dev_seek_time", {
+            # Every source opened by this harness is owned by SageTV's
+            # VideoFrame.  In Push/Fixed mode especially, reposition the
+            # server byte stream rather than seeking only the Android decoder
+            # over an already-buffered fragment.
+            normalized = call_dict(client, "dev_server_seek_time", {
                 "target_ms": args.start_ms,
                 "tolerance_ms": 5000,
                 "timeout_s": args.recovery_timeout_ms / 1000.0,
@@ -249,10 +353,14 @@ def main() -> int:
 
         def run_commands(label: str, commands: list[str]) -> dict:
             nonlocal caption_state
+            seek_settle_ms = args.seek_settle_ms
+            if seek_settle_ms is None:
+                seek_settle_ms = 5000 if args.streaming == "fixed" else 300
             result = call_dict(client, "dev_run_seek_check", {
                 "commands": commands,
                 "expected_net_ms": 0,
                 "delay_ms": 1000 if commands == ["pause", "play"] else 350,
+                "settle_ms": seek_settle_ms,
                 "recovery_timeout_ms": args.recovery_timeout_ms,
                 "verify_playback_ms": args.verify_ms,
             }, timeout=args.recovery_timeout_ms / 1000.0 + 60.0)
@@ -353,21 +461,52 @@ def main() -> int:
             # MediaFile through Sagex tests a different asynchronous STV path
             # and can race SageMC's StopPopup cleanup.
             time.sleep(1.0)
-            played = call_dict(client, "dev_sage_command", {"command": "play"}, timeout=30.0)
+            # The generic SageTV Play UI command is STV-dependent; SageMC may
+            # use it to start its saved Now Playing playlist instead of
+            # resuming the retained exact MediaFile. Use the bounded stock API
+            # bridge so this gate tests the current player session only.
+            played = call_dict(
+                client, "dev_server_media_control", {"operation": "play"}, timeout=30.0
+            )
             print("STOP_PLAY: " + json.dumps(played, indent=2, sort_keys=True))
+            retained_timeout_s = min(15.0, args.playback_timeout_s)
             recovered = call_dict(client, "dev_wait_for_playback_started", {
-                "timeout_s": args.playback_timeout_s,
+                "timeout_s": retained_timeout_s,
                 "verify_ms": args.verify_ms,
-            }, timeout=args.playback_timeout_s + 35.0)
+            }, timeout=retained_timeout_s + 20.0)
             print("STOP_PLAY_RECOVERY: " + json.dumps(recovered, indent=2, sort_keys=True))
-            if not recovered.get("passed"):
-                raise RuntimeError(
-                    "retained-session PLAY did not recover A/V: "
-                    f"{recovered.get('failureReason', recovered)}"
-                )
-            normalize_start("STOP_PLAY")
-            if args.require_captions:
-                caption_state = wait_for_captions("STOP_PLAY")
+            recovery_health = recovered.get("health", {})
+            # A Fixed transcoder fragment can end cleanly after producing a
+            # few decoded frames even though Stop unloaded the real SageTV
+            # MediaFile.  The generic playback-health helper deliberately
+            # accepts completed short clips, but that is not a successful
+            # retained-session restart for this gate.  Treat an ended fragment
+            # as unloaded and re-open the exact requested source instead of
+            # seeking the exhausted Android decoder locally.
+            retained_session = bool(recovered.get("passed")) and not bool(
+                recovery_health.get("ended", False)
+            )
+            if not retained_session:
+                # Stock STVs are allowed to close the current MediaFile on
+                # Stop. In that state direct Play is intentionally a no-op.
+                # Restart the same deterministic source through its exact
+                # control path; never fall back to the STV-dependent generic
+                # Play command, which SageMC can route to Now Playing.
+                if args.server_path or args.video_name:
+                    restart_source("STOP_EXACT_REWATCH")
+                    print(
+                        "PASS: Stop unloaded the player; exact-source rewatch "
+                        "recovered A/V without invoking the STV playlist"
+                    )
+                else:
+                    raise RuntimeError(
+                        "retained-session PLAY did not recover A/V and no exact source "
+                        f"is available: {recovered.get('failureReason', recovered)}"
+                    )
+            else:
+                normalize_start("STOP_PLAY")
+                if args.require_captions:
+                    caption_state = wait_for_captions("STOP_PLAY")
 
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         print("CRASH CHECK: " + json.dumps(crash, indent=2, sort_keys=True))

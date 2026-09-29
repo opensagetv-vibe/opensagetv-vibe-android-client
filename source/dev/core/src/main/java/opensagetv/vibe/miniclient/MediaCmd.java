@@ -245,10 +245,11 @@ public class MediaCmd
     }
 
     /**
-     * Changes the compatibility caption mode used when an older SageTV server
-     * cannot publish the STV's VIDEO_CC_STATE. The choice is persisted and is
-     * applied to the active player immediately. If the server has published a
-     * state, that authoritative STV state continues to win.
+     * Changes the caption authority used by the Android client. STV follows a
+     * published VIDEO_CC_STATE; Off, CC1, CC2, and DVB are explicit local
+     * choices and therefore continue to win until the user selects STV again.
+     * This also keeps the menu truthful on servers that can publish caption
+     * state: choosing Off must not be undone by the previous STV CC1 value.
      */
     public void setLegacyServerCaptionMode(String requestedMode)
     {
@@ -278,15 +279,34 @@ public class MediaCmd
         if (currentPlayer == null)
             return;
 
-        // DVB is a client-local mode. A server VIDEO_CC_STATE describes the
-        // SageTV/STV caption state and must not replace an explicit Android
-        // DVB bitmap selection with Teletext or a generic preferred track.
-        if ("dvb".equals(getLegacyServerCaptionMode()))
+        String mode = getLegacyServerCaptionMode();
+        if ("off".equals(mode))
+        {
+            currentPlayer.setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
+            return;
+        }
+
+        // These are client-local modes. A server VIDEO_CC_STATE describes the
+        // SageTV/STV selection and must not replace an explicit Android choice.
+        if ("dvb".equals(mode))
         {
             // Explicit DVB is a broadcast-caption choice. Do not route it
             // through the generic subtitle resolver, which may select SRT,
             // PGS, or DVD text instead.
             currentPlayer.applyDvbCaptionTrack();
+            return;
+        }
+        if ("cc1".equals(mode) || "cc2".equals(mode))
+        {
+            int channel = "cc2".equals(mode) ? 2 : 1;
+            String type = client.properties().getString(channel == 1
+                    ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
+                    "auto");
+            String language = client.properties().getString(channel == 1
+                    ? PrefStore.Keys.caption_cc1_language
+                    : PrefStore.Keys.caption_cc2_language, "");
+            if (!currentPlayer.applyClosedCaptionSlot(channel, type, language))
+                currentPlayer.setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
             return;
         }
 
@@ -305,11 +325,7 @@ public class MediaCmd
             int channel = sageTvClosedCaptionStateReceived
                     ? sageTvClosedCaptionState : 0;
             if (channel == 0)
-            {
-                String mode = client.properties().getString(
-                        PrefStore.Keys.legacy_server_caption_mode, "stv");
-                channel = "cc2".equals(mode) ? 2 : 1;
-            }
+                channel = 1;
             String type = client.properties().getString(channel == 1
                     ? PrefStore.Keys.caption_cc1_type : PrefStore.Keys.caption_cc2_type,
                     "auto");
@@ -492,6 +508,7 @@ public class MediaCmd
                         playa.load((byte) 0, (byte) 0, "", urlString, null, true, 0);
                         notifyPlaybackLoadStarted();
                         applySageTvClosedCaptionState();
+                        applyRetainedDvdStreamSelections();
                     }
                 }
                 writeInt(1, retbuf, 0);
@@ -1051,6 +1068,39 @@ public class MediaCmd
             if (playa != null)
                 playa.free();
             playa = null;
+        }
+    }
+
+    /**
+     * Reapply the DVD VM's authoritative stream selections after OPENURL
+     * replaces the Android player backend.
+     *
+     * Hybrid DVD playback sends DVD_STREAMS while the native menu cell is
+     * active, then sends a transformed-title OPENURL. OPENURL necessarily
+     * frees that menu backend, so applying the command only to the outgoing
+     * player silently returns Media3/legacy Exo to their first audio track and
+     * loses the authored SPU choice. MediaCmd owns the DVD wire session and
+     * therefore retains the last selectors across that representation change.
+     * Backends already defer an early selector until their new track groups or
+     * SPU decoder are ready. A later DVD_STREAMS command remains authoritative
+     * and simply replaces this retained request.
+     */
+    private void applyRetainedDvdStreamSelections()
+    {
+        if (!dvdSessionPending || playa == null)
+            return;
+        if (dvdLastAudioStreamPosition >= 0)
+        {
+            log.debug("Reapplying retained DVD audio stream {} after OPENURL",
+                    dvdLastAudioStreamPosition);
+            playa.setAudioTrack(dvdLastAudioStreamPosition);
+        }
+        if (dvdLastSubtitleStreamPosition >= 0)
+        {
+            log.debug("Reapplying retained DVD subtitle stream {} after OPENURL",
+                    dvdLastSubtitleStreamPosition);
+            playa.dvdSetStream(STREAM_TYPE_SUBTITLE,
+                    dvdLastSubtitleStreamPosition);
         }
     }
 

@@ -1,6 +1,126 @@
 # Changelog
 
-## Unreleased
+## v0.5.96 - 2026-09-29
+
+- Rebuilt the release candidate with impact-based validation. The debug APK,
+  debug/release-candidate AABs, and universal debug APK set pass Gradle,
+  bundletool, source-contract, changed Java policy/client, and affected MCP
+  playback-health gates. Unrelated full device/DVD matrices were not rerun.
+- Closed the Direct/MIM late-start black-screen gap without adding a private
+  server command. When Direct creation and its exposed Pull fallback both fail
+  before the first video frame, the client retires Direct for that connection
+  and uses SageTV's existing GFX/media reconnect to renegotiate ordinary
+  Fixed/Pull. The Activity, SageTV UI/watch session, saved Direct preference,
+  and user settings remain intact. A debug-only one-shot fault passed on
+  non-Pro `.25` against `.232` with the same connection generation, advancing
+  hardware video/audio through `SAGETV_PULL`, no crash/exit, and all 103
+  settings restored. The exact-path MCP verifier now waits through only this
+  named recovery transition; 18 focused verifier tests pass and unrelated
+  player errors remain terminal.
+- Added the missing persistent `Deinterlace` selector to Fixed Transcoding
+  Settings. `Auto`, `On`, and `Off` now provide the saved baseline for new
+  plugin-owned Direct Transcode sessions; the active-player Video menu remains
+  a current-session override. The settings-preserving APK was installed on
+  non-Pro `.25`, where the preference rendered with its current value. All 575
+  Android/source tests, 99 MCP tests, Core JUnit, strict validation, manifest,
+  and diff checks pass.
+- Added live Fixed/MIM deinterlace `Auto`, `On`, and `Off` selection. Direct
+  Transcode with deinterlacing Off physically reached full hardware decode and
+  encode on Linux VAAPI `.232` and Windows QSV `.185`; non-Pro `.25` passed
+  owned-stream startup, hardware Android decode, seek, pause/resume, and crash
+  gates against both servers.
+- Fixed duplicate CEA rendering in STV authority when MIM Direct preserved a
+  CEA track while its Fixed side channel also supplied event 225. Side-channel
+  evidence now reapplies the server-published CC1/CC2 state and disables only
+  the local preserved track. Linux CC1/CC2/Off cycling passed with one SageTV
+  renderer, visible CC1, clear Off, zero orphan sessions/processes, and all
+  settings restored.
+- Corrected Direct/MIM caption selection and post-seek rebinding for Media3 and
+  legacy Exo. An explicit active-session track now survives asynchronous track
+  publication even when the saved broadcast-caption mode names an unavailable
+  type, while a replacement backend clears only its applied renderer state and
+  reapplies the requested track/overlay. Non-Pro `.25` / `.232` physically
+  passed generated timestamped CEA rendering, Off/On, continuous cues, FF A/V
+  and caption recovery, teardown, and restoration of all 102 settings.
+- Made the debug seek health gate sample through transient segmented-stream
+  buffering within the existing bounded recovery deadline instead of failing
+  on one post-recovery BUFFERING instant. Decoder progress, audio progress,
+  surface validity, player errors, and the deadline remain strict.
+
+- Completed the optional stock-compatible Fixed caption side channel and MIM
+  Direct transport. Direct Copy owns delivery without video/audio transcoding;
+  Direct Transcode reports and uses the negotiated GPU/mixed/software path.
+  Direct MPEG-TS segments preserve CEA, Teletext, DVB, language, and timing
+  data, and Media3 now observes those segment bytes for the existing
+  Android-local Teletext and DVB renderers.
+- Physically validated Direct Copy, full-GPU Direct Transcode, CEA Off/On,
+  Teletext CC1/CC2/Off cycling, DVB Off/On continuity, pause, restart,
+  reconnect, teardown, and settings restoration on non-Pro Fire TV `.25`
+  against `.232`. Direct and ordinary Pull produced the same DVB composition.
+  An explicit Direct request against stock `.175` without the plugin safely
+  reported `unavailable_stock_fixed` and retained healthy SageTV Push playback,
+  hardware video decode, pause/restart recovery, and a crash-free session.
+- Completed the non-Pro cross-player Direct sub-matrix. Media3, legacy Exo,
+  GSY Media3, and GSY legacy Exo pass Copy and Transcode with advancing A/V,
+  pause recovery, clean crash checks, and teardown. IJK passes Direct Copy;
+  requesting Direct Transcode now safely reports
+  `unsupported_player_stock_fixed` and uses ordinary SageTV Fixed/Push because
+  the frozen IJK 0.8.8 MediaCodec path enters an illegal non-advancing state on
+  that output. This is a backend capability boundary, not a device profile.
+- Fixed a shared replacement-player video-rectangle race. Starting a new load
+  now invalidates the old geometry immediately, while release of the previous
+  player cannot erase a new-generation `SETVIDEORECT`. Legacy Exo and both GSY
+  delegates therefore retain automatic full-screen promotion across rapid
+  player replacement.
+- Completed the locally available old/disabled/failed-plugin compatibility
+  gates. A disabled service and a real pre-Direct caption-plugin JAR safely
+  retained ordinary Fixed/Push. A deliberately failed post-negotiation MIM
+  launch retained advancing playback through the already exposed stock Pull
+  source and passed FF/REW plus pause recovery. All server bytes, executable
+  modes, and client settings were restored exactly after each reversible test.
+  Late launch failure still requires a reconnect/re-watch fallback when that
+  Pull source itself is not playable, so the broader MIMFIX-003 gate remains
+  open rather than being overstated as complete.
+
+- Removed the caption/MIM Direct API token from Android settings, debug
+  controls, MCP tooling, and runtime HTTP requests. The client now uses the
+  FFmpeg plugin's LAN-scoped API while retaining opaque per-session handles and
+  automatic fallback to ordinary stock Fixed playback when the plugin is
+  absent or unavailable. The tokenless debug APK preserves existing settings,
+  builds successfully, and launches without a crash on non-Pro Fire TV `.25`.
+
+- Fixed the reported stock-server recording-in-progress rewind. Media3 1.11
+  treated healthy appended MPEG-TS playback beyond its initially discovered
+  duration as `STUCK_PLAYING_NOT_ENDING`, raised a timeout after 60 seconds,
+  and generically reprepared at an earlier sync point. Vibe now classifies
+  ambiguous stock-server Pull recordings before player construction through a
+  separate bounded MediaServer probe and relaxes only that stale-duration
+  detector when growth is proven. Completed files, explicit seeks, SMB, Push,
+  Fixed/MIM, and every other stuck-player detector keep their prior behavior.
+  The supplied completed BargainHunt recording and a greater-than-60-second
+  real growing Live TV run passed on non-Pro `.25` against stock `.175` with
+  hardware video, advancing audio, no timeout/retry/jump, and preserved client
+  settings. The tested debug APK SHA-256 is
+  `ad6ddc256534bfaeb3ad6d8b85b925a504583bdb8fabe2762aaf327841f68651`.
+
+- Prevented physical-test captures from accumulating in Android shared
+  storage. MCP screen recordings now use a unique dedicated temporary path and
+  remove both the remote file and empty staging directory after successful or
+  failed pulls; screenshots continue to stream directly to the host. Cleaned
+  282 historical generated files plus an obsolete test-tool ART cache from the
+  non-Pro device without clearing Vibe settings or diagnostics.
+
+- Corrected the DVD physical-test harness after a discarded cold-storage
+  startup. The cleanup step intentionally disconnects the MiniClient; the
+  measured retry now reconnects to SageTV and waits for an automation-ready UI
+  before exact-path playback. DVD title/menu settling now occurs before an
+  optional positioning seek instead of after it.
+
+- Completed stock Windows `.185` acceptance with non-Pro Fire TV `.25` for
+  hardware and server-software Fixed transcoding, CEA callbacks, Teletext,
+  DVB bitmap subtitles, authored DVD, and real ALADDIN native playback. The
+  forced software server gate still decoded H.264 in Android hardware, passed
+  navigation/pause recovery, and produced no client crash signature.
 
 ## v0.5.95 - 2026-09-22
 

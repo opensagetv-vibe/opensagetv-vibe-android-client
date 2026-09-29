@@ -85,6 +85,41 @@ public class MediaCmdDvdProtocolTest
     }
 
     @Test
+    public void transformedOpenUrlReappliesMenuSelectedDvdStreams()
+    {
+        MiniClient client = mock(MiniClient.class);
+        MiniClientConnection connection = mock(MiniClientConnection.class);
+        MiniPlayerPlugin menuPlayer = mock(MiniPlayerPlugin.class);
+        MiniPlayerPlugin titlePlayer = mock(MiniPlayerPlugin.class);
+        when(client.getCurrentConnection()).thenReturn(connection);
+        when(connection.newPlayerPlugin(anyString())).thenReturn(menuPlayer, titlePlayer);
+
+        MediaCmd command = new MediaCmd(client);
+        byte[] response = new byte[16];
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_INIT, 4, new byte[4], response);
+
+        byte[] audio = new byte[8];
+        MediaCmd.writeInt(MediaCmd.STREAM_TYPE_AUDIO, audio, 0);
+        MediaCmd.writeInt(0xBD81, audio, 4);
+        assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_DVD_STREAMS,
+                audio.length, audio, response));
+
+        byte[] subtitle = new byte[8];
+        MediaCmd.writeInt(MediaCmd.STREAM_TYPE_SUBTITLE, subtitle, 0);
+        MediaCmd.writeInt(65, subtitle, 4);
+        assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_DVD_STREAMS,
+                subtitle.length, subtitle, response));
+
+        byte[] open = openUrl("push:dvd?disc_transport=dvd_mim_copy_v1&format=mpegps");
+        assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_OPENURL,
+                open.length, open, response));
+
+        verify(menuPlayer).free();
+        verify(titlePlayer).setAudioTrack(0xBD81);
+        verify(titlePlayer).dvdSetStream(MediaCmd.STREAM_TYPE_SUBTITLE, 65);
+    }
+
+    @Test
     public void dvdMetadataCommandsValidatePayloadAndAlwaysReply()
     {
         MiniClient client = mock(MiniClient.class);

@@ -91,12 +91,18 @@ drift. Never use an update ZIP to hide an unvalidated overwrite.
 Before delivery:
 
 ```text
-dev test
-dev validate
-dev build (when REQUIRES_BUILD=true)
+affected dev test/validate targets
+dev build (when REQUIRES_BUILD=true or packaged inputs changed)
 PROJECT_MANIFEST.sha256 regenerated and checked
 git diff --check
 ```
+
+Release validation is impact-based. Rerun every compile, unit, source-contract,
+packaging, and physical gate that the change could affect, but do not repeat
+unrelated completed matrices. Run the full project/device matrix only when the
+user explicitly requests it or a broad dependency/architecture change makes it
+necessary; record that reason and the exact selected gates in the release
+evidence.
 
 Record skipped device tests as SKIPPED, never PASS.
 

@@ -20,6 +20,7 @@ public final class ActivePlayerSessionOverrides
     private static volatile String decodingMethod;
     private static volatile String codecMode;
     private static volatile String dvdTimestampRepair;
+    private static volatile String mimDirectDeinterlace;
     private static volatile String bufferPreset;
     private static volatile Integer subtitleOffsetMs;
     private static volatile Integer subtitleSafeAreaPercent;
@@ -40,6 +41,7 @@ public final class ActivePlayerSessionOverrides
         decodingMethod = null;
         codecMode = null;
         dvdTimestampRepair = null;
+        mimDirectDeinterlace = null;
         bufferPreset = null;
         subtitleOffsetMs = null;
         subtitleSafeAreaPercent = null;
@@ -61,6 +63,7 @@ public final class ActivePlayerSessionOverrides
         decodingMethod = null;
         codecMode = null;
         dvdTimestampRepair = null;
+        mimDirectDeinterlace = null;
         bufferPreset = null;
         refreshRatePolicy = null;
         refreshSettleMs = null;
@@ -79,6 +82,11 @@ public final class ActivePlayerSessionOverrides
     public static void setCodecMode(String value) { codecMode = normalize(value); }
     public static String getDvdTimestampRepair() { return dvdTimestampRepair; }
     public static void setDvdTimestampRepair(String value) { dvdTimestampRepair = normalize(value); }
+    public static String getMimDirectDeinterlace() { return mimDirectDeinterlace; }
+    public static void setMimDirectDeinterlace(String value)
+    { mimDirectDeinterlace = normalize(value); }
+    public static String resolveMimDirectDeinterlace(String persisted)
+    { return mimDirectDeinterlace == null ? persisted : mimDirectDeinterlace; }
     public static String getBufferPreset() { return bufferPreset; }
     public static void setBufferPreset(String value) { bufferPreset = normalize(value); }
     public static Integer getSubtitleOffsetMs() { return subtitleOffsetMs; }
@@ -192,7 +200,8 @@ public final class ActivePlayerSessionOverrides
     public static boolean isActive()
     {
         return backend != null || gsyEngine != null || decodingMethod != null || codecMode != null
-                || dvdTimestampRepair != null || bufferPreset != null
+                || dvdTimestampRepair != null || mimDirectDeinterlace != null
+                || bufferPreset != null
                 || subtitleOffsetMs != null || subtitleSafeAreaPercent != null
                 || subtitleTextScalePercent != null || subtitleTextStyle != null
                 || audioOffsetMs != null
@@ -206,7 +215,8 @@ public final class ActivePlayerSessionOverrides
         return "backend=" + value(backend) + ", gsyEngine=" + value(gsyEngine)
                 + ", decode=" + value(decodingMethod)
                 + ", queue=" + value(codecMode) + ", dvdPts="
-                + value(dvdTimestampRepair) + ", buffer=" + value(bufferPreset)
+                + value(dvdTimestampRepair) + ", deinterlace="
+                + value(mimDirectDeinterlace) + ", buffer=" + value(bufferPreset)
                 + ", subtitleOffsetMs=" + value(subtitleOffsetMs)
                 + ", subtitleSafeArea=" + value(subtitleSafeAreaPercent)
                 + ", subtitleScale=" + value(subtitleTextScalePercent)

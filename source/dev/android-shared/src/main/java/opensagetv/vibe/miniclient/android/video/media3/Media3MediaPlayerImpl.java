@@ -118,10 +118,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private final DecoderAttemptTelemetry decoderAttemptTelemetry =
             new DecoderAttemptTelemetry();
     private final Set<String> sessionDecoderExclusions = new LinkedHashSet<>();
+    /** Last real HLS child datasource, retained only for health diagnostics. */
+    private volatile DataSource mimDirectDiagnosticDataSource;
 
     @Override
     protected void releaseDataSource()
     {
+        mimDirectDiagnosticDataSource = null;
         if (dataSource instanceof SessionOwnedDataSource)
             ((SessionOwnedDataSource) dataSource).releaseSession();
         super.releaseDataSource();
@@ -148,6 +151,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void onPlaybackLoadStarted()
     {
+        mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
         decoderAttemptTelemetry.reset();
         sessionDecoderExclusions.clear();
@@ -286,7 +290,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private volatile int requestedDvdAudioStream = -1;
     /** The request applied to the current Media3 track-group generation. */
     private volatile int appliedDvdAudioStream = -1;
-    private long currentPlaybackPosition = 0;
+    private volatile long currentPlaybackPosition = 0;
     private volatile long currentBufferedPosition = 0;
     private ReentrantLock playbackPositionLock;
     private DefaultTrackSelector trackSelector;
@@ -485,8 +489,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public PlaybackHealthSnapshot capturePlaybackHealthSnapshot()
     {
-        return new PlaybackHealthSnapshot(player, dataSource, pushMode,
-                playerReady, seekPending, flushed, errorState, retryCount);
+        DataSource healthDataSource = dataSource != null
+                ? dataSource : mimDirectDiagnosticDataSource;
+        return new PlaybackHealthSnapshot(player, healthDataSource, pushMode,
+                playerReady, seekPending, flushed, errorState, retryCount,
+                isMimDirectMediaUrlActive() ? "MIM_DIRECT" : "");
     }
 
     @Override
@@ -528,6 +535,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     PlaybackSessionController.Operation.LOAD);
             lastUri = urlString;
             dvdTransformedTransport = false;
+            dvdOwnedTransportMode = "";
             lastMediaTime = -1;
             lastStableGrowingPullPositionMs = -1L;
             lastGrowingPullPositionRecoveryMs = -1L;
@@ -715,23 +723,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     public long getPlaybackPosition()
     {
-        long position = 0;
-
-        try
-        {
-            playbackPositionLock.lock();
-            position = this.currentPlaybackPosition;
-        }
-        catch (Exception ex)
-        {
-            log.logError("Unexpected error getting playback position", ex);
-        }
-        finally
-        {
-            playbackPositionLock.unlock();
-        }
-
-        return position;
+        // seek() deliberately holds playbackPositionLock while it asks the
+        // MIM Direct service to replace/re-anchor an HTTP session. UI-thread
+        // diagnostics, overlays, and SageTV timeline reads must not wait on
+        // that bounded network operation. The volatile value is the last
+        // renderer-proven position and is the correct continuity value until
+        // the replacement player's progress callback publishes a newer one.
+        return currentPlaybackPosition;
     }
 
     @Override
@@ -1091,6 +1089,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
         });
 
+        // The next backend instance has no text-renderer override even when
+        // requestedSubtitleTrack intentionally survives a Direct/MIM seek.
+        // Mark only the applied state as empty so asynchronous track
+        // publication rebinds the requested track and recreates its overlay.
+        selectedSubtitleTrack = DISABLE_TRACK;
         this.RemoveSubTitleView();
     }
 
@@ -1593,6 +1596,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
             super.seek(timeInMS);
 
+            if (consumeMimDirectSeekHandled())
+                return;
+
             if (playerReady)
             {
                 if (!pushMode)
@@ -1721,7 +1727,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public void setAudioTrack(final int streamPos)
     {
-        final DvdAudioStreamCode dvdStreamCode = dvdPushMode
+        // BaseMediaPlayerImpl.load() publishes lastUri synchronously, but queues
+        // setupPlayer() on Android's UI thread. MediaCmd may therefore restore
+        // the DVD VM's menu-selected stream before dvdPushMode is initialized.
+        // Treat the already-declared protocol URL as authoritative during that
+        // short transition so the request survives until track discovery.
+        final boolean dvdTransport = dvdPushMode
+                || (lastUri != null && lastUri.startsWith("push:dvd"));
+        final DvdAudioStreamCode dvdStreamCode = dvdTransport
                 ? DvdAudioStreamCode.decode(streamPos) : null;
         final boolean physicalDvdStream = dvdStreamCode != null
                 && (dvdStreamCode.isPrivateStream1()
@@ -1994,6 +2007,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     protected void setupPlayer(String sageTVurl)
     {
         activePlaybackUrl = sageTVurl;
+        // A DVD_STREAMS command can be restored between load() publishing the
+        // push:dvd URL and this queued UI-thread setup. Preserve that one
+        // request across initialization; a new backend starts at -1, while a
+        // later DVD_STREAMS command remains authoritative. Ordinary media must
+        // continue clearing all DVD-specific selector state.
+        final int preSetupDvdAudioRequest = requestedDvdAudioStream;
         // BaseMediaPlayerImpl preserves the protocol URL in lastUri but wraps
         // non-HTTP inputs as stv://server/... before calling setupPlayer().
         // Detect the DVD session from the original MiniPlayer URL so the
@@ -2012,7 +2031,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         dvdPauseAfterFirstFrame = false;
         dvdLogicalClockBaseMs = 0;
         initialAudioTrackIndex = -1;
-        requestedDvdAudioStream = -1;
+        requestedDvdAudioStream = dvdPushMode && preSetupDvdAudioRequest >= 0
+                ? preSetupDvdAudioRequest : -1;
         appliedDvdAudioStream = -1;
 
         if (player != null)
@@ -2133,7 +2153,57 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
 
 
+        boolean provenGrowingMediaServerPull = false;
+        if (!pushMode && !httpls && dataSource instanceof Media3PullDataSource)
+        {
+            Media3PullDataSource pullDataSource = (Media3PullDataSource) dataSource;
+            if (!pullDataSource.isSmbModeConfigured() && mediaContext.isTimeshifted())
+            {
+                try
+                {
+                    provenGrowingMediaServerPull = pullDataSource
+                            .classifyGrowthBeforePlayerBuild(Uri.parse(sageTVurl));
+                    PlaybackDebugTrap.recordDetailed(
+                            provenGrowingMediaServerPull
+                                    ? "growing_pull_prebuild_classified"
+                                    : "completed_pull_prebuild_classified",
+                            this, "metadataExplicit=" + mediaContext.isMetadataExplicit());
+                }
+                catch (IOException growthProbeFailure)
+                {
+                    // A failed optional classification must not block normal
+                    // playback. Keep Media3's default detector and let the real
+                    // datasource open report an authoritative I/O failure if one
+                    // exists.
+                    log.logDebug("Growing Pull prebuild classification unavailable: "
+                            + growthProbeFailure.getMessage());
+                    PlaybackDebugTrap.recordDetailed(
+                            "growing_pull_prebuild_classification_failed", this,
+                            growthProbeFailure.getClass().getSimpleName());
+                }
+            }
+        }
+
         ExoPlayer.Builder builder = new ExoPlayer.Builder(context.getContext(), renderersFactory);
+
+        if (Media3GrowingPlaybackTimeoutPolicy.shouldRelaxPlayingNotEnding(
+                pushMode, httpls,
+                dataSource instanceof Media3PullDataSource
+                        && ((Media3PullDataSource) dataSource).isSmbModeConfigured(),
+                provenGrowingMediaServerPull))
+        {
+            // A recording-in-progress can render appended TS bytes beyond the
+            // finite duration Media3 discovered at its first OPEN. Media3 1.11
+            // otherwise mistakes that healthy state for a player that failed
+            // to end, raises ERROR_CODE_TIMEOUT after 60 seconds, and forces a
+            // TS reprepare that can land at an earlier sync point. Keep the
+            // buffering/no-progress/suppression detectors at their defaults;
+            // only this stale-duration detector is inapplicable to growing Pull.
+            builder.setStuckPlayingNotEndingTimeoutMs(
+                    Media3GrowingPlaybackTimeoutPolicy.PLAYING_NOT_ENDING_TIMEOUT_MS);
+            PlaybackDebugTrap.record("growing_pull_stale_duration_timeout_relaxed", this);
+            log.logDebug("Growing Pull stale-duration timeout relaxed; other stuck-player detectors retained");
+        }
 
         if (dvdPushMode)
         {
@@ -2335,10 +2405,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 decoderAttemptTelemetry.recordTrackChange();
-                // Caption tracks can be published after the initial player
-                // preference pass. Reapply the persisted virtual slot here so
-                // DVB/CC1/CC2 do not require opening the menu a second time.
-                applyConfiguredClosedCaptionSlot();
+                applyPublishedSubtitleSelection();
                 // Track discovery is incremental for DVD private_stream_1.
                 // Retry here because STATE_READY may precede the requested
                 // AC-3 substream becoming visible to the selector.
@@ -2358,6 +2425,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 error.printStackTrace();
 
                 Throwable failureCause = error.getCause();
+                if (failureCause != null)
+                {
+                    log.logDebug("PLAYER ERROR CAUSE: "
+                            + failureCause.getClass().getName() + ": "
+                            + String.valueOf(failureCause.getMessage()));
+                    PlaybackDebugTrap.recordDetailed("player_error_cause",
+                            Media3MediaPlayerImpl.this,
+                            "class=" + failureCause.getClass().getSimpleName()
+                                    + ";message=" + String.valueOf(
+                                    failureCause.getMessage()));
+                }
                 PlaybackFailureClassifier.Decision failure =
                         PlaybackFailureClassifier.classify(
                                 error.getErrorCodeName(),
@@ -2385,6 +2463,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     fallbackFromFastSwitch("asynchronous_" + error.getErrorCodeName());
                     return;
                 }
+
+                if (requestStockFixedReconnectForMimPullFailure(
+                        "media3_" + error.getErrorCodeName()))
+                    return;
 
                 if (retryCount == 0 && failure.showToUser)
                 {
@@ -2541,7 +2623,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     // A persisted DVB/CC slot may have been applied before
                     // Media3 exposed its final track map. Apply it again at
                     // READY so playback starts with the saved choice.
-                    boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();
+                    boolean configuredCaptionApplied = applyPublishedSubtitleSelection();
                     if (!configuredCaptionApplied && requestedSubtitleTrack == PREFERRED_TRACK)
                     {
                         setPreferredSubtitleTrack();
@@ -2830,9 +2912,27 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         {
             ExtractorsFactory httpExtractors = withPassthroughOffset(
                     new DefaultExtractorsFactory());
-            mediaSource = new DefaultMediaSourceFactory(
-                    context.getContext(), httpExtractors)
-                    .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            if (isMimDirectMediaUrlActive())
+            {
+                DataSource.Factory directHttp =
+                        Media3MimDirectHttpDataSource.factory(
+                                new Media3MimDirectHttpDataSource.CreationListener()
+                                {
+                                    @Override public void onCreated(DataSource created)
+                                    {
+                                        mimDirectDiagnosticDataSource = created;
+                                    }
+                                });
+                mediaSource = new DefaultMediaSourceFactory(
+                        directHttp, httpExtractors)
+                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            }
+            else
+            {
+                mediaSource = new DefaultMediaSourceFactory(
+                        context.getContext(), httpExtractors)
+                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            }
             player.setMediaSource(mediaSource, true);
             player.prepare();
         }
@@ -2877,6 +2977,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             reportedPositionMs, listenerSession, listenerPlayer);
                     Media3MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
                     scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
+                    updateFixedCaptionClock(currentPositionMs);
                     currentBufferedPosition = listenerPlayer.getBufferedPosition();
                     promoteConfirmedPullTailToEos();
                     progressHandler.postDelayed(sessionProgress[0], 500);
@@ -3741,6 +3842,30 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 }
             }
         });
+    }
+
+    /**
+     * Reconciles asynchronous Media3 track publication without replacing an
+     * explicit active-session selection. The long-press selector and debug
+     * commissioning path can choose a native SRT/CEA/DVB track after playback
+     * starts. Applying the persisted CC/DVB mode unconditionally from
+     * onTracksChanged() used to turn that track back off when the saved mode
+     * referred to a caption type absent from the current stream.
+     */
+    private boolean applyPublishedSubtitleSelection()
+    {
+        int requestedTrack = requestedSubtitleTrack;
+        if (requestedTrack != DISABLE_TRACK && requestedTrack != PREFERRED_TRACK)
+        {
+            if (selectedSubtitleTrack != requestedTrack)
+            {
+                log.logDebug("Applying explicit active-session subtitle track: "
+                        + requestedTrack);
+                setSubtitleTrack(requestedTrack);
+            }
+            return true;
+        }
+        return applyConfiguredClosedCaptionSlot();
     }
 
     /**

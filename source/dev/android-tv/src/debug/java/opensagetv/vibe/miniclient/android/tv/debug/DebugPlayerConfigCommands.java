@@ -58,6 +58,13 @@ final class DebugPlayerConfigCommands
         String fixedAudioChannels = clean(intent.getStringExtra("fixed_audio_channels"));
         String fixedRemuxingPreference = clean(intent.getStringExtra("fixed_remuxing_preference"));
         String fixedRemuxingFormat = clean(intent.getStringExtra("fixed_remuxing_format"));
+        String fixedCaptionEnabled = clean(intent.getStringExtra(
+                "fixed_caption_side_channel_enabled"));
+        String fixedCaptionPort = clean(intent.getStringExtra(
+                "fixed_caption_side_channel_port"));
+        String mimDirectMode = clean(intent.getStringExtra("mim_direct_mode"));
+        String mimDirectDeinterlace = clean(
+                intent.getStringExtra("mim_direct_deinterlace"));
         // SMB mappings and profile URLs can contain case-sensitive Linux/share
         // path components. Only command/enumeration tokens use clean().
         String smbMappings = text(intent.getStringExtra("smb_mappings"));
@@ -305,6 +312,29 @@ final class DebugPlayerConfigCommands
                 throw new IllegalArgumentException("invalid fixed remuxing format: " + fixedRemuxingFormat);
             prefs.setString(AndroidPrefStore.FIXED_REMUXING_FORMAT, value);
         }
+        if (!fixedCaptionEnabled.isEmpty())
+            prefs.setBoolean(PrefStore.Keys.fixed_caption_side_channel_enabled,
+                    parseBoolean(fixedCaptionEnabled, false));
+        if (!fixedCaptionPort.isEmpty())
+            prefs.setString(PrefStore.Keys.fixed_caption_side_channel_port,
+                    String.valueOf(parseBoundedInt(fixedCaptionPort, 31910, 1024, 65535)));
+        if (!mimDirectMode.isEmpty())
+        {
+            String value = mimDirectMode.toLowerCase();
+            if (!("off".equals(value) || "copy".equals(value)
+                    || "transcode".equals(value)))
+                throw new IllegalArgumentException("invalid MIM Direct mode: "
+                        + mimDirectMode);
+            prefs.setString(PrefStore.Keys.mim_direct_mode, value);
+        }
+        if (!mimDirectDeinterlace.isEmpty())
+        {
+            String value = mimDirectDeinterlace.toLowerCase();
+            if (!("auto".equals(value) || "on".equals(value) || "off".equals(value)))
+                throw new IllegalArgumentException("invalid MIM Direct deinterlace mode: "
+                        + mimDirectDeinterlace);
+            prefs.setString(PrefStore.Keys.mim_direct_deinterlace, value);
+        }
 
         if (!smbMappings.isEmpty())
         {
@@ -400,6 +430,7 @@ final class DebugPlayerConfigCommands
                 + AndroidPrefStore.SMB_AUTH_CREDENTIALS.equals(prefs.getString(
                         AndroidPrefStore.SMB_DIAGNOSTICS_AUTH_MODE,
                         AndroidPrefStore.SMB_AUTH_ANONYMOUS))
+                + ";fixedCaptionSideChannelAppliesNextConnection=true"
                 + ";appliesNextPlayback=true";
     }
 

@@ -11,6 +11,46 @@ from sagetv_dev_mcp.adb import AdbClient, parse_broadcast_result, parse_telemetr
 
 class AdbSafetyTests(unittest.TestCase):
 
+    def test_screenrecord_uses_dedicated_device_temp_and_always_cleans_it(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "capture.mp4"
+
+            def pull(args, **_kwargs):
+                self.assertEqual(args[0], "pull")
+                output.write_bytes(b"video")
+                return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+            with patch("sagetv_dev_mcp.adb.time.time_ns", return_value=12345), \
+                    patch.object(c, "shell", return_value="") as shell, \
+                    patch.object(c, "run", side_effect=pull):
+                self.assertEqual(c.screenrecord(output, seconds=5), output)
+
+        commands = [call.args[0] for call in shell.call_args_list]
+        remote = "/sdcard/OpenSageTV_Vibe_Test_Temp/screenrecord-12345.mp4"
+        self.assertEqual(commands[0], "mkdir -p /sdcard/OpenSageTV_Vibe_Test_Temp")
+        self.assertIn(remote, commands[1])
+        self.assertEqual(commands[-2], f"rm -f {remote}")
+        self.assertEqual(commands[-1], "rmdir /sdcard/OpenSageTV_Vibe_Test_Temp")
+        self.assertFalse(shell.call_args_list[-2].kwargs["check"])
+        self.assertFalse(shell.call_args_list[-1].kwargs["check"])
+
+    def test_screenrecord_cleans_device_temp_when_pull_fails(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with tempfile.TemporaryDirectory() as td, \
+                patch("sagetv_dev_mcp.adb.time.time_ns", return_value=67890), \
+                patch.object(c, "shell", return_value="") as shell, \
+                patch.object(c, "run", side_effect=RuntimeError("pull failed")):
+            with self.assertRaisesRegex(RuntimeError, "pull failed"):
+                c.screenrecord(Path(td) / "capture.mp4", seconds=5)
+
+        commands = [call.args[0] for call in shell.call_args_list]
+        self.assertEqual(
+            commands[-2],
+            "rm -f /sdcard/OpenSageTV_Vibe_Test_Temp/screenrecord-67890.mp4",
+        )
+        self.assertEqual(commands[-1], "rmdir /sdcard/OpenSageTV_Vibe_Test_Temp")
+
     def test_run_replaces_non_utf8_vendor_output(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         completed = subprocess.CompletedProcess(
@@ -67,6 +107,19 @@ exit 2
         with patch.object(c, "shell", return_value="") as shell:
             c.key("ff")
             shell.assert_called_once_with("input keyevent KEYCODE_MEDIA_FAST_FORWARD")
+
+    def test_dpad_key_aliases_match_android_names(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "shell", return_value="") as shell:
+            c.key("dpad_down")
+            c.key("dpad_center")
+        self.assertEqual(
+            [call.args[0] for call in shell.call_args_list],
+            [
+                "input keyevent KEYCODE_DPAD_DOWN",
+                "input keyevent KEYCODE_DPAD_CENTER",
+            ],
+        )
 
     def test_input_text_encodes_spaces_and_next_uses_enter(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
@@ -337,6 +390,17 @@ exit 2
         self.assertTrue(result["unifiedGraphicsSurfaces"])
         self.assertTrue(result["unifiedGraphicsAppliesNextConnection"])
 
+    def test_mim_direct_late_fallback_fault_is_explicit_and_one_shot(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;'
+                  'op=mim_direct_late_fallback_fault;armed=true;state=ready_transcode"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.set_mim_direct_late_fallback_fault(True)
+        command = shell.call_args.args[0]
+        self.assertIn("--es op mim_direct_late_fallback_fault", command)
+        self.assertIn("--es enabled true", command)
+        self.assertTrue(result["armed"])
+
     def test_background_recovery_options_are_forwarded_independently(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         output = ('Broadcast completed: result=1, data="ok=true;op=config;'
@@ -386,6 +450,20 @@ exit 2
         with self.assertRaisesRegex(ValueError, "-1 \\(off\\) or >= 0"):
             c.set_subtitle_track(-2)
 
+    def test_caption_mode_uses_media_cmd_authority_path(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", return_value={
+            "ok": True, "op": "caption_mode", "mode": "cc1", "accepted": True,
+        }) as control:
+            result = c.set_caption_mode("CC1")
+        self.assertTrue(result["accepted"])
+        self.assertEqual(control.call_args.args[0], "caption_mode")
+        self.assertEqual(control.call_args.kwargs, {
+            "foreground": False, "mode": "cc1",
+        })
+        with self.assertRaisesRegex(ValueError, "off, cc1, cc2, stv, or dvb"):
+            c.set_caption_mode("subtitle")
+
     def test_active_audio_control_validates_and_uses_non_foreground_broadcast(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with patch.object(c, "dev_control", return_value={
@@ -424,6 +502,10 @@ exit 2
                 fixed_key_frame_interval=10, fixed_use_b_frames=True, fixed_video_resolution="720",
                 fixed_audio_codec="ac3", fixed_audio_bitrate_kbps=192, fixed_audio_channels="6",
                 fixed_remuxing_preference="off", fixed_remuxing_format="matroska",
+                fixed_caption_side_channel_enabled=True,
+                fixed_caption_side_channel_port=31910,
+                mim_direct_mode="copy",
+                mim_direct_deinterlace="off",
             )
         command = shell.call_args.args[0]
         for expected in (
@@ -434,6 +516,10 @@ exit 2
             "--es fixed_audio_codec ac3", "--es fixed_audio_bitrate_kbps 192",
             "--es fixed_audio_channels 6", "--es fixed_remuxing_preference off",
             "--es fixed_remuxing_format matroska",
+            "--es fixed_caption_side_channel_enabled true",
+            "--es fixed_caption_side_channel_port 31910",
+            "--es mim_direct_mode copy",
+            "--es mim_direct_deinterlace off",
         ):
             self.assertIn(expected, command)
         self.assertEqual(result["fixedVideoBitrateKbps"], 6000)

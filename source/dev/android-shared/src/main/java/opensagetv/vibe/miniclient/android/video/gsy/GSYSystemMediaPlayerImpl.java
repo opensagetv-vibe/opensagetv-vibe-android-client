@@ -128,6 +128,9 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return true;
                     PlaybackDebugTrap.record("player_error_" + what + "_" + extra, GSYSystemMediaPlayerImpl.this);
                     log.error("GSY/System MediaPlayer error: {}, {}", what, extra);
+                    if (requestStockFixedReconnectForMimPullFailure(
+                            "system_" + what + "_" + extra))
+                        return true;
                     playerFailed();
                     return true;
                 }
@@ -317,6 +320,8 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     public void seek(long timeMS)
     {
         super.seek(timeMS);
+        if (consumeMimDirectSeekHandled())
+            return;
         if (player == null || !playerReady || state == NO_STATE || state == LOADED_STATE)
         {
             preSeekPos = timeMS;

@@ -114,6 +114,49 @@ public class MediaCmdPlaybackRateTest
                 .setPreferredSubtitleTrack();
     }
 
+    @Test
+    public void explicitAndroidOffOverridesPublishedStvCc1()
+    {
+        MiniClient client = mock(MiniClient.class);
+        PrefStore prefs = mock(PrefStore.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.properties()).thenReturn(prefs);
+        when(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                .thenReturn("off");
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        command.setSageTvClosedCaptionState(1);
+
+        verify(player).setSubtitleTrack(MiniPlayerPlugin.DISABLE_TRACK);
+        org.mockito.Mockito.verify(player, org.mockito.Mockito.never())
+                .applyClosedCaptionSlot(org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    public void explicitAndroidCc2OverridesPublishedStvCc1()
+    {
+        MiniClient client = mock(MiniClient.class);
+        PrefStore prefs = mock(PrefStore.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.properties()).thenReturn(prefs);
+        when(prefs.getString(PrefStore.Keys.legacy_server_caption_mode, "stv"))
+                .thenReturn("cc2");
+        when(prefs.getString(PrefStore.Keys.caption_cc2_type, "auto"))
+                .thenReturn("teletext");
+        when(prefs.getString(PrefStore.Keys.caption_cc2_language, ""))
+                .thenReturn("eng");
+        when(player.applyClosedCaptionSlot(2, "teletext", "eng")).thenReturn(true);
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        command.setSageTvClosedCaptionState(1);
+
+        verify(player).applyClosedCaptionSlot(2, "teletext", "eng");
+    }
+
     private static void setPlayer(MediaCmd command, MiniPlayerPlugin player)
     {
         try

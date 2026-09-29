@@ -16,6 +16,8 @@ import os
 import re
 import sys
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from mcp_lifecycle_test import MCPProcess, call_dict, initialize, require, wait_automation_ready
@@ -65,6 +67,23 @@ def wait_stopped(client: MCPProcess, timeout_s: float = 20.0) -> dict:
     while time.monotonic() < deadline:
         last = call_dict(client, "dev_player_state", timeout=30.0)
         if not bool(last.get("playerActive")):
+            return last
+        # Some STVs intentionally retain the MiniPlayer object after STOP and
+        # transformed DVD EOF can reach the same state before the UI tears it
+        # down.  The object being present is not evidence that playback work is
+        # still active.  Accept it only when the MiniPlayer reports its formal
+        # STOPPED_STATE (4), Media3/Exo is idle (1), neither play signal is set,
+        # and no load or seek remains in flight.
+        retained_stopped_player = (
+            int(last.get("state", -1)) == 4
+            and int(last.get("health_playbackState", -1)) == 1
+            and last.get("health_isPlaying") is False
+            and last.get("health_playWhenReady") is False
+            and last.get("health_isLoading") is False
+            and last.get("health_seekPending") is False
+        )
+        if retained_stopped_player and not str(last.get("popupName") or "").strip():
+            last["retainedStoppedPlayer"] = True
             return last
         # SageMC retains a quiescent MiniPlayer behind StopPopup. Treat that as
         # stopped only when both backend playback signals agree. Dismiss the
@@ -199,8 +218,27 @@ def compact_state(state: dict) -> dict:
         "discTransformedTransport",
         "discOldServerNativeFallback", "discTransformRuntimeFallback",
         "discCompatibilityReason",
+        "mimDirectRequestedMode", "mimDirectNegotiatedMode",
+        "mimDirectSessionState", "mimDvdOwnedState",
+        "mimDvdOwnedExecutionPath", "mimDvdOwnedBytesRelayed",
     )
     return {key: state.get(key) for key in keys if key in state}
+
+
+def dvd_mim_status(server: str, port: int, mode: str) -> dict:
+    host = server.strip()
+    if ":" in host and not host.startswith("["):
+        host = "[" + host + "]"
+    url = "http://{}:{}/v1/dvd/status?mode={}".format(
+        host, port, urllib.parse.quote(mode, safe=""))
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=5.0) as response:
+        require(response.status == 200,
+                f"DVD MIM status returned HTTP {response.status}")
+        payload = response.read(256 * 1024)
+    result = json.loads(payload.decode("utf-8"))
+    require(isinstance(result, dict), "DVD MIM status was not a JSON object")
+    return result
 
 
 def main() -> int:
@@ -228,6 +266,18 @@ def main() -> int:
     parser.add_argument("--fixture-id", action="append", default=[],
                         help="Limit --fixture-mode to one configured fixture ID; repeat as needed")
     parser.add_argument("--player", choices=("media3", "exoplayer"), default="media3")
+    parser.add_argument("--streaming", choices=("dynamic", "fixed"), default="dynamic",
+                        help="SageTV transport selection used for this DVD gate")
+    parser.add_argument("--mim-direct-mode", choices=("off", "copy", "transcode"),
+                        default="off",
+                        help=("Require FFmpeg/MIM ownership for the DVD stream; copy/transcode "
+                              "must be proven by runtime diagnostics and cannot pass as Native"))
+    parser.add_argument("--mim-api-port", type=int,
+                        default=int(default_server_value("ffmpeg_plugin_api_port", 31910)),
+                        help="LAN-scoped FFmpeg plugin API used for DVD ownership proof")
+    parser.add_argument("--expect-mim-fallback", action="store_true",
+                        help=("Request Copy/Transcode but require a healthy native DVD fallback "
+                              "instead of plugin ownership (failure-injection gate)"))
     parser.add_argument("--decoding", choices=("hardware", "hardware_preferred"),
                         default="hardware")
     parser.add_argument("--codec-mode", choices=("auto", "async", "sync"),
@@ -342,6 +392,11 @@ def main() -> int:
     require(0.0 <= args.storage_warm_cache_s <= 3600.0,
             "--storage-warm-cache-s must be between 0 and 3600 seconds")
     args.verify_ms = max(500, min(int(args.verify_ms), 10_000))
+    require(1024 <= args.mim_api_port <= 65535,
+            "--mim-api-port must be between 1024 and 65535")
+    require(not args.expect_mim_fallback
+            or args.mim_direct_mode in ("copy", "transcode"),
+            "--expect-mim-fallback requires --mim-direct-mode copy or transcode")
     args.settle_s = max(0.0, min(float(args.settle_s), 30.0))
     require(args.start_ms >= -1, "--start-ms must be -1 (disabled) or non-negative")
     args.seek_tolerance_ms = max(0, min(int(args.seek_tolerance_ms), 30_000))
@@ -387,8 +442,9 @@ def main() -> int:
                     f"Media3 codec-mode override was not applied: {tuning}")
         call_dict(client, "dev_set_player_config", {
             "player": args.player,
-            "streaming": "dynamic",
+            "streaming": args.streaming,
             "decoding": args.decoding,
+            "mim_direct_mode": args.mim_direct_mode,
             "disc_playback_policy": args.disc_policy,
             "disc_skip_menus": args.skip_menus,
             "disc_skip_previews": args.skip_previews,
@@ -501,6 +557,25 @@ def main() -> int:
                             "wake": False, "graceful_timeout_s": 3.0,
                         }, timeout=30.0)
                         storage_warmup["cleanupReadyToLaunch"] = bool(cleanup.get("readyToLaunch"))
+                        # dev_prepare_clean_start deliberately tears down the
+                        # entire MiniClient session so the slow first start
+                        # cannot contaminate the measured retry.  Recreate the
+                        # server connection before asking start_target() to
+                        # invoke an exact-path/Watch control.  Previously the
+                        # retry called dev_play_server_path while disconnected,
+                        # turning a successful cold DVD start into a misleading
+                        # infrastructure failure.
+                        require(
+                            bool(cleanup.get("readyToLaunch")),
+                            f"DVD cold-start cleanup did not become ready: {cleanup}",
+                        )
+                        reconnected = call_dict(client, "dev_connect_server", {
+                            "address": args.server_address,
+                            "port": args.server_port,
+                            "save": False,
+                        }, timeout=30.0)
+                        storage_warmup["retryReconnect"] = reconnected
+                        wait_automation_ready(client, timeout_s=60.0)
                         started, retry_ms = start_target(args.timeout_s)
                         storage_warmup["measuredRetryStartupMs"] = retry_ms
                         storage_warmup["measuredRetryPassed"] = bool(started.get("passed"))
@@ -537,6 +612,14 @@ def main() -> int:
                     print(f"PASS expected-safe-failure [{index}/{len(targets)}]: {target_value}")
                     continue
                 require(bool(started.get("passed")), f"DVD startup failed: {started}")
+                if args.settle_s:
+                    # A DVD start can report healthy A/V while the server VM is
+                    # still crossing previews/menu commands into the selected
+                    # title.  Let that server-owned timeline settle before an
+                    # exact positioning seek; delaying only after the seek can
+                    # make stock SageTV accept Seek(long) yet continue from the
+                    # pre-title clock.
+                    time.sleep(args.settle_s)
                 if args.start_ms >= 0:
                     # DVD is a server-owned Push session.  Reposition SageTV's
                     # VideoFrame/MiniDVDPlayer so the server reader and emitted
@@ -570,8 +653,6 @@ def main() -> int:
                     }
                     print(f"PASS: positioned {target_value} at {reached_ms} ms "
                           f"(target {args.start_ms} ms)")
-                if args.settle_s:
-                    time.sleep(args.settle_s)
                 if args.cadence_observe_s:
                     cadence = observe_playback_cadence(client, args.cadence_observe_s)
                     result["cadence"] = cadence
@@ -625,6 +706,18 @@ def main() -> int:
                     require(not str(command_state.get("playerError", "")).strip(),
                             f"DVD player error after {command}: "
                             f"{command_state.get('playerError')}")
+                    dvd_menu_commands = {
+                        "up", "down", "left", "right", "select", "center", "enter",
+                        "dpad_up", "dpad_down", "dpad_left", "dpad_right",
+                        "dpad_center", "back", "dvd_return", "dvd_menu",
+                        "dvd_title_menu",
+                    }
+                    escaped_menu_names = {"main menu", "browser - videos"}
+                    if command_key in dvd_menu_commands:
+                        menu_name = str(command_state.get("menuName", "")).strip().lower()
+                        require(menu_name not in escaped_menu_names,
+                                f"DVD navigation escaped to SageTV UI after {command}: "
+                                f"{command_state}")
                     if command_key == "pause":
                         # MiniPlayerPlugin.PAUSE_STATE is 3.  LOADED_STATE is 1;
                         # accepting it here produced a false PASS for a player
@@ -654,6 +747,12 @@ def main() -> int:
                     recovery_commands = {
                         "play", "ff_2", "rew_2", "dvd_chapter_up", "dvd_chapter_down",
                         "dvd_audio_change", "dvd_subtitle_change", "dvd_subtitle_toggle",
+                        # DVD Menu leaves an owned title for the native menu
+                        # transport; DVD Return performs the inverse transition.
+                        # Both must prove actual A/V output, not merely that the
+                        # Sage command was accepted while the replacement
+                        # extractor remained loaded at a black frame.
+                        "dvd_menu", "dvd_title_menu", "dvd_return",
                         # Physical SELECT/ENTER is the critical menu-to-title
                         # transition.  Omitting it allowed an empty MIM title
                         # source to error immediately after the command while
@@ -678,9 +777,128 @@ def main() -> int:
                         f"No remote DVD media bytes were pushed: {state}")
                 require(not str(state.get("playerError", "")).strip(),
                         f"DVD player error: {state.get('playerError')}")
+                if (args.mim_direct_mode in ("copy", "transcode")
+                        and args.expect_mim_fallback):
+                    require(args.streaming == "fixed",
+                            "DVD MIM fallback gates require --streaming fixed")
+                    try:
+                        result["mimDvdStatus"] = dvd_mim_status(
+                            args.server_address, args.mim_api_port,
+                            args.mim_direct_mode)
+                    except Exception as status_exc:
+                        # Plugin absence is one of the intended injected
+                        # conditions. Preserve a bounded diagnostic without
+                        # converting the expected unavailable API into a test
+                        # failure or leaking connection details.
+                        result["mimDvdStatusError"] = type(status_exc).__name__
+                    fallback_signaled = (
+                        state.get("discOldServerNativeFallback") in (True, "true")
+                        or state.get("discTransformRuntimeFallback") in (True, "true")
+                        or str(state.get("mimDirectNegotiatedMode", ""))
+                        != args.mim_direct_mode
+                        or "fallback" in str(
+                            state.get("mimDirectSessionState", "")).lower()
+                    )
+                    require(fallback_signaled,
+                            "DVD did not expose a MIM/native fallback state: "
+                            f"requested={args.mim_direct_mode}, state={state}")
+                    require(state.get("discTransformedTransport") not in (True, "true"),
+                            f"DVD failure gate stayed on transformed transport: {state}")
+                    require(str(state.get("health_videoMime", "")).lower()
+                            == "video/mpeg2",
+                            f"DVD native fallback did not expose MPEG-2 video: {state}")
+                    result["mimFallbackStatus"] = {
+                        "requestedMode": args.mim_direct_mode,
+                        "negotiatedMode": str(
+                            state.get("mimDirectNegotiatedMode", "")),
+                        "sessionState": str(state.get("mimDirectSessionState", "")),
+                        "compatibilityReason": str(
+                            state.get("discCompatibilityReason", "")),
+                    }
+                elif args.mim_direct_mode in ("copy", "transcode"):
+                    plugin_status = dvd_mim_status(args.server_address,
+                                                   args.mim_api_port,
+                                                   args.mim_direct_mode)
+                    result["mimDvdStatus"] = plugin_status
+                    state["mimDvdOwnedExecutionPath"] = str(
+                        plugin_status.get("executionPath") or
+                        state.get("mimDvdOwnedExecutionPath") or "")
+                    state["mimDvdOwnedBytesRelayed"] = max(
+                        int(state.get("mimDvdOwnedBytesRelayed", 0)),
+                        int(plugin_status.get("bytesOut", 0)))
+                    expected_transport_id = (
+                        "dvd_mim_copy_v1" if args.mim_direct_mode == "copy"
+                        else "dvd_mim_transcode_v1"
+                    )
+                    require(args.streaming == "fixed",
+                            "DVD MIM ownership gates require --streaming fixed")
+                    require(str(state.get("mimDirectNegotiatedMode", ""))
+                            == args.mim_direct_mode,
+                            "DVD MIM ownership was not negotiated: "
+                            f"requested={args.mim_direct_mode}, state={state}")
+                    plugin_state = str(plugin_status.get("state") or "")
+                    relay_bytes_in = int(plugin_status.get("bytesIn", 0))
+                    relay_bytes_out = int(plugin_status.get("bytesOut", 0))
+                    # A short authored title can finish its finite transform
+                    # segment between the first rendered frame and this status
+                    # sample. In that case the plugin correctly reports
+                    # released and Android may already have accepted the next
+                    # native menu OPENURL. Exact transport/mode plus non-zero
+                    # bidirectional bytes and a client-observed segment EOS are
+                    # durable proof that the owned relay was active. Do not
+                    # weaken this for failed/empty sessions.
+                    completed_owned_segment = (
+                        plugin_state in ("released", "complete")
+                        and relay_bytes_in > 0
+                        and relay_bytes_out > 0
+                        and int(state.get("dvdTransientEosCount", 0)) > 0
+                        and int(state.get("dvdPushedBytes", 0)) > 0
+                        and int(state.get("health_videoRendered", 0)) > 0
+                    )
+                    require(plugin_state == "active" or completed_owned_segment,
+                            "DVD MIM-owned relay was neither active nor a proven "
+                            "completed segment during playback: "
+                            f"plugin={plugin_status}, state={state}")
+                    require(plugin_status.get("mode") == args.mim_direct_mode,
+                            "DVD MIM-owned relay mode did not match the request: "
+                            f"plugin={plugin_status}, state={state}")
+                    require(plugin_status.get("transportId") == expected_transport_id,
+                            "DVD MIM-owned relay transport contract did not match: "
+                            f"expected={expected_transport_id}, plugin={plugin_status}, "
+                            f"state={state}")
+                    require(state.get("discTransformedTransport") in (True, "true")
+                            or completed_owned_segment,
+                            "DVD remained Native/ordinary Push without proof of a "
+                            f"completed MIM-owned segment: {state}")
+                    # The Core's provider-neutral URL marker proves transformed
+                    # transport, while the plugin API proves its exact owned
+                    # mode and transport ID. Preserve that combined result in
+                    # the compact client evidence even when an older URL shape
+                    # does not expose disc_transport to Android directly.
+                    state["mimDvdOwnedState"] = "active_" + args.mim_direct_mode
+                    expected_path = "copy" if args.mim_direct_mode == "copy" else None
+                    actual_path = str(state.get("mimDvdOwnedExecutionPath", ""))
+                    if expected_path is not None:
+                        require(actual_path == expected_path,
+                                f"DVD Direct Copy executed a non-copy path: {state}")
+                    else:
+                        require(actual_path in ("full_gpu", "mixed", "software"),
+                                "DVD Direct Transcode did not report a proven execution path: "
+                                f"{state}")
+                    require(int(state.get("mimDvdOwnedBytesRelayed", 0)) > 0,
+                            f"No DVD bytes reached the MIM-owned relay: {state}")
                 if args.player in ("media3", "exoplayer"):
                     transformed_transport = state.get("discTransformedTransport") in (True, "true")
-                    if transformed_transport:
+                    owned_state = str(state.get("mimDvdOwnedState", ""))
+                    if owned_state == "active_copy":
+                        require(str(state.get("health_videoMime", "")).lower() == "video/mpeg2",
+                                f"DVD Direct Copy did not preserve the MPEG-2 track: {state}")
+                        require(state.get("health_mpeg2SequenceExtensionSeen") in (True, "true"),
+                                f"DVD Direct Copy lost the MPEG-2 sequence extension: {state}")
+                        require(str(state.get("health_mpeg2InterlaceObservation", "unknown"))
+                                != "unknown",
+                                f"DVD Direct Copy MPEG-2 interlace state remained unknown: {state}")
+                    elif transformed_transport:
                         require(str(state.get("health_videoMime", "")).lower() == "video/avc",
                                 f"DVD transform did not resolve the negotiated AVC track: {state}")
                         require(state.get("discTransformRuntimeFallback") not in (True, "true"),
@@ -767,6 +985,9 @@ def main() -> int:
             "mediaSelectionMode": selection_mode,
             "fixtureMode": args.fixture_mode or None,
             "player": args.player,
+            "streaming": args.streaming,
+            "mimDirectMode": args.mim_direct_mode,
+            "mimApiPort": args.mim_api_port,
             "decoding": args.decoding,
             "discPolicy": args.disc_policy,
             "skipMenus": args.skip_menus,

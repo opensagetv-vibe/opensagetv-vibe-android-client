@@ -50,6 +50,8 @@ public class CaptionSlotPolicyTest
     @Test public void unknownCea608LanguageIsNotInvented()
     {
         SubtitleTrack[] tracks = { track(4, SubtitleCodec.CEA608, "", 3) };
+        assertEquals(4, CaptionSlotPolicy.findTrack(
+                tracks, 1, "cea608", "eng").getIndex());
         assertNull(CaptionSlotPolicy.findTrack(tracks, 1, "cea608", "spa"));
         assertEquals(4, CaptionSlotPolicy.findTrack(tracks, 1, "cea608", "").getIndex());
     }

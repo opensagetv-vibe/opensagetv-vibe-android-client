@@ -11,11 +11,22 @@ public final class PlaybackHealthSnapshot
     private final boolean flushed;
     private final boolean errorState;
     private final int retryCount;
+    private final String playbackSource;
 
     public PlaybackHealthSnapshot(Object backendPlayer, Object dataSource,
                                   boolean pushMode, boolean playerReady,
                                   boolean seekPending, boolean flushed,
                                   boolean errorState, int retryCount)
+    {
+        this(backendPlayer, dataSource, pushMode, playerReady, seekPending,
+                flushed, errorState, retryCount, "");
+    }
+
+    public PlaybackHealthSnapshot(Object backendPlayer, Object dataSource,
+                                  boolean pushMode, boolean playerReady,
+                                  boolean seekPending, boolean flushed,
+                                  boolean errorState, int retryCount,
+                                  String playbackSource)
     {
         this.backendPlayer = backendPlayer;
         this.dataSource = dataSource;
@@ -25,6 +36,7 @@ public final class PlaybackHealthSnapshot
         this.flushed = flushed;
         this.errorState = errorState;
         this.retryCount = retryCount;
+        this.playbackSource = playbackSource == null ? "" : playbackSource;
     }
 
     public Object getBackendPlayer() { return backendPlayer; }
@@ -35,4 +47,5 @@ public final class PlaybackHealthSnapshot
     public boolean isFlushed() { return flushed; }
     public boolean isErrorState() { return errorState; }
     public int getRetryCount() { return retryCount; }
+    public String getPlaybackSource() { return playbackSource; }
 }

@@ -1050,7 +1050,14 @@ final class DvdPsExtractor implements Extractor
         private final TimestampAdjuster timestampAdjuster;
         private final TimestampState timestampState;
         private final boolean video;
-        private final ParsableBitArray scratch = new ParsableBitArray(new byte[64]);
+        // PES_header_data_length is an unsigned byte, so a standards-compliant
+        // remuxer may emit as many as 255 optional-header bytes. The Media3
+        // stock reader's 64-byte scratch buffer is sufficient for the common
+        // PTS/DTS-only case, but it is not a protocol limit. FFmpeg preserves
+        // longer DVD PES headers in owned Copy mode; sizing this buffer to the
+        // encoded maximum prevents a valid stream from being rejected before
+        // its first frame.
+        private final ParsableBitArray scratch = new ParsableBitArray(new byte[256]);
         private boolean ptsFlag;
         private boolean dtsFlag;
         private boolean seenFirstDts;
@@ -1202,7 +1209,9 @@ final class DvdPsExtractor implements Extractor
         @Nullable private final DvdSubpictureDecoder subpictureDecoder;
         private final StillFrameRepeater stillFrameRepeater;
         private final SparseArray<DvdAc3Reader> substreams = new SparseArray<>();
-        private final ParsableBitArray scratch = new ParsableBitArray(new byte[64]);
+        // See PesReader: private-stream PES packets use the same unsigned-byte
+        // optional-header length and therefore require the same full range.
+        private final ParsableBitArray scratch = new ParsableBitArray(new byte[256]);
         private boolean ptsFlag;
         private boolean dtsFlag;
         private boolean seenFirstDts;

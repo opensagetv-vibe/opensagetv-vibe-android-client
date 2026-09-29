@@ -159,6 +159,63 @@ class PlaybackHealthTest(unittest.TestCase):
 
         self.assertFalse(healthy)
 
+    def test_late_fixed_reconnect_ignores_only_its_transient_player_error(self):
+        reconnect_error = {
+            "mimDirectSessionState": "late_failure_stock_fixed_reconnect_requested",
+            "health_errorState": True,
+            "health_playerError": "injected pull startup failure",
+        }
+        healthy_before = {
+            "mimDirectSessionState": "late_failure_stock_fixed_reconnect",
+            "health_probeSupported": True,
+            "playerActive": True,
+            "health_videoDecoder": "c2.android.avc.decoder",
+            "health_audioDecoder": "c2.android.aac.decoder",
+            "health_surfaceValid": True,
+            "health_videoRendered": 10,
+            "health_audioRendered": 20,
+        }
+        healthy_after = {
+            **healthy_before,
+            "health_videoRendered": 11,
+            "health_audioRendered": 21,
+        }
+        states = [reconnect_error, healthy_before, healthy_after]
+
+        with mock.patch.object(
+            server.adb,
+            "player_state_snapshot",
+            side_effect=lambda: states.pop(0) if states else healthy_after,
+        ), mock.patch.object(server.time, "sleep", return_value=None), \
+                mock.patch.object(server, "_crash_probe_snapshot", return_value={}):
+            result = server._wait_for_playback(
+                timeout_s=1.0,
+                verify_ms=250,
+                allow_mim_late_fixed_reconnect=True,
+            )
+
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["mimLateFixedReconnectObserved"])
+
+    def test_late_fixed_reconnect_does_not_hide_unrelated_player_error(self):
+        unrelated_error = {
+            "mimDirectSessionState": "active_transcode",
+            "health_errorState": True,
+            "health_playerError": "real decoder failure",
+        }
+        with mock.patch.object(
+            server.adb, "player_state_snapshot", return_value=unrelated_error
+        ), mock.patch.object(server, "_crash_probe_snapshot", return_value={}):
+            result = server._wait_for_playback(
+                timeout_s=1.0,
+                verify_ms=250,
+                allow_mim_late_fixed_reconnect=True,
+            )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual("player_error", result["failureReason"]["code"])
+        self.assertFalse(result["mimLateFixedReconnectObserved"])
+
     def test_fullscreen_promotion_rejects_transient_osd_toggle(self):
         preview = self._preview_state()
         snapshots = [preview, self._fullscreen_state(), preview]
@@ -236,6 +293,21 @@ class PlaybackHealthTest(unittest.TestCase):
 
         self.assertFalse(result["passed"])
         self.assertEqual("client_owned_fullscreen_surface_not_observed", result["reason"])
+        command.assert_not_called()
+
+    def test_fullscreen_recovery_does_not_double_toggle_client_command_in_flight(self):
+        preview = self._preview_state()
+        preview["fullscreenPromotionSent"] = True
+        preview["fullscreenPromotionCommandCount"] = 1
+        with mock.patch.object(server.adb, "player_state_snapshot", return_value=preview), \
+                mock.patch.object(server.adb, "sage_command") as command:
+            result = server._promote_preview_to_fullscreen(
+                timeout_s=2.2,
+                allow_command=True,
+            )
+
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["clientCommandInFlight"])
         command.assert_not_called()
 
 

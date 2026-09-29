@@ -23,6 +23,8 @@ import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
+import opensagetv.vibe.miniclient.android.video.FixedCaptionSideChannelClient;
+import opensagetv.vibe.miniclient.android.video.MimDirectSessionClient;
 
 /**
  * Created by seans on 12/10/15.
@@ -36,6 +38,9 @@ public class MiniclientApplication extends Application
     private int versionCode;
     private String versionName;
     private final BackgroundSessionOwner backgroundSessionOwner = new BackgroundSessionOwner();
+    private final FixedCaptionSideChannelClient fixedCaptionSideChannel =
+            new FixedCaptionSideChannelClient();
+    private final MimDirectSessionClient mimDirectSession = new MimDirectSessionClient();
 
     public static MiniclientApplication get() {
         return INSTANCE;
@@ -55,6 +60,16 @@ public class MiniclientApplication extends Application
     public BackgroundSessionOwner getBackgroundSessionOwner()
     {
         return backgroundSessionOwner;
+    }
+
+    public FixedCaptionSideChannelClient getFixedCaptionSideChannel()
+    {
+        return fixedCaptionSideChannel;
+    }
+
+    public MimDirectSessionClient getMimDirectSession()
+    {
+        return mimDirectSession;
     }
 
     @Override
@@ -114,6 +129,8 @@ public class MiniclientApplication extends Application
     public void onTerminate()
     {
         log.logDebug("Destroying MiniClient");
+        fixedCaptionSideChannel.stop();
+        mimDirectSession.stop();
         DiagnosticSessionSpool.shutdown();
         if (client != null)
         {

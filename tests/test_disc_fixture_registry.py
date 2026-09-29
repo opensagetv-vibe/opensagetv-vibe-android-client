@@ -62,10 +62,19 @@ class DiscFixtureRegistryTests(unittest.TestCase):
             '"slow_start_discarded_and_retried"',
             '"normal_start_used_as_measured_result"',
             '"recent_media_uses_normal_gate"',
+            'storage_warmup["retryReconnect"]',
+            'call_dict(client, "dev_connect_server"',
+            'wait_automation_ready(client, timeout_s=60.0)',
             'mark_recent(',
             'recent_entry(',
         ):
             self.assertIn(expected, source)
+
+    def test_disc_harness_settles_the_server_vm_before_positioning_seek(self):
+        source = (ROOT / "scripts" / "mcp_disc_test.py").read_text(encoding="utf-8")
+        settle = source.index("if args.settle_s:", source.index('DVD startup failed'))
+        seek = source.index("if args.start_ms >= 0:", settle)
+        self.assertLess(settle, seek)
 
 
 if __name__ == "__main__":

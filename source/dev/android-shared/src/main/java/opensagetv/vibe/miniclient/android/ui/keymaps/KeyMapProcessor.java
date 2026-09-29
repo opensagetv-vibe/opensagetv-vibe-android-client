@@ -397,6 +397,13 @@ public class KeyMapProcessor {
 
         switch (keyCode)
         {
+            // A dedicated DVD remote labels this key Return. Android TV
+            // remotes expose only Back, so route it to the authored-disc VM
+            // while a real DVD button highlight is active. Falling through to
+            // SageCommand.BACK exits fullscreen/SageMC instead of returning
+            // from the submenu and leaves the disc stranded in preview.
+            case KeyEvent.KEYCODE_BACK:
+                return SageCommand.DVD_RETURN;
             case KeyEvent.KEYCODE_DPAD_LEFT:
                 return SageCommand.LEFT;
             case KeyEvent.KEYCODE_DPAD_RIGHT:

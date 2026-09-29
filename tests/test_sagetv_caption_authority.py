@@ -6,10 +6,26 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from mcp_caption_test import caption_time_count, stable_caption_time_ms
+from mcp_caption_test import (
+    caption_time_count,
+    resolve_requested_track_raw,
+    stable_caption_time_ms,
+    subtitle_track_codec,
+)
 
 
 class SageTvCaptionAuthorityTests(unittest.TestCase):
+    def test_caption_gate_resolves_teletext_row_to_raw_pid_track_id(self):
+        state = {
+            "subtitleTracks": (
+                "0:DVB:en::-1:true|1:CEA608:en::1:true|"
+                "2:CEA708:en::1:true|21504:TELETEXT:eng:Teletext 888:-1:true"
+            )
+        }
+        self.assertEqual(21504, resolve_requested_track_raw(state, 3))
+        self.assertEqual("TELETEXT", subtitle_track_codec(state, 21504))
+        self.assertEqual(0, resolve_requested_track_raw(state, 0))
+
     def test_android_implements_legacy_extender_subtitle_callback_producer(self):
         profile = (
             ROOT
@@ -111,6 +127,15 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             self.assertIn("Applying pending SageTV subtitle track", source)
             self.assertIn("requestedSubtitleTrack = PREFERRED_TRACK", source)
             self.assertIn("resolvePreferredSubtitleTrack()", source)
+            self.assertIn("applyPublishedSubtitleSelection()", source)
+            self.assertIn("requestedTrack != DISABLE_TRACK", source)
+            self.assertIn("requestedTrack != PREFERRED_TRACK", source)
+            self.assertIn("Applying explicit active-session subtitle track", source)
+            release = source.split("protected void releasePlayer()", 1)[1].split(
+                "public Dimension getVideoDimensions()", 1
+            )[0]
+            self.assertIn("selectedSubtitleTrack = DISABLE_TRACK;", release)
+            self.assertIn("RemoveSubTitleView();", release)
 
     def test_long_press_navigation_exposes_legacy_caption_compatibility(self):
         navigation_java = (
@@ -191,6 +216,9 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         apply_slot = base.split("public boolean applyClosedCaptionSlot", 1)[1]
         apply_slot = apply_slot.split("private SubtitleTrack resolveCaptionSlotTrack", 1)[0]
         self.assertIn("!isExplicitLocalCaptionAuthority(connection)", apply_slot)
+        self.assertIn("fixedCaptionAttached", apply_slot)
+        self.assertIn("fixedCaptionBridge.isForwardingCurrentStream()", apply_slot)
+        self.assertIn("side channel is the source", apply_slot)
         self.assertIn("setSubtitleTrack(track.getIndex())", apply_slot)
         resolver = base.split("private SubtitleTrack resolveCaptionSlotTrack", 1)[1]
         resolver = resolver.split("public boolean applyDvbCaptionTrack", 1)[0]
@@ -223,7 +251,7 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             self.assertIn("SubtitleTrack.parseSourceStreamId", player)
             self.assertIn("applyPendingServerSubpictureStream()", player)
 
-    def test_teletext_callback_clock_does_not_depend_on_stv_osd_polling(self):
+    def test_broadcast_caption_clock_does_not_depend_on_stv_osd_polling(self):
         base = (
             ROOT
             / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/BaseMediaPlayerImpl.java"
@@ -232,6 +260,12 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("scheduleTeletextClock();", base)
         self.assertIn("getPlayerMediaTimeMillis(teletextClockServerBaseMs)", base)
         self.assertIn("teletextLegacyBridge.drainTo(mediaTimeMs)", base)
+        self.assertIn("updateFixedCaptionClock(mediaTimeMs)", base)
+        self.assertIn("(!fixedCaptionAttached && teletextServices.length == 0)", base)
+        self.assertIn("getFixedCaptionEvidenceRefreshCountForDebug", base)
+        self.assertIn("fixedCaptionEvidenceRefreshState", base)
+        self.assertIn('"stv_cc" + channel', base)
+        self.assertIn("getSageTvClosedCaptionState()", base)
         self.assertIn("Stock STVs stop polling media time once their OSD is hidden", base)
 
         caption_test = (ROOT / "scripts/mcp_caption_test.py").read_text(encoding="utf-8")
@@ -239,7 +273,7 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("time.sleep(continuity_window_s)", caption_test)
         self.assertIn('continuity_state = call_dict(client, "dev_player_state"', caption_test)
 
-    def test_legacy_caption_choices_do_not_override_received_stv_state(self):
+    def test_only_stv_caption_mode_follows_received_server_state(self):
         media_cmd = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java").read_text(
             encoding="utf-8"
         )
@@ -249,6 +283,9 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("setLegacyServerCaptionMode", media_cmd)
         self.assertIn("sageTvClosedCaptionStateReceived", media_cmd)
         self.assertIn("? sageTvClosedCaptionState != 0", media_cmd)
+        self.assertIn('if ("off".equals(mode))', media_cmd)
+        self.assertIn('if ("cc1".equals(mode) || "cc2".equals(mode))', media_cmd)
+        self.assertIn("must not replace an explicit Android choice", media_cmd)
         for mode in ("stv", "off", "cc1", "cc2", "dvb"):
             self.assertIn(f"<item>{mode}</item>", arrays)
 
@@ -264,7 +301,7 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             ROOT
             / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ActivePlayerAdjustmentsDialog.java"
         ).read_text(encoding="utf-8")
-        self.assertIn('"dvb".equals(getLegacyServerCaptionMode())', media_cmd)
+        self.assertIn('if ("dvb".equals(mode))', media_cmd)
         self.assertIn("applyDvbCaptionTrack()", base)
         self.assertIn('final String[] labels = { "OFF", "CC1", "CC2", "STV", "DVB" }', dialog)
         self.assertIn("Only Teletext can be emitted through the legacy CEA callback", base)
@@ -275,8 +312,8 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         exo2 = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("applyConfiguredClosedCaptionSlot();", media3)
         self.assertIn("applyConfiguredClosedCaptionSlot();", exo2)
-        self.assertIn("boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();", media3)
-        self.assertIn("boolean configuredCaptionApplied = applyConfiguredClosedCaptionSlot();", exo2)
+        self.assertIn("boolean configuredCaptionApplied = applyPublishedSubtitleSelection();", media3)
+        self.assertIn("boolean configuredCaptionApplied = applyPublishedSubtitleSelection();", exo2)
 
     def test_track_preferences_select_below_stv_caption_authority(self):
         prefs = (ROOT / "source/dev/android-shared/src/main/res/xml/playback_track_prefs.xml").read_text(
@@ -332,6 +369,7 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn('"--continuity-window-s"', script)
         self.assertIn("captions remained continuous after re-enable", script.lower())
         self.assertIn('if args.authority == "debug":', script)
+        self.assertIn('"dev_set_caption_mode"', script)
         self.assertIn("Android subtitle selector was not invoked", script)
         self.assertIn('"--show-stv-timeline"', script)
         self.assertIn('{"key": "PAUSE"}', script)
