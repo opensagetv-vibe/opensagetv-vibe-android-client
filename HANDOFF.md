@@ -1,5 +1,23 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.99 publication (2026-09-30)
+
+Commits `14eef99` and `fc9aacb` are published as v0.5.99. Repository checks
+and Pages deployment passed; the release tag targets the tested source commit,
+the latest-release API returns v0.5.99, and the permanent Pages downloader
+returns HTTP 200. All five public assets were downloaded again and matched
+their GitHub SHA-256 digests. The versioned APK is
+`64ff1be013e9ded1a1a5ab7c9f0c945a2205888ab9fbe2c0ed0054f6116f5af8`,
+the exact source archive is
+`bdad5462da339e554d301df4d43dcd0dd1f2797b5b5bfc13bee284e73ce2ba24`,
+and the review bundle is
+`0ec955547175dbd4ada2a6aa85be36b0332e1cacd17cf0c5905684aed7b7ed35`.
+
+The evidence-backed diagnosis, correction, stock `.175` physical gates, and
+release link were posted to issue #3 at
+`https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/issues/3#issuecomment-5915800759`.
+The issue remains open for reporter confirmation as requested.
+
 ## v0.5.99 stock-server growing Pull correction (2026-09-30)
 
 The diagnostic bundle attached to issue #3 after v0.5.98 isolated a second,

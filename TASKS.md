@@ -792,7 +792,7 @@ explicitly approves publication after the active hardware phases.
   against `.232`, publish affected APK/source assets with bullet-formatted
   notes, verify public hashes and workflows, and comment the evidence and
   release link on the issue.
-- [ ] **GH-012 - Publish v0.5.99 stock growing-Pull correction.** Use the
+- [x] **GH-012 - Publish v0.5.99 stock growing-Pull correction.** Use the
   reporter's post-v0.5.98 diagnostic bundle to remove the remaining UI-thread
   legacy growth probe, defer real size classification to Media3's loader,
   preserve finite completed-recording seek behavior, run only the affected
@@ -883,6 +883,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 91 | 2026-09-30 | Completed GH-012. Commits `14eef99` and `fc9aacb` passed focused growth-policy/source tests, strict validation, a clean 60-task build, strict APK inspection, active Live TV and finite completed-recording stock `.175` / non-Pro `.25` gates, deterministic source/review packaging, repository checks, and Pages deployment. All five downloaded public v0.5.99 assets match GitHub SHA-256 digests; the latest-release API and permanent downloader are correct. The root cause, validation, and release link were posted to issue #3, which remains open for reporter confirmation. |
 | 90 | 2026-09-30 | Added GH-012 from the reporter's post-v0.5.98 diagnostic bundle. The log proved an ambiguous stock `stv://` source still ran its one-shot MediaServer growth probe on Android's main thread; the swallowed `NetworkOnMainThreadException` resolved the active recording as completed and exposed only its roughly 1.2 MiB opening snapshot. Prebuild is now nonblocking, and the retained datasource performs the bounded proof on Media3's loader. Focused tests and affected stock `.175` / non-Pro `.25` physical gates pass: Live TV sustains fullscreen A/V, while the finite 899,959 ms completed control passes FF/REW recovery with no player error/crash and all 103 settings restored. Publication and reporter confirmation remain. |
 | 89 | 2026-09-30 | Completed GH-011. Commit `5251547` passed the affected source/Core/Media3 tests, deterministic manifest, clean APK build, strict debug APK inspection, repeated `.232` / non-Pro Direct starts, and the matched Pull control. The public v0.5.98 APK/source/review/manifest/hash assets match local SHA-256 values; repository and Pages checks pass; the tag, latest-release API, and permanent downloader are correct. The evidence-backed result was posted to issue #3 without closing it, pending reporter confirmation. |
 | 88 | 2026-09-30 | Closed the already-published GH-010 and added GH-011 after reproducing issue #3 on v0.5.97. The Direct-growing startup path performed a UI-thread source probe while a connection replacement could clear Media3's mutable datasource, causing `NetworkOnMainThreadException`, a null datasource factory result, and a fatal setup exit. The candidate trusts explicit active metadata, snapshots the setup datasource, and enters the existing bounded stock-Fixed reconnect if synchronous fallback setup still has no source. Publication remains open pending repeated `.232` / non-Pro physical gates. |
