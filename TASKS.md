@@ -792,6 +792,13 @@ explicitly approves publication after the active hardware phases.
   against `.232`, publish affected APK/source assets with bullet-formatted
   notes, verify public hashes and workflows, and comment the evidence and
   release link on the issue.
+- [ ] **GH-012 - Publish v0.5.99 stock growing-Pull correction.** Use the
+  reporter's post-v0.5.98 diagnostic bundle to remove the remaining UI-thread
+  legacy growth probe, defer real size classification to Media3's loader,
+  preserve finite completed-recording seek behavior, run only the affected
+  stock `.175` / non-Pro `.25` gates, publish bullet-formatted APK/source
+  assets, verify public hashes and workflows, and comment on issue #3 without
+  closing it.
 
 ## 5. Deferred cross-device matrix after GitHub release publication
 
@@ -829,7 +836,24 @@ explicitly approves publication after the active hardware phases.
   and server-side extender compatibility branches. Distinguish proven protocol
   and binary evidence from inference, do not copy proprietary/vendor code, and
   place each useful implementation behind existing physical playback and stock-
-  compatibility gates. This is a future task and must not start during TTX-003.
+  compatibility gates.
+  - [x] Start the audit after TTX-003 and the affected release gates; hash the
+    archived images, verify their manifests, and extract the HD300 release and
+    latest archived beta only into workspace temporary storage.
+  - [x] Establish the evidence rubric and reconcile the first HD300 exported-
+    symbol/property inventory with surviving MiniClient/Core source, current
+    Android capability replies, and public SageTV release/firmware reports.
+  - [ ] Extract the HD200 compressed ROMFS payload without altering the archive,
+    then compare its MiniClient behavior surface with HD300 release and beta.
+  - [ ] Complete domain-by-domain call/branch tracing for buffering and
+    bandwidth, growing/live files, seek/skip and A/V sync, decoder/timestamp and
+    subtitle paths, aspect/interlace/output, standby/reconnect, remote input,
+    fast switching, and every server-side extender compatibility branch.
+  - [ ] Convert only corroborated, currently useful findings into focused
+    Android candidates. Reject hardware/vendor-only behavior and keep each
+    accepted change stock-compatible and behind its affected physical gate.
+  - [ ] Run the affected physical/stock-server gates, synchronize the durable
+    compatibility and handoff evidence, and remove the temporary extraction.
 
 ## 7. Deferred Amazon Appstore and Google Play work
 
@@ -859,6 +883,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 90 | 2026-09-30 | Added GH-012 from the reporter's post-v0.5.98 diagnostic bundle. The log proved an ambiguous stock `stv://` source still ran its one-shot MediaServer growth probe on Android's main thread; the swallowed `NetworkOnMainThreadException` resolved the active recording as completed and exposed only its roughly 1.2 MiB opening snapshot. Prebuild is now nonblocking, and the retained datasource performs the bounded proof on Media3's loader. Focused tests and affected stock `.175` / non-Pro `.25` physical gates pass: Live TV sustains fullscreen A/V, while the finite 899,959 ms completed control passes FF/REW recovery with no player error/crash and all 103 settings restored. Publication and reporter confirmation remain. |
 | 89 | 2026-09-30 | Completed GH-011. Commit `5251547` passed the affected source/Core/Media3 tests, deterministic manifest, clean APK build, strict debug APK inspection, repeated `.232` / non-Pro Direct starts, and the matched Pull control. The public v0.5.98 APK/source/review/manifest/hash assets match local SHA-256 values; repository and Pages checks pass; the tag, latest-release API, and permanent downloader are correct. The evidence-backed result was posted to issue #3 without closing it, pending reporter confirmation. |
 | 88 | 2026-09-30 | Closed the already-published GH-010 and added GH-011 after reproducing issue #3 on v0.5.97. The Direct-growing startup path performed a UI-thread source probe while a connection replacement could clear Media3's mutable datasource, causing `NetworkOnMainThreadException`, a null datasource factory result, and a fatal setup exit. The candidate trusts explicit active metadata, snapshots the setup datasource, and enters the existing bounded stock-Fixed reconnect if synchronous fallback setup still has no source. Publication remains open pending repeated `.232` / non-Pro physical gates. |
 | 87 | 2026-09-29 | Closed the Linux MIMFIX-003 growing/transition row with impact-only validation. The plugin now receives active-file state, retries one stale active hint, rejects incomplete/unreadable startup media, accepts valid duplicate MPEG-TS FFprobe records, and returns an effective bounded live-edge offset. Non-Pro `.25` / `.232` passed hardware Direct Transcode startup, a 24-hour live-edge clamp, REW/FF recovery, two owned channel transitions, zero-session teardown, and restoration of all 103 settings. |

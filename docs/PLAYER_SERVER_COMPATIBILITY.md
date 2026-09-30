@@ -236,9 +236,77 @@ standard `ClearWatched` through Sagex or Nielm's stock Web Interface.
 This audit uses the released SageTV Core, Windows player contracts, Java
 PlaceShifter and wire protocol as primary evidence. The Linux MiniClient is not
 used as a DVD correctness reference: Android, Linux and Java PlaceShifter never
-had complete authored-DVD playback. The proprietary hardware-extender firmware
-was not released, so firmware-internal buffering, decoder and rendering details
-remain inference even when the server contains explicit extender workarounds.
+had complete authored-DVD playback. The archived hardware-extender firmware is
+available for clean-room observation, but it is not source code: exported
+symbols, imports, properties, strings and call sites prove only that a path is
+present. They do not prove its complete runtime policy. No proprietary or vendor
+implementation is copied into Vibe.
+
+### EXT-004 evidence ledger and first-pass inventory
+
+EXT-004 uses four evidence classes. `P` is a public protocol or surviving
+source path whose behavior can be followed end to end. `B` is a direct binary
+observation such as an exported symbol, import, property string or call site.
+`R` is a public release note, manual, or reproducible behavior report. `I` is
+an inference. An `I` finding cannot justify a code change, and a `B` finding
+still needs `P` or focused physical evidence before Android advertises or uses
+the behavior.
+
+The archived inputs were verified before inspection:
+
+| Image | Archived version | MD5 manifest result | SHA-256 | Audit disposition |
+|---|---|---|---|---|
+| `stp200.bin` | `20100909 0` | PASS: `62cc9962a5dac45092afb12922c71cf5` | `46a073089c652e1c404df3c6d902d07d1a61412bbe16c450e848c6e597f7c685` | ROMFS container identified; compressed payload extraction remains open. |
+| `stp300.bin` | `20101007-0` | PASS: `810883b9321f2233cf2a054bf5e300f6` | `6db303c219927905b4f7f5ae71965ada1f3e19717d1e3b384e2b3f311f89ef95` | Four-partition update; SquashFS root extracted read-only into workspace temporary storage. |
+| `stp300beta.bin` | `20110506-0` | PASS: `4a6d7fd9e3d2a78fe909e2ec391fb90e` | `565b4ac6ddcf26c22174f597982f7dd27bb6afe1e5a67f0d8da9430f8c4e8fd6` | Latest archived HD300 beta and primary HD300 binary reference; SquashFS root extracted read-only. |
+
+Both inspected HD300 images contain a non-stripped 32-bit little-endian MIPS
+MiniClient. The latest beta directly exports `Media_PushBuffer`,
+`Media_PushBuffer2`, `Media_Seek`, `Media_FrameStep`, `Media_Pause`,
+`Media_Flush`, `ProcessPushFlags`, `DCCSTCGetSpeed`, `DCCSTCSetSpeed`,
+`SetDVBPTSOffset`, `SetBDPTSOffset`, `UpdateDVBSubpicture`,
+`SendSubpictureUpdate`, `GFX_SetAspect`, `Output_SetAspect`, and bounded
+decoder/event-wait functions. Its property strings include `PUSH_BUFFER_LIMIT`,
+`FRAME_STEP`, `DEINTERLACE_CONTROL`, `GFX_SUBTITLES`,
+`FORCED_MEDIA_RECONNECT`, the advanced-aspect properties, Pull/Push container
+lists, and audio-output selection. This is `B` evidence for separate mechanisms,
+not proof that one mechanism invokes another or that Android should expose it.
+
+The surviving [MiniClient property table](https://github.com/google/sagetv/tree/master/native/elf/newminiclient)
+corroborates the HD300 contract (`P`): a 512 KiB Push-buffer limit, frame step,
+advanced deinterlace control, local audio/output modes, reconnect, subtitle
+callbacks, and advanced aspect choices were independently negotiated. Current
+Core queries those capabilities before constructing `MiniPlayer`; current Vibe
+already answers only the subset it implements. In particular, it deliberately
+does not claim HD300 HDMI/HBR modes, RC5, remote filesystem, unified YUV cache,
+or server-controlled advanced deinterlacing.
+
+Public SageTV 7.1.3 notes provide `R` evidence for the user-visible boundary:
+the server fixed transport-stream reseek, smooth FF/REW, paused MPEG seeking,
+frame advance, seamless-transition parser setup and temporary OSD-clock error,
+reconnect watch-time accounting, and enabled HD300 deinterlace reconfiguration.
+See the [SageTV 7.1.3 beta notes](https://forums.sagetv.com/forums/showthread_t_54508.html?t=54508).
+The later HD300 firmware notes separately document device-side fixes for
+unneeded deinterlacing, PAL timing, audio output, missing audio, invalid
+subtitle packets, buffer-underrun detection, and HDMI audio. See the
+[HD300 firmware history](https://forums.sagetv.com/forums/showthread_t_50840.html?t=50840).
+Those reports prevent server fixes and hardware decoder workarounds from being
+mistaken for the same layer.
+
+First-pass implementation decisions:
+
+| Finding | Evidence | Decision |
+|---|---|---|
+| HD300 advertised a 512 KiB `PUSH_BUFFER_LIMIT`; Vibe currently leaves it empty and Core uses its historical bounded default. | `B` property plus `P` server parser/limit branch. | Candidate only. Measure server write cadence, Android free-space replies, first-frame time, underruns and seek recovery on stock Push before considering a capability reply. |
+| HD300 used explicit decoder/event waits and later firmware fixed false DVD underrun detection. | `B` symbols plus `R` firmware note. | Architectural hint only. Keep Android waits bounded and state-driven; do not copy constants or infer a universal timeout. |
+| Seek, frame step, smooth FF/REW and seamless transition required both client mechanisms and server corrections. | `B` media functions plus `P` Core branches plus `R` server notes. | Retain Vibe's mode-specific capability gates and replacement fallback. Do not identify normal reload as seamless switching. |
+| Deinterlace, HDMI/audio-output, aspect and local DVB surfaces are hardware-output paths. | `B` symbols/properties plus `P` property contract. | Do not advertise Sigma-specific output controls. Android continues to use device/player controls and reports observed interlace state. |
+| Later firmware skipped invalid subtitle packets to avoid a crash. | `R`, with separate `B` local DVB/BD decoder paths. | Audit malformed-packet handling in each Android caption path; any change needs a generated corrupt-packet regression and normal CEA/Teletext/DVB gates. |
+
+No Android runtime behavior changed in this first phase. The extracted trees and
+generated symbol inventories are disposable audit data under
+`artifacts/temp/ext004-firmware-audit`; they are not project inputs and must be
+removed when EXT-004 closes.
 
 | Behavior | Evidence classification | Reusable Android result | Status |
 |---|---|---|---|

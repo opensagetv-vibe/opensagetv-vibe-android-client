@@ -25,6 +25,7 @@ import opensagetv.vibe.miniclient.net.ISageTVDataSource;
 import opensagetv.vibe.miniclient.net.RetainedBufferedPullDataSource;
 import opensagetv.vibe.miniclient.net.SessionOwnedDataSource;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
+import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
 import opensagetv.vibe.miniclient.android.video.GrowingPlaybackSourcePolicy;
 import opensagetv.vibe.miniclient.android.video.smb.SmbDirectConfig;
@@ -395,21 +396,21 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     }
 
     /**
-     * Resolves SageTV's growing-file contract before ExoPlayer is built.
+     * Prepares the non-blocking growing-file policy before ExoPlayer is built.
      *
-     * <p>Media3 configures its stuck-playing detectors only on the builder. A
-     * stock SageTV OPENURL does not distinguish a completed recording from one
-     * still being written, so the normal {@link #open(DataSpec)} SIZE-growth
-     * classification would otherwise happen too late. This bounded preflight
-     * uses a separate MediaServer connection so it cannot open, close, or
-     * otherwise mutate the session-owned datasource that Media3 will use. The
-     * resolved growth policy is retained for the real player open.</p>
+     * <p>Media3 configures its stuck-playing detectors only on the builder.
+     * Explicit Vibe metadata can be resolved immediately. A stock SageTV
+     * OPENURL, however, only supplies a conservative active-file guess. Its
+     * SIZE-growth proof must be deferred to {@link #open(DataSpec)}, which runs
+     * on Media3's loader thread. Opening a separate MediaServer connection here
+     * would perform network I/O on Android's main thread and, on Fire TV,
+     * silently classify a growing recording as completed after
+     * {@code NetworkOnMainThreadException}.</p>
      */
-    public boolean classifyGrowthBeforePlayerBuild(Uri sourceUri) throws IOException
+    public boolean prepareGrowthPolicyBeforePlayerBuild() throws IOException
     {
-        if (sourceUri == null) throw new IllegalArgumentException("sourceUri is required");
         if (smbConfig != null)
-            throw new IllegalStateException("Prebuild growth classification is only valid for MediaServer Pull");
+            throw new IllegalStateException("Prebuild growth policy is only valid for MediaServer Pull");
 
         // A Vibe-capable server already supplied an authoritative active=1
         // declaration in OPENURL. Resolving that declaration requires no
@@ -423,21 +424,13 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             return effectivelyGrowing;
         }
 
-        RetainedBufferedPullDataSource probe =
-                new RetainedBufferedPullDataSource(host, pullReadBytes);
-        try
-        {
-            long size = probe.open(sourceUri.toString());
-            effectivelyGrowing = growthPolicy.resolve(probe, size);
-            return effectivelyGrowing;
-        }
-        finally
-        {
-            // RetainedBufferedPullDataSource.close() intentionally preserves
-            // its connection for range reuse. A one-shot probe must release
-            // the connection explicitly.
-            probe.release();
-        }
+        // Do not resolve the legacy guess here. The real loader-thread open()
+        // will observe SIZE growth and replace this conservative build-time
+        // value before publishing the DataSource length to Media3.
+        effectivelyGrowing = growthPolicy.shouldPreparePlayerForGrowth();
+        PlaybackDebugTrap.recordDetailed("legacy_growth_probe_deferred", null,
+                "potentiallyGrowing=" + effectivelyGrowing);
+        return effectivelyGrowing;
     }
 
     /** Restores the normal unknown-length contract after the first post-seek frame. */

@@ -250,14 +250,21 @@ class LiveProgramTransitionTest(unittest.TestCase):
 
         media3_pull = self.read("media3/Media3PullDataSource.java")
         explicit = media3_pull.index("if (growthPolicy.isMetadataExplicit())")
-        network_probe = media3_pull.index(
-            "RetainedBufferedPullDataSource probe =", explicit
-        )
-        self.assertLess(explicit, network_probe)
         self.assertIn(
             "effectivelyGrowing = growthPolicy.resolve(null, -1L);",
-            media3_pull[explicit:network_probe],
+            media3_pull[explicit:],
         )
+        prebuild = media3_pull.index("prepareGrowthPolicyBeforePlayerBuild()")
+        prebuild_end = media3_pull.index(
+            "/** Restores the normal unknown-length contract", prebuild
+        )
+        prebuild_source = media3_pull[prebuild:prebuild_end]
+        self.assertIn(
+            "growthPolicy.shouldPreparePlayerForGrowth()", prebuild_source
+        )
+        self.assertIn('"legacy_growth_probe_deferred"', prebuild_source)
+        self.assertNotIn("RetainedBufferedPullDataSource probe", prebuild_source)
+        self.assertNotIn(".open(", prebuild_source)
         self.assertIn("ISageTVDataSource activeSource = dataSource;", media3_pull)
         self.assertIn("int bytes = activeSource.read(", media3_pull)
         self.assertNotIn("int bytes = dataSource.read(", media3_pull)

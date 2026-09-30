@@ -2153,7 +2153,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
 
 
-        boolean provenGrowingMediaServerPull = false;
+        boolean preparedGrowingMediaServerPull = false;
         if (!pushMode && !httpls && dataSource instanceof Media3PullDataSource)
         {
             Media3PullDataSource pullDataSource = (Media3PullDataSource) dataSource;
@@ -2161,12 +2161,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 try
                 {
-                    provenGrowingMediaServerPull = pullDataSource
-                            .classifyGrowthBeforePlayerBuild(Uri.parse(sageTVurl));
+                    preparedGrowingMediaServerPull = pullDataSource
+                            .prepareGrowthPolicyBeforePlayerBuild();
                     PlaybackDebugTrap.recordDetailed(
-                            provenGrowingMediaServerPull
-                                    ? "growing_pull_prebuild_classified"
-                                    : "completed_pull_prebuild_classified",
+                            preparedGrowingMediaServerPull
+                                    ? "growing_pull_prebuild_prepared"
+                                    : "completed_pull_prebuild_prepared",
                             this, "metadataExplicit=" + mediaContext.isMetadataExplicit());
                 }
                 catch (IOException growthProbeFailure)
@@ -2190,7 +2190,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 pushMode, httpls,
                 dataSource instanceof Media3PullDataSource
                         && ((Media3PullDataSource) dataSource).isSmbModeConfigured(),
-                provenGrowingMediaServerPull))
+                preparedGrowingMediaServerPull))
         {
             // A recording-in-progress can render appended TS bytes beyond the
             // finite duration Media3 discovered at its first OPEN. Media3 1.11

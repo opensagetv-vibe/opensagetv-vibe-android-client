@@ -560,14 +560,19 @@ silently reopen at zero.
 
 Media3 configures that detector only on its builder, before its normal
 datasource OPEN can verify whether an ambiguous stock-server recording is
-still growing. Perform the bounded SIZE-growth classification through a
-separate, explicitly released MediaServer connection before building the
-player. Never open and close the retained playback datasource for this probe:
-its logical range close intentionally preserves the underlying connection and
-will make the real OPEN fail as an already-open source. Relax only Media3's
-playing-not-ending detector, only for proven growing plain Pull; retain the
-default timeout when the probe fails and preserve every other stuck-player
-detector.
+still growing. Prebuild classification must therefore never perform network
+I/O: player setup runs on Android's UI thread, where a MediaServer connection
+raises `NetworkOnMainThreadException`. Explicit Vibe active/completed metadata
+may resolve the policy synchronously. A legacy SageTV source is only prepared
+as a conservative growth candidate so the builder can relax the inapplicable
+playing-not-ending detector; every other stuck-player detector remains active.
+
+The retained playback datasource performs the bounded SIZE-growth proof from
+its real Media3 loader-thread OPEN. It reports unknown length only after growth
+is observed and otherwise publishes the finite completed-file size. Do not use
+a separate prebuild MediaServer connection and do not open/close the retained
+datasource as a probe: both approaches can corrupt or prematurely resolve the
+real playback source. Completed files must retain duration and random access.
 
 For a live-program transition, a new `OPENURL` owns a new playback generation.
 Media3 fast replacement is prohibited when the current item is growing, and

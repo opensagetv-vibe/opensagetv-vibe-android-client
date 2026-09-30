@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.99 - 2026-09-30
+
+- Fixed the remaining stock-server Media3 Pull freeze at the start of an
+  in-progress recording. The reporter's v0.5.98 diagnostic log proved that an
+  ambiguous legacy `stv://` source still performed a MediaServer size probe on
+  Android's UI thread, swallowed `NetworkOnMainThreadException`, and exposed
+  the small opening snapshot as a final length.
+- Legacy stock playback now makes only a nonblocking growth-candidate decision
+  before constructing Media3. The retained playback datasource performs the
+  bounded size-growth proof later on Media3's loader thread, where network I/O
+  is valid, and publishes either unknown length for a growing file or finite
+  length for a completed recording.
+- Added focused Java and source-contract regressions for nonblocking legacy
+  preparation, loader-thread growth proof, completed-file handling, and the
+  absence of a separate prebuild connection.
+- On the non-Pro Fire TV against unmodified stock server `.175`, active Live TV
+  sustained hardware-decoded Media3 Pull playback in fullscreen and a completed
+  899,959 ms MPEG-2/AC-3 recording passed startup plus FF/REW recovery. Both
+  gates restored all 103 client settings and produced no player error or crash.
+- Issue #3 remains open for confirmation on the reporter's Fire TV and NVIDIA
+  Shield hardware.
+
 ## v0.5.98 - 2026-09-30
 
 - Fixed the in-progress recording startup regression reported after v0.5.97.

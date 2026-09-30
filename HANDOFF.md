@@ -1,5 +1,32 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.99 stock-server growing Pull correction (2026-09-30)
+
+The diagnostic bundle attached to issue #3 after v0.5.98 isolated a second,
+stock-only form of the startup failure. An ambiguous legacy `stv://` Pull source
+still called `classifyGrowthBeforePlayerBuild()` on Android's main thread. The
+temporary MediaServer connection raised `NetworkOnMainThreadException`; the
+legacy datasource converted that exception into a zero-size result, so the
+growth policy resolved the active recording as completed. Media3 then received
+the roughly 1.2 MiB opening snapshot as the final content length and exhausted
+it after only a few seconds.
+
+The prebuild path now performs no network I/O. Explicit Vibe active/completed
+metadata remains authoritative, while a legacy SageTV candidate only prepares
+the builder-time timeout policy. The retained Media3 datasource performs the
+bounded size-growth classification from its real loader-thread `open()` and
+then reports unknown length only when the file actually grows. A completed
+recording still reports its finite length and remains seekable.
+
+Focused source and Java policy tests pass, as does the clean APK build. On
+non-Pro `.25` against unmodified stock `.175`, the active Live TV Pull gate
+advanced video/audio in stable fullscreen. The completed-file control reported
+a finite 899,959 ms duration and passed FF/REW recovery with continued hardware
+MPEG-2 video and AC-3 audio. Both physical gates restored all 103 settings and
+reported no player error or crash. Publication and reporter confirmation are
+recorded separately below; issue #3 remains open until affected hardware
+confirms the result.
+
 ## v0.5.98 publication (2026-09-30)
 
 Commit `5251547` is published as v0.5.98. GitHub repository and Pages checks
@@ -3350,6 +3377,24 @@ Then record the APK SHA-256 and inspect package ID, target SDK, permissions,
 exported components, FileProvider authority, and launcher resources. Only after
 that should a guarded physical install/launch and the first-time setup/device
 matrix proceed.
+
+## Active EXT-004 legacy-extender audit
+
+EXT-004 began after the caption and v0.5.98 release gates. The archived HD200,
+HD300 release, and latest archived HD300 beta images were checksum-verified.
+The two HD300 roots and their non-stripped MIPS MiniClient binaries were
+extracted only under workspace `artifacts/temp/ext004-firmware-audit`; the
+archive repository remains unchanged. The evidence rubric, hashes, initial
+symbol/property inventory, public release-note corroboration, and first gated
+candidates are in `docs/PLAYER_SERVER_COMPATIBILITY.md` under **EXT-004
+evidence ledger and first-pass inventory**.
+
+No runtime capability was enabled in this phase. The 512 KiB HD300 Push limit
+is only a test candidate, and hardware-specific HDMI/HBR, RC5, unified-YUV,
+advanced-deinterlace, and Sigma decoder behavior remain rejected unless an
+independent Android reproduction and affected stock-server physical gate prove
+they are useful. Next work is HD200 ROMFS payload extraction and the complete
+domain-by-domain call/branch map listed under EXT-004 in `TASKS.md`.
 
 ## Invariants
 

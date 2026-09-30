@@ -49,6 +49,22 @@ public final class GrowingPlaybackSourcePolicy
         return growing;
     }
 
+    /**
+     * Returns the conservative policy Media3 must use while its player is
+     * being built, before the loader thread has opened the media source.
+     *
+     * <p>Legacy SageTV OPENURL commands mark streamable files as potentially
+     * active but do not say whether the file is actually growing.  Proving
+     * that state requires MediaServer I/O and therefore belongs in
+     * {@link #resolve(ISageTVDataSource, long)}, which Media3 invokes from its
+     * loader thread.  Player construction runs on Android's main thread, so it
+     * must only consume the non-blocking candidate state here.</p>
+     */
+    public boolean shouldPreparePlayerForGrowth()
+    {
+        return configuredPotentiallyGrowing;
+    }
+
     public boolean isConfiguredPotentiallyGrowing()
     {
         return configuredPotentiallyGrowing;
