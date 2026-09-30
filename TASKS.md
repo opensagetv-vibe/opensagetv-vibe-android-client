@@ -7,7 +7,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **88** (2026-09-30)
+Checklist revision: **89** (2026-09-30)
 
 ## Stable checklist rules
 
@@ -786,7 +786,7 @@ explicitly approves publication after the active hardware phases.
   source/MCP/player/build/archive gates, publish the versioned APK and source
   assets with grouped bullet notes, and verify public hashes, repository and
   Pages checks, the latest-release API, and permanent downloader endpoint.
-- [ ] **GH-011 - Publish v0.5.98 in-progress recording recovery.** Correct the
+- [x] **GH-011 - Publish v0.5.98 in-progress recording recovery.** Correct the
   Direct-growing startup/fallback race reproduced from issue #3, run repeated
   Fixed/MIM starts and the matched ordinary-Pull control on non-Pro `.25`
   against `.232`, publish affected APK/source assets with bullet-formatted
@@ -859,6 +859,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 89 | 2026-09-30 | Completed GH-011. Commit `5251547` passed the affected source/Core/Media3 tests, deterministic manifest, clean APK build, strict debug APK inspection, repeated `.232` / non-Pro Direct starts, and the matched Pull control. The public v0.5.98 APK/source/review/manifest/hash assets match local SHA-256 values; repository and Pages checks pass; the tag, latest-release API, and permanent downloader are correct. The evidence-backed result was posted to issue #3 without closing it, pending reporter confirmation. |
 | 88 | 2026-09-30 | Closed the already-published GH-010 and added GH-011 after reproducing issue #3 on v0.5.97. The Direct-growing startup path performed a UI-thread source probe while a connection replacement could clear Media3's mutable datasource, causing `NetworkOnMainThreadException`, a null datasource factory result, and a fatal setup exit. The candidate trusts explicit active metadata, snapshots the setup datasource, and enters the existing bounded stock-Fixed reconnect if synchronous fallback setup still has no source. Publication remains open pending repeated `.232` / non-Pro physical gates. |
 | 87 | 2026-09-29 | Closed the Linux MIMFIX-003 growing/transition row with impact-only validation. The plugin now receives active-file state, retries one stale active hint, rejects incomplete/unreadable startup media, accepts valid duplicate MPEG-TS FFprobe records, and returns an effective bounded live-edge offset. Non-Pro `.25` / `.232` passed hardware Direct Transcode startup, a 24-hour live-edge clamp, REW/FF recovery, two owned channel transitions, zero-session teardown, and restoration of all 103 settings. |
 | 86 | 2026-09-29 | Ran only the focused clean-Windows DVD ownership boundary instead of repeating the completed Windows/general or Linux/device matrices. Stock-Core `.185` started the authored DVD through the Core-MCP `Watch` path, but did not negotiate `DVD_DISC_*`; the client correctly remained native hardware MPEG-2 with `discTransformedTransport=false`. The no-false-pass gate rejected the 0.168x native cadence as not being plugin-owned Direct Transcode, restored all 103 settings, and leaves the Windows DVD portion explicitly open without weakening the already-passed ordinary-video QSV Direct result. |
