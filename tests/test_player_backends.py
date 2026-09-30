@@ -217,6 +217,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # an owned live-edge rebuild. The trace records only a proven clamp;
         # ordinary player seek behavior and stock fallback are unchanged.
         reviewed_mim_direct_live_edge_hash = "e02435aa0f010e691efa29c7e631b5116b58cf947149d69c05361e9a76760448"
+        # A synchronous missing datasource during Direct's original Pull
+        # fallback now requests the existing bounded stock-Fixed reconnect.
+        # This keeps the recovery capability-gated and prevents a fatal setup
+        # exit before the reconnect controller can complete.
+        reviewed_mim_direct_growing_recovery_hash = "61b0f24e9735b1c1ae24c5a1d50e3532af2164c8b082764fcfcff789c88cd256"
         # Clears old geometry before queuing a replacement but preserves a
         # new-generation SETVIDEORECT that arrives while the UI-thread release
         # is pending. This prevents Direct playback from remaining in SageTV's
@@ -265,6 +270,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_mim_direct_stock_fixed_reconnect_hash,
             reviewed_mim_direct_segment_observer_hash,
             reviewed_mim_direct_live_edge_hash,
+            reviewed_mim_direct_growing_recovery_hash,
             reviewed_load_rectangle_race_hash,
         }, rel)
 
@@ -385,7 +391,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.97")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.98")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -526,7 +532,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("getNetworkReadCount()", media3_pull)
         self.assertIn("getOpenWaitMs()", media3_pull)
         self.assertIn("hasReachedEndOfInput()", media3_pull)
-        self.assertIn("((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)", media3_pull)
+        self.assertIn("((GrowingDataSource) activeSource).waitForGrowth(startPos, 2000)", media3_pull)
 
         exo2_pull = (SHARED / "video/exoplayer2/Exo2PullDataSource.java").read_text(encoding="utf-8")
         self.assertIn("getNetworkReadCount()", exo2_pull)
@@ -535,7 +541,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)", exo2_pull)
         for text, name in ((media3_pull, "Media3"), (exo2_pull, "Exo2")):
             self.assertIn("returned zero bytes for non-zero read", text, name)
-            self.assertIn("closed during non-zero read", text, name)
+        self.assertIn("ISageTVDataSource activeSource = dataSource;", media3_pull)
+        self.assertIn("if (activeSource == null)", media3_pull)
+        self.assertIn("closed during non-zero read", exo2_pull, "Exo2")
 
         expectations = {
             "video/exoplayer2/Exo2MediaPlayerImpl.java": "com.google.android.exoplayer2.DefaultLoadControl",
@@ -703,6 +711,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("source = null;", pull)
 
         core_pull = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/net/SimplePullDataSource.java").read_text(encoding="utf-8")
+        self.assertIn("OutputStream writer = remoteWriter;", core_pull)
+        self.assertIn('throw new IOException("Pull datasource closed before read command")', core_pull)
         self.assertIn("public synchronized void close()", core_pull)
         self.assertIn("if (position >= size) return -1;", core_pull)
         self.assertIn("Math.min((long) len, size - position)", core_pull)

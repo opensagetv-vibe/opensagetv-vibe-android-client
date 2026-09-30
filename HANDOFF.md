@@ -1,5 +1,35 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.98 in-progress recording recovery (2026-09-30)
+
+Issue #3 was reproduced on non-Pro `.25` against Vibe server `.232` with the
+v0.5.97 client. MIM Direct session startup exhausted its bounded playlist wait,
+the original-source Pull fallback then classified growth on Android's UI
+thread, and a concurrent connection replacement cleared the mutable datasource
+before Media3's factory consumed it. The resulting
+`NetworkOnMainThreadException`, null factory result, and fatal
+`setupPlayer must create a datasource` returned the client to its server UI.
+
+The correction trusts the already-authoritative active/completed metadata
+without a UI-thread network probe, captures the selected datasource for the
+current Media3 setup generation, and routes a synchronous missing-source
+fallback through the existing one-shot stock-Fixed reconnect. The behavior is
+bounded to pre-first-frame Direct recovery and does not change the saved
+transport preference or ordinary Pull setup. Per-read stable references also
+prevent the retiring Media3 loader from dereferencing a datasource or command
+stream that concurrent teardown has just cleared. Focused automated and
+physical gate results are recorded before publication below.
+
+The final candidate passed three consecutive Direct Transcode starts before
+the teardown hardening and one after it, plus matched ordinary-Pull controls.
+Every run used Media3 hardware decoding on non-Pro `.25` against `.232`,
+produced advancing video and audio on channel 2.1, reached stable fullscreen,
+and restored all 103 client settings. Direct runs retained
+`active_transcode`. After a clean log reset, the final Direct and Pull runs
+contained no `NetworkOnMainThreadException`, missing-datasource fatal,
+null-reference, app-fatal, or ANR signature. The final debug APK SHA-256 is
+`86abcdd264bf3222939b4fef75f7a47d7feba19560ddc7c439dda60ff41588d2`.
+
 ## v0.5.97 release preparation (2026-09-29)
 
 Version 0.5.97 packages the already-validated MIM Direct growing-stream client

@@ -271,13 +271,23 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             {
                 return 0;
             }
+            // close() may run on the UI/session thread while Media3 is still
+            // retiring its loader. Keep one stable source reference for this
+            // read so a teardown cannot turn a successful null check into a
+            // LoadTask NullPointerException a few statements later.
+            ISageTVDataSource activeSource = dataSource;
+            if (activeSource == null)
+            {
+                endOfInput = true;
+                return C.RESULT_END_OF_INPUT;
+            }
             if (bytesRemaining == 0)
             {
-                if (effectivelyGrowing && dataSource != null)
+                if (effectivelyGrowing)
                 {
-                    long refreshedSize = dataSource instanceof GrowingDataSource
-                            ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
-                            : dataSource.size();
+                    long refreshedSize = activeSource instanceof GrowingDataSource
+                            ? ((GrowingDataSource) activeSource).waitForGrowth(startPos, 2000)
+                            : activeSource.size();
                     if (refreshedSize > startPos)
                     {
                         bytesRemaining = refreshedSize - startPos;
@@ -294,17 +304,12 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
                     return C.RESULT_END_OF_INPUT;
                 }
             }
-            if (dataSource == null)
-            {
-                throw new IOException("Media3 Pull datasource closed during non-zero read");
-            }
-
             if (effectivelyGrowing && bytesRemaining == C.LENGTH_UNSET
-                    && startPos >= dataSource.size())
+                    && startPos >= activeSource.size())
             {
-                long refreshedSize = dataSource instanceof GrowingDataSource
-                        ? ((GrowingDataSource) dataSource).waitForGrowth(startPos, 2000)
-                        : dataSource.size();
+                long refreshedSize = activeSource instanceof GrowingDataSource
+                        ? ((GrowingDataSource) activeSource).waitForGrowth(startPos, 2000)
+                        : activeSource.size();
                 if (refreshedSize <= startPos)
                 {
                     endOfInput = true;
@@ -318,7 +323,7 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             long physicalReadsBefore = currentPhysicalReadCount();
             long physicalReadStartedMs = SystemClock.elapsedRealtime();
             long requestedPosition = startPos;
-            int bytes = dataSource.read(startPos, buffer, offset, bytesToRead);
+            int bytes = activeSource.read(startPos, buffer, offset, bytesToRead);
             if (currentPhysicalReadCount() > physicalReadsBefore)
             {
                 lastPhysicalReadMonotonicMs = physicalReadStartedMs;
@@ -405,6 +410,18 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
         if (sourceUri == null) throw new IllegalArgumentException("sourceUri is required");
         if (smbConfig != null)
             throw new IllegalStateException("Prebuild growth classification is only valid for MediaServer Pull");
+
+        // A Vibe-capable server already supplied an authoritative active=1
+        // declaration in OPENURL. Resolving that declaration requires no
+        // MediaServer I/O. In particular, setupPlayer() normally runs on
+        // Android's UI thread, where opening the optional legacy SIZE probe
+        // raises NetworkOnMainThreadException. Only stock/legacy URLs, whose
+        // timeshift state is an inference, need the bounded growth probe.
+        if (growthPolicy.isMetadataExplicit())
+        {
+            effectivelyGrowing = growthPolicy.resolve(null, -1L);
+            return effectivelyGrowing;
+        }
 
         RetainedBufferedPullDataSource probe =
                 new RetainedBufferedPullDataSource(host, pullReadBytes);

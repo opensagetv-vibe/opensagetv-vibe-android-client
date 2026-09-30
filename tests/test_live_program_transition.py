@@ -248,6 +248,33 @@ class LiveProgramTransitionTest(unittest.TestCase):
         self.assertIn("waitForGrowth(size, LEGACY_GROWTH_PROBE_MS)", policy)
         self.assertIn('"legacy_growth_classified"', policy)
 
+        media3_pull = self.read("media3/Media3PullDataSource.java")
+        explicit = media3_pull.index("if (growthPolicy.isMetadataExplicit())")
+        network_probe = media3_pull.index(
+            "RetainedBufferedPullDataSource probe =", explicit
+        )
+        self.assertLess(explicit, network_probe)
+        self.assertIn(
+            "effectivelyGrowing = growthPolicy.resolve(null, -1L);",
+            media3_pull[explicit:network_probe],
+        )
+        self.assertIn("ISageTVDataSource activeSource = dataSource;", media3_pull)
+        self.assertIn("int bytes = activeSource.read(", media3_pull)
+        self.assertNotIn("int bytes = dataSource.read(", media3_pull)
+
+        media3_player = self.read("media3/Media3MediaPlayerImpl.java")
+        self.assertIn("final DataSource setupDataSource = dataSource;", media3_player)
+        self.assertIn("return setupDataSource;", media3_player)
+
+        base_player = self.read("BaseMediaPlayerImpl.java")
+        self.assertGreaterEqual(
+            base_player.count(
+                'requestStockFixedReconnectForMimPullFailure(\n'
+                '                                    "setup_datasource_unavailable")'
+            ),
+            1,
+        )
+
         media_cmd = (
             ROOT
             / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java"

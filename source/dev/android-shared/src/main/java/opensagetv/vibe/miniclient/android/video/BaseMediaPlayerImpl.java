@@ -452,6 +452,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
                         if (dataSource == null && !httpls)
                         {
+                            // A slow optional Direct start can overlap SageTV's
+                            // media-socket recycle. If that recycle retires the
+                            // just-created Pull datasource, use the same
+                            // connection-scoped, one-shot native reconnect as
+                            // an asynchronous pre-first-frame Pull failure.
+                            // Crashing the Activity here loses the watch
+                            // session and prevents that bounded recovery.
+                            if (requestStockFixedReconnectForMimPullFailure(
+                                    "setup_datasource_unavailable"))
+                                return;
                             throw new RuntimeException("setupPlayer must create a datasource");
                         }
                     }
@@ -483,6 +493,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
                 if (dataSource == null && !httpls)
                 {
+                    if (requestStockFixedReconnectForMimPullFailure(
+                            "setup_datasource_unavailable"))
+                        return;
                     throw new RuntimeException("setupPlayer must create a datasource");
                 }
             }

@@ -236,8 +236,14 @@ public class SimplePullDataSource implements ISageTVDataSource, GrowingDataSourc
             String cmd = ("READ " + String.valueOf(position) + " " + String.valueOf(len));
             if (VerboseLogging.DATASOURCE_LOGGING)
                 log.debug("read(): position:{}, offset:{}, len: {}, buffersize: {}; COMMAND: {}", position, offset, len, buffer.length, cmd);
-            remoteWriter.write((cmd + "\r\n").getBytes());
-            remoteWriter.flush();
+            // Keep the command stream stable for this request. close() may
+            // concurrently clear the instance fields while Media3 retires a
+            // loader; that should produce a normal closed-source IOException,
+            // never a NullPointerException from the loader thread.
+            OutputStream writer = remoteWriter;
+            if (writer == null) throw new IOException("Pull datasource closed before read command");
+            writer.write((cmd + "\r\n").getBytes());
+            writer.flush();
             int bytes = readBuffer(buffer, offset, len);
             if (bytes == -1) {
                 log.debug("EOF for {}", uri);

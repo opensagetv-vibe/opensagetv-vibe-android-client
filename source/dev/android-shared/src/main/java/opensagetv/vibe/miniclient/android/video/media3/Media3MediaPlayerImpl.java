@@ -2807,13 +2807,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
         if (!httpls)
         {
-
+            // A reconnect can retire the shared field while this UI-thread
+            // setup is still finishing. Media3's factory belongs to this
+            // player generation, so capture its datasource rather than
+            // dereferencing the mutable field later on ExoPlayer's thread.
+            final DataSource setupDataSource = dataSource;
             androidx.media3.datasource.DataSource.Factory dataSourceFactory = new DataSource.Factory()
             {
                 @Override
                 public DataSource createDataSource()
                 {
-                    return dataSource;
+                    return setupDataSource;
                 }
             };
 

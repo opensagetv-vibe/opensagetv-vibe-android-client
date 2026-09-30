@@ -418,6 +418,11 @@ def main() -> int:
             # the existing debug trace records when it differs from SageTV's
             # requested position; ordinary player seeks are unchanged.
             "e02435aa0f010e691efa29c7e631b5116b58cf947149d69c05361e9a76760448",
+            # Reviewed Direct-growing startup recovery. A synchronous missing
+            # datasource during the original Pull fallback now enters the
+            # existing bounded stock-Fixed reconnect instead of terminating
+            # setup before that recovery can run.
+            "61b0f24e9735b1c1ae24c5a1d50e3532af2164c8b082764fcfcff789c88cd256",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

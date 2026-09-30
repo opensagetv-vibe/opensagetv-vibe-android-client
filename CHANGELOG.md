@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.98 - 2026-09-30
+
+- Fixed the in-progress recording startup regression reported after v0.5.97.
+  An authoritative active/growing source no longer performs an unnecessary
+  network classification probe on Android's UI thread, and the player factory
+  now retains the exact datasource selected for that setup generation.
+- A synchronous missing datasource during MIM Direct's original-source Pull
+  fallback now enters the existing one-shot stock-Fixed reconnect instead of
+  terminating player setup. The saved Direct preference is unchanged, and the
+  recovery remains limited to startup before the first rendered frame.
+- Media3 and the shared Pull transport now retain stable per-read datasource
+  and command-stream references while an old loader is being retired, so
+  concurrent teardown ends normally instead of logging a null-reference error.
+- Added focused source and Java regression coverage for explicit growing and
+  completed metadata, datasource ownership during replacement, and the bounded
+  reconnect path. Repeated Fixed/MIM Direct and matched ordinary-Pull physical
+  gates pass on `.232` / non-Pro `.25`, with all 103 settings restored and no
+  former fatal or null-reference signature in the clean final log.
+
 ## v0.5.97 - 2026-09-29
 
 - Fixed plugin-owned Direct Transcode for active and growing recordings. The
