@@ -17,17 +17,19 @@ Before changing code, read:
 
 `TASKS.md` is the only authoritative subproject backlog and durable master
 checklist. Do not create `TASK_CODEX.md`, prompt-specific task files,
-review-note backlogs, or duplicate task lists. Retain completed work in
-`TASKS.md` with a checked box and stable task ID; also record release-relevant
-results in `CHANGELOG.md`/`HANDOFF.md`.
+review-note backlogs, or duplicate task lists. Retain completed work in its
+`## Checklist change ledger` with a checked box and stable task ID; also record
+release-relevant results in `CHANGELOG.md`/`HANDOFF.md`.
 
 When a task's acceptance criteria pass, update task tracking in the same
 change: change its existing box to `[x]` without renumbering or deleting it,
 update any mirrored entry in the workspace-wide `task.md`, add a dated entry to
 the `TASKS.md` change ledger, and record the result and evidence in
-`CHANGELOG.md` and `HANDOFF.md`. New work receives a new ID. Reordering retains
-the original ID and is recorded in the ledger. Remove a task only when the user
-explicitly requests removal, and preserve that decision in the ledger.
+`CHANGELOG.md` and `HANDOFF.md`. Immediately before commit, move that checked
+item from its active section into the ledger. New work receives a new ID.
+Reordering retains the original ID and is recorded in the ledger. Remove a task
+only when the user explicitly requests removal, and preserve that decision in
+the ledger.
 
 ## Workspace boundary
 
@@ -59,9 +61,9 @@ explicitly requests removal, and preserve that decision in the ledger.
   OpenSageTV Vibe release tracking; never add Vibe release entries there.
 - `HANDOFF.md` contains current state and the exact resume point, not a second
   chronological changelog.
-- `TASKS.md` contains the stable checked/unchecked master checklist and its
-  change ledger. Checked tasks remain visible so status reports do not appear
-  to change from one turn to the next.
+- `TASKS.md` contains unchecked work in its active sections and completed
+  checked work in its change ledger. Checked tasks remain visible in that
+  ledger so status reports do not appear to change from one turn to the next.
 - Stable operational guidance belongs in README, AGENTS, `docs/`, or component
   READMEs; update those files in place.
 - Do not create `UPDATE_v*.txt`, version-named Markdown notes, dated matrix
@@ -169,3 +171,13 @@ Record skipped device tests as SKIPPED, never PASS.
   expressed through the stock plugin/API boundary. Document the proven API
   gap, keep the extension optional and negotiated with a safe stock fallback,
   and verify older clients and installations remain unaffected.
+
+## Pre-commit task-list maintenance
+
+Immediately before every repository commit, clean `TASKS.md`: move every
+completed `[x]` item out of the active task sections and into
+`## Checklist change ledger`. Preserve stable IDs, acceptance evidence, order,
+and enough source/parent context to understand the result. Never delete
+completion history. Active task sections must contain unchecked work only;
+checked boxes may appear only inside the checklist change ledger. Regenerate
+the project manifest when the repository tracks one.
