@@ -101,6 +101,17 @@ Kodi/VLC/Media3/legacy-Exo comparison and its license boundary are in
 `docs/DECODER_STABILITY_SOURCE_COMPARISON.md`. No reference player is launched;
 MX Player is closed source and remains user-reported capability evidence only.
 
+**Shared physical A/V evidence for AUDIO-001, AUDIO-005, AUDIO-006, and
+DVD-001:** a baseline-calibrated Logitech C920 (`V-U0028`, P/N `860-000334`)
+may record the displayed calibration fixture and the final TV/receiver speaker
+output in one USB audio/video capture. Its 30 fps video provides approximately
+33 ms measurement resolution, which is sufficient to prove or reject the
+reported roughly 500 ms route delay and other large regressions. Pair every run
+with the matching diagnostic bundle and ADB audio-route/EDID state. This webcam
+evidence does not certify 25 ms adjustment accuracy or 50/59.94 fps cadence and
+does not replace HDMI/client telemetry for decoder, frame, seek, or protocol
+results.
+
 - [ ] **AUDIO-001 - Matched Pro/non-Pro A/V-sync characterization.** Determine
   why the same `PBSNewsHour` recording needs approximately `+500 ms` audio
   correction on Fire TV Pro AFTKRT but appears synchronized on non-Pro AFTMM.
@@ -287,6 +298,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 95 | 2026-09-30 | Documented the calibrated Logitech C920 as reusable primary physical A/V evidence for AUDIO-001/AUDIO-005/AUDIO-006 and supporting DVD-001 validation. One-device camera/microphone capture can resolve the reported roughly 500 ms receiver-route delay at about 33 ms precision, but does not replace HDMI/client telemetry or certify 25 ms adjustments and 50/59.94 fps cadence. |
 | 94 | 2026-09-30 | Normalized pre-commit task maintenance across all active Vibe repositories. Android active sections now contain only unchecked work; all 117 completed checkoffs were moved intact under this ledger with their stable IDs, evidence, source section, and open-parent context. The repository rules now require this cleanup immediately before every commit. |
 | 93 | 2026-09-30 | Added deferred follow-ups EXT-005 through EXT-007 without starting implementation: a measured stock-Core-clamped Push-buffer A/B only after a reproduced Push defect, generated malformed-caption regression expansion only after a concrete parser failure or parser change, and individual legacy hardware-output re-evaluation only after an Android problem that existing player/OS controls cannot solve. The HD300 512 KiB value and Sigma/extender identity remain rejected as defaults. |
 | 92 | 2026-09-30 | Completed EXT-004. The checksum-verified HD200 ROMFS was extracted read-only; its MiniClient resides inside an encoded `FNIB` kernel payload, so the audit records that clean-room boundary instead of inventing binary evidence. HD300 release/beta symbols and properties were reconciled with the surviving Apache MiniClient/Core source, public firmware/server notes, Android capabilities, and every required behavior domain. No speculative runtime capability was enabled: Sigma output/decoder workarounds remain rejected, the 512 KiB Push advertisement remains deferred, and existing targeted Android behavior stays stock-compatible. A stock `.175` / non-Pro `.25` Media3 hardware session passed seek, FF/REW, large-jump and pause/resume output health with no crash and all 103 settings restored; dynamic mode truthfully negotiated MediaServer Pull. |
