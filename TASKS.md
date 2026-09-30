@@ -826,7 +826,7 @@ explicitly approves publication after the active hardware phases.
 - [ ] **EXT-003 - Secure decoder/DRM validation.** Exercise secure-decoder/DRM selection with an authorized Widevine or
   PlayReady test asset. A clear FFmpeg fixture cannot prove secure MediaCodec
   behavior.
-- [ ] **EXT-004 - Complete legacy-extender firmware behavior audit.** After the
+- [x] **EXT-004 - Complete legacy-extender firmware behavior audit.** After the
   active caption work and release gates, analyze the archived HD200/HD300
   firmware binaries, the surviving MiniClient/server source, exported symbols,
   capability negotiation, and public behavior reports for reusable Android
@@ -843,16 +843,16 @@ explicitly approves publication after the active hardware phases.
   - [x] Establish the evidence rubric and reconcile the first HD300 exported-
     symbol/property inventory with surviving MiniClient/Core source, current
     Android capability replies, and public SageTV release/firmware reports.
-  - [ ] Extract the HD200 compressed ROMFS payload without altering the archive,
+  - [x] Extract the HD200 compressed ROMFS payload without altering the archive,
     then compare its MiniClient behavior surface with HD300 release and beta.
-  - [ ] Complete domain-by-domain call/branch tracing for buffering and
+  - [x] Complete domain-by-domain call/branch tracing for buffering and
     bandwidth, growing/live files, seek/skip and A/V sync, decoder/timestamp and
     subtitle paths, aspect/interlace/output, standby/reconnect, remote input,
     fast switching, and every server-side extender compatibility branch.
-  - [ ] Convert only corroborated, currently useful findings into focused
+  - [x] Convert only corroborated, currently useful findings into focused
     Android candidates. Reject hardware/vendor-only behavior and keep each
     accepted change stock-compatible and behind its affected physical gate.
-  - [ ] Run the affected physical/stock-server gates, synchronize the durable
+  - [x] Run the affected physical/stock-server gates, synchronize the durable
     compatibility and handoff evidence, and remove the temporary extraction.
 
 ## 7. Deferred Amazon Appstore and Google Play work
@@ -883,6 +883,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 92 | 2026-09-30 | Completed EXT-004. The checksum-verified HD200 ROMFS was extracted read-only; its MiniClient resides inside an encoded `FNIB` kernel payload, so the audit records that clean-room boundary instead of inventing binary evidence. HD300 release/beta symbols and properties were reconciled with the surviving Apache MiniClient/Core source, public firmware/server notes, Android capabilities, and every required behavior domain. No speculative runtime capability was enabled: Sigma output/decoder workarounds remain rejected, the 512 KiB Push advertisement remains deferred, and existing targeted Android behavior stays stock-compatible. A stock `.175` / non-Pro `.25` Media3 hardware session passed seek, FF/REW, large-jump and pause/resume output health with no crash and all 103 settings restored; dynamic mode truthfully negotiated MediaServer Pull. |
 | 91 | 2026-09-30 | Completed GH-012. Commits `14eef99` and `fc9aacb` passed focused growth-policy/source tests, strict validation, a clean 60-task build, strict APK inspection, active Live TV and finite completed-recording stock `.175` / non-Pro `.25` gates, deterministic source/review packaging, repository checks, and Pages deployment. All five downloaded public v0.5.99 assets match GitHub SHA-256 digests; the latest-release API and permanent downloader are correct. The root cause, validation, and release link were posted to issue #3, which remains open for reporter confirmation. |
 | 90 | 2026-09-30 | Added GH-012 from the reporter's post-v0.5.98 diagnostic bundle. The log proved an ambiguous stock `stv://` source still ran its one-shot MediaServer growth probe on Android's main thread; the swallowed `NetworkOnMainThreadException` resolved the active recording as completed and exposed only its roughly 1.2 MiB opening snapshot. Prebuild is now nonblocking, and the retained datasource performs the bounded proof on Media3's loader. Focused tests and affected stock `.175` / non-Pro `.25` physical gates pass: Live TV sustains fullscreen A/V, while the finite 899,959 ms completed control passes FF/REW recovery with no player error/crash and all 103 settings restored. Publication and reporter confirmation remain. |
 | 89 | 2026-09-30 | Completed GH-011. Commit `5251547` passed the affected source/Core/Media3 tests, deterministic manifest, clean APK build, strict debug APK inspection, repeated `.232` / non-Pro Direct starts, and the matched Pull control. The public v0.5.98 APK/source/review/manifest/hash assets match local SHA-256 values; repository and Pages checks pass; the tag, latest-release API, and permanent downloader are correct. The evidence-backed result was posted to issue #3 without closing it, pending reporter confirmation. |

@@ -242,7 +242,7 @@ symbols, imports, properties, strings and call sites prove only that a path is
 present. They do not prove its complete runtime policy. No proprietary or vendor
 implementation is copied into Vibe.
 
-### EXT-004 evidence ledger and first-pass inventory
+### EXT-004 completed evidence ledger
 
 EXT-004 uses four evidence classes. `P` is a public protocol or surviving
 source path whose behavior can be followed end to end. `B` is a direct binary
@@ -256,9 +256,19 @@ The archived inputs were verified before inspection:
 
 | Image | Archived version | MD5 manifest result | SHA-256 | Audit disposition |
 |---|---|---|---|---|
-| `stp200.bin` | `20100909 0` | PASS: `62cc9962a5dac45092afb12922c71cf5` | `46a073089c652e1c404df3c6d902d07d1a61412bbe16c450e848c6e597f7c685` | ROMFS container identified; compressed payload extraction remains open. |
+| `stp200.bin` | `20100909 0` | PASS: `62cc9962a5dac45092afb12922c71cf5` | `46a073089c652e1c404df3c6d902d07d1a61412bbe16c450e848c6e597f7c685` | Complete ROMFS inventory extracted read-only. The executable payload is an encoded `FNIB` kernel image, so no HD200 binary behavior is claimed beyond the surviving public protocol/source contract. |
 | `stp300.bin` | `20101007-0` | PASS: `810883b9321f2233cf2a054bf5e300f6` | `6db303c219927905b4f7f5ae71965ada1f3e19717d1e3b384e2b3f311f89ef95` | Four-partition update; SquashFS root extracted read-only into workspace temporary storage. |
 | `stp300beta.bin` | `20110506-0` | PASS: `4a6d7fd9e3d2a78fe909e2ec391fb90e` | `565b4ac6ddcf26c22174f597982f7dd27bb6afe1e5a67f0d8da9430f8c4e8fd6` | Latest archived HD300 beta and primary HD300 binary reference; SquashFS root extracted read-only. |
+
+The HD200 image is itself a 2,885,840-byte ROMFS volume with 15 entries. Its
+`99vmlinux_enc.zbf` payload starts with `FNIB` and is not an ELF executable;
+there is no separately inspectable MiniClient binary in the image. Attempting
+to infer functions from the encoded kernel would cross the clean-room evidence
+boundary. HD200 comparisons therefore use only the public Apache-licensed
+`EM8634` property table, MiniClient wire protocol, Core branches, and public
+behavior reports. The `EM8654` build deliberately also defines `EM8634`, while
+adding HD300-specific HDMI HBR and advanced-deinterlace properties. This is
+source-level `P` evidence, not a claim about the hidden HD200 implementation.
 
 Both inspected HD300 images contain a non-stripped 32-bit little-endian MIPS
 MiniClient. The latest beta directly exports `Media_PushBuffer`,
@@ -293,20 +303,24 @@ subtitle packets, buffer-underrun detection, and HDMI audio. See the
 Those reports prevent server fixes and hardware decoder workarounds from being
 mistaken for the same layer.
 
-First-pass implementation decisions:
+Final implementation decisions:
 
 | Finding | Evidence | Decision |
 |---|---|---|
-| HD300 advertised a 512 KiB `PUSH_BUFFER_LIMIT`; Vibe currently leaves it empty and Core uses its historical bounded default. | `B` property plus `P` server parser/limit branch. | Candidate only. Measure server write cadence, Android free-space replies, first-frame time, underruns and seek recovery on stock Push before considering a capability reply. |
+| HD300 advertised a 512 KiB `PUSH_BUFFER_LIMIT`; Vibe currently leaves it empty and Core uses its historical bounded default. | `B` property plus `P` server parser/limit branch. | Deferred, not enabled. Stock Core clamps the negotiated value to 128 KiB and no reproduced Android defect requires changing the current bounded behavior. Any future change needs measured Push A/B evidence. |
 | HD300 used explicit decoder/event waits and later firmware fixed false DVD underrun detection. | `B` symbols plus `R` firmware note. | Architectural hint only. Keep Android waits bounded and state-driven; do not copy constants or infer a universal timeout. |
 | Seek, frame step, smooth FF/REW and seamless transition required both client mechanisms and server corrections. | `B` media functions plus `P` Core branches plus `R` server notes. | Retain Vibe's mode-specific capability gates and replacement fallback. Do not identify normal reload as seamless switching. |
 | Deinterlace, HDMI/audio-output, aspect and local DVB surfaces are hardware-output paths. | `B` symbols/properties plus `P` property contract. | Do not advertise Sigma-specific output controls. Android continues to use device/player controls and reports observed interlace state. |
-| Later firmware skipped invalid subtitle packets to avoid a crash. | `R`, with separate `B` local DVB/BD decoder paths. | Audit malformed-packet handling in each Android caption path; any change needs a generated corrupt-packet regression and normal CEA/Teletext/DVB gates. |
+| Later firmware skipped invalid subtitle packets to avoid a crash. | `R`, with separate `B` local DVB/BD decoder paths. | No firmware workaround imported. Android's independent bounded CEA, Teletext and DVB parsers already reject malformed/truncated input; any future defect still requires a generated corrupt-packet regression plus normal caption gates. |
 
-No Android runtime behavior changed in this first phase. The extracted trees and
-generated symbol inventories are disposable audit data under
-`artifacts/temp/ext004-firmware-audit`; they are not project inputs and must be
-removed when EXT-004 closes.
+No Android runtime behavior changed as a result of EXT-004. The audit found no
+corroborated missing capability that outweighed the compatibility risk of
+advertising another legacy-extender property. The extracted trees and generated
+symbol inventories were disposable audit data, not project inputs.
+
+The following table is the completed domain-by-domain disposition. It separates
+server-owned behavior, reusable protocol behavior, Android-local behavior and
+vendor-only implementation details.
 
 | Behavior | Evidence classification | Reusable Android result | Status |
 |---|---|---|---|
@@ -349,6 +363,23 @@ they are not inferred firmware behavior:
 No other firmware-only branch is safe to enable without a physical
 reproduction. New compiled-firmware observations must remain labeled as
 inference until matched to protocol/server source or a focused physical test.
+
+EXT-004 closed with a stock `.175` / non-Pro `.25` Media3 hardware session on
+`VibeSeekTest`. Dynamic negotiation selected stock MediaServer Pull; playback
+remained fullscreen with hardware MPEG-2 video and AC-3 audio, seek, FF, REW,
+large-jump and pause/resume recovery all reported healthy output, no crash
+signature was present, and all 103 saved settings were restored. This affected
+gate confirms the standard capability/reconnect/seek path without pretending it
+was a forced Push session. Existing focused Push, caption, DVB, DVD, unified-
+graphics, SMB and Fixed evidence remains the authority for those separate paths.
+
+The resulting rule is intentionally conservative: retain the standard
+MiniClient contract and Android implementations already proven by user-visible
+defects; keep server parser/timeline policy server-owned; do not copy Sigma/DCC
+decoder policy; and do not unlock `isStandaloneMediaPlayer()` wholesale by
+claiming the unrelated HD300 unified-YUV cache. Future firmware-derived work
+requires an independently reproduced Android problem and its affected physical
+stock-server gate.
 
 ## Server dependency classes
 

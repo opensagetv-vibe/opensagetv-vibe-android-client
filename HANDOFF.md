@@ -3396,23 +3396,36 @@ exported components, FileProvider authority, and launcher resources. Only after
 that should a guarded physical install/launch and the first-time setup/device
 matrix proceed.
 
-## Active EXT-004 legacy-extender audit
+## Completed EXT-004 legacy-extender audit
 
-EXT-004 began after the caption and v0.5.98 release gates. The archived HD200,
-HD300 release, and latest archived HD300 beta images were checksum-verified.
-The two HD300 roots and their non-stripped MIPS MiniClient binaries were
-extracted only under workspace `artifacts/temp/ext004-firmware-audit`; the
-archive repository remains unchanged. The evidence rubric, hashes, initial
-symbol/property inventory, public release-note corroboration, and first gated
-candidates are in `docs/PLAYER_SERVER_COMPATIBILITY.md` under **EXT-004
-evidence ledger and first-pass inventory**.
+EXT-004 checksum-verified the archived HD200, HD300 release, and latest HD300
+beta images. The HD200 ROMFS was extracted read-only and inventoried, but its
+MiniClient is inside an encoded `FNIB` kernel payload rather than a separately
+inspectable executable. That limitation is recorded as a clean-room evidence
+boundary. Both HD300 roots contained non-stripped MIPS MiniClient binaries, so
+their symbols and properties could be compared with the surviving Apache-
+licensed MiniClient/Core source and public SageTV release/firmware reports.
 
-No runtime capability was enabled in this phase. The 512 KiB HD300 Push limit
-is only a test candidate, and hardware-specific HDMI/HBR, RC5, unified-YUV,
-advanced-deinterlace, and Sigma decoder behavior remain rejected unless an
-independent Android reproduction and affected stock-server physical gate prove
-they are useful. Next work is HD200 ROMFS payload extraction and the complete
-domain-by-domain call/branch map listed under EXT-004 in `TASKS.md`.
+The completed domain and server-branch disposition is in
+`docs/PLAYER_SERVER_COMPATIBILITY.md` under **EXT-004 completed evidence
+ledger**. No new runtime capability was justified. The 512 KiB HD300 Push limit
+remains deferred because stock Core clamps it and there is no reproduced client
+defect; HDMI/HBR, RC5, unified-YUV, advanced-deinterlace and Sigma DCC/STC
+implementation details remain rejected. Existing targeted reconnect, detailed-
+buffer, seek-generation, caption/DVB, aspect/interlace, input, fast-switch and
+DVD behavior remains independently gated rather than enabled by extender
+identity.
+
+The closing affected physical gate used non-Pro `.25` against stock `.175` on
+`VibeSeekTest`: Media3 hardware playback remained fullscreen; seek, FF/REW,
+large jump and pause/resume all recovered healthy A/V; no crash signature was
+present; and all 103 settings were restored. Dynamic negotiation selected
+stock MediaServer Pull, and the record says so rather than claiming forced
+Push. The firmware extraction and generated inventories are disposable audit
+data and are not project inputs. Workspace safety policy blocked direct
+recursive deletion after completion, so the verified generated-only tree was
+moved out of `artifacts/temp` to the recoverable
+`artifacts/cleanup-quarantine/ext004-firmware-audit-20260930` location.
 
 ## Invariants
 
