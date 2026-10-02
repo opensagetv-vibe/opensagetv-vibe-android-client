@@ -1,15 +1,29 @@
 # OpenSageTV Vibe Android Client handoff
 
-## v0.5.100 release preparation (2026-10-01)
+## v0.5.100 publication (2026-10-01)
 
-Version `0.5.100` packages the bounded stock-Push post-Comskip recovery,
-Fire OS stale long-press containment, manual app-owned audio-output restart,
-and persistent MCP ADB authorization. The affected source/Core tests, strict
-validation, physical stock `.175` / non-Pro Push gate, settings-preserving Pro
-installation, and clean APK compilation are recorded below. Final publication
-must use grouped bullet-form release notes, upload the versioned APK/source/
-manifest/hash/review assets, re-download and verify every public digest, and
-confirm repository checks plus the permanent Pages downloader.
+Commit `ff2549c` is published as v0.5.100 with grouped bullet-form release
+notes and all five required assets. The release packages the bounded stock-
+Push post-Comskip recovery, Fire OS stale long-press containment, manual app-
+owned audio-output restart, and persistent MCP ADB authorization. The affected
+source/Core tests, strict validation, 1,487-file manifest, physical stock
+`.175` / non-Pro Push gate, settings-preserving Pro installation, clean
+60-task APK build, and strict APK inspection pass. GitHub repository checks
+and Pages deployment also pass; the release tag targets the tested commit,
+the latest-release API returns v0.5.100, and the permanent Pages downloader
+returns HTTP 200.
+
+All five public assets were downloaded again and match their local SHA-256:
+
+- APK: `04276b8df011a89169539d50d815fb4b45092166c093cc254ff48b1e8c23eea7`
+- source ZIP: `63626a321a9081c620cec323400e873e3f92ab4e4bdb69f0dcf1dbdddc82fd89`
+- GitHub review ZIP: `b250e0cfd5a671228caa388990bfc681e12b6b6508eb0a522c761cca26d2e466`
+- release manifest: `3fb306c60bc6a2ace6c011ea024034334029c1a233253afa61895b855e92ab3a`
+- SHA-256 list: `2d0962460659bbf94e6260b5542a3a92c7a28a0a16b6ead3787f2f5a23f4c2f0`
+
+Final visible Pro Comskip landing, fresh FF/RW input, and manual audio-reset
+acceptance remain explicitly open under SEEK-001; publication does not claim
+those user-visible checks as complete.
 
 ## Manual app-owned audio reset (2026-10-01)
 
