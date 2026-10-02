@@ -203,6 +203,13 @@ explicitly approves publication after the active hardware phases.
 
 ## 4A. Active post-release feature work
 
+- [ ] **GH-013 - Publish v0.5.100 recovery and audio-reset update.** Package
+  the bounded stock-Push post-Comskip recovery, stale Fire OS long-press
+  containment, manual app-owned audio-output restart, and persistent MCP ADB
+  authorization. Run the affected tests, validation, versioned APK build and
+  deterministic release packaging; publish grouped bullet-form notes and all
+  five assets; then verify public hashes, repository/Pages workflows, latest-
+  release API, and the permanent downloader endpoint.
 - [ ] **SEEK-001 - Fire TV Pro skip and Comskip landing regression.** Preserve
   the current Pro diagnostic evidence, reproduce ordinary seek/skip and
   commercial-skip on a stock-compatible server path, and correct any shared
@@ -304,6 +311,7 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 99 | 2026-10-01 | Added GH-013 at user direction after the recovery/audio implementation commit: publish the affected Android changes as v0.5.100 with grouped bullet release notes, deterministic assets, public hash verification, successful repository/Pages workflows, latest-release API confirmation, and permanent downloader validation. SEEK-001 retains its explicit Pro visible-acceptance checks after publication. |
 | 98 | 2026-10-01 | Contained the Pro Fire OS stale-long-press case without changing mappings: fresh physical key gestures now discard an abandoned prior hold, so Left/Right returns to configured FF/RW after long-Right Comskip. Added a live **Restart audio output** action for Media3, legacy Exo, and their GSY delegates; it recreates the app-owned player/AudioTrack while retaining transport, selected stream, passthrough policy, offset, and playback position. The affected 188 Linux tests, focused Core JUnit, project validation, and clean 60-task APK build pass; the settings-preserving APK was installed on Pro `.29`. Final visible Pro input/audio acceptance remains explicitly open under SEEK-001. |
 | 97 | 2026-10-01 | Completed the SEEK-001 one-shot post-Comskip Push recovery subtask. Media3, legacy Exo, IJK, and their GSY delegates now share a bounded recovery controller that arms only for long-Right, requires the following stock-server FLUSH plus first non-empty Push payload, and may restart only the local reader once without sending another seek or changing the STV-selected destination. Six focused controller tests plus a zero-mux Push-epoch protocol test, 576 repository tests, 104 MCP tests, Core JUnit, validation, and a clean 60-task APK build pass. On non-Pro `.25` against stock `.175`, a real long-Right plus exact stock `Seek(long)` produced arm/FLUSH/zero-mux epoch/first-frame/healthy evidence with advancing A/V and no redundant recovery; the settings transaction restored all 107 values. The settings-preserving APK was also installed on Pro `.29`; final visible Pro landing acceptance remains open under SEEK-001. |
 | 96 | 2026-10-01 | Completed ADB-001: every MCP `adb_connect` now sets and verifies device-global `adb_allowed_connection_time=0`, reports the prior/current policy, and fails explicitly if a vendor build does not retain it. The focused 55-test ADB suite passes, and real MCP stdio calls on non-Pro `.25` and Pro `.29` both reported `currentValue=0`, `nonExpiring=true`, and a live persistent shell. This preserves an already-approved workspace key but does not bypass initial user authorization. |

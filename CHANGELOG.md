@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.100 - 2026-10-01
 
 - Added **Restart audio output** to the live Audio settings menu for Media3,
   legacy Exo, and their GSY delegates. It releases and recreates Vibe's player

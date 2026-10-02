@@ -1,5 +1,16 @@
 # OpenSageTV Vibe Android Client handoff
 
+## v0.5.100 release preparation (2026-10-01)
+
+Version `0.5.100` packages the bounded stock-Push post-Comskip recovery,
+Fire OS stale long-press containment, manual app-owned audio-output restart,
+and persistent MCP ADB authorization. The affected source/Core tests, strict
+validation, physical stock `.175` / non-Pro Push gate, settings-preserving Pro
+installation, and clean APK compilation are recorded below. Final publication
+must use grouped bullet-form release notes, upload the versioned APK/source/
+manifest/hash/review assets, re-download and verify every public digest, and
+confirm repository checks plus the permanent Pages downloader.
+
 ## Manual app-owned audio reset (2026-10-01)
 
 The live Audio settings menu now includes **Restart audio output** when the
