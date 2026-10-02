@@ -6,6 +6,8 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class MediaCmdDetailedPushStatsTest
@@ -94,6 +96,49 @@ public class MediaCmdDetailedPushStatsTest
         assertEquals(5, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_GETMEDIATIME,
                 0, new byte[0], response));
         assertEquals(940216, MediaCmd.readInt(0, response));
+    }
+
+    @Test
+    public void zeroMuxTimePublishesFirstPayloadOncePerPushEpoch()
+    {
+        MiniClient client = mock(MiniClient.class);
+        MiniClientConnection connection = mock(MiniClientConnection.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.getCurrentConnection()).thenReturn(connection);
+        when(player.getMediaTimeMillis(anyLong())).thenReturn(0L);
+        when(player.getBufferLeft()).thenReturn(4096);
+        when(player.getState()).thenReturn(MiniPlayerPlugin.PLAY_STATE);
+
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        setBooleanField(command, "pushMode", true);
+        setBooleanField(command, "dvdSessionPending", false);
+        MiniClientConnection.detailedBufferStats = true;
+
+        byte[] packet = new byte[22];
+        MediaCmd.writeInt(4, packet, 0);
+        MediaCmd.writeInt(0x40, packet, 4);
+        MediaCmd.writeShort((short) 12000, packet, 8);
+        MediaCmd.writeShort((short) 8000, packet, 10);
+        MediaCmd.writeShort((short) 6000, packet, 12);
+        MediaCmd.writeInt(0, packet, 14);
+        packet[18] = 1;
+        packet[19] = 2;
+        packet[20] = 3;
+        packet[21] = 4;
+
+        byte[] response = new byte[16];
+        assertEquals(9, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER,
+                packet.length, packet, response));
+        assertEquals(9, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER,
+                packet.length, packet, response));
+        verify(player, times(1)).onServerPushAnchor(0L);
+
+        assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_FLUSH,
+                0, new byte[0], response));
+        assertEquals(9, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER,
+                packet.length, packet, response));
+        verify(player, times(2)).onServerPushAnchor(0L);
     }
 
     private static void setPlayer(MediaCmd command, MiniPlayerPlugin player)

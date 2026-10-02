@@ -1,5 +1,98 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Manual app-owned audio reset (2026-10-01)
+
+The live Audio settings menu now includes **Restart audio output** when the
+active backend is Media3, legacy Exo, or a GSY delegate backed by either one.
+The action uses the existing bounded live-output rebuild to release the player
+and encoded/PCM Android `AudioTrack`, retain the current datasource, recreate
+the player, restore the selected audio stream, and resume. Session passthrough
+policy and audio offset remain unchanged; saved device defaults are not
+modified.
+
+This is the strongest safe reset available to a normal Android application.
+It cannot restart privileged Fire OS AudioFlinger/HAL services or power-cycle
+the HDMI receiver. Failure to clear a fault therefore identifies a lower-layer
+route problem that still requires a Fire OS audio-mode toggle or device
+restart. The 133 affected tests and clean 60-task APK build pass. APK SHA-256
+is `f8f5e4f3d76ba185b992bf88902f1bc293d514ea27c1321a9c3405255d22943f`;
+it was installed on Pro `.29` without clearing settings.
+
+## Fire OS stale long-press containment (2026-10-01)
+
+Pro `.29` exposed a second input defect while accepting SEEK-001: after one
+long-Right commercial skip, later Left/Right presses could continue to send
+the long-press action instead of their configured FF/RW actions. The key
+processor previously stored long-press state globally and assumed every
+physical gesture delivered ACTION_UP. Fire OS can omit or delay that release
+while playback is rebuilding after a seek.
+
+`KeyMapProcessor` now binds hold state to the active key code and Android
+`downTime`. A fresh key gesture resets an abandoned hold before command
+mapping, and a delayed release from an older key cannot clear a newer active
+gesture. This does not change short/long mappings, remote timing, or the
+server-owned Comskip target. The affected 91 tests pass, and this fix is
+included in the newer manual-audio-reset APK above. Visible user acceptance
+remains open under SEEK-001.
+
+The same Pro snapshot showed encoded AC-3 passthrough with the previously
+saved `-400 ms` passthrough offset actively applied. No
+`post_seek_push_recovery_started` event was present, so the new automatic
+second reprepare did not run in that observed session. If recovery does run,
+the existing extractor retains the same atomic passthrough-offset controller
+across `setMediaSource(...)/prepare()`, so the configured value continues to
+apply to the replacement epoch; an output receiver can still exhibit a short
+transient while its encoded queue relocks.
+
+## One-shot post-Comskip Push recovery (2026-10-01)
+
+The open SEEK-001 work now includes a shared, device-independent recovery path
+for the reported long-Right/Comskip stall. The Android key mapper only arms the
+active player; SageTV still owns the Comskip command and destination. Recovery
+cannot become eligible until the stock server subsequently sends FLUSH and the
+first non-empty payload of its replacement Push epoch. Media3, legacy Exo, IJK,
+and their GSY delegates then observe first-frame and buffering callbacks. A
+stalled local reader may be flushed/re-prepared once, but the client never
+sends a second server seek. Pull, SMB Direct, plugin-owned MIM Direct, DVD Push,
+and external/system-player ownership remain excluded.
+
+The first physical Fixed gate exposed that stock transcoding can report a
+valid mux timestamp of zero. `MediaCmd` now publishes the first non-empty
+post-FLUSH payload as the epoch confirmation without treating zero as an
+absolute timeline anchor; positive timestamps retain the existing calibration
+behavior. This keeps the recovery available on an unmodified stock server.
+
+Six focused controller tests plus a zero-mux Push-epoch protocol test, 576
+repository tests, 104 MCP tests, Core JUnit, project validation, and a clean
+60-task APK build pass. On non-Pro `.25`
+against stock `.175`, `PBS News Hour` ran through Media3 Fixed/Push with
+hardware video and advancing audio. A real Android long-Right followed by the
+stock `Seek(long)` control produced `post_seek_push_recovery_armed`,
+`post_seek_push_server_flush`, `post_seek_push_server_anchor` with mux time
+zero, `first_video_frame`, and `post_seek_push_recovery_healthy`; it did not
+emit `post_seek_push_recovery_started`. The test restored all 107 client
+settings. APK SHA-256 is
+`4c57abffecb9feb25638d8f56a7f1c9d212b92f15b20975b77d50af5280398a7`.
+That exact final APK repeated the stock `.175` physical gate and was installed
+in place on Pro `.29` as version `0.5.99-DEV-DEBUG` without clearing its data.
+Final visible Pro Comskip destination/landing acceptance remains open under
+SEEK-001.
+
+## Persistent MCP ADB authorization (2026-10-01)
+
+`adb_connect` now establishes its persistent device shell, writes
+`settings put global adb_allowed_connection_time 0`, and requires a matching
+readback before reporting success. The returned `adbAuthorization` object makes
+the setting, prior/current value, scope, and non-expiring state visible to every
+physical-test caller. This changes only the lifetime of a key the user has
+already approved; it cannot bypass the initial Android/Fire OS authorization
+dialog. A rejected or ignored setting stops the half-initialized shell and
+fails visibly.
+
+The focused 55-test ADB suite passes. Real MCP stdio calls on non-Pro `.25`
+and Pro `.29` both returned `currentValue=0`, `nonExpiring=true`, and one live
+persistent shell. No APK or playback setting changed; this is host/MCP tooling.
+
 ## v0.5.99 publication (2026-09-30)
 
 Commits `14eef99` and `fc9aacb` are published as v0.5.99. Repository checks

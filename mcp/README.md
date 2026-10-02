@@ -10,6 +10,10 @@ and the Android build. Codex is optional; any compatible MCP client can use it.
 - Package mutation refuses `jvl.sage.miniclient*`.
 - APK installation verifies the application ID with `aapt`/`aapt2`.
 - Debug controls are compiled only in the Android debug source set.
+- `adb_connect` sets and verifies device-global
+  `adb_allowed_connection_time=0` before returning a shell, so an already
+  approved workspace key does not expire from inactivity. Initial device
+  authorization remains manual, and vendor rejection fails visibly.
 - After fresh install/Clear Data, complete first-time setup manually before
   running playback automation.
 - Scripted tests default to `DEV001`; normal app use keeps its persisted ID.

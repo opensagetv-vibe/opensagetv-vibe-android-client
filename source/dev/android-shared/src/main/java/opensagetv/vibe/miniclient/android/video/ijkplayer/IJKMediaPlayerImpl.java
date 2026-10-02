@@ -419,7 +419,16 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                     if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START)
                     {
                         firstVideoFrameRendered = true;
+                        notifyPostSeekPushFirstFrame();
                         PlaybackDebugTrap.record("first_video_frame", IJKMediaPlayerImpl.this);
+                    }
+                    else if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START)
+                    {
+                        notifyPostSeekPushBuffering(true);
+                    }
+                    else if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_END)
+                    {
+                        notifyPostSeekPushBuffering(false);
                     }
                     return false;
                 }

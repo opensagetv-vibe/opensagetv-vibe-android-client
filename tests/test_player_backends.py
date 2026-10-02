@@ -227,6 +227,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # is pending. This prevents Direct playback from remaining in SageTV's
         # embedded preview on backends with slower asynchronous replacement.
         reviewed_load_rectangle_race_hash = "69d4ad1fe65168340dceee60ff479c56543c871ac46f564eae6202c3e7c62ce1"
+        # A long-Right navigation intent is now correlated with stock Core's
+        # following FLUSH and timestamp anchor. One shared, bounded controller
+        # can restart a stalled ordinary Push reader once without sending a
+        # second seek or changing the STV-owned Comskip target.
+        reviewed_post_seek_push_recovery_hash = "c0dfac43c638649c6e9a2e1b0314f8a2fc3602578a9e8d2b283c5a9b7c6d39d6"
         self.assertIn(dev_hash, {
             baseline_hash,
             reviewed_fullscreen_hash,
@@ -272,6 +277,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_mim_direct_live_edge_hash,
             reviewed_mim_direct_growing_recovery_hash,
             reviewed_load_rectangle_race_hash,
+            reviewed_post_seek_push_recovery_hash,
         }, rel)
 
     def test_push_flush_timeline_hold_is_bounded_to_established_non_dvd_push(self):
@@ -682,7 +688,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             "supportsAudioOffset", "setAudioOffsetMillis", "getContentFrameRateHz",
             "getAudioTrackIds", "getAudioTrackLabels", "getSelectedAudioTrack",
             "getAudioOutputSummary", "supportsAudioPassthroughControl",
-            "setAudioPassthroughEnabled", "setPreferredSubtitleTrack",
+            "setAudioPassthroughEnabled", "supportsAudioOutputRestart",
+            "restartAudioOutput", "setPreferredSubtitleTrack",
             "getBufferedPlaybackAheadMillis", "dvdNewCell", "dvdSetClut",
             "dvdSetSpuControl", "isDvdMenuNavigationActive", "dvdSetStc",
             "dvdSetFormat", "dvdSetStream",

@@ -229,6 +229,15 @@ public interface MiniPlayerPlugin extends Runnable
     /** Resolved policy for the active output; false means decoded PCM. */
     default boolean isAudioPassthroughEnabled() { return false; }
 
+    /** True when the backend can release and recreate its active audio output. */
+    default boolean supportsAudioOutputRestart() { return false; }
+
+    /**
+     * Recreates the active player/audio renderer without changing the selected
+     * output policy, track, offset, transport, or SageTV-owned position.
+     */
+    default boolean restartAudioOutput() { return false; }
+
     /**
      * Temporarily releases this player's audio renderer so an exclusive local
      * diagnostic (for example the encoded A/V sync fixture) can own the
@@ -315,6 +324,16 @@ public interface MiniPlayerPlugin extends Runnable
     void pushData(byte[] cmddata, int bufDataOffset, int buffSize) throws IOException;
 
     void flush();
+
+    /**
+     * Arms bounded local Push recovery for a server-owned playback navigation
+     * request. Implementations must still require the subsequent server FLUSH
+     * and timestamp anchor; this method does not perform or replace the seek.
+     */
+    default void armPostSeekPushRecovery(SageCommand command) { }
+
+    /** Supplies the first timestamp anchor of a new server Push byte epoch. */
+    default void onServerPushAnchor(long anchorMs) { }
 
     /**
      * Return the # of bytes left in the media buffer

@@ -77,7 +77,12 @@ exit 2
             fake_adb.chmod(0o755)
             c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug", adb=str(fake_adb))
             try:
-                self.assertEqual(c.connect(), "connected")
+                with patch.object(
+                    c,
+                    "ensure_nonexpiring_adb_authorization",
+                    return_value={"currentValue": "0", "nonExpiring": True},
+                ):
+                    self.assertEqual(c.connect(), "connected")
                 first = c.persistent_shell_status()
                 self.assertTrue(first["persistentShell"])
                 self.assertEqual(first["persistentShellRestarts"], 1)
@@ -91,6 +96,47 @@ exit 2
             finally:
                 c.close()
             self.assertFalse(c.persistent_shell_status()["persistentShell"])
+
+    def test_connect_sets_and_verifies_nonexpiring_device_authorization(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        connected = subprocess.CompletedProcess(
+            ["adb", "connect"], 0, stdout="already connected\n", stderr=""
+        )
+        with patch.object(c, "run", return_value=connected), \
+                patch.object(c, "_start_persistent_shell"), \
+                patch.object(c, "shell", side_effect=["null\n", "", "0\n"]) as shell:
+            self.assertEqual(c.connect(), "already connected")
+        self.assertEqual(
+            [call.args[0] for call in shell.call_args_list],
+            [
+                "settings get global adb_allowed_connection_time",
+                "settings put global adb_allowed_connection_time 0",
+                "settings get global adb_allowed_connection_time",
+            ],
+        )
+        self.assertEqual(
+            c.adb_authorization_status(),
+            {
+                "setting": "adb_allowed_connection_time",
+                "previousValue": "null",
+                "currentValue": "0",
+                "nonExpiring": True,
+                "scope": "device_global",
+            },
+        )
+
+    def test_connect_fails_when_vendor_does_not_retain_authorization_policy(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        connected = subprocess.CompletedProcess(
+            ["adb", "connect"], 0, stdout="connected\n", stderr=""
+        )
+        with patch.object(c, "run", return_value=connected), \
+                patch.object(c, "_start_persistent_shell"), \
+                patch.object(c, "_stop_persistent_shell") as stop, \
+                patch.object(c, "shell", side_effect=["null\n", "", "null\n"]):
+            with self.assertRaisesRegex(RuntimeError, "did not retain"):
+                c.connect()
+        stop.assert_called_once_with()
 
     def test_refuses_production_namespace(self):
         c = AdbClient("1.2.3.4:5555", "jvl.sage.miniclient.android.tv.debug")

@@ -423,6 +423,12 @@ def main() -> int:
             # existing bounded stock-Fixed reconnect instead of terminating
             # setup before that recovery can run.
             "61b0f24e9735b1c1ae24c5a1d50e3532af2164c8b082764fcfcff789c88cd256",
+            # Reviewed post-Comskip ordinary-Push recovery. A client intent,
+            # stock server FLUSH, and replacement timestamp anchor are all
+            # required before a one-shot local reader reprepare can occur.
+            # The server retains seek-target ownership, and Pull, Direct,
+            # DVD, external, and System-player paths remain unchanged.
+            "c0dfac43c638649c6e9a2e1b0314f8a2fc3602578a9e8d2b283c5a9b7c6d39d6",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

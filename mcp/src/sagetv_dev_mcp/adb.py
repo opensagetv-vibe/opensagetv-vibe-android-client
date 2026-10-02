@@ -140,6 +140,7 @@ class AdbClient:
     _shell_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _shell_command_id: int = field(default=0, init=False, repr=False)
     _shell_restart_count: int = field(default=0, init=False, repr=False)
+    _adb_authorization_status: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def _base(self, device: bool = True) -> list[str]:
         return [self.adb, "-s", self.serial] if device else [self.adb]
@@ -277,7 +278,43 @@ class AdbClient:
         # Establish one reusable device shell for the MCP server lifetime.
         with self._shell_lock:
             self._start_persistent_shell()
+        try:
+            self._adb_authorization_status = self.ensure_nonexpiring_adb_authorization()
+        except Exception:
+            # Do not leave a half-initialized MCP transport alive. A successful
+            # MCP connection promises that this device-side authorization policy
+            # was both written and read back, rather than merely attempted.
+            with self._shell_lock:
+                self._stop_persistent_shell()
+            raise
         return result
+
+    def ensure_nonexpiring_adb_authorization(self) -> dict[str, Any]:
+        """Disable Android's inactivity expiry for the already-authorized ADB key.
+
+        This changes only the device-side lifetime of an existing authorization;
+        it cannot approve a new host key or bypass the device confirmation dialog.
+        Fire OS accepts this standard Android global setting, but verification is
+        mandatory so vendor builds that reject or ignore it fail visibly.
+        """
+        setting = "adb_allowed_connection_time"
+        previous = self.shell(f"settings get global {setting}", timeout=15).strip()
+        self.shell(f"settings put global {setting} 0", timeout=15)
+        current = self.shell(f"settings get global {setting}", timeout=15).strip()
+        if current != "0":
+            raise RuntimeError(
+                f"Android did not retain global {setting}=0; read back {current!r}"
+            )
+        return {
+            "setting": setting,
+            "previousValue": previous,
+            "currentValue": current,
+            "nonExpiring": True,
+            "scope": "device_global",
+        }
+
+    def adb_authorization_status(self) -> dict[str, Any]:
+        return dict(self._adb_authorization_status)
 
     def devices(self) -> str:
         return self.run(["devices", "-l"], device=False).stdout

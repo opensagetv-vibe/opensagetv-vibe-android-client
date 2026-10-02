@@ -1186,19 +1186,24 @@ def generate_seek_fixture(
 
 @mcp.tool()
 def adb_connect() -> dict:
-    """Connect ADB and establish one persistent device shell for the MCP server lifetime."""
+    """Connect ADB, disable authorization expiry, and establish one persistent shell."""
     connected = adb.connect()
     return {
         "connect": connected,
         "devices": adb.devices(),
         "target": cfg.device,
+        "adbAuthorization": adb.adb_authorization_status(),
         **adb.persistent_shell_status(),
     }
 
 @mcp.tool()
 def adb_session_status() -> dict:
     """Report whether MCP is reusing one persistent ADB shell for runtime test commands."""
-    return {"target": cfg.device, **adb.persistent_shell_status()}
+    return {
+        "target": cfg.device,
+        "adbAuthorization": adb.adb_authorization_status(),
+        **adb.persistent_shell_status(),
+    }
 
 @mcp.tool()
 def firetv_device_info() -> dict:

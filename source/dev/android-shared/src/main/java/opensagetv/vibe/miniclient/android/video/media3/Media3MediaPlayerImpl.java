@@ -2557,6 +2557,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record("playback_state_" + playbackState, Media3MediaPlayerImpl.this);
+                if (playbackState == Player.STATE_BUFFERING)
+                    notifyPostSeekPushBuffering(true);
+                else if (playbackState == Player.STATE_READY)
+                    notifyPostSeekPushBuffering(false);
                 if (!pushMode)
                 {
                     log.logDebug("Pull playback state=" + playbackState
@@ -2700,6 +2704,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 firstVideoFrameRendered = true;
+                notifyPostSeekPushFirstFrame();
                 if (dataSource instanceof Media3PullDataSource)
                     ((Media3PullDataSource) dataSource).endSeekableSnapshotPreparation();
                 cancelPullSeekRecovery();
@@ -3456,6 +3461,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         if (enabled == audioPassthroughEnabled)
             return true;
         return requestAudioOutputRebuild("passthrough=" + enabled);
+    }
+
+    @Override public boolean supportsAudioOutputRestart() { return true; }
+
+    @Override public boolean restartAudioOutput()
+    {
+        return requestAudioOutputRebuild("manual-audio-reset");
     }
 
     private boolean requestAudioOutputRebuild(final String reason)

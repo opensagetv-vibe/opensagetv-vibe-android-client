@@ -1110,6 +1110,21 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("chooseCaptionLanguage", dialog)
         self.assertIn("applyClosedCaptionSlot", PLUGIN.read_text(encoding="utf-8"))
 
+    def test_audio_menu_can_recreate_output_without_changing_policy(self):
+        plugin = PLUGIN.read_text(encoding="utf-8")
+        dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
+        media3 = MEDIA3.read_text(encoding="utf-8")
+        exo2 = (ROOT / (
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/"
+            "android/video/exoplayer2/Exo2MediaPlayerImpl.java"
+        )).read_text(encoding="utf-8")
+        self.assertIn("supportsAudioOutputRestart", plugin)
+        self.assertIn("restartAudioOutput", plugin)
+        self.assertIn('audioSettingRow("Restart audio output"', dialog)
+        self.assertIn("Keep current settings", dialog)
+        self.assertIn('requestAudioOutputRebuild("manual-audio-reset")', media3)
+        self.assertIn('requestAudioOutputRebuild("manual-audio-reset")', exo2)
+
 
 if __name__ == "__main__":
     unittest.main()

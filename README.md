@@ -207,6 +207,13 @@ The MCP server and ADB tools run in the same unified container. Configure
 command. Read `mcp/README.md` for tool usage and
 `docs/PLAYBACK_DIAGNOSTICS.md` before diagnosing playback.
 
+Every MCP `adb_connect` writes Android's global
+`adb_allowed_connection_time` setting to `0` and reads it back before exposing
+the device shell. This prevents inactivity expiry of the already-approved,
+workspace-persisted ADB key. It does not bypass the initial confirmation dialog;
+if a vendor build rejects or ignores the setting, the MCP connection fails with
+the observed value instead of claiming that authorization is persistent.
+
 Physical-test scripts use the one ignored `config/firetv.toml` for named and
 aliased Android clients, SageTV servers/Web credentials, per-server SMB
 shares/mappings, fixtures, HDMI capture, identities, safety policy, and test

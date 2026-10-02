@@ -1441,6 +1441,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         return requestAudioOutputRebuild("passthrough=" + enabled);
     }
 
+    @Override public boolean supportsAudioOutputRestart() { return true; }
+
+    @Override public boolean restartAudioOutput()
+    {
+        return requestAudioOutputRebuild("manual-audio-reset");
+    }
+
     private boolean requestAudioOutputRebuild(final String reason)
     {
         final ExoPlayer expectedPlayer = player;
@@ -2059,6 +2066,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record("playback_state_" + playbackState, Exo2MediaPlayerImpl.this);
+                if (playbackState == Player.STATE_BUFFERING)
+                    notifyPostSeekPushBuffering(true);
+                else if (playbackState == Player.STATE_READY)
+                    notifyPostSeekPushBuffering(false);
                 if (!pushMode && player != null)
                 {
                     log.logDebug("Pull playback state=" + playbackState
@@ -2171,6 +2182,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 firstVideoFrameRendered = true;
+                notifyPostSeekPushFirstFrame();
                 if (dataSource instanceof Exo2PullDataSource)
                     ((Exo2PullDataSource) dataSource).endSeekableSnapshotPreparation();
                 cancelPullSeekRecovery();

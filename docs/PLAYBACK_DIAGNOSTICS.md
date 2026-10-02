@@ -442,6 +442,34 @@ not recognizable 188-byte MPEG-TS, has fewer than two timestamps, or has an
 implausible span, the historical raw anchor is retained. The estimator resets
 on OPENURL and FLUSH and never applies to DVD Push, Pull, or SMB playback.
 
+### One-shot post-Comskip Push recovery
+
+A long-Right command only arms observation; it does not transfer the seek or
+commercial-marker destination to Android. The recovery gate requires the next
+ordinary-Push FLUSH and the first non-empty payload in that replacement byte
+epoch. A positive detailed-stat mux time remains the absolute timeline anchor,
+but stock Fixed may validly report zero; in that case the payload confirms only
+the new epoch and must not be promoted to an absolute program position.
+
+After confirmation, Media3, legacy Exo, IJK, and their GSY delegates observe
+first-frame and buffering callbacks. Five seconds of stable playback completes
+the gate with no action. A missing first frame or a post-frame stall permits
+one local Push-reader flush/reprepare only; a second server seek is never sent.
+The gate expires when any required event is absent. It does not run for Pull,
+SMB Direct, plugin-owned MIM Direct, DVD Push, or external/system players.
+
+Retain these bounded trace events when diagnosing a report:
+
+- `post_seek_push_recovery_armed`
+- `post_seek_push_server_flush`
+- `post_seek_push_server_anchor`
+- `post_seek_push_recovery_healthy` or `post_seek_push_recovery_started`
+- `post_seek_push_recovery_expired` when the event chain was incomplete
+
+An ordinary healthy gate must show advancing audio/video after the anchor and
+must not contain `post_seek_push_recovery_started`. A forced-stall/unit gate
+must prove at most one start and continued server ownership of the target.
+
 For a same-file MPEG-TS cache comparison, keep one player session alive and use
 the tuning matrix's `--check absolute_seek --repeat-count N` mode. It seeks to
 `--target-ms`, moves `--repeat-away-ms` away, then returns to the identical

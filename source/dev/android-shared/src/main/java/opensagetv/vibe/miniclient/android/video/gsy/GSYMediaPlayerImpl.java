@@ -216,6 +216,8 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public boolean supportsAudioPassthroughControl() { return d() != null && d().supportsAudioPassthroughControl(); }
     @Override public boolean setAudioPassthroughEnabled(boolean enabled) { return d() != null && d().setAudioPassthroughEnabled(enabled); }
     @Override public boolean isAudioPassthroughEnabled() { return d() != null && d().isAudioPassthroughEnabled(); }
+    @Override public boolean supportsAudioOutputRestart() { return d() != null && d().supportsAudioOutputRestart(); }
+    @Override public boolean restartAudioOutput() { return d() != null && d().restartAudioOutput(); }
     @Override public boolean suspendAudioForExclusiveDiagnostic() { return d() != null && d().suspendAudioForExclusiveDiagnostic(); }
     @Override public void resumeAudioAfterExclusiveDiagnostic() { if (d() != null) d().resumeAudioAfterExclusiveDiagnostic(); }
     @Override public void setSubtitleTrack(int streamPos) { if (d() != null) d().setSubtitleTrack(streamPos); }
@@ -229,6 +231,12 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public Dimension getVideoDimensions() { return d() == null ? null : d().getVideoDimensions(); }
     @Override public void pushData(byte[] cmddata, int bufDataOffset, int buffSize) throws IOException { if (d() != null) d().pushData(cmddata, bufDataOffset, buffSize); }
     @Override public void flush() { if (d() != null) d().flush(); }
+    @Override public void armPostSeekPushRecovery(opensagetv.vibe.miniclient.SageCommand command) {
+        if (d() != null) d().armPostSeekPushRecovery(command);
+    }
+    @Override public void onServerPushAnchor(long anchorMs) {
+        if (d() != null) d().onServerPushAnchor(anchorMs);
+    }
     @Override public int getBufferLeft() { return d() == null ? 0 : d().getBufferLeft(); }
     @Override public long getBufferedPlaybackAheadMillis() { return d() == null ? -1L : d().getBufferedPlaybackAheadMillis(); }
     @Override public void setVideoAdvancedAspect(String aspectMode) { if (d() != null) d().setVideoAdvancedAspect(aspectMode); }

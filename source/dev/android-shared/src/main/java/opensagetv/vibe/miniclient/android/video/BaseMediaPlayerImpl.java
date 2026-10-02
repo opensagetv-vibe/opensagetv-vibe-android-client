@@ -2,7 +2,9 @@ package opensagetv.vibe.miniclient.android.video;
 
 import android.graphics.Bitmap;
 import android.app.Activity;
+import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -46,6 +48,7 @@ import opensagetv.vibe.miniclient.video.TeletextCea608Bridge;
 import opensagetv.vibe.miniclient.video.FullscreenPlaybackPolicy;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
+import opensagetv.vibe.miniclient.video.PostSeekPushRecoveryController;
 import opensagetv.vibe.miniclient.video.VideoInfoResponse;
 
 //import org.videolan.libvlc.LibVLC;
@@ -98,6 +101,63 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     // Promote that preview with the normal TV user event after playback starts.
     // Keep this client-side so it also works with an unmodified SageTV server.
     private final PlaybackSessionController playbackSessions = new PlaybackSessionController();
+    private final PostSeekPushRecoveryController postSeekPushRecovery =
+            new PostSeekPushRecoveryController();
+    private final Handler postSeekPushRecoveryHandler = new Handler(Looper.getMainLooper());
+    private volatile boolean postSeekPushRecoveryCheckScheduled;
+    private volatile boolean postSeekPushRecoveryInternalFlush;
+    private final Runnable postSeekPushRecoveryCheck = new Runnable()
+    {
+        @Override public void run()
+        {
+            postSeekPushRecoveryCheckScheduled = false;
+            PostSeekPushRecoveryController.Action action =
+                    postSeekPushRecovery.evaluate(SystemClock.elapsedRealtime());
+            if (action == PostSeekPushRecoveryController.Action.RECOVER)
+            {
+                if (!isPostSeekPushRecoveryEligible())
+                {
+                    resetPostSeekPushRecovery();
+                    return;
+                }
+                PlaybackDebugTrap.recordDetailed("post_seek_push_recovery_started",
+                        BaseMediaPlayerImpl.this, postSeekPushRecovery.snapshot());
+                postSeekPushRecoveryInternalFlush = true;
+                try
+                {
+                    // Dynamic dispatch intentionally invokes the active
+                    // backend's existing Push reprepare. This clears only the
+                    // client reader; it sends no key/seek and cannot alter the
+                    // server-owned Comskip destination.
+                    flush();
+                }
+                catch (RuntimeException ex)
+                {
+                    postSeekPushRecovery.reset();
+                    PlaybackDebugTrap.recordDetailed(
+                            "post_seek_push_recovery_error_"
+                                    + ex.getClass().getSimpleName(),
+                            BaseMediaPlayerImpl.this, "local-reprepare");
+                    log.warn("Post-seek Push recovery failed", ex);
+                }
+                finally
+                {
+                    postSeekPushRecoveryInternalFlush = false;
+                }
+            }
+            else if (action == PostSeekPushRecoveryController.Action.COMPLETE)
+            {
+                PlaybackDebugTrap.record("post_seek_push_recovery_healthy",
+                        BaseMediaPlayerImpl.this);
+            }
+            else if (action == PostSeekPushRecoveryController.Action.EXPIRED)
+            {
+                PlaybackDebugTrap.record("post_seek_push_recovery_expired",
+                        BaseMediaPlayerImpl.this);
+            }
+            schedulePostSeekPushRecoveryCheck();
+        }
+    };
     protected volatile PlaybackSessionController.Token lastPlaybackOperation;
     /**
      * Non-null while a replacement player is being released and configured.
@@ -303,6 +363,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void free()
     {
+        resetPostSeekPushRecovery();
         mimDirectController().release(this);
         mimDirectMediaUrlActive = false;
         fixedCaptionController().detach(this, true);
@@ -326,6 +387,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void load(byte majorHint, byte minorHint, String encodingHint, final String urlString, String hostname, boolean timeshifted, long buffersize)
     {
+        resetPostSeekPushRecovery();
         final PlaybackSessionController.Token loadSession = playbackSessions.beginSession();
         loadTransitionToken = loadSession;
         fixedCaptionAttached = fixedCaptionController().attach(this, fixedCaptionBridge);
@@ -1259,6 +1321,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void stop()
     {
+        resetPostSeekPushRecovery();
         DiagnosticSessionSpool.checkpoint("playback-stop");
         loadTransitionToken = null;
         // SageTV STOP is not necessarily terminal. Stock servers legitimately
@@ -1516,6 +1579,21 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void flush()
     {
+        if (!postSeekPushRecoveryInternalFlush)
+        {
+            if (isPostSeekPushRecoveryEligible()
+                    && postSeekPushRecovery.onServerFlush(
+                            SystemClock.elapsedRealtime()))
+            {
+                PlaybackDebugTrap.record("post_seek_push_server_flush",
+                        BaseMediaPlayerImpl.this);
+                schedulePostSeekPushRecoveryCheck();
+            }
+            else if (!isPostSeekPushRecoveryEligible())
+            {
+                resetPostSeekPushRecovery();
+            }
+        }
         beginPlaybackOperation(PlaybackSessionController.Operation.FLUSH);
         log.debug("JVL - flush called!");
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
@@ -1535,6 +1613,76 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         teletextLegacyBridge.clearPending();
         postTeletextFlush();
         resetFixedCaptionForDiscontinuity();
+    }
+
+    @Override
+    public final void armPostSeekPushRecovery(SageCommand command)
+    {
+        if (!isPostSeekPushRecoveryEligible())
+        {
+            resetPostSeekPushRecovery();
+            return;
+        }
+        postSeekPushRecovery.arm(SystemClock.elapsedRealtime());
+        PlaybackDebugTrap.recordDetailed("post_seek_push_recovery_armed", this,
+                "command=" + (command == null ? "unknown" : command.name()));
+        schedulePostSeekPushRecoveryCheck();
+    }
+
+    @Override
+    public final void onServerPushAnchor(long anchorMs)
+    {
+        if (!isPostSeekPushRecoveryEligible())
+        {
+            resetPostSeekPushRecovery();
+            return;
+        }
+        if (postSeekPushRecovery.onServerAnchor(SystemClock.elapsedRealtime()))
+        {
+            PlaybackDebugTrap.recordDetailed("post_seek_push_server_anchor", this,
+                    "anchorMs=" + anchorMs);
+            schedulePostSeekPushRecoveryCheck();
+        }
+    }
+
+    /** Backend callback: the current post-FLUSH epoch rendered video. */
+    protected final void notifyPostSeekPushFirstFrame()
+    {
+        postSeekPushRecovery.onFirstFrame(SystemClock.elapsedRealtime());
+        schedulePostSeekPushRecoveryCheck();
+    }
+
+    /** Backend callback: decoder input entered or left buffering. */
+    protected final void notifyPostSeekPushBuffering(boolean buffering)
+    {
+        postSeekPushRecovery.onBufferingChanged(
+                buffering, SystemClock.elapsedRealtime());
+        schedulePostSeekPushRecoveryCheck();
+    }
+
+    private boolean isPostSeekPushRecoveryEligible()
+    {
+        boolean dvdPush = lastUri != null && lastUri.startsWith("push:dvd");
+        return pushMode && !dvdPush && !isMimDirectMediaUrlActive()
+                && player != null && !eos && dataSource instanceof HasPushBuffer;
+    }
+
+    private void schedulePostSeekPushRecoveryCheck()
+    {
+        if (!postSeekPushRecovery.isActive()
+                || postSeekPushRecoveryCheckScheduled)
+            return;
+        postSeekPushRecoveryCheckScheduled = true;
+        postSeekPushRecoveryHandler.postDelayed(postSeekPushRecoveryCheck, 250L);
+    }
+
+    private void resetPostSeekPushRecovery()
+    {
+        postSeekPushRecovery.reset();
+        if (postSeekPushRecoveryCheckScheduled)
+            postSeekPushRecoveryHandler.removeCallbacks(postSeekPushRecoveryCheck);
+        postSeekPushRecoveryCheckScheduled = false;
+        postSeekPushRecoveryInternalFlush = false;
     }
 
     @Override
@@ -1577,6 +1725,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
     protected void releasePlayer()
     {
+        resetPostSeekPushRecovery();
         log.debug("Releasing Player");
         endTeletextPresentation();
         if (context.getContext() instanceof Activity)

@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import opensagetv.vibe.miniclient.MiniClient;
+import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.SageCommand;
 import opensagetv.vibe.miniclient.android.AndroidKeyEventMapper;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
@@ -58,6 +59,12 @@ public class KeyMapProcessor {
     private final Handler longPressHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingLongPressTask;
     private int pendingLongPressKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+    // Long-press state belongs to one physical key gesture. Fire OS can
+    // occasionally omit ACTION_UP when playback is rebuilding after a seek;
+    // without this identity, the next Left/Right DOWN inherits the previous
+    // gesture's long-press mapping (for example, Comskip instead of FF/RW).
+    private int activeGestureKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+    private long activeGestureDownTime = -1L;
     private static volatile long inputEventSequence;
     private static volatile int inputLastKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     private static volatile int inputLastScanCode;
@@ -82,10 +89,25 @@ public class KeyMapProcessor {
     public boolean onKey(KeyMap keyMap, int keyCode, KeyEvent event)
     {
         recordInputEvent(keyCode, event);
+        if (event.getAction() == KeyEvent.ACTION_DOWN)
+            beginInputGesture(keyCode, event);
+        else if (event.getAction() == KeyEvent.ACTION_UP
+                && activeGestureKeyCode != KeyEvent.KEYCODE_UNKNOWN
+                && activeGestureKeyCode != keyCode)
+        {
+            // A delayed UP from an abandoned gesture must not clear the newer
+            // key that is now active.
+            log.debug("Ignoring stale key-up {} while gesture {} is active",
+                    keyCode, activeGestureKeyCode);
+            return true;
+        }
+
         if(!longPress && getDvdMenuCommand(keyCode) == null
                 && keyMap.getNormalPressCommand(keyCode) == SageCommand.NONE)
         {
             log.debug("Key is mapped to none...");
+            if (event.getAction() == KeyEvent.ACTION_UP)
+                finishInputGesture();
             //handleDefaultEvent(keyCode, event);
             return false;
         }
@@ -166,6 +188,7 @@ public class KeyMapProcessor {
                 longPress = false;
                 longPressCancel = false;
                 skipUp = false;
+                finishInputGesture();
                 return true;
             }
             if (longPress || skipUp) {
@@ -182,6 +205,7 @@ public class KeyMapProcessor {
                 // pretty much all normal keyboard keys will get handled here
                 handleKeyPress(keyMap, keyCode, event, false);
             }
+            finishInputGesture();
         }
 
         return true;
@@ -230,13 +254,48 @@ public class KeyMapProcessor {
         pendingLongPressKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     }
 
-    public void shutdown()
+    private void beginInputGesture(int keyCode, KeyEvent event)
+    {
+        boolean firstDown = event.getRepeatCount() == 0;
+        boolean differentKey = activeGestureKeyCode != KeyEvent.KEYCODE_UNKNOWN
+                && activeGestureKeyCode != keyCode;
+        boolean restartedKey = firstDown
+                && activeGestureKeyCode == keyCode
+                && activeGestureDownTime != event.getDownTime();
+
+        if (differentKey || restartedKey)
+        {
+            log.warn("Resetting stale key gesture {} before key {} down",
+                    activeGestureKeyCode, keyCode);
+            resetInputGestureState();
+        }
+
+        if (activeGestureKeyCode == KeyEvent.KEYCODE_UNKNOWN || firstDown)
+        {
+            activeGestureKeyCode = keyCode;
+            activeGestureDownTime = event.getDownTime();
+        }
+    }
+
+    private void finishInputGesture()
+    {
+        activeGestureKeyCode = KeyEvent.KEYCODE_UNKNOWN;
+        activeGestureDownTime = -1L;
+    }
+
+    private void resetInputGestureState()
     {
         cancelPendingLongPress();
         longPressTime = 0;
         longPress = false;
         longPressCancel = false;
         skipUp = false;
+        finishInputGesture();
+    }
+
+    public void shutdown()
+    {
+        resetInputGestureState();
     }
 
     private void handleKeyPress(KeyMap keyMap, int keyCode, KeyEvent event, boolean longPress) {
@@ -338,6 +397,16 @@ public class KeyMapProcessor {
             if (VerboseLogging.LOG_KEYS)
                 log.debug("Sending Sage Command {} for Event {}", command, event);
             recordMappedCommand(command, longPress);
+            // SageMC commonly maps long-Right to commercial skip. The client
+            // must not guess its destination or emit another command. Merely
+            // arm the active player here; recovery becomes eligible only if
+            // stock SageTV subsequently sends both FLUSH and a new Push anchor.
+            if (longPress && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+            {
+                MiniPlayerPlugin activePlayer = client.getPlayer();
+                if (activePlayer != null)
+                    activePlayer.armPostSeekPushRecovery(command);
+            }
             EventRouter.postCommand(client, command);
             return;
         }

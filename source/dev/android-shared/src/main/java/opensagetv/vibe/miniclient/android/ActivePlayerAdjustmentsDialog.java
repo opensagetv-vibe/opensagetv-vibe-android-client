@@ -726,6 +726,26 @@ public final class ActivePlayerAdjustmentsDialog
         });
         settings.addView(track);
 
+        LinearLayout restartAudio = audioSettingRow("Restart audio output",
+                active != null && active.supportsAudioOutputRestart()
+                        ? "Keep current settings" : "Unavailable");
+        restartAudio.setOnClickListener(new View.OnClickListener()
+        {
+            @Override public void onClick(View view)
+            {
+                if (active == null || !active.supportsAudioOutputRestart())
+                {
+                    AppUtil.message("The active player cannot restart its audio output");
+                    return;
+                }
+                holder[0].dismiss();
+                AppUtil.message(active.restartAudioOutput()
+                        ? "Restarting audio output with current settings"
+                        : "Audio output restart could not be started");
+            }
+        });
+        settings.addView(restartAudio);
+
         View divider = new View(activity);
         divider.setBackgroundColor(0xff606060);
         settings.addView(divider, new LinearLayout.LayoutParams(

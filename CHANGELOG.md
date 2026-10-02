@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+- Added **Restart audio output** to the live Audio settings menu for Media3,
+  legacy Exo, and their GSY delegates. It releases and recreates Vibe's player
+  and Android `AudioTrack` while preserving output mode, selected stream,
+  passthrough offset, transport, and playback position. It does not modify
+  device defaults or require toggling passthrough off and back on.
+- All 133 affected input/player/protocol tests and a clean 60-task APK build
+  pass. The settings-preserving Pro `.29` build has SHA-256
+  `f8f5e4f3d76ba185b992bf88902f1bc293d514ea27c1321a9c3405255d22943f`.
+- Fixed a Fire OS remote-state leak in which a missing/delayed key-up could
+  leave the previous long-Right commercial-skip gesture active. A fresh
+  physical key or a new press of the same key now resets abandoned hold state,
+  so later Left/Right presses retain their configured FF/RW actions. No key
+  mapping or SageTV-owned Comskip destination changed.
+- The affected 91 key/recovery/MCP source tests pass. This correction is also
+  present in the newer audio-reset APK identified above.
+- Added bounded automatic recovery for a local Push reader that stalls after
+  SageMC handles a long-Right commercial skip. Media3, legacy Exo, IJK, and
+  their GSY delegates share the same one-shot gate; it requires the user's
+  long-Right, the following stock-server FLUSH, and the first payload of the
+  replacement Push epoch. It never chooses a destination or sends another
+  seek, and Pull, SMB Direct, MIM Direct, DVD Push, and external players retain
+  their existing behavior.
+- Stock Fixed compatibility accepts its valid zero mux timestamp as an epoch
+  only after non-empty post-FLUSH data arrives. Positive mux timestamps remain
+  authoritative for timeline calibration.
+- Six focused controller tests plus a zero-mux Push-epoch protocol test, 576
+  repository tests, 104 MCP tests, Core JUnit, validation, and a clean 60-task
+  APK build pass. A stock `.175` /
+  non-Pro `.25` Fixed/Push gate produced arm, FLUSH, zero-mux epoch, first-frame,
+  and healthy completion evidence with advancing A/V and no duplicate recovery;
+  all 107 settings were restored. The same settings-preserving APK was
+  installed on Pro `.29` for user acceptance.
+- MCP `adb_connect` now sets Android's device-global
+  `adb_allowed_connection_time` to `0`, verifies the readback, and returns the
+  authorization policy in its result. A vendor device that refuses or ignores
+  the setting now fails connection explicitly instead of silently allowing its
+  approved workspace key to expire after inactivity.
+- The focused 55-test ADB suite passes, and the real MCP path verified
+  `currentValue=0` plus `nonExpiring=true` on both the non-Pro Fire TV `.25`
+  and Pro Fire TV `.29`.
+
 ## v0.5.99 - 2026-09-30
 
 - Fixed the remaining stock-server Media3 Pull freeze at the start of an

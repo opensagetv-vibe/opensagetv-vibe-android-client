@@ -35,6 +35,20 @@ class RemoteLongPressTest(unittest.TestCase):
         self.assertIn("public void shutdown()", listener)
         self.assertGreaterEqual(lifecycle.count("keyListener.shutdown();"), 3)
 
+    def test_fresh_physical_gesture_cannot_inherit_prior_long_press(self):
+        text = PROCESSOR.read_text(encoding="utf-8")
+        self.assertIn("private int activeGestureKeyCode", text)
+        self.assertIn("private long activeGestureDownTime", text)
+        self.assertIn("beginInputGesture(keyCode, event)", text)
+        self.assertIn("activeGestureKeyCode != keyCode", text)
+        self.assertIn("activeGestureDownTime != event.getDownTime()", text)
+        self.assertIn("resetInputGestureState();", text)
+        self.assertIn("finishInputGesture();", text)
+        self.assertLess(
+            text.index("beginInputGesture(keyCode, event)"),
+            text.index("if (longPressCancel) return true;"),
+        )
+
     def test_dvd_menu_only_intercepts_short_remote_presses(self):
         text = PROCESSOR.read_text(encoding="utf-8")
         self.assertIn("if (!longPress && dvdMenuCommand != null)", text)

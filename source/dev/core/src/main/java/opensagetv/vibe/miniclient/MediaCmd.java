@@ -114,6 +114,11 @@ public class MediaCmd
     private long lastServerFlushMonotonicMs = -1;
     private long lastServerAnchorSequence = 0;
     private long lastServerAnchorMonotonicMs = -1;
+    // Some stock Fixed transcode paths report a valid post-FLUSH mux time of
+    // zero. Track the first payload of each Push byte epoch separately so a
+    // client recovery gate can confirm that the server has begun the new
+    // epoch without inventing a non-zero absolute timeline anchor.
+    private boolean pushEpochPayloadPublished;
     private final PushTimelineAnchorEstimator pushTimelineAnchorEstimator =
             new PushTimelineAnchorEstimator();
     /** Epoch-start anchor derived from MPEG-TS PTS; -1 preserves raw fallback. */
@@ -417,6 +422,7 @@ public class MediaCmd
             case MEDIACMD_OPENURL:
                 this.setLastServerStartPosition(-1);
                 resetPushTimelineAnchor();
+                pushEpochPayloadPublished = false;
                 resetDetailedPushStats();
                 startupMediaTimeTraceDeadlineMs = monotonicMs() + 4_000L;
                 startupMediaTimeTraceRemaining = 12;
@@ -611,6 +617,7 @@ public class MediaCmd
                     }
                     this.setLastServerStartPosition(-1);
                     resetPushTimelineAnchor();
+                    pushEpochPayloadPublished = false;
                 }
 
                 return 4;
@@ -669,6 +676,7 @@ public class MediaCmd
                         {
                             log.debug("Flush - Last server time is -1, and serverMuxtime > 0.  ServerMuxTime: {}", Utils.toHHMMSS(statsServerMuxTimeMs, true));
                             this.setLastServerStartPosition(statsServerMuxTimeMs);
+                            playa.onServerPushAnchor(statsServerMuxTimeMs);
                             PlaybackDebugEventBridge.recordAsyncDetailed(
                                     "server_anchor_set", playa,
                                     "anchorMs=" + statsServerMuxTimeMs
@@ -715,6 +723,23 @@ public class MediaCmd
                 {
                     if (buffSize > 0)
                     {
+                        if (pushMode && !dvdSessionPending
+                                && !pushEpochPayloadPublished)
+                        {
+                            pushEpochPayloadPublished = true;
+                            // A positive detailed-stat timestamp remains the
+                            // authoritative absolute timeline value. The
+                            // callback also accepts zero/unknown here because
+                            // the first non-empty payload itself proves that
+                            // the stock server committed the post-FLUSH epoch.
+                            if (statsServerMuxTimeMs <= 0)
+                                playa.onServerPushAnchor(statsServerMuxTimeMs);
+                            PlaybackDebugEventBridge.recordAsyncDetailed(
+                                    "server_push_epoch_payload", playa,
+                                    "muxTimeMs=" + statsServerMuxTimeMs
+                                            + ";anchorSequence=" + lastServerAnchorSequence
+                                            + ";flushSequence=" + lastServerFlushSequence);
+                        }
                         try
                         {
                             playa.pushData(cmddata, bufDataOffset, buffSize);

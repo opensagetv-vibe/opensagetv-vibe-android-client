@@ -211,6 +211,12 @@ explicitly approves publication after the active hardware phases.
   on Pro `.29`, then run the affected non-Pro reference gate.
   - [ ] Obtain final user-visible Pro acceptance for exact skip/Comskip landing;
     USB HDMI was not routed to `.29` during the corrected stress run.
+  - [ ] Confirm on Pro `.29` that one long-Right Comskip followed by fresh
+    Left/Right presses returns to the configured FF/RW actions and that encoded
+    AC-3 retains the saved A/V offset after the discontinuity.
+  - [ ] Physically verify **Restart audio output** clears an app-owned encoded
+    HDMI sync fault on Pro `.29` while retaining passthrough, the selected
+    audio stream, saved offset, and the SageTV-owned playback position.
 - [ ] **MIMFIX-003 - Cross-player and stock compatibility gates.** On an
   unmodified `.175` stock server and clean stock Windows server, test Media3,
   legacy Exo, IJK, and both GSY delegates as applicable with the FFmpeg plugin
@@ -298,6 +304,9 @@ explicitly approves publication after the active hardware phases.
 
 | Revision | Date | Change |
 |---|---|---|
+| 98 | 2026-10-01 | Contained the Pro Fire OS stale-long-press case without changing mappings: fresh physical key gestures now discard an abandoned prior hold, so Left/Right returns to configured FF/RW after long-Right Comskip. Added a live **Restart audio output** action for Media3, legacy Exo, and their GSY delegates; it recreates the app-owned player/AudioTrack while retaining transport, selected stream, passthrough policy, offset, and playback position. The affected 188 Linux tests, focused Core JUnit, project validation, and clean 60-task APK build pass; the settings-preserving APK was installed on Pro `.29`. Final visible Pro input/audio acceptance remains explicitly open under SEEK-001. |
+| 97 | 2026-10-01 | Completed the SEEK-001 one-shot post-Comskip Push recovery subtask. Media3, legacy Exo, IJK, and their GSY delegates now share a bounded recovery controller that arms only for long-Right, requires the following stock-server FLUSH plus first non-empty Push payload, and may restart only the local reader once without sending another seek or changing the STV-selected destination. Six focused controller tests plus a zero-mux Push-epoch protocol test, 576 repository tests, 104 MCP tests, Core JUnit, validation, and a clean 60-task APK build pass. On non-Pro `.25` against stock `.175`, a real long-Right plus exact stock `Seek(long)` produced arm/FLUSH/zero-mux epoch/first-frame/healthy evidence with advancing A/V and no redundant recovery; the settings transaction restored all 107 values. The settings-preserving APK was also installed on Pro `.29`; final visible Pro landing acceptance remains open under SEEK-001. |
+| 96 | 2026-10-01 | Completed ADB-001: every MCP `adb_connect` now sets and verifies device-global `adb_allowed_connection_time=0`, reports the prior/current policy, and fails explicitly if a vendor build does not retain it. The focused 55-test ADB suite passes, and real MCP stdio calls on non-Pro `.25` and Pro `.29` both reported `currentValue=0`, `nonExpiring=true`, and a live persistent shell. This preserves an already-approved workspace key but does not bypass initial user authorization. |
 | 95 | 2026-09-30 | Documented the calibrated Logitech C920 as reusable primary physical A/V evidence for AUDIO-001/AUDIO-005/AUDIO-006 and supporting DVD-001 validation. One-device camera/microphone capture can resolve the reported roughly 500 ms receiver-route delay at about 33 ms precision, but does not replace HDMI/client telemetry or certify 25 ms adjustments and 50/59.94 fps cadence. |
 | 94 | 2026-09-30 | Normalized pre-commit task maintenance across all active Vibe repositories. Android active sections now contain only unchecked work; all 117 completed checkoffs were moved intact under this ledger with their stable IDs, evidence, source section, and open-parent context. The repository rules now require this cleanup immediately before every commit. |
 | 93 | 2026-09-30 | Added deferred follow-ups EXT-005 through EXT-007 without starting implementation: a measured stock-Core-clamped Push-buffer A/B only after a reproduced Push defect, generated malformed-caption regression expansion only after a concrete parser failure or parser change, and individual legacy hardware-output re-evaluation only after an Android problem that existing player/OS controls cannot solve. The HD300 512 KiB value and Sigma/extender identity remain rejected as defaults. |
