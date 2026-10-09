@@ -23,6 +23,17 @@ public class MediaMappingPreferences
         return preferences.getBoolean("debug_key_presses", false);
     }
 
+    public boolean isDvdHeldArrowControlsEnabled()
+    {
+        return preferences.getBoolean("dvdplaying_hold_arrows", true);
+    }
+
+    /** Default-on title-only dedicated scan gestures; saved false is never overwritten. */
+    public boolean isDvdScanHoldControlsEnabled()
+    {
+        return preferences.getBoolean("dvdplaying_hold_scan", true);
+    }
+
     public boolean isSoundEffectsEnabled() {
         return preferences.getBoolean("sound_effects_enabled", true);
     }
@@ -78,6 +89,16 @@ public class MediaMappingPreferences
                 key = preferences.getString(prefix + "_right", SageCommand.FF.getKey());
                 break;
 
+            case "dvdplaying":
+
+                // Combined extender event: authored menus navigate Right,
+                // and stock PseudoMenu falls back to a timeline skip. STV
+                // listeners can override that fallback (SageMC uses its DVD
+                // FF/REW preference); no private server seek is implied.
+                key = preferences.getString(prefix + "_right",
+                        SageCommand.RIGHT_FF.getKey());
+                break;
+
             default:
 
                 key = preferences.getString(prefix + "_right", SageCommand.RIGHT.getKey());
@@ -100,6 +121,13 @@ public class MediaMappingPreferences
             case "videopaused":
 
                 key = preferences.getString(prefix + "_left", SageCommand.REW.getKey());
+                break;
+
+            case "dvdplaying":
+
+                // See the matching Right default above.
+                key = preferences.getString(prefix + "_left",
+                        SageCommand.LEFT_REW.getKey());
                 break;
 
             default:
@@ -198,6 +226,12 @@ public class MediaMappingPreferences
                 key = preferences.getString(prefix + "_right_long_press", SageCommand.RIGHT.getKey());
                 break;
 
+            case "dvdplaying":
+
+                key = preferences.getString(prefix + "_right_long_press",
+                        SageCommand.DVD_CHAPTER_NEXT.getKey());
+                break;
+
             default:
 
                 key = preferences.getString(prefix + "_right_long_press", SageCommand.RIGHT.getKey());
@@ -220,6 +254,12 @@ public class MediaMappingPreferences
             case "videopaused":
 
                 key = preferences.getString(prefix + "_left_long_press", SageCommand.LEFT.getKey());
+                break;
+
+            case "dvdplaying":
+
+                key = preferences.getString(prefix + "_left_long_press",
+                        SageCommand.DVD_CHAPTER_PREV.getKey());
                 break;
 
             default:

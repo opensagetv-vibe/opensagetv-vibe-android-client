@@ -135,6 +135,63 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
             self.connection,
         )
 
+    def test_debug_build_can_force_the_first_reconnect_rejection_through_retry(self):
+        self.assertIn("testGfxReconnectAttemptsToReject.compareAndSet(1, 0)", self.connection)
+        rejection = self.connection.index(
+            "testGfxReconnectAttemptsToReject.compareAndSet(1, 0)"
+        )
+        establish = self.connection.index("EstablishServerConnection(5)", rejection)
+        self.assertLess(rejection, establish)
+        self.assertIn('reconnect("test_first_attempt_rejected")', self.connection)
+        debug_commands = (
+            ROOT
+            / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugSessionCommands.java"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"reject_reconnect_attempts"', debug_commands)
+        self.assertIn('"armGfxReconnectRejectForTest"', debug_commands)
+
+    def test_interrupted_gfx_command_is_discarded_after_reconnect(self):
+        reader = self.connection.split('new Thread("GFXRead")', 1)[1].split(
+            'connectionWorkers.retainGfxRead(gfxReadThread)', 1
+        )[0]
+        self.assertIn('myStream.readFully(cmdbuffer, 0, len)', reader)
+        assert_in_order(
+            self,
+            reader,
+            'connectionDiagnostics.reconnect("succeeded")',
+            'reconnectState.finish();',
+            'continue;',
+            'gfxFrames.publish(gfxCmds, cmdbuffer',
+        )
+
+    def test_debug_only_gfx_fault_closes_only_the_scoped_graphics_socket(self):
+        debug_root = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug"
+        receiver = (debug_root / "DevTestReceiver.java").read_text(encoding="utf-8")
+        session = (debug_root / "DebugSessionCommands.java").read_text(encoding="utf-8")
+        release_root = ROOT / "source/dev/android-tv/src/main/java"
+        self.assertIn('"gfx_read_fault".equals(op)', receiver)
+        self.assertIn('"close_gfx_socket".equals(clean(intent.getStringExtra("confirm")))', session)
+        self.assertIn('expectedServer.equals(server.address)', session)
+        self.assertIn('Socket socket = (Socket) gfxSocket.invoke(workers)', session)
+        self.assertIn('socket.close();', session)
+        self.assertNotIn('gfx_read_fault', self.connection)
+        self.assertFalse(any('gfx_read_fault' in path.read_text(encoding="utf-8")
+                             for path in release_root.rglob("*.java")))
+
+    def test_live_opengl_context_loss_uses_bounded_fresh_session(self):
+        debug_root = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug"
+        receiver = (debug_root / "DevTestReceiver.java").read_text(encoding="utf-8")
+        session = (debug_root / "DebugSessionCommands.java").read_text(encoding="utf-8")
+        self.assertIn("if (surfaceCreated && client.getCurrentConnection() != null", self.opengl_renderer)
+        self.assertIn("activity.requestGraphicsContextRecovery()", self.opengl_renderer)
+        self.assertIn("GRAPHICS_RECOVERY_COOLDOWN_MS", self.lifecycle)
+        self.assertIn("pendingReplacementActivity = replacement", self.lifecycle)
+        self.assertIn("pendingReplacementActivity == null", self.lifecycle)
+        self.assertIn('"gfx_context_recreated".equals(op)', receiver)
+        self.assertIn('"recreate_gfx_context".equals(clean(intent.getStringExtra("confirm")))', session)
+        self.assertIn("expectedServer.equals(server.address)", session)
+        self.assertNotIn("gfx_context_recreated", self.connection)
+
     def test_image_allocation_recovery_is_single_attempt_and_fail_open_is_forbidden(self):
         self.assertIn("catch (OutOfMemoryError firstFailure)", self.gfx_image_recovery)
         self.assertEqual(2, self.gfx_image_recovery.count("allocation.allocate()"))
@@ -164,6 +221,27 @@ class ConnectionProtocolCharacterizationTests(unittest.TestCase):
             invoke = renderer[invoke_start:invoke_end]
             self.assertIn("synchronized (renderQueue)", invoke)
             self.assertIn("frameQueue.add(runnable)", invoke)
+
+    def test_missing_texture_uses_stock_unload_then_repaint_protocol(self):
+        draw = self.gfx_drawing.split("case GFXCMD2.GFXCMD_DRAWTEXTURED:", 1)[1].split(
+            "case GFXCMD2.GFXCMD_DRAWLINE:", 1
+        )[0]
+        assert_in_order(
+            self,
+            draw,
+            "client.getImageCache().get(handle)",
+            "if (image == null)",
+            "client.getImageCache().reportMissingDraw(handle)",
+            "renderer.drawTexture(",
+        )
+        flip = self.gfx_lifecycle.split("case GFXCMD2.GFXCMD_FLIPBUFFER:", 1)[1].split(
+            "case GFXCMD2.GFXCMD_STARTFRAME:", 1
+        )[0]
+        assert_in_order(self, flip, "renderer.flipBuffer()", "flushMissingDrawRepaint()")
+        self.assertIn("activeConnection.postImageUnload(handle)", self.image_cache)
+        self.assertIn("activeConnection.postRepaintEvent(0, 0, size.width, size.height)", self.image_cache)
+        self.assertIn("eventChannel.write(IMAGE_UNLOAD_REPLY_TYPE)", self.connection)
+        self.assertIn("eventChannel.write(UI_REPAINT_EVENT_REPLY_TYPE)", self.connection)
 
     def test_resume_repaint_uses_ordered_event_router(self):
         repaint = self.connection[

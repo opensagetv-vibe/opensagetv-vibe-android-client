@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 from typing import Any, Iterable
+from .config import DEFAULT_INSTALL_TIMEOUT_SECONDS, validated_install_timeout_seconds
 
 
 TELEMETRY_TAG = "SageTVDevTelemetry"
@@ -99,7 +100,10 @@ def _parse_dev_control_data(data: str) -> dict[str, Any]:
             continue
         key, value = token.split("=", 1)
         if key:
-            out[key] = _typed_telemetry_value(value)
+            # UI-context names are opaque identities, not measurements. A hex
+            # client ID can accidentally be valid scientific notation (..e60)
+            # or contain significant leading zeros. Preserve its exact bytes.
+            out[key] = value if key == "uiContextHint" else _typed_telemetry_value(value)
     return out
 
 
@@ -136,11 +140,15 @@ class AdbClient:
     dev_package: str
     adb: str = "adb"
     aapt: str = ""
+    install_timeout_seconds: float = DEFAULT_INSTALL_TIMEOUT_SECONDS
     _shell_proc: subprocess.Popen | None = field(default=None, init=False, repr=False)
     _shell_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _shell_command_id: int = field(default=0, init=False, repr=False)
     _shell_restart_count: int = field(default=0, init=False, repr=False)
     _adb_authorization_status: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.install_timeout_seconds = validated_install_timeout_seconds(self.install_timeout_seconds)
 
     def _base(self, device: bool = True) -> list[str]:
         return [self.adb, "-s", self.serial] if device else [self.adb]
@@ -180,6 +188,23 @@ class AdbClient:
             bufsize=0,
         )
         self._shell_restart_count += 1
+        # Android 6 transports can require a PTY even when our local pipes are
+        # non-interactive. mksh then echoes and redraws command lines and emits
+        # prompts. Initialize only this shell, and consume its startup preamble
+        # before sending any ordered runtime command. Pipes need no stty setup.
+        marker = f"__SAGETV_MCP_READY_{time.monotonic_ns()}__"
+        setup = (
+            "if [ -t 0 ]; then stty -echo -onlcr || exit; "
+            'if [ -n "$KSH_VERSION" ]; then set +o emacs; set +o vi; fi; fi; '
+            "PS1=; PS2=; printf '\\n" + marker + ":0\\n'\n"
+        )
+        try:
+            self._shell_proc.stdin.write(setup.encode("utf-8"))
+            self._shell_proc.stdin.flush()
+            self._read_persistent_shell_result(marker, "startup handshake", timeout=15)
+        except Exception:
+            self._stop_persistent_shell()
+            raise
 
     def _stop_persistent_shell(self) -> None:
         proc = self._shell_proc
@@ -241,45 +266,71 @@ class AdbClient:
                 self._stop_persistent_shell()
                 raise RuntimeError(f"ADB persistent shell write failed: {exc}") from exc
 
-            deadline = time.monotonic() + max(0.1, float(timeout))
-            buffer = bytearray()
-            token = b"\n" + marker.encode("utf-8") + b":"
-            while True:
-                marker_at = buffer.find(token)
-                if marker_at >= 0:
-                    status_start = marker_at + len(token)
-                    status_end = buffer.find(b"\n", status_start)
-                    if status_end >= 0:
-                        try:
-                            rc = int(bytes(buffer[status_start:status_end]).decode("ascii", errors="strict").strip())
-                        except (ValueError, UnicodeDecodeError):
-                            rc = 1
-                        output = bytes(buffer[:marker_at]).decode("utf-8", errors="replace")
-                        return output, rc
+            return self._read_persistent_shell_result(marker, command, timeout=timeout)
 
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
+    def _read_persistent_shell_result(
+        self, marker: str, command: str, *, timeout: float
+    ) -> tuple[str, int]:
+        proc = self._shell_proc
+        if proc is None or proc.stdout is None:
+            raise RuntimeError("ADB persistent shell failed to start")
+        deadline = time.monotonic() + max(0.1, float(timeout))
+        buffer = bytearray()
+        token = b"\n" + marker.encode("utf-8") + b":"
+        while True:
+            marker_at = buffer.find(token)
+            if marker_at >= 0:
+                status_start = marker_at + len(token)
+                status_end = buffer.find(b"\n", status_start)
+                if status_end >= 0:
+                    try:
+                        rc = int(bytes(buffer[status_start:status_end]).decode("ascii", errors="strict").strip())
+                    except (ValueError, UnicodeDecodeError):
+                        rc = 1
+                    output = bytes(buffer[:marker_at]).decode("utf-8", errors="replace")
+                    return output, rc
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._stop_persistent_shell()
+                raise subprocess.TimeoutExpired(self._base(True) + ["shell", command], timeout)
+            ready, _, _ = select.select([proc.stdout], [], [], min(0.25, remaining))
+            if not ready:
+                if proc.poll() is not None:
                     self._stop_persistent_shell()
-                    raise subprocess.TimeoutExpired(self._base(True) + ["shell", command], timeout)
-                ready, _, _ = select.select([proc.stdout], [], [], min(0.25, remaining))
-                if not ready:
-                    if proc.poll() is not None:
-                        self._stop_persistent_shell()
-                        raise RuntimeError(f"ADB persistent shell exited while running: {command}")
-                    continue
-                chunk = proc.stdout.read(4096)
-                if not chunk:
-                    self._stop_persistent_shell()
-                    raise RuntimeError(f"ADB persistent shell closed while running: {command}")
-                buffer.extend(chunk)
+                    raise RuntimeError(f"ADB persistent shell exited while running: {command}")
+                continue
+            chunk = proc.stdout.read(4096)
+            if not chunk:
+                self._stop_persistent_shell()
+                raise RuntimeError(f"ADB persistent shell closed while running: {command}")
+            buffer.extend(chunk)
 
     def connect(self) -> str:
         result = self.run(["connect", self.serial], device=False).stdout.strip()
-        # Establish one reusable device shell for the MCP server lifetime.
-        with self._shell_lock:
-            self._start_persistent_shell()
         try:
-            self._adb_authorization_status = self.ensure_nonexpiring_adb_authorization()
+            # Fire OS can close an interactive shell opened immediately after
+            # `adb connect` while the transport is still settling. Apply and
+            # verify the idempotent authorization policy with independent
+            # one-shot shell commands first, then establish the long-lived MCP
+            # shell. This prevents a healthy authorized device from failing
+            # installation/commissioning on the first settings query.
+            try:
+                self._adb_authorization_status = self.ensure_nonexpiring_adb_authorization()
+            except RuntimeError as exc:
+                # `adb connect` may report "already connected" while its
+                # retained TCP transport is actually offline. Recover only
+                # that exact stale state, once, and only for this commissioned
+                # serial. An unauthorized key or any other failure must remain
+                # visible and must never be papered over by a retry loop.
+                if "device offline" not in str(exc).lower():
+                    raise
+                self.run(["disconnect", self.serial], device=False, check=False)
+                time.sleep(0.25)
+                result = self.run(["connect", self.serial], device=False).stdout.strip()
+                self._adb_authorization_status = self.ensure_nonexpiring_adb_authorization()
+            with self._shell_lock:
+                self._start_persistent_shell()
         except Exception:
             # Do not leave a half-initialized MCP transport alive. A successful
             # MCP connection promises that this device-side authorization policy
@@ -298,9 +349,13 @@ class AdbClient:
         mandatory so vendor builds that reject or ignore it fail visibly.
         """
         setting = "adb_allowed_connection_time"
-        previous = self.shell(f"settings get global {setting}", timeout=15).strip()
-        self.shell(f"settings put global {setting} 0", timeout=15)
-        current = self.shell(f"settings get global {setting}", timeout=15).strip()
+        previous = self._one_shot_shell(
+            f"settings get global {setting}", timeout=15
+        ).strip()
+        self._one_shot_shell(f"settings put global {setting} 0", timeout=15)
+        current = self._one_shot_shell(
+            f"settings get global {setting}", timeout=15
+        ).strip()
         if current != "0":
             raise RuntimeError(
                 f"Android did not retain global {setting}=0; read back {current!r}"
@@ -312,6 +367,14 @@ class AdbClient:
             "nonExpiring": True,
             "scope": "device_global",
         }
+
+    def _one_shot_shell(self, command: str, *, timeout: float = 30) -> str:
+        """Run an idempotent setup command outside the reusable shell.
+
+        Runtime control remains serialized through the persistent shell so
+        ordered side effects are never replayed implicitly.
+        """
+        return self.run(["shell", command], timeout=timeout).stdout
 
     def adb_authorization_status(self) -> dict[str, Any]:
         return dict(self._adb_authorization_status)
@@ -348,6 +411,7 @@ class AdbClient:
     def _resolve_launcher_component(self) -> str:
         """Resolve the TV launcher first, then the ordinary phone launcher."""
         package = shlex.quote(self.dev_package)
+        legacy_resolver_unavailable = False
         for category in (
             "android.intent.category.LEANBACK_LAUNCHER",
             "android.intent.category.LAUNCHER",
@@ -360,9 +424,30 @@ class AdbClient:
                 timeout=15,
                 check=False,
             ).strip()
+            legacy_resolver_unavailable |= "cmd: not found" in output
             for line in reversed(output.splitlines()):
                 candidate = line.strip()
-                if "/" in candidate and not candidate.lower().startswith("no activity"):
+                # Android6 has no `cmd` service frontend. Its shell error starts
+                # with /system/bin/sh and must not become an Activity component.
+                if re.fullmatch(
+                    re.escape(self.dev_package) + r"/[A-Za-z_$.][A-Za-z0-9_$.]*",
+                    candidate,
+                ):
+                    return candidate
+        if legacy_resolver_unavailable:
+            # Older Am also fails package-restricted implicit MAIN resolution
+            # on some vendor builds. Read installed metadata, not a guessed
+            # Activity or a foreign component, and preserve the firmware's
+            # explicit TV/phone distinction for this read-only fallback.
+            metadata = self.shell(f"dumpsys package {package}", timeout=30, check=False)
+            features = self.shell("pm list features", timeout=15, check=False)
+            tv = "feature:android.software.leanback" in features
+            suffix = ".tv.MainActivity" if tv else ".phone.ServersActivity"
+            components = re.findall(
+                re.escape(self.dev_package) + r"/[A-Za-z_$.][A-Za-z0-9_$.]*", metadata,
+            )
+            for candidate in components:
+                if candidate.endswith(suffix):
                     return candidate
         return ""
 
@@ -407,11 +492,22 @@ class AdbClient:
         """
         self._ensure_dev_package(self.dev_package)
         pid_text = self.shell(f"pidof {shlex.quote(self.dev_package)}", check=False).strip()
-        pids = [item for item in pid_text.split() if item.isdigit()]
+        # Some old vendor pidof builds return every system PID for any name.
+        # An Android application cannot be init/PID1. Reject that result (and
+        # nonnumeric diagnostics) before trusting it as running/crash evidence.
+        pids = pid_text.split() if re.fullmatch(r"\d+(?:\s+\d+)*", pid_text) else []
+        if "1" in pids or "0" in pids:
+            pids = []
         pid_source = "pidof" if pids else "none"
 
         if not pids:
             ps_text = self.shell("ps -A", timeout=30, check=False)
+            # Android6 toolbox ps does not understand -A and can return only
+            # its legacy header without an error. Plain ps lists all processes
+            # on that implementation; this fallback is read-only, never replay.
+            if ("VSIZE" in ps_text and "WCHAN" in ps_text
+                    and len(ps_text.strip().splitlines()) <= 1):
+                ps_text = self.shell("ps", timeout=30, check=False)
             for line in ps_text.splitlines():
                 parts = line.split()
                 if not parts:
@@ -642,7 +738,9 @@ class AdbClient:
         component = f"{self.dev_package}/{DEV_CONTROL_COMPONENT}"
         parts = ["am", "broadcast"]
         if foreground:
-            parts.append("--receiver-foreground")
+            # FLAG_RECEIVER_FOREGROUND has the same scheduling/timeout semantics
+            # through stable Intent flags; API 23 am rejects the newer long option.
+            parts.extend(["-f", "0x10000000"])
         parts.extend([
             "-a", DEV_CONTROL_ACTION,
             "-n", component,
@@ -696,6 +794,9 @@ class AdbClient:
     def open_smb_profile_settings(self) -> dict[str, Any]:
         return self.dev_control("profile_ui", foreground=False)
 
+    def open_diagnostics_settings(self) -> dict[str, Any]:
+        return self.dev_control("diagnostics_ui", foreground=False)
+
     def player_event_traps(self) -> dict[str, Any]:
         return self.dev_control("events")
 
@@ -735,11 +836,18 @@ class AdbClient:
             enabled="true" if enabled else "false",
         )
 
-    def set_mim_direct_late_fallback_fault(self, enabled: bool = True) -> dict[str, Any]:
+    def set_native_dvd_codec_fault(self, enabled: bool) -> dict[str, Any]:
+        """One-shot local output withholding; never a server/GFX/socket fault."""
+        return self.dev_control("native_dvd_codec_fault", enabled="true" if enabled else "false")
+
+    def set_mim_direct_late_fallback_fault(self, enabled: bool = True,
+                                         include_pull_failure: bool = True) -> dict[str, Any]:
         """Arm the debug APK's one-shot Direct->Pull->Fixed recovery proof."""
+        extra = {} if include_pull_failure else {"fail_pull": "false"}
         return self.dev_control(
             "mim_direct_late_fallback_fault",
             enabled="true" if enabled else "false",
+            **extra,
         )
 
     def checkpoint_settings(self) -> dict[str, Any]:
@@ -1122,6 +1230,12 @@ class AdbClient:
             raise ValueError("subtitle index must be -1 (off) or >= 0")
         return self.dev_control("subtitle_control", foreground=False, index=value)
 
+    def set_audio_track(self, index: int) -> dict[str, Any]:
+        value = int(index)
+        if value < 0:
+            raise ValueError("audio index must be >= 0")
+        return self.dev_control("audio_track_control", foreground=False, index=value)
+
     def set_caption_mode(self, mode: str) -> dict[str, Any]:
         value = str(mode).strip().lower()
         if value not in {"off", "cc1", "cc2", "stv", "dvb"}:
@@ -1285,6 +1399,10 @@ class AdbClient:
 
     def show_active_player_adjustments(self) -> dict[str, Any]:
         return self.dev_control("active_player_adjustments")
+
+    def show_av_sync_test(self) -> dict[str, Any]:
+        """Open the embedded common-clock A/V fixture on active playback."""
+        return self.dev_control("av_sync_test")
 
     def set_active_player_overlay(
         self,
@@ -1481,7 +1599,7 @@ class AdbClient:
             uninstall = self.run(["uninstall", self.dev_package], timeout=60, check=False)
             uninstall_text = (uninstall.stdout + uninstall.stderr).strip()
         install_args = ["install", str(apk)] if clean else ["install", "-r", str(apk)]
-        install = self.run(install_args, timeout=180)
+        install = self.run(install_args, timeout=self.install_timeout_seconds)
         install_text = install.stdout.strip()
         if clean:
             return f"uninstall: {uninstall_text or 'not installed'}\ninstall: {install_text}"

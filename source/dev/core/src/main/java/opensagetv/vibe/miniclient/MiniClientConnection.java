@@ -28,6 +28,21 @@ import opensagetv.vibe.miniclient.util.Utils;
 
 public class MiniClientConnection implements SageTVInputCallback
 {
+    /*
+     * Test seam armed only by the debug APK's non-exported control receiver.
+     * Release builds have no caller. Skipping the first connection attempt
+     * here models the null result returned by a rejected type-5 handshake
+     * without making stock SageTV accept and reload twice.
+     */
+    private final java.util.concurrent.atomic.AtomicInteger
+            testGfxReconnectAttemptsToReject =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    private void armGfxReconnectRejectForTest(int count)
+    {
+        testGfxReconnectAttemptsToReject.set(Math.max(0, Math.min(1, count)));
+    }
+
     static String unsupportedGetPropertyValue(String propertyName)
     {
         // Unknown capability names are normal when different server/client
@@ -501,6 +516,11 @@ public class MiniClientConnection implements SageTVInputCallback
                     throw new java.io.IOException("Graphics reconnect interrupted", interrupted);
                 }
             }
+            if (testGfxReconnectAttemptsToReject.compareAndSet(1, 0)) {
+                log.logWarning("Test seam rejected the first graphics reconnect attempt");
+                connectionDiagnostics.reconnect("test_first_attempt_rejected");
+                continue;
+            }
             java.net.Socket socket = EstablishServerConnection(5);
             if (socket != null)
                 return socket;
@@ -818,6 +838,11 @@ public class MiniClientConnection implements SageTVInputCallback
                                     return;
                                 }
                                 reconnectState.finish();
+                                // A read failure may leave gfxCmds and cmdbuffer partly filled
+                                // with the old socket's frame. The new socket starts a new
+                                // command stream; never dispatch that interrupted command to
+                                // the renderer after reconnecting.
+                                continue;
                             }
                             else
                             {
@@ -1203,6 +1228,8 @@ public class MiniClientConnection implements SageTVInputCallback
                         {
                             String extra_codecs = client.properties().getString(PrefStore.Keys.mplayer_extra_video_codecs, null);
                             propVal = capabilityProfile.videoCodecs();
+                            propVal = MimDirectTransportPolicy.sourceVideoCapabilities(propVal,
+                                    client.getMimDirectTransportMode(),client.isMimDirectSourceAcceptance());
                             if (extra_codecs != null)
                                 propVal += "," + extra_codecs;
                         }
@@ -2754,7 +2781,9 @@ public class MiniClientConnection implements SageTVInputCallback
     /**
      * Reuse SageTV's established extender reconnect path after a client-side
      * transport policy changes. This preserves the server UI/watch session and
-     * causes capabilities to be queried again without a private wire command.
+     * restores media without a private wire command. Stock renderers can keep
+     * their cached codec capabilities: callers requiring a changed codec list
+     * must use a fresh session instead of relying on this socket reconnect.
      */
     public boolean requestTransportRenegotiationReconnect() {
         if (!reconnectState.canReconnect(alive, encryptEvents))

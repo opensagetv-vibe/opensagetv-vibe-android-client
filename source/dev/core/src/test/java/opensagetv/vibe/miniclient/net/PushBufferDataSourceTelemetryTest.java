@@ -30,7 +30,51 @@ public class PushBufferDataSourceTelemetryTest
         assertEquals(expected.length, source.getReadRequestedBytes());
         assertEquals(expected.length, source.getBytesRead());
         assertTrue(source.getReadRateKbps() >= 0);
+        PushBufferDataSource.TelemetrySnapshot snapshot = source.telemetrySnapshot();
+        assertEquals(1, snapshot.pushCalls);
+        assertEquals(expected.length, snapshot.pushedBytes);
+        assertEquals(1, snapshot.readCalls);
+        assertEquals(expected.length, snapshot.bytesRead);
+        assertEquals(0, snapshot.bufferUsedBytes);
+        assertEquals(PushBufferDataSource.PIPE_SIZE, snapshot.bufferFreeBytes);
         source.release();
+    }
+
+    @Test
+    public void snapshotObservesWriteBackpressureWithoutChangingBytes() throws Exception
+    {
+        PushBufferDataSource source = new PushBufferDataSource();
+        source.open("push:test");
+        byte[] fill = new byte[PushBufferDataSource.PIPE_SIZE];
+        fill[fill.length - 1] = 23;
+        source.pushBytes(fill, 0, fill.length);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> blocked = executor.submit(() -> {
+            source.pushBytes(new byte[] {42}, 0, 1);
+            return null;
+        });
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        PushBufferDataSource.TelemetrySnapshot snapshot;
+        do
+        {
+            snapshot = source.telemetrySnapshot();
+            Thread.yield();
+        }
+        while (snapshot.activePushWriteMs == 0 && System.nanoTime() < deadline);
+
+        assertTrue(snapshot.activePushWriteMs > 0);
+        assertEquals(PushBufferDataSource.PIPE_SIZE, snapshot.bufferUsedBytes);
+        byte[] first = new byte[1];
+        assertEquals(1, source.readBlocking(0, first, 0, 1));
+        blocked.get(1, TimeUnit.SECONDS);
+        byte[] remainder = new byte[PushBufferDataSource.PIPE_SIZE];
+        assertEquals(PushBufferDataSource.PIPE_SIZE,
+                source.readBlocking(1, remainder, 0, remainder.length));
+        assertEquals(23, remainder[remainder.length - 2]);
+        assertEquals(42, remainder[remainder.length - 1]);
+        source.release();
+        executor.shutdownNow();
     }
 
     @Test

@@ -7,14 +7,143 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from mcp_caption_test import (
+    caption_clock_diagnostic,
+    caption_progressed,
     caption_time_count,
     resolve_requested_track_raw,
+    resolve_requested_codec_track,
+    mim_direct_owned,
+    require_mim_direct_ownership,
     stable_caption_time_ms,
     subtitle_track_codec,
 )
 
 
 class SageTvCaptionAuthorityTests(unittest.TestCase):
+    def test_late_cue_from_errored_or_stopped_player_is_not_recovery(self):
+        samples = [
+            ("DVB", {"subtitleCueUpdateCount": 4, "currentSubtitleCueCount": 1,
+                     "subtitleOverlayAttached": True}),
+            ("TELETEXT", {"teletextCueUpdateCount": 4, "currentTeletextCueText": "Caption",
+                          "teletextOverlayVisible": True}),
+        ]
+        for codec, state in samples:
+            self.assertTrue(caption_progressed(state, codec, 3))
+            self.assertFalse(caption_progressed({**state, "health_errorState": True}, codec, 3))
+            self.assertFalse(caption_progressed({**state, "health_isPlaying": False}, codec, 3))
+    def test_owned_session_rechecks_negotiated_mode_after_controls(self):
+        source = (ROOT / "scripts/mcp_session_test.py").read_text(encoding="utf-8")
+        self.assertIn("from mcp_caption_test import require_mim_direct_ownership", source)
+        self.assertIn('require_mim_direct_ownership(client, args.mim_direct_mode, "after " + label)', source)
+        self.assertIn('require_mim_direct_ownership(client, args.mim_direct_mode, "settled after session controls")', source)
+
+    def test_sage_lan_http_optin_is_shared_not_a_device_profile(self):
+        import xml.etree.ElementTree as ET
+        manifest = ET.parse(ROOT / "source/dev/android-shared/src/main/AndroidManifest.xml")
+        self.assertEqual("true", manifest.getroot().find("application").get(
+            "{http://schemas.android.com/apk/res/android}usesCleartextTraffic"))
+
+    def test_caption_gate_rejects_legacy_fallback_as_direct_ownership(self):
+        state = {"mimDirectNegotiatedMode": "transcode", "mimDirectSessionState": "active_transcode",
+                 "playbackSource": "MIM_DIRECT", "health_dataSourceClass": "Media3MimDirectHttpDataSource"}
+        self.assertTrue(mim_direct_owned(state, "transcode"))
+        state["mimDirectSessionState"] = "active_transcode_startup_seek_suppressed"
+        self.assertTrue(mim_direct_owned(state, "transcode"))
+        state["playbackSource"] = "PUSH"
+        self.assertFalse(mim_direct_owned(state, "transcode"))
+        state["playbackSource"] = "MIM_DIRECT"
+        state["health_dataSourceClass"] = "Media3PushDataSource"
+        self.assertFalse(mim_direct_owned(state, "transcode"))
+
+    def test_live_owned_gate_accepts_real_legacy_http_not_stock_or_unknown_source(self):
+        from unittest.mock import patch
+        from mcp_live_tv_test import require_mim_direct_ownership as require_live_owned
+        state = {"mimDirectNegotiatedMode": "copy", "mimDirectSessionState": "active_copy",
+                 "playbackSource": "MIM_DIRECT", "health_dataSourceClass": "Exo2MimDirectHttpDataSource"}
+        with patch("mcp_live_tv_test.call_dict", return_value=state):
+            self.assertEqual(state, require_live_owned(object(), "copy", "legacy"))
+        state["health_dataSourceClass"] = "Exo2PullDataSource"
+        with patch("mcp_live_tv_test.call_dict", return_value=state):
+            with self.assertRaises(RuntimeError):
+                require_live_owned(object(), "copy", "not-owned")
+
+    def test_session_owned_gate_accepts_both_existing_http_observer_classes(self):
+        source = (ROOT / "scripts/mcp_session_test.py").read_text()
+        self.assertIn('data_source.endswith(("Media3MimDirectHttpDataSource",', source)
+        self.assertIn('"Exo2MimDirectHttpDataSource"))', source)
+
+    def test_settled_direct_gate_rechecks_state_after_controls(self):
+        from unittest.mock import patch
+        with patch("mcp_caption_test.call_dict", return_value={"playbackSource": "PUSH"}) as snapshot:
+            with self.assertRaisesRegex(RuntimeError, "settled after controls"):
+                require_mim_direct_ownership(object(), "transcode", "settled after controls")
+            snapshot.assert_called_once()
+
+    def test_caption_pause_observes_completion_without_replaying_key(self):
+        script = (ROOT / "scripts/mcp_caption_test.py").read_text(encoding="utf-8")
+        block = script.split("if args.pause_resume:", 1)[1].split("pause_wire =", 1)[0]
+        self.assertIn('"requested PAUSE to reach the current player", args.cue_timeout_s', block)
+        self.assertEqual(1, block.count('"firetv_key", {"key": "PAUSE"}'))
+        self.assertIn("<= 100", block)
+
+    def test_caption_exact_watch_waits_for_restored_stv_playback_to_stop(self):
+        script = (ROOT / "scripts/mcp_caption_test.py").read_text(encoding="utf-8")
+        setup = script.split("wait_automation_ready(client)", 1)[1]
+        self.assertLess(setup.index("clear_restored_playback(client)"),
+                        setup.index('"dev_play_server_path"'))
+        self.assertLess(setup.index("clear_restored_playback(client)"),
+                        setup.index('"dev_play_media_file_id"'))
+
+    def test_caption_codec_oracle_uses_discovered_ids_not_row_zero(self):
+        state = {"subtitleTracks": "0:CEA608:en::1:true|1:CEA708:en::1:true|2:DVB:en::-1:true|21504:TELETEXT:eng::-1:true"}
+        self.assertEqual(2, resolve_requested_codec_track(state, "dvb"))
+        state["selectedSubtitleTrackRaw"] = None
+        self.assertEqual(2, resolve_requested_codec_track(state, "dvb"))
+        self.assertEqual(21504, resolve_requested_codec_track(state, "teletext"))
+        self.assertIsNone(resolve_requested_codec_track(state, "SRT"))
+
+    def test_caption_codec_oracle_keeps_selected_language_service(self):
+        state = {"subtitleTracks": "2:DVB:fr::-1:true|7:DVB:en::-1:true",
+                 "selectedSubtitleTrackRaw": 7}
+        self.assertEqual(7, resolve_requested_codec_track(state, "DVB"))
+
+    def test_caption_clock_is_separate_from_timeline_poll_and_session_scoped(self):
+        for backend in ("media3/Media3MediaPlayerImpl.java", "exoplayer2/Exo2MediaPlayerImpl.java"):
+            source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video" / backend).read_text(encoding="utf-8")
+            ticker = source.split("private void startCaptionClockUpdates", 1)[1].split("private void cancelProgressUpdates", 1)[0]
+            self.assertIn("captionClockRunnable != this", ticker)
+            self.assertIn("!isCurrentPlaybackSession(session)", ticker)
+            self.assertIn("player != expectedPlayer", ticker)
+            self.assertIn("CaptionClockCadence.delayMs", ticker)
+            self.assertIn("expectedPlayer.isPlaying()", ticker)
+            self.assertIn("progressHandler.removeCallbacks(captionClockRunnable)", source)
+            # This timer must not change server timeline, recovery policy, or
+            # audio clock/output settings just to pace caption delivery.
+            ticker = ticker.split("captionClockRunnable = new Runnable()", 1)[1].split("progressHandler.post(captionClockRunnable)", 1)[0]
+            for unrelated in ("setPlaybackPosition", "guardGrowingPullPosition", "setPlaybackParameters", "setAudioOffset"):
+                self.assertNotIn(unrelated, ticker)
+
+    def test_caption_gate_can_isolate_ui_renderer_without_changing_default(self):
+        script = (ROOT / "scripts/mcp_caption_test.py").read_text(encoding="utf-8")
+        self.assertIn('"--renderer", choices=("keep", "opengl", "gdx"), default="keep"', script)
+        self.assertIn('"renderer": "" if args.renderer == "keep" else args.renderer', script)
+        self.assertIn('"save": False', script)
+        self.assertIn('"--pause-resume", action="store_true"', script)
+        self.assertIn('"health_playerPositionMs" in paused and "health_playerPositionMs" in held', script)
+        self.assertIn('> int(held["health_playerPositionMs"])', script)
+        self.assertIn('"--pre-seek-hold-s", type=float, default=0.0', script)
+        self.assertIn('window = min(30.0, args.pre_seek_hold_s)', script)
+
+    def test_caption_clock_diagnostic_is_bounded_and_does_not_expose_private_state(self):
+        import json
+        result = json.loads(caption_clock_diagnostic({
+            "health_playerPositionMs": 1234, "fixedCaptionLastPollClockMs": 1200,
+            "password": "private", "sessionToken": "private"}))
+        self.assertEqual(1234, result["health_playerPositionMs"])
+        self.assertEqual(1200, result["fixedCaptionLastPollClockMs"])
+        self.assertNotIn("password", result)
+        self.assertNotIn("sessionToken", result)
+
     def test_caption_gate_resolves_teletext_row_to_raw_pid_track_id(self):
         state = {
             "subtitleTracks": (
@@ -71,6 +200,24 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             self.assertIn("isForwardingCurrentStream", player)
             self.assertIn("scheduleLegacyCaptionDrain(currentPositionMs * 1000L)", player)
             self.assertIn("getBackgroundService().execute", player)
+            self.assertIn("|| isFixedCaptionForwardingForDebug()", player)
+            self.assertIn("mimDirectController().adjustPosition(", player)
+
+        fixed = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/FixedCaptionSideChannelClient.java").read_text(
+            encoding="utf-8"
+        )
+        clock = fixed.split("public void updatePlaybackClock", 1)[1].split(
+            "public void setPaused", 1
+        )[0]
+        self.assertNotIn("drainTo(", clock)
+        self.assertIn("NETWORK_POLL_INTERVAL_MS = 250L", fixed)
+        self.assertIn("CaptionClockCadence.ACTIVE_DELAY_MS", fixed)
+        self.assertIn("if (now < nextPollMs)", fixed)
+        self.assertIn("generation != expectedGeneration || bridge != activeBridge", fixed)
+        self.assertIn("previousPresentation.shutdown()", fixed)
+        network_tick = fixed.split("private void tick(", 1)[1].split("private void releaseActiveSession", 1)[0]
+        self.assertNotIn("drainTo(", network_tick)
+        self.assertIn('"vibe-fixed-caption-clock"', fixed)
 
         debug_state = (
             ROOT
@@ -393,6 +540,12 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("DPAD RIGHT is SageTV's skip command", script)
         self.assertIn("test-only caption/timeline evidence remains visible", script)
         self.assertIn('"--legacy-extender-callback"', script)
+        self.assertIn('"--stv-state-hold-s"', script)
+        self.assertIn('"--unified-graphics"', script)
+        self.assertIn('"--fixed-caption-side-channel"', script)
+        self.assertIn('"fixed_caption_side_channel_enabled"', script)
+        self.assertIn("wire delivery alone does not prove rendered text", script)
+        self.assertIn("rendered text requires separate screenshot review", script)
         self.assertIn('"--expect-no-legacy-callback"', script)
         self.assertIn('choices=("exoplayer", "media3", "ijkplayer", "gsyplayer")', script)
         self.assertIn('"--gsy-engine"', script)

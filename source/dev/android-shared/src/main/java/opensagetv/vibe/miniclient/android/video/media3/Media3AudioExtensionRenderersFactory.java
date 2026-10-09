@@ -2,16 +2,20 @@ package opensagetv.vibe.miniclient.android.video.media3;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.Renderer;
+import androidx.media3.exoplayer.text.TextOutput;
+import androidx.media3.exoplayer.text.TextRenderer;
 import androidx.media3.exoplayer.audio.AudioCapabilities;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.video.VideoRendererEventListener;
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
 
 import java.util.ArrayList;
 
@@ -28,18 +32,43 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
 {
     private final boolean allowEncodedAudioPassthrough;
     private final Media3PcmAudioProcessor pcmAudioProcessor;
+    private final boolean nativeDvd;
+    private final boolean dvdDecoderRecovery;
 
     Media3AudioExtensionRenderersFactory(Context context,
                                          boolean allowEncodedAudioPassthrough,
                                          int audioOffsetMs)
     {
+        this(context, allowEncodedAudioPassthrough, audioOffsetMs, false);
+    }
+
+    Media3AudioExtensionRenderersFactory(Context context,
+                                         boolean allowEncodedAudioPassthrough,
+                                         int audioOffsetMs, boolean nativeDvd)
+    {
+        this(context, allowEncodedAudioPassthrough, audioOffsetMs, nativeDvd, true);
+    }
+
+    Media3AudioExtensionRenderersFactory(Context context,
+                                         boolean allowEncodedAudioPassthrough,
+                                         int audioOffsetMs, boolean nativeDvd,
+                                         boolean dvdDecoderRecovery)
+    {
         super(context);
         this.allowEncodedAudioPassthrough = allowEncodedAudioPassthrough;
+        this.nativeDvd = nativeDvd;
+        this.dvdDecoderRecovery = dvdDecoderRecovery;
         pcmAudioProcessor = allowEncodedAudioPassthrough
                 ? null : new Media3PcmAudioProcessor(audioOffsetMs);
     }
 
     Media3PcmAudioProcessor getPcmAudioProcessor() { return pcmAudioProcessor; }
+
+    @Override protected void buildTextRenderers(Context context, TextOutput output,
+            Looper looper, @ExtensionRendererMode int mode, ArrayList<Renderer> out)
+    {
+        out.add(new TextRenderer(output, looper, new Media3Cea708DecoderFactory()));
+    }
 
     @Override
     protected AudioSink buildAudioSink(Context context,
@@ -82,14 +111,24 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
             long allowedVideoJoiningTimeMs,
             ArrayList<Renderer> out)
     {
-        super.buildVideoRenderers(
-                context,
-                EXTENSION_RENDERER_MODE_OFF,
-                mediaCodecSelector,
-                enableDecoderFallback,
-                eventHandler,
-                eventListener,
-                allowedVideoJoiningTimeMs,
-                out);
+        if (nativeDvd && dvdDecoderRecovery)
+        {
+            out.add(new NativeDvdVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
+                    allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
+            return;
+        }
+        super.buildVideoRenderers(context, EXTENSION_RENDERER_MODE_OFF, mediaCodecSelector,
+                enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
+        // Keep the established platform-only video policy and replace only its
+        // platform renderer. The audio extension/fallback path stays untouched.
+        for (int i = 0; i < out.size(); i++)
+        {
+            if (out.get(i).getClass() == MediaCodecVideoRenderer.class)
+            {
+                out.set(i, new SurfaceVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
+                        allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
+                break;
+            }
+        }
     }
 }

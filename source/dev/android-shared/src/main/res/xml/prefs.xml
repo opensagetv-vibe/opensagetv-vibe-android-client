@@ -141,6 +141,11 @@
             android:summary="@string/background_session_settings_summary"
             android:title="@string/background_session_settings_title" />
 
+        <Preference
+            android:key="diagnostics_settings"
+            android:summary="Automatic Push-stall capture, logging, diagnostic export, and SMB destination"
+            android:title="Diagnostics Settings" />
+
         <CheckBoxPreference
             android:defaultValue="true"
             android:key="disable_sleep"
@@ -180,50 +185,6 @@
             android:title="@string/title_list_disk_cache_preference"/>
 
     </PreferenceCategory>
-
-    <PreferenceCategory android:title="@string/debug_preferences">
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="debug_log_unmapped_keypresses"
-            android:summary="@string/summary_debug_log_unmapped_keypresses_preference"
-            android:title="@string/title_debug_log_unmapped_keypresses_preference"/>
-
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="debug_ar"
-            android:summary="@string/summary_debug_ar_preference"
-            android:title="@string/title_debug_ar_preference"/>
-
-        <!--
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="use_httpls"
-            android:summary="@string/summary_use_httpls_preference"
-            android:title="@string/title_use_httpls_preference" />-->
-
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="@string/logging_preferences">
-        <CheckBoxPreference
-            android:defaultValue="false"
-            android:key="use_log_to_sdcard"
-            android:summary="@string/summary_use_log_to_sdcard_acceleration_preference"
-            android:title="@string/title_use_log_to_sdcard_preference"/>
-
-        <Preference
-            android:key="share_log"
-            android:summary="Share the newest app-private log using another application"
-            android:title="Share Log"/>
-
-        <ListPreference
-            android:defaultValue="debug"
-            android:dialogTitle="@string/dialog_title_list_loglevels_preference"
-            android:entries="@array/entries_list_loglevels_preference"
-            android:entryValues="@array/entryvalues_list_loglevels_preference"
-            android:key="log_level"
-            android:summary="@string/summary_list_loglevels_preference"
-            android:title="@string/title_list_loglevels_preference"/>
-</PreferenceCategory>
 
     <PreferenceCategory android:title="About">
 

@@ -62,7 +62,8 @@ def require_mim_direct_ownership(client: MCPProcess, mode: str, label: str) -> d
         failures.append("session=" + str(state.get("mimDirectSessionState", "")))
     if str(state.get("playbackSource", "")) != "MIM_DIRECT":
         failures.append("source=" + str(state.get("playbackSource", "")))
-    if not data_source.endswith("Media3MimDirectHttpDataSource"):
+    if not data_source.endswith(("Media3MimDirectHttpDataSource",
+                                 "Exo2MimDirectHttpDataSource")):
         failures.append("dataSource=" + data_source)
     require(
         not failures,

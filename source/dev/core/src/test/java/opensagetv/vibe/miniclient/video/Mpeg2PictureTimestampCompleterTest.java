@@ -163,6 +163,41 @@ public class Mpeg2PictureTimestampCompleterTest
         assertEquals(0L, interlaced.getFieldPictureCount());
     }
 
+    @Test
+    public void confirmsOnlySustainedNtscSoftTelecineAndBuildsFilmClock()
+    {
+        Mpeg2PictureTimestampCompleter completer = new Mpeg2PictureTimestampCompleter();
+        feed(completer, concat(sequenceHeader(4), sequenceExtension(false), gopHeader(),
+                pictureWithCodingExtension(0, 1, true, true)), 1_000_000L);
+        for (int reference = 1; reference < 8; reference++)
+        {
+            feed(completer, pictureWithCodingExtension(reference, 2,
+                    (reference & 1) == 0, true),
+                    1_000_000L + Math.round(reference * 1_000_000.0 / 30.0));
+        }
+        assertTrue(completer.isSoftTelecineConfirmed());
+
+        Mpeg2PictureTimestampCompleter.PictureTiming picture = observe(completer,
+                pictureWithCodingExtension(8, 2, true, true), 1_266_667L);
+        assertEquals(1_333_667L,
+                completer.completeSoftTelecineTimestamp(picture, 1_266_667L));
+        assertEquals(Mpeg2PictureTimestampCompleter.DECISION_FILM_NORMALIZED,
+                completer.getLastTimestampDecision());
+    }
+
+    @Test
+    public void doesNotConfirmNativeInterlacedPicturesAsSoftTelecine()
+    {
+        Mpeg2PictureTimestampCompleter completer = new Mpeg2PictureTimestampCompleter();
+        feed(completer, concat(sequenceHeader(4), sequenceExtension(false), gopHeader(),
+                pictureWithCodingExtension(0, 1, true, true)), 1_000_000L);
+        for (int reference = 1; reference < 8; reference++)
+            feed(completer, pictureWithCodingExtension(reference, 2,
+                    (reference & 1) == 0, reference != 4),
+                    1_000_000L + reference * 33_367L);
+        assertFalse(completer.isSoftTelecineConfirmed());
+    }
+
     private static long feed(Mpeg2PictureTimestampCompleter completer, byte[] sample, long timeUs)
     {
         long start = completer.getBytesConsumed();

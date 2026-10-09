@@ -1,5 +1,12 @@
 # OpenSageTV Vibe Android Client
 
+Current GitHub sideload release: **v0.5.101**. Use the APK on the
+[release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.101).
+It keeps the existing Dev sideload package/signing identity; an update install
+preserves settings. This is not a production Appstore/Play release. Stock
+SageTV remains supported, optional MIM enhancements are capability-negotiated,
+and hardware limitations are listed in the release notes and device matrix.
+
 This repository contains the actively maintained Android/Fire TV SageTV
 MiniClient, its Docker build workflow, host tests, and guarded MCP/ADB tooling.
 It is self-contained and can be developed independently from Codex or any
@@ -23,10 +30,30 @@ resources.
   a media-playback failure.
 - Release history: `CHANGELOG.md`.
 - Active work: `TASKS.md` (the only task backlog in this repository).
+
+Configured SageTV/MIM HTTP endpoints are supported on current Android versions
+through an explicit shared-manifest cleartext opt-in. Use plain HTTP only on
+a trusted network; HTTPS certificate verification remains enabled. Optional
+MIM Direct playback still requires its setting and negotiated server support.
+MPEG-2-less devices additionally require the FFmpeg plugin's bounded stock-API
+watch-recovery capability and a MIM runtime advertising owned Direct support;
+otherwise the client keeps ordinary Fixed playback and the saved preference.
+GSY negotiates its selected delegate's capabilities, not assumed IJK support.
+Core MCP is commissioning tooling, not a normal playback dependency.
+The Tab S6 Lite/API33 qualification is complete with explicit limitations:
+its original UK IJK hardware picture and CPU175500ms CEA stress readability
+remain NOT_WORKING; native MPEG-2 DVD is safely unsupported. Selected owned
+Transcode recovery/controls and slower captions pass, including both GSY
+delegates and fresh232 VAAPI decode/encode. Physical speaker A/V sync is
+unmeasured; see docs/PLAYER_SERVER_COMPATIBILITY.md for per-row provenance.
 - Current takeover state: `HANDOFF.md`.
 - Contributor/AI rules: `AGENTS.md`.
 - Common takeover/update commands: `WORKFLOW.md`.
 - Legacy ExoPlayer remains the default player until physical-device gates pass.
+- Android boxes whose firmware omits TV/Leanback features open the phone-style
+  server browser. Enable **Use TV server browser** in Settings for the
+  remote-oriented startup layout; it applies when returning from Settings.
+  This explicit user choice does not clear saved servers or player settings.
 - Production package identities under `jvl.sage.miniclient` are protected.
 - The selected application IDs are `opensagetv.vibe.miniclient` for production
   and `opensagetv.vibe.miniclient.debug` for development; both display as
@@ -316,6 +343,10 @@ Android debug track selector and fails unless the SageTV STV's caption state
 selects and renders a real cue. Use `--authority debug` only for isolated
 decoder diagnostics.
 
+One-finger touch hold on a tablet opens this client navigation panel when
+its touch mapping is unset. A saved mapping (including SageTV Options or
+None) remains unchanged; use Touch Mappings to select Show OSD Navigation.
+
 The playback long-press row keeps Aspect ratio and places **Video**,
 **Audio**, and **Subtitles/CC** beside it. Video settings directly exposes the
 active Player, Decoding mode, Codec Queueing, Source buffering, Display, DVD
@@ -342,8 +373,9 @@ The values are shown once above the bar. Duplicate text rows and the unhelpful e
 link-capacity bar are omitted. Sampling starts with the visible overlay and is
 cancelled when it is hidden or the playback Activity leaves the foreground.
 
-For a support report, configure **Settings > SMB Direct Settings > Diagnostic
-export**, test the independent destination, then long-press Select/OK and use
+For a support report, open **Settings > Diagnostics Settings**, configure and
+test the independent SMB destination when needed, then use **Export diagnostic
+bundle** or long-press Select/OK and use
 the bug icon beside the triangular Video Info icon. **On request** uploads one
 redacted ZIP; **Always** atomically refreshes one bounded session log and
 retries protected pending data after a restart. Settings reports the exact
@@ -391,9 +423,10 @@ credentials.
 During playback, long-press the remote, select the speaker icon, and choose
 **A/V sync test**. The client loops a redistributable 12-second 1280x720 H.264
 pattern through a real Media3 video/audio pipeline. The ball reaches the line
-once per second while a one-frame border flash and a 25 ms, 48 kHz stereo AC-3
-click use the same authored clock. At correct synchronization, all three occur
-together.
+once every two seconds while a 25 ms, 48 kHz stereo AC-3 click uses the same authored
+clock. At correct synchronization, impact and click occur together. The lower-
+luminance outlined ball moves every output frame and holds at impact for 200 ms,
+giving a 30 fps validation camera stable impact frames without choppy motion.
 
 Left/Right changes the test by `25 ms`, Center resets to zero, and Back applies
 the value to the active playback session and returns to Audio settings. The
@@ -411,8 +444,18 @@ dev.cmd av-sync-fixture
 
 The generator validates H.264, 59.94 fps, 1280x720 video and 48 kHz stereo
 AC-3 audio before the asset is packaged into the APK. This calibration isolates
-the Android display/audio/HDMI/receiver route; the longer server fixtures remain
-the separate transport, seek, live-transition, and lifecycle tests.
+the Android display/audio/HDMI/receiver route. Generate the matching 1080i
+MPEG-2/AC-3 server fixture for stock Push testing with:
+
+```powershell
+dev.cmd server-av-sync-fixture `
+  --duration 120 `
+  --output artifacts/temp/OpenSageTV-Vibe-PBS-1080i-MPEG2-AC3-AVSync.ts
+```
+
+The physical C920 capture and automated offset-measurement workflow is
+documented in `docs/AV_SYNC_PHYSICAL_GATE.md`. The server fixture remains a
+separate transport, seek, live-transition, and lifecycle test.
 
 Generate the short Kodi-derived codec/profile/bitstream matrix with the same
 unified container:
@@ -428,6 +471,38 @@ client completion gate because neither commissioned Fire TV advertises VC-1
 hardware support.
 
 ### Deterministic authored DVD fixture
+
+DVD Playback key mappings include **DVD arrow navigation** (default on).
+Main Settings' key-mapping screen also exposes **DVD FF/RW tap and hold**
+(default on). Existing disabled choices and custom mappings are preserved;
+disable the corresponding preset to use those saved mappings instead.
+During a title, Left/Right enters stock STV Time Scroll and adjusts the selected
+position. Center accepts; Back or Play cancels without seeking. Dedicated FF/RW
+keys cancel an open cursor first. Tap FF/RW to change one scan rate and leave
+it active. Hold to increase the rate about once per second, capped at 256x;
+release after a hold to resume Play. Opposite taps reduce the current scan
+speed; its logical zero/off state resumes normal 1x, not a wire rate of zero.
+Play cancels scanning. Hold Up/Down for one
+second to start repeating next/previous chapter changes; short taps do not
+change chapters. Authored DVD-menu arrows still navigate immediately. Turn the
+preset off to retain saved arrow mappings; existing preference keys are preserved.
+The STV displays the selected timeline; the client position display remains
+available only during chapter navigation, not FF/RW. Above 16x the stock STV
+may retain its independent 16x label even though Core acknowledges a higher
+rate; do not treat that label as measured scan throughput. Actual scan
+throughput depends on the disc/server; a rate label is not a measurement.
+
+The long-press icon menu prefers the same column on Up/Down and the same row
+on Left/Right, skipping empty cells. If no next icon exists on that line,
+focus moves to the closest icon in the requested direction in any row/column.
+At the outer edge, focus stays put. Last (Previous Channel) sits between
+Page Up and Page Down and sends SageTV's existing Previous Channel command.
+
+DVD shortcuts are restricted to the full-screen playback context, using the
+STV hint and server-requested video bounds. Windowed previews and explicit
+popups retain ordinary menu navigation. Final SageMC inline-menu behavior is
+still being physically verified under DVD-002; a missing popup hint is not
+proof that no OSD control panel is visible.
 
 Create the complete DVD-Video fixture with the unified build environment:
 

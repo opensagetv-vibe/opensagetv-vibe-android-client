@@ -8,6 +8,28 @@ TV = DEV / "android-tv/src"
 
 
 class MCPPlaybackAutomationTests(unittest.TestCase):
+    def test_live_audio_gate_changes_active_player_without_opening_calibration(self):
+        script = (ROOT / "scripts/mcp_set_active_audio.py").read_text(encoding="utf-8")
+        shell = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        self.assertIn("mcp-set-active-audio)", shell)
+        self.assertIn("mcp_set_active_audio.py", shell)
+        self.assertIn('call_dict(client, "dev_set_active_audio"', script)
+        self.assertIn('call_dict(client, "dev_player_state"', script)
+        self.assertIn('state.get("health_playerReady")', script)
+        self.assertNotIn("dev_show_av_sync_test", script)
+
+    def test_audio_track_gate_uses_exact_path_and_active_player_api(self):
+        script = (ROOT / "scripts/mcp_audio_track_test.py").read_text(encoding="utf-8")
+        shell = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        self.assertIn('call_dict(client, "dev_play_server_path"', script)
+        self.assertIn('call_dict(client, "dev_set_audio_track"', script)
+        self.assertIn('"passthrough_offset_enabled"', script)
+        self.assertIn("mcp-audio-track-test)", shell)
+        self.assertIn("def dev_set_audio_track(index: int)", server)
+        self.assertIn('"audio_track_control".equals(op)', receiver)
+
     def test_debug_control_receiver_exists_only_in_debug_source_set(self):
         debug_manifest = TV / "debug/AndroidManifest.xml"
         debug_receiver = TV / "debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java"
@@ -350,6 +372,9 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         adb = (ROOT / "mcp/src/sagetv_dev_mcp/adb.py").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
         script = (ROOT / "scripts/mcp_session_test.py").read_text(encoding="utf-8")
+        # Exact-path control has a cold-index lookup and a separate bounded
+        # stock-Core Watch call before playback verification begins.
+        self.assertEqual(script.count("timeout=args.playback_timeout_s + 320.0"), 2)
         lifecycle = (ROOT / "scripts/mcp_lifecycle_test.py").read_text(encoding="utf-8")
         devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
         roots = (ROOT / "scripts/mcp_ui_roots.py").read_text(encoding="utf-8")
@@ -408,6 +433,8 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('def dev_resolve_video_names(', server)
         self.assertIn('def _sage_control_session(', server)
         self.assertIn('_sage_control_sessions[key] = resolved', server)
+        self.assertIn('core_mcp_required(key[0])', server)
+        self.assertIn('isinstance(cached[0], CoreMcpApiClient)', server)
         keymap = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/keymaps/KeyMapProcessor.java").read_text(encoding="utf-8")
         self.assertIn('recordInputEvent(keyCode, event);', keymap)
         self.assertIn('recordMappedCommand(command, longPress);', keymap)
@@ -552,6 +579,9 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('smb_diagnostics_mode=smb_diagnostics_mode', server)
         self.assertIn('direct_reason == "video_not_found"', script)
         self.assertIn('refusing to hide it with UI Search', script)
+        self.assertIn('required_core_mcp = core_mcp_required(args.server)', script)
+        self.assertIn('Required Core MCP exact-path control failed; refusing Sagex/search fallback', script)
+        self.assertIn('Required Core MCP direct control failed; refusing UI Search fallback', script)
         self.assertIn('call_dict(client, "dev_open_search"', script)
         self.assertIn('"require_ime": False', script)
         self.assertIn('"suppress_ime": True', script)
@@ -575,6 +605,25 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('dev_play_server_path', script)
         self.assertNotIn('SagexApiClient', script)
         self.assertIn('mcp-playback-test)', devsh)
+
+    def test_automated_mcp_tests_scope_and_restore_android_keep_awake(self):
+        devsh = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        helper = (ROOT / "scripts/android_test_keep_awake.py").read_text(encoding="utf-8")
+        docs = (ROOT / "docs/TEST_ENVIRONMENT.md").read_text(encoding="utf-8")
+
+        self.assertIn('android_test_keep_awake.py" begin --scope automated', devsh)
+        self.assertIn('android_test_keep_awake.py" end --scope automated', devsh)
+        self.assertIn("trap cleanup_automated_mcp_test EXIT", devsh)
+        self.assertIn("trap 'exit 130' INT", devsh)
+        self.assertIn("trap 'exit 143' TERM", devsh)
+        self.assertIn("test-awake)", devsh)
+        self.assertIn('("global", "stay_on_while_plugged_in", "7")', helper)
+        self.assertIn('("system", "screen_off_timeout", "2147483647")', helper)
+        self.assertIn("Persist the original values before making either device mutation", helper)
+        self.assertIn("recoveredInterruptedSession", helper)
+        self.assertIn('active_scope == "manual" and scope == "automated"', helper)
+        self.assertIn("dev.cmd test-awake begin", docs)
+        self.assertIn("dev.cmd test-awake end", docs)
 
     def test_session_start_verifies_real_output_when_probe_supported(self):
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
@@ -804,22 +853,47 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('"--seek-settle-ms"', session)
         self.assertIn('5000 if args.streaming == "fixed" else 300', session)
         self.assertIn('"settle_ms": seek_settle_ms', session)
+        self.assertIn('if int(result.get("afterState", -1)) == 5:', session)
+        self.assertIn('reached end-of-media during the navigation gate', session)
+        self.assertIn('"--fixed-caption-side-channel"', session)
+        self.assertIn('elif args.fixed_caption_side_channel == "off":', session)
+        self.assertIn('elif args.require_captions and args.mim_direct_mode != "off":', session)
+        self.assertIn('"fixed_caption_side_channel_enabled": caption_side_channel_override', session)
+        self.assertIn('mcp-caption-test --legacy-extender-callback', session)
+        captions = (root / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/FixedCaptionSideChannelClient.java").read_text(encoding="utf-8")
+        self.assertIn("receivedPacketCount += batch.packets.length", captions)
+        self.assertIn("lastPollClockMs = clock", captions)
+        self.assertIn("fixedCaptionReceivedPackets", state)
+        self.assertIn("fixedCaptionLastPacketPtsMs", state)
+        self.assertIn("fixedCaptionLastPollClockMs", state)
 
 
     def test_generic_debug_seek_time_uses_av_output_counters_for_recovery(self):
         receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
         player_commands = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugPlayerCommands.java").read_text(encoding="utf-8")
+        session_commands = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugSessionCommands.java").read_text(encoding="utf-8")
+        adb = (ROOT / "mcp/src/sagetv_dev_mcp/adb.py").read_text(encoding="utf-8")
         server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
         self.assertIn('"seek_time".equals(op)', receiver)
         self.assertIn('target_ms is required', player_commands)
         self.assertIn('player.seek(targetMs)', player_commands)
         self.assertIn('def dev_seek_time(target_ms: int', server)
         self.assertIn('def dev_server_seek_time(target_ms: int', server)
+        self.assertIn('max_attempts: int = 1', server)
+        self.assertIn('max_attempts = max(1, min(int(max_attempts), 3))', server)
         self.assertIn('getattr(sage_control, "transport", "stock_sagex_videoframe_seek")', server)
         self.assertIn('sage_control.seek(sage_context, value_ms)', server)
+        self.assertIn('attempt_deadline = min(deadline', server)
+        self.assertIn('if anchor_ms < 0:', server)
+        self.assertIn('continue', server)
         self.assertNotIn('if use_vibe_event:', server)
         self.assertIn('reached_ms = _snapshot_media_time(last)', server)
         self.assertIn('def dev_show_active_player_adjustments()', server)
+        self.assertIn('def dev_show_av_sync_test()', server)
+        self.assertIn('adb.show_av_sync_test()', server)
+        self.assertIn('def show_av_sync_test(self)', adb)
+        self.assertIn('"av_sync_test".equals(op)', receiver)
+        self.assertIn('static String showAvSyncTest(', session_commands)
         self.assertIn('def dev_refresh_video_output()', server)
         self.assertIn('adb.refresh_video_output()', server)
         self.assertIn('adb.seek_time(target_ms)', server)
@@ -830,6 +904,35 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('video_audio_output_counters_advancing_position_diagnostic_only', server)
         self.assertNotIn('position_snapped_away_from_target', server)
         self.assertNotIn('ready_but_outside_target_tolerance', server)
+
+    def test_av_sync_screen_preflight_uses_mcp_control_without_menu_coordinates(self):
+        script = (ROOT / "scripts/mcp_av_sync_screen.py").read_text(encoding="utf-8")
+        dev = (ROOT / "dev.sh").read_text(encoding="utf-8")
+        self.assertIn('call_dict(client, "dev_show_av_sync_test"', script)
+        self.assertIn('call_dict(client, "dev_player_state"', script)
+        self.assertIn("requires active playback", script)
+        self.assertIn('"dev_set_active_audio"', script)
+        self.assertIn('if not audio.get("accepted"):', script)
+        self.assertIn('state.get("health_playerReady")', script)
+        self.assertIn('if not args.stress_immediate_open:', script)
+        self.assertIn('choices=("decoded", "passthrough")', script)
+        self.assertIn("--offset-ms must be between -4000 and 4000", script)
+        self.assertIn("mcp-av-sync-screen)", dev)
+        self.assertIn("mcp_av_sync_screen.py", dev)
+
+    def test_hardware_codec_matrix_uses_exact_path_before_title_lookup(self):
+        matrix = (ROOT / "scripts/mcp_hardware_codec_matrix.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'exact_first = args.media_selection_mode != "stock_web"', matrix
+        )
+        self.assertIn(
+            'args.media_selection_mode == "stock_web"', matrix
+        )
+        self.assertIn('"dev_play_server_path"', matrix)
+        self.assertIn('"focusedRun": True', matrix)
+        self.assertIn('if args.start_at or args.max_cases is not None:', matrix)
 
 
 

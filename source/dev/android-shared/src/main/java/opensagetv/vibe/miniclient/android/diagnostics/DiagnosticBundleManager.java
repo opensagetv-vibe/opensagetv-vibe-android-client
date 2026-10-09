@@ -61,6 +61,7 @@ public final class DiagnosticBundleManager
             entries.add(new Entry("active-player.txt", utf8(DiagnosticRedactor.redact(activePlayerText) + "\n")));
         addLogs(app, entries);
         addPlaybackTraces(app, entries);
+        addPushStallIncidents(app, entries);
         addCurrentVideoTests(app, entries);
 
         StringBuilder checksums = new StringBuilder();
@@ -115,6 +116,13 @@ public final class DiagnosticBundleManager
         {
             output.write(utf8("\n--- current-video diagnostic test ---\n"));
             String text = new String(readTail(videoTest, MAX_LOG_BYTES), StandardCharsets.UTF_8);
+            output.write(utf8(DiagnosticRedactor.redact(text)));
+        }
+        File[] incidents = pushStallIncidents(context);
+        for (File incident : incidents)
+        {
+            output.write(utf8("\n--- automatic Push-stall incident ---\n"));
+            String text = new String(readTail(incident, MAX_LOG_BYTES), StandardCharsets.UTF_8);
             output.write(utf8(DiagnosticRedactor.redact(text)));
         }
         return output.toByteArray();
@@ -199,6 +207,34 @@ public final class DiagnosticBundleManager
             entries.add(new Entry("current-video-tests/test-" + (index + 1) + ".txt",
                     utf8(DiagnosticRedactor.redact(text))));
         }
+    }
+
+    private static void addPushStallIncidents(Context context, List<Entry> entries)
+            throws IOException
+    {
+        File[] incidents = pushStallIncidents(context);
+        for (int index = 0; index < incidents.length; index++)
+        {
+            String text = new String(readTail(incidents[index], MAX_LOG_BYTES),
+                    StandardCharsets.UTF_8);
+            entries.add(new Entry("push-stall/incident-" + (index + 1) + ".jsonl",
+                    utf8(DiagnosticRedactor.redact(text))));
+        }
+    }
+
+    private static File[] pushStallIncidents(Context context)
+    {
+        File directory = new File(context.getFilesDir(), PushStallDiagnosticRecorder.DIRECTORY);
+        File[] incidents = directory.listFiles((dir, name) ->
+                name.startsWith("push-stall-") && name.endsWith(".jsonl"));
+        if (incidents == null) return new File[0];
+        Arrays.sort(incidents, new Comparator<File>()
+        {
+            @Override public int compare(File left, File right)
+            { return Long.compare(left.lastModified(), right.lastModified()); }
+        });
+        if (incidents.length <= 4) return incidents;
+        return Arrays.copyOfRange(incidents, incidents.length - 4, incidents.length);
     }
 
     private static byte[] readTail(File file, int maximum) throws IOException

@@ -25,6 +25,7 @@ import opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.dvd.DvdDiagnostics;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
+import opensagetv.vibe.miniclient.android.diagnostics.PushStallDiagnosticRecorder;
 import opensagetv.vibe.miniclient.events.VideoInfoRefresh;
 import opensagetv.vibe.miniclient.events.VideoInfoShow;
 import opensagetv.vibe.miniclient.net.HasPushBuffer;
@@ -103,6 +104,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     private final PlaybackSessionController playbackSessions = new PlaybackSessionController();
     private final PostSeekPushRecoveryController postSeekPushRecovery =
             new PostSeekPushRecoveryController();
+    private final PushStallDiagnosticRecorder pushStallDiagnostics;
     private final Handler postSeekPushRecoveryHandler = new Handler(Looper.getMainLooper());
     private volatile boolean postSeekPushRecoveryCheckScheduled;
     private volatile boolean postSeekPushRecoveryInternalFlush;
@@ -243,6 +245,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                             ? new TeletextSubtitleEngine.Service[0] : services.clone();
                     applyTeletextCcMappings();
                     scheduleTeletextClock();
+                    onTeletextSubtitleTracksChanged();
                     log.info("Discovered {} DVB Teletext subtitle service(s)",
                             teletextServices.length);
                 }
@@ -264,6 +267,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     public BaseMediaPlayerImpl(AndroidUIController activity, boolean createPlayerOnUI, boolean waitForPlayer)
     {
         this.context = activity;
+        this.pushStallDiagnostics = new PushStallDiagnosticRecorder(
+                activity.getContext(), this);
         fixedCaptionBridge = new LegacyExtenderCaptionBridge(
                 new LegacyExtenderCaptionBridge.Sink()
                 {
@@ -363,6 +368,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void free()
     {
+        pushStallDiagnostics.resetSession();
         resetPostSeekPushRecovery();
         mimDirectController().release(this);
         mimDirectMediaUrlActive = false;
@@ -387,6 +393,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void load(byte majorHint, byte minorHint, String encodingHint, final String urlString, String hostname, boolean timeshifted, long buffersize)
     {
+        pushStallDiagnostics.resetSession();
         resetPostSeekPushRecovery();
         final PlaybackSessionController.Token loadSession = playbackSessions.beginSession();
         loadTransitionToken = loadSession;
@@ -645,6 +652,14 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected int teletextTrackCount()
     {
         return teletextServices.length;
+    }
+
+    /** Inventory notification only; existing extractor backends keep their own track callbacks. */
+    protected void onTeletextSubtitleTracksChanged()
+    {
+        // IJK has no native subtitle onTracksChanged callback. Its override
+        // retries the configured caption slot without changing transport or
+        // making a diagnostic getter responsible for playback state.
     }
 
     @Override
@@ -1182,6 +1197,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             return false;
         String safeReason = reason == null ? "unknown" : reason;
         PlaybackDebugTrap.record("mim_direct_pull_failed_stock_fixed_reconnect", this);
+        // Negotiated plugin recovery captures latest intent on its worker
+        // before publishing the fresh-Activity event. Do not publish a second
+        // immediate native reconnect with cached unsupported capabilities.
+        if (mimDirectController().requiresPluginWatchRecovery()) return true;
         context.getClient().eventbus().post(
                 new MimDirectFallbackReconnectEvent(safeReason));
         return true;
@@ -1358,6 +1377,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void pause()
     {
+        mimDirectController().recordRecoveryPlaying(this,false);
         beginPlaybackOperation(PlaybackSessionController.Operation.PAUSE);
         state = PAUSE_STATE;
         fixedCaptionController().setPaused(this, true);
@@ -1370,6 +1390,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void play()
     {
+        mimDirectController().recordRecoveryPlaying(this,true);
         beginPlaybackOperation(PlaybackSessionController.Operation.PLAY);
         state = PLAY_STATE;
         fixedCaptionController().setPaused(this, false);
@@ -1384,6 +1405,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void seek(long timeInMS)
     {
+        mimDirectController().recordRecoveryPosition(this,timeInMS,state !=PAUSE_STATE);
         final PlaybackSessionController.Token seekOperation = beginPlaybackOperation(
                 PlaybackSessionController.Operation.SEEK);
         TeletextSubtitleEngine.setPlaybackAnchor(timeInMS);
@@ -1411,7 +1433,23 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (mimDirectController().consumeRedundantStartupSeek(this, timeInMS))
             return true;
         final String replacementUrl = mimDirectController().restart(this, timeInMS);
-        if (replacementUrl == null) return false;
+        if (replacementUrl == null)
+        {
+            if (mimDirectController().owns(this))
+            {
+                // A rejected replacement keeps the preceding Direct producer.
+                // Its local HLS time starts at the preceding source offset,
+                // not at SageTV's requested absolute seek. Letting either Exo
+                // backend fall through to seekToImpl would seek that OLD epoch
+                // and can jump to an unrelated point. Consume this request,
+                // retain the real current clock and report failure; do not
+                // replay a network-ambiguous seek or claim it landed correctly.
+                seekPending = false;
+                message(context.getContext().getString(R.string.msg_mim_direct_seek_retained));
+                return true;
+            }
+            return false; // Ordinary stock transports retain their seek path.
+        }
         if (mimDirectController().lastRestartWasClamped(this))
             PlaybackDebugTrap.record("seek_clamped_live_edge", this);
         final long rebindGeneration = ++mimDirectRebindGeneration;
@@ -1648,6 +1686,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** Backend callback: the current post-FLUSH epoch rendered video. */
     protected final void notifyPostSeekPushFirstFrame()
     {
+        mimDirectController().onRecoveryVideoFrame(this,context.getClient().getCurrentConnection());
         postSeekPushRecovery.onFirstFrame(SystemClock.elapsedRealtime());
         schedulePostSeekPushRecoveryCheck();
     }
@@ -1655,9 +1694,20 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** Backend callback: decoder input entered or left buffering. */
     protected final void notifyPostSeekPushBuffering(boolean buffering)
     {
+        PushBufferDataSource pushSource = dataSource instanceof PushBufferDataSource
+                ? (PushBufferDataSource) dataSource : null;
+        pushStallDiagnostics.onBufferingChanged(buffering, pushSource,
+                isPushStallDiagnosticEligible(), seekPending || postSeekPushRecovery.isActive());
         postSeekPushRecovery.onBufferingChanged(
                 buffering, SystemClock.elapsedRealtime());
         schedulePostSeekPushRecoveryCheck();
+    }
+
+    private boolean isPushStallDiagnosticEligible()
+    {
+        boolean dvdPush = lastUri != null && lastUri.startsWith("push:dvd");
+        return pushMode && !dvdPush && !isMimDirectMediaUrlActive()
+                && player != null && !eos && dataSource instanceof PushBufferDataSource;
     }
 
     private boolean isPostSeekPushRecoveryEligible()
@@ -1725,6 +1775,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
     protected void releasePlayer()
     {
+        pushStallDiagnostics.resetSession();
         resetPostSeekPushRecovery();
         log.debug("Releasing Player");
         endTeletextPresentation();
@@ -1774,7 +1825,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (fixedCaptionAttached && positionMs >= 0L)
         {
             fixedCaptionClockUpdateCount++;
-            fixedCaptionController().updatePlaybackClock(this, positionMs);
+            fixedCaptionController().updatePlaybackClock(this,
+                    mimDirectController().captionClockPosition(this, positionMs));
             if (!fixedCaptionEvidenceRefreshRequested &&
                     fixedCaptionBridge.isForwardingCurrentStream())
             {
@@ -1866,7 +1918,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         return MiniclientApplication.get().getFixedCaptionSideChannel();
     }
 
-    private MimDirectSessionClient mimDirectController()
+    protected final MimDirectSessionClient mimDirectController()
     {
         return MiniclientApplication.get().getMimDirectSession();
     }

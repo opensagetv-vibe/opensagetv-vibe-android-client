@@ -31,6 +31,7 @@ import java.util.Arrays;
 
 import opensagetv.vibe.miniclient.android.video.DvdSubpictureDecoder;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
+import opensagetv.vibe.miniclient.video.Mpeg2SoftTelecineNormalizer;
 
 /** MPEG-2 program-stream extractor specialized for SageTV's non-seekable DVD push stream. */
 @UnstableApi
@@ -121,6 +122,8 @@ final class DvdPsExtractor implements Extractor
         private volatile long mpeg2ProgressiveFrameCount;
         private volatile long mpeg2InterlacedFrameCount;
         private volatile long mpeg2FieldPictureCount;
+        private volatile boolean mpeg2SoftTelecineConfirmed;
+        private volatile long mpeg2SoftTelecinePictureRewriteCount;
         private long presentationShiftUs;
         private long pendingCellAnchorUs = C.TIME_UNSET;
         private boolean pendingCellNormalization;
@@ -128,6 +131,22 @@ final class DvdPsExtractor implements Extractor
         private boolean pendingInputEpochBase;
         private long flushPlaybackAnchorUs = C.TIME_UNSET;
         private final ArrayDeque<PtsBoundary> pendingPtsBoundaries = new ArrayDeque<>();
+        private final ArrayDeque<TrickBoundary> pendingTrickBoundaries = new ArrayDeque<>();
+        private float trickRate = 1.0f;
+        private long trickInputAnchorUs = C.TIME_UNSET;
+        private long trickOutputAnchorUs = C.TIME_UNSET;
+        private long lastTrickVideoUs = C.TIME_UNSET;
+        private long lastScanSourcePts90Khz = C.TIME_UNSET;
+        private long scanPresentationFloorUs = C.TIME_UNSET;
+        private final long[] normalClockPresentationUs = new long[64];
+        private final long[] normalClockBaseMs = new long[64];
+        private int normalClockIndex;
+        private int normalClockCount;
+        private long normalClockCellGeneration = -1L;
+        private final long[] scanPresentationUs = new long[512];
+        private final long[] scanSourceMs = new long[512];
+        private int scanIndex;
+        private int scanCount;
         // Fixed primitive arrays avoid allocating one object per decoded DVD picture. The trace
         // covers over 17 seconds at 29.97 fps, comfortably exceeding the normal decoder buffer,
         // so a frame-release warning can identify the exact extractor timestamp decision.
@@ -154,6 +173,13 @@ final class DvdPsExtractor implements Extractor
             mpeg2ProgressiveFrameCount = completer.getProgressiveFrameCount();
             mpeg2InterlacedFrameCount = completer.getInterlacedFrameCount();
             mpeg2FieldPictureCount = completer.getFieldPictureCount();
+            mpeg2SoftTelecineConfirmed = completer.isSoftTelecineConfirmed();
+        }
+
+        void noteSoftTelecineNormalizer(Mpeg2SoftTelecineNormalizer normalizer)
+        {
+            mpeg2SoftTelecinePictureRewriteCount =
+                    normalizer.getRewrittenPictureExtensions();
         }
 
         double getMpeg2ReportedFrameRateHz() { return mpeg2ReportedFrameRateHz; }
@@ -165,6 +191,11 @@ final class DvdPsExtractor implements Extractor
         long getMpeg2ProgressiveFrameCount() { return mpeg2ProgressiveFrameCount; }
         long getMpeg2InterlacedFrameCount() { return mpeg2InterlacedFrameCount; }
         long getMpeg2FieldPictureCount() { return mpeg2FieldPictureCount; }
+        boolean isMpeg2SoftTelecineConfirmed() { return mpeg2SoftTelecineConfirmed; }
+        long getMpeg2SoftTelecinePictureRewriteCount()
+        {
+            return mpeg2SoftTelecinePictureRewriteCount;
+        }
 
         private static final class PtsBoundary
         {
@@ -178,6 +209,18 @@ final class DvdPsExtractor implements Extractor
             }
         }
 
+        private static final class TrickBoundary
+        {
+            final long bytePosition;
+            final float rate;
+
+            TrickBoundary(long bytePosition, float rate)
+            {
+                this.bytePosition = bytePosition;
+                this.rate = rate;
+            }
+        }
+
         synchronized void setPtsOffset90Khz(long ptsOffset90Khz)
         {
             // This is an absolute stream rebase (initial open or SageTV FLUSH),
@@ -185,6 +228,8 @@ final class DvdPsExtractor implements Extractor
             // restart at zero after MediaSource reprepare, so boundaries from
             // the discarded byte epoch must never survive into the new stream.
             pendingPtsBoundaries.clear();
+            pendingTrickBoundaries.clear();
+            resetTrickMode();
             this.ptsOffset90Khz = ptsOffset90Khz;
             presentationShiftUs = 0;
             pendingCellAnchorUs = C.TIME_UNSET;
@@ -241,6 +286,8 @@ final class DvdPsExtractor implements Extractor
                 pendingCellAnchorUs = C.TIME_UNSET;
             }
             pendingPtsBoundaries.clear();
+            pendingTrickBoundaries.clear();
+            resetTrickMode();
             this.ptsOffset90Khz = ptsOffset90Khz;
             flushPlaybackAnchorUs = playbackAnchorUs >= 0
                     ? playbackAnchorUs : C.TIME_UNSET;
@@ -258,6 +305,8 @@ final class DvdPsExtractor implements Extractor
             // presentation time makes Media3 wait tens of seconds at a black
             // frame while audio/video are queued in the future.
             pendingPtsBoundaries.clear();
+            pendingTrickBoundaries.clear();
+            resetTrickMode();
             this.ptsOffset90Khz = ptsOffset90Khz;
             presentationShiftUs = 0;
             pendingCellAnchorUs = 0;
@@ -280,6 +329,12 @@ final class DvdPsExtractor implements Extractor
         {
             pendingPtsBoundaries.addLast(new PtsBoundary(
                     Math.max(0L, bytePosition), ptsOffset90Khz));
+        }
+
+        synchronized void queueTrickRate(long bytePosition, float rate)
+        {
+            pendingTrickBoundaries.addLast(new TrickBoundary(
+                    Math.max(0L, bytePosition), rate));
         }
 
         synchronized void advanceToPosition(long bytePosition)
@@ -311,6 +366,12 @@ final class DvdPsExtractor implements Extractor
                 ptsOffset90Khz = boundary.offset90Khz;
                 cellGeneration++;
             }
+            while (!pendingTrickBoundaries.isEmpty()
+                    && pendingTrickBoundaries.peekFirst().bytePosition <= epochPosition)
+            {
+                TrickBoundary boundary = pendingTrickBoundaries.removeFirst();
+                applyTrickRate(boundary.rate);
+            }
         }
 
         long applyPtsOffset(long pts90Khz)
@@ -322,6 +383,8 @@ final class DvdPsExtractor implements Extractor
         {
             if (adjustedTimeUs == C.TIME_UNSET)
                 return adjustedTimeUs;
+            if (trickRate != 1.0f)
+                return normalizeTrickTimeUs(adjustedTimeUs);
             if (pendingCellNormalization)
             {
                 // The historical extender jumps its STC on NEWCELL. Media3
@@ -349,6 +412,204 @@ final class DvdPsExtractor implements Extractor
             // publishes this normalized value for subsequent streams.
             flushPlaybackAnchorUs = C.TIME_UNSET;
             return outputTimeUs;
+        }
+
+        private long normalizeTrickTimeUs(long adjustedTimeUs)
+        {
+            long referenceUs = latestContinuousAvTimeUs();
+            if (trickInputAnchorUs == C.TIME_UNSET)
+            {
+                trickInputAnchorUs = adjustedTimeUs;
+                trickOutputAnchorUs = referenceUs == C.TIME_UNSET
+                        ? 0L : referenceUs + 1L;
+            }
+            long sourceDeltaUs = trickRate > 0.0f
+                    ? adjustedTimeUs - trickInputAnchorUs
+                    : trickInputAnchorUs - adjustedTimeUs;
+            // MPEG B-picture timestamps can briefly move opposite the scan
+            // direction. They belong to the same displayed VOBU; never let
+            // that local reordering move Media3's clock backwards.
+            sourceDeltaUs = Math.max(0L, sourceDeltaUs);
+            return trickOutputAnchorUs
+                    + (long) (sourceDeltaUs / Math.abs(trickRate));
+        }
+
+        private void applyTrickRate(float rate)
+        {
+            float next = rate == 0.0f || Float.isNaN(rate) ? 1.0f : rate;
+            if (Float.compare(next, trickRate) == 0) return;
+            long referenceUs = latestContinuousAvTimeUs();
+            trickRate = next;
+            trickInputAnchorUs = C.TIME_UNSET;
+            trickOutputAnchorUs = referenceUs == C.TIME_UNSET
+                    ? C.TIME_UNSET : referenceUs + 1L;
+            if (next == 1.0f && referenceUs != C.TIME_UNSET)
+            {
+                // Resume authored timestamps directly after the last trick
+                // sample. MiniDVDPlayer also performs its normal-play reseek,
+                // so the next PES becomes a clean continuity anchor.
+                pendingCellAnchorUs = referenceUs;
+                pendingCellNormalization = true;
+            }
+        }
+
+        private void resetTrickMode()
+        {
+            normalClockIndex = 0;
+            normalClockCount = 0;
+            normalClockCellGeneration = -1;
+            trickRate = 1.0f;
+            trickInputAnchorUs = C.TIME_UNSET;
+            trickOutputAnchorUs = C.TIME_UNSET;
+            lastTrickVideoUs = C.TIME_UNSET;
+            lastScanSourcePts90Khz = C.TIME_UNSET;
+            scanPresentationFloorUs = C.TIME_UNSET;
+            scanIndex = 0;
+            scanCount = 0;
+        }
+
+        synchronized boolean isTrickMode()
+        {
+            return Float.compare(trickRate, 1.0f) != 0;
+        }
+
+        synchronized boolean shouldParseAudioPes()
+        {
+            // Native DVD scanning deliberately disables audio presentation.
+            // Do not enqueue its normal-speed samples anyway: at a short
+            // Push-reader EOF Media3 can derive the period's end from their
+            // later timestamps and hold stock DVD EMPTY drain polls for
+            // seconds after the final sparse video preview. This is not an
+            // audio clock offset or a normal-play codec/filter change.
+            return !isTrickMode();
+        }
+
+        synchronized long nextScanVideoTimeUs()
+        {
+            // Stock VM selects approximate VOBU jumps using rate/3 and an
+            // assumed six previews/second. The extender also changes its STC
+            // speed; a fixed 6fps Android clock alone can therefore undershoot
+            // 8x/16x on discs with different GOP/VOBU lengths. Schedule previews
+            // by the actual source distance divided by the requested rate.
+            // Bounds prevent corrupt/missing/backward PTS from creating either
+            // a busy loop or a long frozen preview. Normal 1x is untouched.
+            if (lastTrickVideoUs == C.TIME_UNSET)
+            {
+                long reference = latestVideoSampleUs;
+                lastTrickVideoUs = reference == C.TIME_UNSET ? 0L : reference + 1L;
+            }
+            else
+            {
+                long intervalUs = 166_667L;
+                if (isTrickMode() && lastScanSourcePts90Khz != C.TIME_UNSET
+                        && latestVideoOffsetPts90Khz != C.TIME_UNSET)
+                {
+                    // Signed nearest-distance arithmetic handles the 33-bit
+                    // MPEG clock wrap in either scan direction.
+                    long delta90Khz = (latestVideoOffsetPts90Khz
+                            - lastScanSourcePts90Khz + (1L << 32)) & PTS_MASK;
+                    delta90Khz -= 1L << 32;
+                    long directedDelta = trickRate > 0 ? delta90Khz : -delta90Khz;
+                    if (directedDelta > 0 && directedDelta <= 90_000L * 10L)
+                        intervalUs = Math.max(Math.abs(trickRate) >= 128f ? 16_667L : 33_333L,
+                                Math.min(500_000L,
+                                (long) (directedDelta * 1_000_000.0
+                                        / (90_000.0 * Math.abs(trickRate)))));
+                    else if (directedDelta <= 0 && directedDelta >= -90_000L)
+                        // A PES can cover multiple I-pictures. Its repeated
+                        // PTS (or local reordered timestamp) is not another
+                        // VOBU jump and must not add a full 6fps dwell each
+                        // time; that made 8x behave closer to 4x. Keep a
+                        // bounded one-display-frame interval for these images.
+                        intervalUs = 33_333L;
+                }
+                lastTrickVideoUs += intervalUs;
+            }
+            lastScanSourcePts90Khz = latestVideoOffsetPts90Khz;
+            if (isTrickMode() && scanPresentationFloorUs != C.TIME_UNSET)
+                lastTrickVideoUs = Math.max(lastTrickVideoUs, scanPresentationFloorUs);
+            if (latestVideoOffsetPts90Khz != C.TIME_UNSET)
+            {
+                scanPresentationUs[scanIndex] = lastTrickVideoUs;
+                scanSourceMs[scanIndex] = latestVideoOffsetPts90Khz / 90L;
+                scanIndex = (scanIndex + 1) % scanPresentationUs.length;
+                scanCount = Math.min(scanCount + 1, scanPresentationUs.length);
+            }
+            return lastTrickVideoUs;
+        }
+
+        synchronized long scanSourceTimeMs(long presentationUs)
+        {
+            long nearestUs = Long.MIN_VALUE;
+            long sourceMs = C.TIME_UNSET;
+            for (int offset = 0; offset < scanCount; offset++)
+            {
+                int index = (scanIndex - 1 - offset + scanPresentationUs.length)
+                        % scanPresentationUs.length;
+                long candidate = scanPresentationUs[index];
+                if (candidate <= presentationUs && candidate > nearestUs)
+                {
+                    nearestUs = candidate;
+                    sourceMs = scanSourceMs[index];
+                }
+            }
+            // Report only the source clock for a picture that has reached
+            // the player, never an ahead-of-rendering extractor timestamp.
+            return sourceMs;
+        }
+
+        synchronized long normalSourceTimeMs(long presentationUs)
+        {
+            long nearestUs = Long.MIN_VALUE;
+            long baseMs = C.TIME_UNSET;
+            for (int offset = 0; offset < normalClockCount; offset++)
+            {
+                int index = (normalClockIndex - 1 - offset + normalClockPresentationUs.length)
+                        % normalClockPresentationUs.length;
+                long candidate = normalClockPresentationUs[index];
+                if (candidate <= presentationUs && candidate > nearestUs)
+                {
+                    nearestUs = candidate;
+                    baseMs = normalClockBaseMs[index];
+                }
+            }
+            return baseMs == C.TIME_UNSET ? C.TIME_UNSET : baseMs + presentationUs / 1000L;
+        }
+
+        synchronized String describeNormalClock(long presentationUs)
+        {
+            int oldest = (normalClockIndex - normalClockCount + normalClockPresentationUs.length)
+                    % normalClockPresentationUs.length;
+            int newest = (normalClockIndex - 1 + normalClockPresentationUs.length)
+                    % normalClockPresentationUs.length;
+            return "count=" + normalClockCount + ",capacity=" + normalClockPresentationUs.length
+                    + ",presentationUs=" + presentationUs
+                    + ",oldestUs=" + (normalClockCount == 0 ? C.TIME_UNSET : normalClockPresentationUs[oldest])
+                    + ",newestUs=" + (normalClockCount == 0 ? C.TIME_UNSET : normalClockPresentationUs[newest])
+                    + ",mappedSourceMs=" + normalSourceTimeMs(presentationUs);
+        }
+
+        synchronized void setScanPresentationFloorUs(long floorUs)
+        {
+            if (floorUs >= 0L) scanPresentationFloorUs = floorUs;
+        }
+
+        synchronized String describeScanTiming()
+        {
+            // Reuse the clock ring only on a bounded diagnostic snapshot:
+            // no per-picture logging, allocation, or background sampling.
+            StringBuilder out = new StringBuilder("rate=").append(trickRate)
+                    .append(",count=").append(scanCount).append(",points=");
+            int count = Math.min(scanCount, 12);
+            for (int offset = count - 1; offset >= 0; offset--)
+            {
+                int index = (scanIndex - 1 - offset + scanPresentationUs.length)
+                        % scanPresentationUs.length;
+                if (offset != count - 1) out.append('|');
+                out.append(scanPresentationUs[index]).append('/')
+                        .append(scanSourceMs[index]);
+            }
+            return out.toString();
         }
 
         synchronized long previewNormalizedCellTimeUs(long adjustedTimeUs)
@@ -484,13 +745,34 @@ final class DvdPsExtractor implements Extractor
         long getVideoCorrectionCount() { return videoCorrectionCount; }
         long getDiscontinuityRebaseCount() { return discontinuityRebaseCount; }
 
-        void notePes(boolean video, long rawPts90Khz, long offsetPts90Khz, long adjustedUs)
+        synchronized void notePes(boolean video, long rawPts90Khz, long offsetPts90Khz, long adjustedUs)
         {
             if (video)
             {
                 latestVideoRawPts90Khz = rawPts90Khz;
                 latestVideoOffsetPts90Khz = offsetPts90Khz;
                 latestVideoPesUs = adjustedUs;
+                if (!isTrickMode() && offsetPts90Khz != C.TIME_UNSET && adjustedUs != C.TIME_UNSET)
+                {
+                    // NEWCELL's signed offset makes PES PTS an absolute title
+                    // clock. Stock Core can omit STC after an ordinary seek or
+                    // resume. Pair that source clock with this epoch's Media3
+                    // presentation clock instead of retaining an old cell base.
+                    // Queue boundaries: an ahead-of-rendering next cell must
+                    // not change the timeline of the picture still on screen.
+                    long baseMs = offsetPts90Khz / 90L - adjustedUs / 1000L;
+                    int previous = (normalClockIndex - 1 + normalClockBaseMs.length)
+                            % normalClockBaseMs.length;
+                    if (normalClockCount == 0 || normalClockCellGeneration != cellGeneration
+                            || Math.abs(normalClockBaseMs[previous] - baseMs) > 1L)
+                    {
+                        normalClockPresentationUs[normalClockIndex] = adjustedUs;
+                        normalClockBaseMs[normalClockIndex] = baseMs;
+                        normalClockIndex = (normalClockIndex + 1) % normalClockBaseMs.length;
+                        normalClockCount = Math.min(normalClockCount + 1, normalClockBaseMs.length);
+                        normalClockCellGeneration = cellGeneration;
+                    }
+                }
             }
             else
             {
@@ -760,6 +1042,8 @@ final class DvdPsExtractor implements Extractor
         private final boolean repairMpeg2PictureTimestamps;
         private final Mpeg2PictureTimestampCompleter timestampCompleter =
                 new Mpeg2PictureTimestampCompleter();
+        private final Mpeg2SoftTelecineNormalizer softTelecineNormalizer =
+                new Mpeg2SoftTelecineNormalizer();
         private final ByteArrayOutputStream pendingSampleData = new ByteArrayOutputStream();
         @Nullable private byte[] lastSampleData;
         private int lastSampleFlags;
@@ -796,8 +1080,15 @@ final class DvdPsExtractor implements Extractor
                     int read = input.read(buffer, offset, readLength);
                     if (read > 0)
                     {
-                        timestampCompleter.consume(buffer, offset, read);
-                        if (captureCandidate)
+                        if (!timestampState.isTrickMode())
+                        {
+                            timestampCompleter.consume(buffer, offset, read);
+                            softTelecineNormalizer.consumeAndNormalize(buffer, offset, read,
+                                    repairMpeg2PictureTimestamps
+                                            && timestampCompleter.isSoftTelecineConfirmed());
+                            timestampState.noteSoftTelecineNormalizer(softTelecineNormalizer);
+                        }
+                        if (captureCandidate && !timestampState.isTrickMode())
                             appendCaptured(buffer, offset, read);
                     }
                     return read;
@@ -812,8 +1103,18 @@ final class DvdPsExtractor implements Extractor
         @Override
         public void sampleData(ParsableByteArray data, int length, int sampleDataPart)
         {
-            timestampCompleter.consume(data.getData(), data.getPosition(), length);
-            if (captureCandidate)
+            // Sparse native scan uses its own I-picture clock and is not a
+            // normal telecine stream. Avoid parsing/rewriting all discarded
+            // P/B bytes through the normal-play cadence repair a second time.
+            if (!timestampState.isTrickMode())
+            {
+                timestampCompleter.consume(data.getData(), data.getPosition(), length);
+                softTelecineNormalizer.consumeAndNormalize(data.getData(), data.getPosition(), length,
+                        repairMpeg2PictureTimestamps
+                                && timestampCompleter.isSoftTelecineConfirmed());
+                timestampState.noteSoftTelecineNormalizer(softTelecineNormalizer);
+            }
+            if (captureCandidate && !timestampState.isTrickMode())
                 appendCaptured(data.getData(), data.getPosition(), length);
             delegate.sampleData(data, length, sampleDataPart);
             totalBytesForwarded += length;
@@ -826,7 +1127,7 @@ final class DvdPsExtractor implements Extractor
             long sampleEnd = totalBytesForwarded - Math.max(0, offset);
             long sampleStart = sampleEnd - Math.max(0, size);
             Mpeg2PictureTimestampCompleter.PictureTiming timing = null;
-            if (repairMpeg2PictureTimestamps)
+            if (repairMpeg2PictureTimestamps && !timestampState.isTrickMode())
                 timing = timestampCompleter.observeSample(sampleStart, sampleEnd, timeUs);
             timestampState.noteMpeg2Cadence(timestampCompleter);
             if (captureCandidate)
@@ -834,11 +1135,39 @@ final class DvdPsExtractor implements Extractor
                 // Only the first completed picture can be an authored still.
                 // Copying every moving-video sample produces sustained large
                 // allocations and periodic GC/frame-release stalls on Fire TV.
-                rememberCompletedSample(timeUs, flags, size, offset);
+                if (!timestampState.isTrickMode())
+                    rememberCompletedSample(timeUs, flags, size, offset);
                 captureCandidate = false;
                 pendingSampleData.reset();
             }
             sequenceSampleCount++;
+            if (timestampState.isTrickMode())
+            {
+                // Flag 0x01 explicitly asks the extender to discard P/B
+                // pictures. Retain sequence/GOP bytes already forwarded to
+                // the sample queue, but publish only independently decodable
+                // I-picture metadata; unclaimed P/B bytes are skipped by the
+                // following sample's size/offset.
+                if ((flags & C.BUFFER_FLAG_KEY_FRAME) == 0)
+                    return;
+                long scanTimeUs = timestampState.nextScanVideoTimeUs();
+                timestampState.noteVideoTimestampDecision(scanTimeUs, timeUs,
+                        Mpeg2PictureTimestampCompleter.TIME_UNSET,
+                        Mpeg2PictureTimestampCompleter.DECISION_NO_TIMING,
+                        false, timing);
+                delegate.sampleMetadata(scanTimeUs, flags, size, offset, cryptoData);
+                return;
+            }
+            // The HD extenders handled PUSH flag 0x08 as a hardware scan-clock
+            // transition (ProcessPushFlags/DCCSTCSetSpeed) while discarding
+            // normal presentation timing.  Running the ordinary telecine and
+            // missing-picture timestamp repair during that scan synthesizes a
+            // 29.97-fps video clock even though MiniDVDPlayer is skipping VOBUs.
+            // At 8x/16x audio then races far ahead of video and Media3 waits
+            // forever for a video timestamp that the sparse stream cannot
+            // produce.  The PES reader has already mapped the server's scan
+            // rate onto a continuous presentation clock, so preserve that
+            // timestamp unchanged until the 1x boundary arrives.
             if (!repairMpeg2PictureTimestamps)
             {
                 timestampState.noteVideoTimestampDecision(timeUs, timeUs,
@@ -848,7 +1177,9 @@ final class DvdPsExtractor implements Extractor
                 delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData);
                 return;
             }
-            long outputTimeUs = timestampCompleter.completeTimestamp(timing, timeUs);
+            long outputTimeUs = timestampCompleter.isSoftTelecineConfirmed()
+                    ? timestampCompleter.completeSoftTelecineTimestamp(timing, timeUs)
+                    : timestampCompleter.completeTimestamp(timing, timeUs);
             boolean corrected = timestampCompleter.wasLastTimestampCorrected();
             timestampState.noteVideoTimestampDecision(outputTimeUs, timeUs,
                     timestampCompleter.getLastCandidateTimestampUs(),
@@ -871,7 +1202,10 @@ final class DvdPsExtractor implements Extractor
             lastSampleTimeUs = C.TIME_UNSET;
             captureCandidate = true;
             if (repairMpeg2PictureTimestamps)
+            {
                 timestampCompleter.reset();
+                softTelecineNormalizer.reset();
+            }
         }
 
         boolean isSinglePictureSequence()
@@ -1098,6 +1432,11 @@ final class DvdPsExtractor implements Extractor
         @Override
         public void consume(ParsableByteArray data) throws ParserException
         {
+            if (!video && !timestampState.shouldParseAudioPes())
+            {
+                data.skipBytes(data.bytesLeft());
+                return;
+            }
             long cellGeneration = timestampState.getCellGeneration();
             if (cellGeneration != observedCellGeneration)
             {
@@ -1272,6 +1611,18 @@ final class DvdPsExtractor implements Extractor
             extendedHeaderLength = scratch.readBits(8);
             data.readBytes(scratch.data, 0, extendedHeaderLength);
             scratch.setPosition(0);
+            // PRIVATE_STREAM_1 also carries SPU. Keep its navigation/subtitle
+            // packets, but skip only AC-3 audio before its PTS can advance the
+            // shared presentation domain or publish muted SampleQueue data.
+            if (!timestampState.shouldParseAudioPes() && data.bytesLeft() > 0)
+            {
+                int skippedSubstream = data.getData()[data.getPosition()] & 0xFF;
+                if (skippedSubstream >= 0x80 && skippedSubstream <= 0x87)
+                {
+                    data.skipBytes(data.bytesLeft());
+                    return;
+                }
+            }
             parseTime();
 
             if (data.bytesLeft() < 4)

@@ -25,6 +25,7 @@ public final class Mpeg2PictureTimestampCompleter
     public static final int DECISION_DELTA_ALREADY_PLAUSIBLE = 8;
     public static final int DECISION_DELTA_OUT_OF_RANGE = 9;
     public static final int DECISION_CORRECTED = 10;
+    public static final int DECISION_FILM_NORMALIZED = 11;
 
     private static final int PICTURE_START_CODE = 0x00000100;
     private static final int SEQUENCE_HEADER_CODE = 0x000001B3;
@@ -66,6 +67,11 @@ public final class Mpeg2PictureTimestampCompleter
     private long progressiveFrameCount;
     private long interlacedFrameCount;
     private long fieldPictureCount;
+    private int softTelecineProgressiveRun;
+    private int softTelecineRepeatCount;
+    private int softTelecineRepeatTransitions;
+    private int softTelecineLastRepeat = -1;
+    private boolean softTelecineConfirmed;
 
     /** Sets a container-reported frame rate if a sequence header has not supplied one. */
     public void setFrameRate(float frameRate)
@@ -108,6 +114,7 @@ public final class Mpeg2PictureTimestampCompleter
         progressiveFrameCount = 0L;
         interlacedFrameCount = 0L;
         fieldPictureCount = 0L;
+        resetSoftTelecineEvidence();
     }
 
     /** Marks whether the next MPEG-2 picture is covered by an authored PES PTS. */
@@ -144,6 +151,7 @@ public final class Mpeg2PictureTimestampCompleter
             case DECISION_DELTA_ALREADY_PLAUSIBLE: return "delta_already_plausible";
             case DECISION_DELTA_OUT_OF_RANGE: return "delta_out_of_range";
             case DECISION_CORRECTED: return "corrected";
+            case DECISION_FILM_NORMALIZED: return "film_normalized";
             case DECISION_NO_TIMING:
             default: return "no_timing";
         }
@@ -168,6 +176,9 @@ public final class Mpeg2PictureTimestampCompleter
     {
         return telecineCadenceSeen;
     }
+
+    /** True only after a sustained progressive-picture/RFF cadence is observed. */
+    public boolean isSoftTelecineConfirmed() { return softTelecineConfirmed; }
 
     public boolean isSequenceExtensionSeen() { return sequenceExtensionSeen; }
     public long getPictureCodingExtensionCount() { return pictureCodingExtensionCount; }
@@ -332,6 +343,42 @@ public final class Mpeg2PictureTimestampCompleter
     }
 
     /**
+     * Produces the presentation clock for a decoder-normalized 24000/1001 film
+     * stream.  Unlike ordinary repair this intentionally replaces authored
+     * 3:2 carrier timestamps: after RFF is removed, each unique picture must
+     * be separated by one film-frame duration rather than alternating two and
+     * three field durations.
+     */
+    public long completeSoftTelecineTimestamp(PictureTiming timing, long suppliedTimeUs)
+    {
+        lastTimestampCorrected = false;
+        lastCandidateTimestampUs = TIME_UNSET;
+        if (!softTelecineConfirmed || timing == null || suppliedTimeUs == TIME_UNSET)
+            return completeTimestamp(timing, suppliedTimeUs);
+        GopTiming gop = gopTiming(timing.header.gopGeneration, false);
+        if (gop == null || !gop.hasAnchor())
+        {
+            lastTimestampDecision = DECISION_GOP_UNAVAILABLE;
+            return suppliedTimeUs;
+        }
+        long candidateUs = gop.resolveFilm(timing.header.temporalReference);
+        if (candidateUs == TIME_UNSET)
+        {
+            lastTimestampDecision = DECISION_CANDIDATE_UNRESOLVED;
+            return suppliedTimeUs;
+        }
+        lastCandidateTimestampUs = candidateUs;
+        if (Math.abs(candidateUs - suppliedTimeUs) > MAX_REPAIR_DELTA_US)
+        {
+            lastTimestampDecision = DECISION_DELTA_OUT_OF_RANGE;
+            return suppliedTimeUs;
+        }
+        lastTimestampCorrected = candidateUs != suppliedTimeUs;
+        lastTimestampDecision = DECISION_FILM_NORMALIZED;
+        return candidateUs;
+    }
+
+    /**
      * Returns the corrected timestamp for one TrackOutput sample range.
      * Authored timestamps and already-plausible extrapolated timestamps are returned unchanged.
      */
@@ -418,6 +465,7 @@ public final class Mpeg2PictureTimestampCompleter
                     if (!progressiveSequence && lastPictureHeader.progressiveFrame
                             && lastPictureHeader.repeatFirstField)
                         telecineCadenceSeen = true;
+                    noteSoftTelecineEvidence(lastPictureHeader);
                 }
                 pendingHeaderKind = 0;
                 pendingHeaderBytes = 0;
@@ -439,6 +487,44 @@ public final class Mpeg2PictureTimestampCompleter
             pendingHeaderKind = 0;
             pendingHeaderBytes = 0;
         }
+    }
+
+    private void noteSoftTelecineEvidence(PictureHeader picture)
+    {
+        boolean ntscCarrier = (frameRateHz >= 29.0 && frameRateHz <= 30.5)
+                || (reportedFrameRateHz >= 59.0 && reportedFrameRateHz <= 61.0);
+        boolean progressiveFramePicture = !progressiveSequence
+                && picture.pictureStructure == 3 && picture.progressiveFrame;
+        if (!ntscCarrier || !progressiveFramePicture)
+        {
+            resetSoftTelecineEvidence();
+            return;
+        }
+
+        int repeat = picture.repeatFirstField ? 1 : 0;
+        softTelecineProgressiveRun++;
+        softTelecineRepeatCount += repeat;
+        if (softTelecineLastRepeat >= 0 && softTelecineLastRepeat != repeat)
+            softTelecineRepeatTransitions++;
+        softTelecineLastRepeat = repeat;
+
+        // Require both repeated and non-repeated progressive pictures plus
+        // several transitions. One isolated RFF flag is not enough to rewrite
+        // a native 29.97 or genuinely interlaced DVD stream.
+        if (softTelecineProgressiveRun >= 8
+                && softTelecineRepeatCount >= 2
+                && softTelecineRepeatCount <= softTelecineProgressiveRun - 2
+                && softTelecineRepeatTransitions >= 2)
+            softTelecineConfirmed = true;
+    }
+
+    private void resetSoftTelecineEvidence()
+    {
+        softTelecineProgressiveRun = 0;
+        softTelecineRepeatCount = 0;
+        softTelecineRepeatTransitions = 0;
+        softTelecineLastRepeat = -1;
+        softTelecineConfirmed = false;
     }
 
     private double fieldDurationUs()
@@ -591,6 +677,15 @@ public final class Mpeg2PictureTimestampCompleter
                 fields += duration;
             }
             return anchorTimeUs - Math.round(fields * fieldDurationUs);
+        }
+
+        long resolveFilm(int temporalReference)
+        {
+            if (!hasAnchor())
+                return TIME_UNSET;
+            double frameDurationUs = 1_000_000.0 * 1_001.0 / 24_000.0;
+            return anchorTimeUs + Math.round(
+                    (temporalReference - anchorReference) * frameDurationUs);
         }
     }
 }

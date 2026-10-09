@@ -12,6 +12,7 @@ import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.android.UIActivityLifeCycleHandler;
 import opensagetv.vibe.miniclient.android.preferences.MediaMappingPreferences;
 import opensagetv.vibe.miniclient.android.ui.keymaps.DefaultKeyMap;
+import opensagetv.vibe.miniclient.android.ui.keymaps.DvdInputContext;
 import opensagetv.vibe.miniclient.android.ui.keymaps.GuideKeyMap;
 import opensagetv.vibe.miniclient.android.ui.keymaps.KeyMap;
 import opensagetv.vibe.miniclient.android.ui.keymaps.KeyMapProcessor;
@@ -68,6 +69,13 @@ public class MiniClientKeyListener implements View.OnKeyListener {
     @Override
     public boolean onKey(View v, int keyCode, KeyEvent event) {
         if (client.getCurrentConnection()==null) return false;
+
+        // A visible DVD preview does not own the STV's navigation keys. This
+        // also defeats a stale OSD hint while SETVIDEORECT is already windowed.
+        if (client.getCurrentConnection().getMediaCmd() != null
+                && client.getCurrentConnection().getMediaCmd().isDvdSessionPending()
+                && !DvdInputContext.isFullscreen(client))
+            return keyProcessor.onKey(defaultKeyMap, keyCode, event);
 
         if (prefs.isSmartRemoteEnabled() && client.getCurrentConnection().getMenuHint()!=null) {
             // if there's a popup then just use normal keys

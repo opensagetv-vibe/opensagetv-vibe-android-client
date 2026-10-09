@@ -16,6 +16,9 @@ automated_client_id = "44:45:56:30:30:31"
 [devices.primary]
 alias = "living-room"
 serial = "192.0.2.10:5555"
+# Single settings-preserving install attempt; finite seconds in 30..900.
+# Slow APK optimization can need a larger device-specific budget.
+install_timeout_seconds = 180
 label = "Primary Android TV test device"
 model = "replace-me"
 api = 0
@@ -34,6 +37,8 @@ client_id = "44:45:56:30:30:32"
 stv_by_server = { vibe = "replace-with-stv-name", stock = "replace-with-stv-name" }
 
 [servers.vibe]
+# Non-TV boxes can use the app's explicit "Use TV server browser" preference;
+# do not fake TV/Leanback firmware features or borrow another device identity.
 alias = "development"
 address = "192.0.2.20"
 miniclient_port = 31099
@@ -120,6 +125,23 @@ expected_video_mime = "video/mpeg2"
 expected_audio_mime = "audio/ac3"
 expected_subtitle = "cea608"
 minimum_duration_seconds = 60
+
+# Generated common-clock A/V fixture matching PBS/OTA server playback:
+# stock Push startup, 1080i MPEG-2 cadence, AC-3 passthrough, and physical
+# ball-impact/click synchronization. Regenerate with
+# scripts/generate_pbs_av_sync_fixture.py; do not substitute a broadcast clip.
+[[fixtures.cases]]
+id = "pbs_av_sync"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-PBS-1080i-MPEG2-AC3-AVSync.ts"
+modes = { startup = true, cadence = true, audio = true, audio_sync = true, passthrough = true, physical_capture = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_audio_mime = "audio/ac3"
+expected_width = 1920
+expected_height = 1080
+minimum_duration_seconds = 110
 
 # Authored DVD: menus/submenus, chapters, languages, timestamped subtitles, navigation, and main title.
 [[fixtures.cases]]
@@ -219,6 +241,9 @@ expected_subtitle = "dvb_or_teletext"
 expected_teletext_pes = "preserved"
 
 # UK 576i50 H.264: SD cadence, multi-audio, and DVB/Teletext subtitle selection.
+# Verify useful duration/caption range before multi-phase continuity gates;
+# this commissioned Holby sample is82.688s and ends after commercial silence.
+# The longer uk_breakfast sample is used for IJK Off/On+continuity+pause gates.
 [[fixtures.cases]]
 id = "uk_classic_holby"
 enabled = false

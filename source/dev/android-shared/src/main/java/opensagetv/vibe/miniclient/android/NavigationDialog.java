@@ -47,6 +47,13 @@ public class NavigationDialog extends Dialog
 
     private View navView;
 
+    @Override public boolean dispatchKeyEvent(KeyEvent event)
+    {
+        if (navView instanceof ViewGroup && NavigationFocusController.handle(
+                (ViewGroup) navView, getCurrentFocus(), event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
     View navOptions = null;
 
     View navPause = null;
@@ -96,7 +103,7 @@ public class NavigationDialog extends Dialog
             }
         };
 
-        for (int id : new int[]{R.id.nav_up, R.id.nav_down, R.id.nav_left, R.id.nav_right, R.id.nav_select, R.id.nav_pgdn, R.id.nav_pgup,
+        for (int id : new int[]{R.id.nav_up, R.id.nav_down, R.id.nav_left, R.id.nav_right, R.id.nav_select, R.id.nav_pgdn, R.id.nav_pgup, R.id.nav_last,
                 R.id.nav_options, R.id.nav_home, R.id.nav_media_pause, R.id.nav_media_play, R.id.nav_media_skip_back, R.id.nav_media_skip_back_2,
                 R.id.nav_media_skip_forward, R.id.nav_media_skip_forward_2,
                 R.id.nav_media_stop, R.id.nav_back, R.id.nav_info, R.id.nav_video_info})
@@ -273,7 +280,8 @@ public class NavigationDialog extends Dialog
                 dismiss();
             }
 
-            int sageCommand = SageCommand.parseByKey(key).getEventCode();
+            SageCommand requested = SageCommand.parseByKey(key);
+            int sageCommand = requested.getEventCode();
 
             if (sageCommand == -1)
             {
@@ -281,7 +289,19 @@ public class NavigationDialog extends Dialog
             }
             else
             {
-                EventRouter.postCommand(client, sageCommand);
+                if (client.getPlayer() != null && client.getCurrentConnection() != null
+                        && client.getCurrentConnection().getMediaCmd() != null
+                        && client.getCurrentConnection().getMediaCmd().isDvdSessionPending()
+                        && !client.getPlayer().isDvdMenuNavigationActive())
+                {
+                    // Match the physical remote's DVD scan handling. The
+                    // vertical-line buttons retain FF_2/REW_2 chapter behavior.
+                    for (SageCommand command : opensagetv.vibe.miniclient.android.ui.keymaps.DvdRemoteScanPolicy.sequence(requested,
+                                    client.getPlayer().getPlaybackRate()))
+                        if (command != SageCommand.NONE)
+                            EventRouter.postCommand(client, command);
+                }
+                else EventRouter.postCommand(client, sageCommand);
             }
         }
         catch (Throwable t)

@@ -7,9 +7,15 @@ package opensagetv.vibe.miniclient.android.events;
 public final class MimDirectFallbackReconnectEvent
 {
     public final String reason;
+    public final boolean pluginWatchRecovery;
 
     public MimDirectFallbackReconnectEvent(String reason)
     {
+        this(reason,false);
+    }
+    public MimDirectFallbackReconnectEvent(String reason,boolean pluginWatchRecovery)
+    {
         this.reason = reason == null ? "unknown" : reason;
+        this.pluginWatchRecovery=pluginWatchRecovery;
     }
 }

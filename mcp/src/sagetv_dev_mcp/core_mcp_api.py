@@ -21,7 +21,9 @@ class CoreMcpApiClient:
 
     The Java plugin exposes a deliberately bounded HTTP bridge.  This adapter
     gives the existing commissioning MCP the same small method surface it used
-    for Sagex, while retaining Sagex/Web only as the title-search fallback.
+    for Sagex. When the plugin is enabled it is authoritative: configuration,
+    authentication, or health failures are surfaced and never hidden by a
+    Sagex/Web fallback.
     """
 
     transport = "core_mcp_plugin"
@@ -32,6 +34,7 @@ class CoreMcpApiClient:
         self.token = token.strip()
         self.timeout_s = max(0.5, float(timeout_s))
         self._legacy = legacy
+        self.plugin_version = ""
 
     @classmethod
     def discover(cls, host: str) -> "CoreMcpApiClient | SagexApiClient":
@@ -51,7 +54,8 @@ class CoreMcpApiClient:
                 f"Core MCP is enabled for {host}, but no core_mcp_token is configured"
             )
         client = cls(base, token)
-        client.health()
+        health = client.health()
+        client.plugin_version = str(health.get("version", ""))
         return client
 
     def _request(
@@ -109,6 +113,19 @@ class CoreMcpApiClient:
         contexts = payload.get("contexts", [])
         return [str(value) for value in contexts] if isinstance(contexts, list) else []
 
+    def plugin_caption_listener(self, enabled: bool | None = None,
+                                expected: bool | None = None,
+                                plugin_id: str = "sagetvffmpegpluginlinux") -> dict[str, Any]:
+        """Bounded commissioning setting, never an arbitrary plugin/API proxy."""
+        if enabled is None:
+            return self._request("plugin.config_get", plugin_id=plugin_id,
+                                 setting="caption_side_channel.enabled")
+        if type(enabled) is not bool or type(expected) is not bool:
+            raise ValueError("Boolean enabled and expected checkpoint required")
+        return self._request("plugin.config_set", plugin_id=plugin_id,
+                             setting="caption_side_channel.enabled", value=enabled,
+                             expected=expected, confirm=True)
+
     def resolve_context(self, client_id: str) -> str:
         contexts = self.ui_context_names()
         normalized = "".join(ch for ch in client_id.lower() if ch.isalnum())
@@ -161,14 +178,31 @@ class CoreMcpApiClient:
         raise AssertionError("unreachable")
 
     def refresh_media_index(self, wait_until_done: bool = False) -> dict[str, Any]:
-        return self._request("library.scan", wait_until_done=wait_until_done)
+        # A stock library scan may legitimately exceed an ordinary control
+        # request. Bound an explicitly blocking commissioning call separately;
+        # never replay it after an ambiguous timeout. The default remains the
+        # nonblocking public scan plus independently verified exact lookup.
+        return self._request("library.scan", wait_until_done=wait_until_done,
+                             request_timeout_s=120.0 if wait_until_done else None)
 
     def watch(self, context: str, media_file_id: int,
               from_beginning: bool = False) -> dict[str, Any]:
+        # Bridge 0.1.4 can acknowledge ordinary Watch without querying a
+        # decoder that is still replacing its media socket. Older installed
+        # bridges require at least 1000 ms and may still append a synchronous
+        # UI snapshot; keep their protocol valid until they can be upgraded.
+        try:
+            version = tuple(int(part) for part in self.plugin_version.split(".")[:3])
+        except ValueError:
+            version = ()
+        nonblocking_watch = version >= (0, 1, 4)
+        wait_ms = (15000 if from_beginning else 0) if nonblocking_watch else (
+            60000 if from_beginning else 1000
+        )
         return self._request(
             "media.watch", context=context, media_id=int(media_file_id),
-            from_beginning=from_beginning, wait_ms=60000,
-            request_timeout_s=75.0,
+            from_beginning=from_beginning, wait_ms=wait_ms,
+            request_timeout_s=75.0 if not nonblocking_watch else 30.0,
         )
 
     def remote_command(self, context: str, command: str) -> dict[str, Any]:
@@ -215,3 +249,18 @@ class CoreMcpApiClient:
 
 def discover_sage_control(host: str) -> CoreMcpApiClient | SagexApiClient:
     return CoreMcpApiClient.discover(host)
+
+
+def core_mcp_required(host: str) -> bool:
+    """Return whether Core MCP is the authoritative control for ``host``.
+
+    This intentionally mirrors :meth:`CoreMcpApiClient.discover` without
+    exposing or validating credentials. Callers use it only to prevent a
+    cached legacy control or UI-search fallback from masking a required Core
+    MCP failure.
+    """
+    environment = load_test_environment()
+    server = environment.server_for_address(host)
+    env_base = os.environ.get("SAGETV_CORE_MCP_BASE", "").strip()
+    env_token = os.environ.get("SAGETV_CORE_MCP_TOKEN", "").strip()
+    return bool(env_base and env_token) or server.get("core_mcp_enabled") is True

@@ -25,6 +25,8 @@ final class DvdPushLoadControl implements LoadControl
     interface DrainState
     {
         boolean shouldDrainImmediately();
+        default boolean isScanning() { return false; }
+        default long scanBufferUs() { return 2_000_000L; }
     }
 
     static final int MIN_BUFFER_MS = 5_000;
@@ -90,6 +92,15 @@ final class DvdPushLoadControl implements LoadControl
 
     @Override public boolean shouldContinueLoading(Parameters parameters)
     {
+        // Twelve seconds of previews represents 192 seconds of source at
+        // 16x. Keep rate commands near the rendered NAV without rebuilding
+        // or changing normal title/menu buffering.
+        if (drainState != null && drainState.isScanning())
+            // Some hardware MPEG-2 decoders retain several reference pictures.
+            // A subsecond cap can stop loading before those pictures drain,
+            // leaving BUFFERING with samples but no decoder output. Two
+            // seconds covers that latency even at the bounded 500ms spacing.
+            return parameters.bufferedDurationUs < drainState.scanBufferUs();
         return delegate.shouldContinueLoading(parameters);
     }
 

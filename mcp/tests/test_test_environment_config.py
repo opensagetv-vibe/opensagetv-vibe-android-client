@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from sagetv_dev_mcp.config import TestEnvironment, load_test_environment
+from sagetv_dev_mcp.config import TestEnvironment, load_config, load_test_environment
 
 
 SCHEMA_2 = b'''schema = 2
@@ -70,6 +70,20 @@ live_channels = ["2.1", "5.1"]
 
 
 class TestEnvironmentConfigTests(unittest.TestCase):
+    def setUp(self):
+        # Synthetic fixture selections must not inherit the operator's device
+        # or server. Nested patch.dict contexts can still exercise overrides.
+        selection = patch.dict(os.environ)
+        selection.start()
+        self.addCleanup(selection.stop)
+        for name in (
+            "SAGETV_TEST_DEVICE_ALIAS",
+            "SAGETV_TEST_SERVER_ALIAS",
+            "SAGETV_ADB_SERIAL",
+            "SAGETV_TEST_SERVER_ADDRESS",
+        ):
+            os.environ.pop(name, None)
+
     def load(self, content: bytes = SCHEMA_2):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -99,9 +113,41 @@ class TestEnvironmentConfigTests(unittest.TestCase):
             self.assertEqual(environment.device_serial(), "192.0.2.11:5555")
             self.assertEqual(environment.server_address(), "192.0.2.21")
 
+    def test_device_install_budget_defaults_and_alias_selection(self):
+        environment = self.load()
+        self.assertEqual(environment.install_timeout_seconds(), 180)
+        environment.data["devices"]["secondary"]["install_timeout_seconds"] = 600
+        self.assertEqual(environment.install_timeout_seconds("bedroom"), 600)
+        self.assertEqual(environment.install_timeout_seconds(), 180)
+        with patch.dict(os.environ, {"SAGETV_TEST_DEVICE_ALIAS": "bedroom"}), \
+                patch("sagetv_dev_mcp.config.load_test_environment", return_value=environment), \
+                patch.object(Path, "mkdir"):
+            self.assertEqual(load_config().install_timeout_seconds, 600)
+
+    def test_invalid_device_install_budgets_are_rejected(self):
+        environment = self.load()
+        for value in (True, False, "600", None, 29, 901, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                environment.data["devices"]["secondary"]["install_timeout_seconds"] = value
+                self.assertIn(
+                    "devices.secondary.install_timeout_seconds must be a finite number from 30 to 900",
+                    environment.validate(),
+                )
+                with self.assertRaises(ValueError):
+                    environment.install_timeout_seconds("bedroom")
+
+    def test_device_install_budget_accepts_finite_boundaries_and_fraction(self):
+        environment = self.load()
+        for value in (30, 900, 180.5):
+            with self.subTest(value=value):
+                environment.data["devices"]["primary"]["install_timeout_seconds"] = value
+                self.assertEqual(environment.validate(), [])
+                self.assertEqual(environment.install_timeout_seconds(), value)
+
     def test_schema_one_device_remains_compatible(self):
         environment = self.load(b'device = "192.0.2.30:5555"\ndev_package = "opensagetv.vibe.miniclient.debug"\n')
         self.assertEqual(environment.device_serial(), "192.0.2.30:5555")
+        self.assertEqual(environment.install_timeout_seconds(), 180)
         self.assertEqual(environment.validate(), [])
 
     def test_redacted_summary_never_returns_credentials(self):

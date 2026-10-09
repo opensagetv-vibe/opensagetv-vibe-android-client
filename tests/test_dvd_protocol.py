@@ -38,6 +38,56 @@ ACTIVE_STATS_SNAPSHOT = ROOT / "source/dev/android-shared/src/main/java/opensage
 
 
 class DvdProtocolTests(unittest.TestCase):
+    def test_sparse_native_scan_skips_muted_audio_before_pts_and_queue(self):
+        text = DVD_PS.read_text(encoding="utf-8")
+        pes = text.split("private static final class PesReader", 1)[1].split("private static final class DvdPrivateStreamPesReader", 1)[0]
+        private = text.split("private static final class DvdPrivateStreamPesReader", 1)[1]
+        self.assertIn("!video && !timestampState.shouldParseAudioPes()", pes)
+        guard = private.index("!timestampState.shouldParseAudioPes()")
+        self.assertLess(guard, private.index("parseTime();"))
+        self.assertIn("skippedSubstream >= 0x80 && skippedSubstream <= 0x87", private)
+        self.assertIn("data.skipBytes(data.bytesLeft());", private[guard:])
+
+    def test_scan_buffers_are_bounded_without_changing_normal_title_reserve(self):
+        player = MEDIA3.read_text(encoding="utf-8")
+        control = DVD_LOAD_CONTROL.read_text(encoding="utf-8")
+        self.assertIn("dvdServerTrickRate == 1f", player)
+        self.assertIn("DvdScanBufferPolicy.available", player)
+        self.assertIn("parameters.bufferedDurationUs < drainState.scanBufferUs()", control)
+        self.assertIn("default long scanBufferUs() { return 2_000_000L; }", control)
+        self.assertIn("MIN_BUFFER_MS = 5_000", control)
+        flush = player.split("public synchronized void flush()", 1)[1].split(
+            "public void setup", 1)[0]
+        self.assertIn("dvdRateTransitionAnchorMs = Math.max(0L, getPlayerMediaTimeMillis(0L))", flush)
+        self.assertIn("dvdRateTransitionPending = true", flush)
+
+    def test_skip_harness_requires_decoded_seek_landing(self):
+        harness = (ROOT / "scripts/mcp_dvd_virtual_skip_test.py").read_text(encoding="utf-8")
+        self.assertIn("Public DVD seek did not land", harness)
+        self.assertIn('positioned.get("mediaTimeMs", 0)', harness)
+        self.assertIn('"target_reached"', harness)
+
+    def test_native_scan_keeps_decoder_and_only_reprepares_at_normal_play(self):
+        player = MEDIA3.read_text(encoding="utf-8")
+        switch = player.split("public boolean onServerDvdTrickMode", 1)[1].split(
+            "private void updateDvdTrickAudioSuspension", 1)[0]
+        self.assertLess(switch.index("getPlayerMediaTimeMillis(0L)"),
+                        switch.index("dvdServerTrickRate = rate"))
+        self.assertIn("dvdLogicalClockBaseMs = transitionAnchorMs", switch)
+        self.assertIn("dvdRateTransitionPending = true", switch)
+        clock = player.split("public long getMediaTimeMillis", 1)[1].split(
+            "public long getPlayerMediaTimeMillis", 1)[0]
+        self.assertIn("dvdPushMode && dvdRateTransitionPending", clock)
+        self.assertIn("return dvdRateTransitionAnchorMs", clock)
+        self.assertIn("return super.getMediaTimeMillis(lastServerTime)", clock)
+        self.assertIn("dvdRateTransitionAnchorMs = dvdLogicalClockBaseMs", player)
+        self.assertIn("if (rate == 1.0f)", switch)
+        scan = switch.split("else\n", 1)[1].split("updateDvdTrickAudioSuspension", 1)[0]
+        self.assertNotIn("flush();", scan)
+        self.assertIn("factory.queueTrickRate(bytePosition, rate)", scan)
+        self.assertIn("dvd_scan_reserve_drained", player)
+        self.assertIn("applyDvdPreviewDrainSpeed(1.0f)", player)
+
     def test_active_text_subtitle_presentation_is_bounded_and_dvd_safe(self):
         plugin = PLUGIN.read_text(encoding="utf-8")
         dialog = ACTIVE_ADJUSTMENTS.read_text(encoding="utf-8")
@@ -842,6 +892,36 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("telecineCadenceSeen", completer)
         self.assertIn("MAX_REPAIR_DELTA_US", completer)
         self.assertIn("disc_mpeg2_timestamp_repair", MEDIA3.read_text(encoding="utf-8"))
+
+    def test_dvd_soft_telecine_normalization_is_evidence_gated(self):
+        extractor = DVD_PS.read_text(encoding="utf-8")
+        completer = (
+            ROOT
+            / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/video/"
+            "Mpeg2PictureTimestampCompleter.java"
+        ).read_text(encoding="utf-8")
+        normalizer = (
+            ROOT
+            / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/video/"
+            "Mpeg2SoftTelecineNormalizer.java"
+        ).read_text(encoding="utf-8")
+        self.assertIn("softTelecineProgressiveRun >= 8", completer)
+        self.assertIn("softTelecineRepeatTransitions >= 2", completer)
+        self.assertIn("resetSoftTelecineEvidence();", completer)
+        self.assertIn("completeSoftTelecineTimestamp", extractor)
+        self.assertIn("timestampCompleter.isSoftTelecineConfirmed()", extractor)
+        self.assertIn("value & ~0x82", normalizer)
+        self.assertIn("FILM_FRAME_RATE_CODE = 1", normalizer)
+
+    def test_visual_disc_positioning_does_not_repeat_scene_by_default(self):
+        script = (ROOT / "scripts/mcp_disc_test.py").read_text(encoding="utf-8")
+        server = (
+            ROOT / "mcp/src/sagetv_dev_mcp/server.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--seek-attempts", type=int, default=1', script)
+        self.assertIn('"max_attempts": args.seek_attempts', script)
+        self.assertIn('"attemptCount": positioned.get("seekAttemptCount")', script)
+        self.assertIn("max_attempts: int = 1", server)
 
     def test_dvd_newcell_resets_scanner_and_sample_byte_coordinates_together(self):
         extractor = DVD_PS.read_text(encoding="utf-8")

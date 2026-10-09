@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.ConnectionLifecycleDiagnostics;
+import opensagetv.vibe.miniclient.android.MiniclientApplication;
+import opensagetv.vibe.miniclient.android.video.MimDirectSessionClient;
 import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
 import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlaybackHealthSource;
@@ -96,6 +98,7 @@ final class PlaybackHealthProbe
         }
 
         out.topLevelPlayerClass = topLevelPlayer.getClass().getName();
+        out.firstVideoFrameRendered = topLevelPlayer.hasRenderedFirstVideoFrame();
         out.miniState = topLevelPlayer.getState();
         out.bufferLeft = topLevelPlayer.getBufferLeft();
         out.lastFileReadPos = topLevelPlayer.getLastFileReadPos();
@@ -171,8 +174,24 @@ final class PlaybackHealthProbe
         // the player URL flag may already have been reset for replacement.
         if ((out.playbackSource == null || out.playbackSource.isEmpty()
                 || "UNKNOWN".equals(out.playbackSource))
-                && out.dataSourceClass.endsWith(".Media3MimDirectHttpDataSource"))
+                && (out.dataSourceClass.endsWith(".Media3MimDirectHttpDataSource")
+                    || out.dataSourceClass.endsWith(".Exo2MimDirectHttpDataSource")))
             out.playbackSource = "MIM_DIRECT";
+        if ("MIM_DIRECT".equals(out.playbackSource))
+        {
+            out.directSourceSession = MiniclientApplication.get().getMimDirectSession()
+                    .mediaUriStateForDiagnostics(invokeStringOptional(dataSource,
+                            "getLastRequestedUriForDebug", ""));
+            // HLS pre-creates key/media loaders which may not have opened yet.
+            // Report the player's actual bound MediaItem separately instead of
+            // pretending an unopened child proves a current HTTP request.
+            Object item = invokeOptional(backendPlayer, "getCurrentMediaItem");
+            Object configuration = readField(item, "localConfiguration");
+            Object uri = readField(configuration, "uri");
+            out.directMediaItemSession = MiniclientApplication.get().getMimDirectSession()
+                    .mediaUriStateForDiagnostics(uri == null ? "" : uri.toString());
+            captureDirectError(backendPlayer, out);
+        }
         // Push and Fixed/MIM datasources predate the Pull/SMB source telemetry
         // interface. The transport is nevertheless unambiguous from the player
         // contract, so do not report an active SageTV Push stream as UNKNOWN.
@@ -215,6 +234,24 @@ final class PlaybackHealthProbe
         out.playerPositionMs = invokeLongOptional(backendPlayer, "getCurrentPosition", -1);
         out.videoWidth = invokeIntOptional(backendPlayer, "getVideoWidth", out.videoWidth);
         out.videoHeight = invokeIntOptional(backendPlayer, "getVideoHeight", out.videoHeight);
+        if (className.equals("tv.danmaku.ijk.media.player.IjkMediaPlayer"))
+        {
+            // On-demand only. First-frame/clock proof must not imply hardware:
+            // IJK may fall back to bundled avcodec despite a hardware request.
+            // Its existing MediaInfo exposes the decoder actually selected.
+            Object info = invokeOptional(backendPlayer, "getMediaInfo");
+            String module = readStringField(info, "mVideoDecoder").trim();
+            out.videoDecoderName = readStringField(info, "mVideoDecoderImpl").trim();
+            if ("mediacodec".equalsIgnoreCase(module) && !out.videoDecoderName.isEmpty())
+                out.videoDecoderKind = AndroidCodecPolicy.isSoftwareCodecName(out.videoDecoderName)
+                        ? "software" : "hardware";
+            else if ("avcodec".equalsIgnoreCase(module) || "ffmpeg".equalsIgnoreCase(module))
+                out.videoDecoderKind = "software";
+            out.audioDecoderName = readStringField(info, "mAudioDecoderImpl").trim();
+            out.provider = "ijk_media_info_on_demand";
+            // Renderer counters remain unavailable; do not promote this to
+            // the stronger Exo output-health oracle or install any listener.
+        }
         out.reason = "renderer_counters_not_available";
         return out;
     }
@@ -562,7 +599,17 @@ final class PlaybackHealthProbe
         if (snapshot.miniState != MiniPlayerPlugin.PLAY_STATE)
             return false;
         if (!snapshot.supported)
-            return snapshot.basicIsPlaying;
+        {
+            // IJK can keep its audio/position clock running after MediaCodec
+            // rejects the video stream. Its real rendering-start callback is
+            // available even though Exo-style output counters are not. Never
+            // accept that clock alone as successful video startup/recovery.
+            // Keep other unsupported backends and audio-only IJK unchanged.
+            return snapshot.basicIsPlaying
+                    && (!snapshot.backendClass.endsWith(".IJKMediaPlayerImpl")
+                        || snapshot.videoWidth <= 0
+                        || snapshot.firstVideoFrameRendered);
+        }
         return snapshot.playbackState == EXO_STATE_READY
                 && snapshot.playWhenReady
                 && snapshot.isPlaying
@@ -590,6 +637,12 @@ final class PlaybackHealthProbe
         String backendClass = "";
         String backendPlayerClass = "";
         String dataSourceClass = "";
+        String directSourceSession = "unavailable";
+        String directMediaItemSession = "unavailable";
+        String directErrorSession = "unavailable";
+        String directErrorAsset = "unavailable";
+        String directErrorCode = "unavailable";
+        int directErrorSegmentIndex = -1;
         long dataSourceOpenCount = -1;
         long dataSourceOpenWaitMs = -1;
         long dataSourceLastOpenPosition = -1;
@@ -651,6 +704,7 @@ final class PlaybackHealthProbe
         boolean isPlaying;
         boolean isLoading;
         boolean basicIsPlaying;
+        boolean firstVideoFrameRendered;
         long playerPositionMs = -1;
         long bufferedPositionMs = -1;
         long durationMs = -1;
@@ -730,6 +784,12 @@ final class PlaybackHealthProbe
             append(out, p + "backendClass", backendClass);
             append(out, p + "backendPlayerClass", backendPlayerClass);
             append(out, p + "dataSourceClass", dataSourceClass);
+            append(out, p + "directSourceSession", directSourceSession);
+            append(out, p + "directMediaItemSession", directMediaItemSession);
+            append(out, p + "directErrorSession", directErrorSession);
+            append(out, p + "directErrorAsset", directErrorAsset);
+            append(out, p + "directErrorCode", directErrorCode);
+            append(out, p + "directErrorSegmentIndex", directErrorSegmentIndex);
             append(out, p + "dataSourceOpenCount", dataSourceOpenCount);
             append(out, p + "dataSourceOpenWaitMs", dataSourceOpenWaitMs);
             append(out, p + "dataSourceLastOpenPosition", dataSourceLastOpenPosition);
@@ -787,6 +847,7 @@ final class PlaybackHealthProbe
             append(out, p + "isPlaying", isPlaying);
             append(out, p + "isLoading", isLoading);
             append(out, p + "basicIsPlaying", basicIsPlaying);
+            append(out, p + "firstVideoFrameRendered", firstVideoFrameRendered);
             append(out, p + "playerPositionMs", playerPositionMs);
             append(out, p + "bufferedPositionMs", bufferedPositionMs);
             append(out, p + "durationMs", durationMs);
@@ -905,6 +966,43 @@ final class PlaybackHealthProbe
     {
         Object value = readField(target, name);
         return value == null ? "" : String.valueOf(value);
+    }
+
+    /** Inspect at most eight existing error causes; no listeners/network or raw URI export. */
+    private static void captureDirectError(Object backendPlayer, Snapshot out)
+    {
+        Object error = invokeOptional(backendPlayer, "getPlayerError");
+        Throwable cause = error instanceof Throwable ? (Throwable) error : null;
+        for (int depth = 0; cause != null && depth < 8; depth++, cause = cause.getCause())
+        {
+            Object spec = readField(cause, "dataSpec");
+            Object uri = readField(spec, "uri");
+            if (uri == null) uri = readField(cause, "url");
+            if (uri == null) continue;
+            String value = uri.toString();
+            out.directErrorSession = MiniclientApplication.get().getMimDirectSession()
+                    .mediaUriStateForDiagnostics(value);
+            try
+            {
+                String path = java.net.URI.create(value).getPath();
+                if (path != null && path.endsWith("/stream.m3u8"))
+                    out.directErrorAsset = "playlist";
+                else if (path != null && path.matches(".*/seg_[0-9]{6}\\.ts"))
+                {
+                    out.directErrorAsset = "segment";
+                    out.directErrorSegmentIndex = Integer.parseInt(
+                            path.substring(path.length() - 9, path.length() - 3));
+                }
+                else out.directErrorAsset = "other";
+            }
+            catch (RuntimeException malformed) { out.directErrorAsset = "unavailable"; }
+            Object status = readField(cause, "responseCode");
+            Object body = readField(cause, "responseBody");
+            if (status instanceof Number)
+                out.directErrorCode = MimDirectSessionClient.mediaResponseTagForDiagnostics(
+                        ((Number) status).intValue(), body instanceof byte[] ? (byte[]) body : null);
+            return;
+        }
     }
 
     private static Object invokeOptional(Object target, String methodName)

@@ -54,6 +54,9 @@ public class MiniClient
     private ServerInfo connectedServer;
     private ImageCache imageCache;
     private volatile String mimDirectTransportMode = MimDirectTransportPolicy.OFF;
+    private volatile boolean mimDirectSourceAcceptance;
+    public interface PlaybackIntentListener { void onCommand(SageCommand command); }
+    private volatile PlaybackIntentListener playbackIntentListener;
 
     public MiniClient(MiniClientOptions options, ILogger logger)
     {
@@ -79,6 +82,19 @@ public class MiniClient
     {
         mimDirectTransportMode = MimDirectTransportPolicy.isActive(mode)
                 ? mode : MimDirectTransportPolicy.OFF;
+        if (!MimDirectTransportPolicy.TRANSCODE.equals(mimDirectTransportMode))
+            mimDirectSourceAcceptance=false;
+    }
+
+    /** Hosted source acceptance is negotiated separately from native inventory. */
+    public void setMimDirectSourceAcceptance(boolean available) {
+        mimDirectSourceAcceptance=available && MimDirectTransportPolicy.TRANSCODE.equals(mimDirectTransportMode);
+    }
+    public boolean isMimDirectSourceAcceptance() { return mimDirectSourceAcceptance; }
+    public void setPlaybackIntentListener(PlaybackIntentListener listener) { playbackIntentListener=listener; }
+    public void observePlaybackCommand(SageCommand command) {
+        PlaybackIntentListener listener=playbackIntentListener;
+        if (listener !=null) listener.onCommand(command);
     }
 
     public String getMimDirectTransportMode()

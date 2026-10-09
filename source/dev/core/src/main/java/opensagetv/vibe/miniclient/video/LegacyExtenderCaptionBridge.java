@@ -26,6 +26,10 @@ public final class LegacyExtenderCaptionBridge
     }
 
     private final Sink sink;
+    // A Fixed side-channel poll and the player clock can drain concurrently.
+    // Keep the network callback in dequeue order without holding the pending
+    // lock while it performs I/O.
+    private final Object emissionLock = new Object();
     private final ArrayDeque<PendingCaption> pending = new ArrayDeque<PendingCaption>();
     private final ArrayDeque<RecentSample> recentSamples = new ArrayDeque<RecentSample>();
     private static final int MAX_RECENT_SAMPLES = 256;
@@ -126,26 +130,32 @@ public final class LegacyExtenderCaptionBridge
      */
     public void drainTo(long playbackTimeUs)
     {
-        List<PendingCaption> due = new ArrayList<PendingCaption>();
-        synchronized (this)
+        synchronized (emissionLock)
         {
-            while (!pending.isEmpty() && pending.peekFirst().timeUs <= playbackTimeUs)
+            List<PendingCaption> due = new ArrayList<PendingCaption>();
+            synchronized (this)
             {
-                PendingCaption caption = pending.removeFirst();
-                due.add(caption);
-                forwardedSamples++;
-                forwardedBytes += caption.payload.length;
+                while (!pending.isEmpty() && pending.peekFirst().timeUs <= playbackTimeUs)
+                {
+                    PendingCaption caption = pending.removeFirst();
+                    due.add(caption);
+                    forwardedSamples++;
+                    forwardedBytes += caption.payload.length;
+                }
             }
+            for (PendingCaption caption : due)
+                sink.postSubtitleInfo(caption.pts45Khz, 0, caption.payload,
+                        CC_SUBTITLE | PTS_VALID);
         }
-        for (PendingCaption caption : due)
-            sink.postSubtitleInfo(caption.pts45Khz, 0, caption.payload,
-                    CC_SUBTITLE | PTS_VALID);
     }
 
-    public synchronized void flush()
+    public void flush()
     {
-        clearPending();
-        postFlush();
+        synchronized (emissionLock)
+        {
+            clearPending();
+            postFlush();
+        }
     }
 
     /**
@@ -173,8 +183,11 @@ public final class LegacyExtenderCaptionBridge
         // controls for both channels/fields. They erase decoder memory without
         // selecting roll-up/pop-on/paint-on or imposing a row; the source's
         // next real mode and PAC controls remain authoritative.
-        sink.postSubtitleInfo(0, 0, buildCea608ResetRecords(),
-                CC_SUBTITLE | FLUSH_SUBTITLE_QUEUE);
+        synchronized (emissionLock)
+        {
+            sink.postSubtitleInfo(0, 0, buildCea608ResetRecords(),
+                    CC_SUBTITLE | FLUSH_SUBTITLE_QUEUE);
+        }
     }
 
     public static byte[] buildCea608ResetRecords()

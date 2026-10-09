@@ -406,8 +406,11 @@ public class AndroidMiniClientOptions implements MiniClientOptions {
 
     private PlayerBackend getPlayerBackend()
     {
-        return PlayerBackend.fromPreference(
-                getPrefs().getString(PrefStore.Keys.default_player, PlayerBackend.DEFAULT_PREFERENCE));
+        return PlayerBackend.codecCapabilityBackend(
+                opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides.resolveBackend(
+                        getPrefs().getString(PrefStore.Keys.default_player, PlayerBackend.DEFAULT_PREFERENCE)),
+                opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides.resolveGsyEngine(
+                        getPrefs().getString(PrefStore.Keys.gsy_player_engine, "auto")));
     }
 
     private boolean isSupportedExoPlayerContainer(Container container)

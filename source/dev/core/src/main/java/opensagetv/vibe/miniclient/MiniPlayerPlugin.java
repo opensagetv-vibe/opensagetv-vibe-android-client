@@ -109,6 +109,9 @@ public interface MiniPlayerPlugin extends Runnable
         return 1.0f;
     }
 
+    /** Bound native DVD reserves during one virtual skip; other paths ignore it. */
+    default void setNativeDvdSkipPulseActive(boolean active) { }
+
     /** Current accepted playback rate, including while paused. */
     default float getPlaybackRate()
     {
@@ -334,6 +337,22 @@ public interface MiniPlayerPlugin extends Runnable
 
     /** Supplies the first timestamp anchor of a new server Push byte epoch. */
     default void onServerPushAnchor(long anchorMs) { }
+
+    /**
+     * Publishes the stock MiniDVDPlayer trick-play mode that begins at the
+     * supplied byte offset in the current DVD Push epoch.  The server already
+     * selects forward/backward VOBUs; DVD-aware clients use this marker to
+     * compress or reverse their presentation timestamps instead of scheduling
+     * the sparse pictures at their authored, normal-play times.
+     *
+     * @return true when the backend starts a replacement DVD byte epoch;
+     *         false when it preserves the existing byte boundary or does not
+     *         implement native DVD trick play.
+     */
+    default boolean onServerDvdTrickMode(float rate, long bytePosition) { return false; }
+
+    /** True only when native DVD scan reports a usable displayed source clock. */
+    default boolean supportsNativeDvdSkipPulse() { return false; }
 
     /**
      * Return the # of bytes left in the media buffer

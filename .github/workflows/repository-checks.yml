@@ -31,7 +31,9 @@ jobs:
           bash -n dev.sh update.sh docker/entrypoint.sh
           find scripts -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
       - name: Run source contract tests
-        run: python -m unittest discover -s tests -p 'test_*.py'
+        run: |
+          python -m pip install -r tests/requirements.txt
+          python -m unittest discover -s tests -p 'test_*.py'
       - name: Verify release metadata
         run: |
           test "$(cat VERSION)" = "$(sed -n 's/^VERSION=//p' release.properties)"

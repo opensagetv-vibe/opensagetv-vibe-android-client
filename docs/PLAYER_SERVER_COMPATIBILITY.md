@@ -28,6 +28,196 @@ control.
 
 ## Feature intent and test-only controls
 
+### MiniMX Android6 device matrix (DEVICE-003, active2026-10-07)
+
+MINIMX model/AM2 Build.DEVICE/gxbaby board, Android6.0.1/API23 ARM32;
+stock175 actual SageTV7.xml verified through public captions.get on its
+commissioned client identity. Firmware lacks TV/Leanback features, so default
+startup uses the phone browser. Existing **Use TV server browser** explicitly
+selects the remote-oriented layout and now applies immediately on Settings
+return; physical verification preserves the original false user preference.
+Do not misidentify this firmware feature boundary as an incomplete APK.
+
+Media3, legacy Exo and both GSY delegates each pass12 supported hardware
+codec/transition rows using actual Amlogic OMX decoders. VP8/VP9 hardware rows
+are explicitly unsupported (software-only platform inventory), not fallback
+PASS. Short clean EOF proves decoded output, not full HDR presentation or
+sustained fullscreen playback. Independent HDMI additionally shows labelled
+fullscreen long MPEG2 playback with nonsilent audio. The earlier HOME-return
+video stall now recovers on F901 through the exact-device renderer replacement
+policy across Media3/legacy/both GSY delegates, same connection and preserved
+manual pause. MINIMX-SURFACE-001 closes with native title lifecycle134.826s,
+readable root/Languages/root/main56.930s and title cadence0.96716/independent
+HDMI;27 preferences restored. Do not promote these completed affected gates
+to a complete device matrix.
+All four extractor paths pass CEA/Teletext/DVB captions with readable output,
+seeks/pause and restored app/server settings. Explicit Android DVB bitmap
+selection is not STV CC1/CC2 bitmap proof. IJK additionally shows real MPEG2
+picture/audio using its software decoder and actual Amlogic hardware AVC on
+the UK sample; do not call its MPEG2 result hardware decoding. IJK controls/
+Teletext pass on99a47797 after event-driven selection correction; original
+native IJK CEA/DVB interfaces remain unsupported, not false caption passes.
+Optional System proves bounded fallback to Media3, not System decoder success.
+Authored DVD selectors/readable SPU/440Hz switched audio, ALADDIN normal-speed
+cadence, approximate cursor accept/cancel and held authored chapter ordinals
+pass. Dedicated timed FF/RW/pause pass67.077s. Native smooth reverse preview
+at-8 is NOT_WORKING on this tested stack; root cause remains unproven. Larger
+buffer and explicit async experiments did not fix it and were withdrawn;
+exact99a47797 restored/normal DVD119.207s and HDMI output pass. This is not a
+hardware-incapability claim or justification to alter working timed keys.
+Optional232 ownership/GPU remains in progress.
+
+Compact provenance: artifacts/results/DEVICE-003/matrix.json. Completed native
+codec snapshots/reports/logs retire recoverably to workspace-root deleteme,
+preserving their relative paths; corrected lifecycle/caption/safety raw also
+retires after compact recording. Only active investigation stays under
+artifacts/active/DEVICE-003. Stock175 has no usable GPU transcoding;
+only actual232 job flags can prove optional server hardware processing.
+
+### Tab S6 Lite full device matrix (DEVICE-002, complete2026-10-08)
+
+Samsung SM-P610/gta4xlwifi, Android13/API33, ARM64/ARM32, paired wireless ADB
+`.51:45219` (refreshed2026-10-08 with existing keys). Initial381ae608 guarded Dev APK install/checksum passed; current
+67e07f95 touch-corrected candidate passed the native hardware matrix.167d3911
+safe Fixed and644596ae IJK candidates were independently stream-hashed,
+retaining only proven IJK pending-seek
+readiness and display-only Surface rebinding, not rejected native workarounds.
+Per-row caption/DVD provenance remains separate, not a released APK. User
+finished both server wizards and actual generated identity is retained.
+Tablet testing uses stock175 first, optional232 later;
+other completed device rows remain unchanged.
+
+2026-10-08 integration update: installed c62911ae is stream-hashed with15
+settings preserved. Native rows below keep their exact earlier APK provenance;
+they were not relabeled as newly retested. Negotiated stock-plugin recovery
+passes Media3/legacy and both GSY delegates on175, including actual video and
+final Seek. Nonzero bookmark44.691s restores near50.838s (burned50.384), canceled
+HTTP Watch409 does not reset the source. Owned2s caption controls independently
+display complete PTS rows on CPU175 and VAAPI232 with seek/pause;232 actual
+hardware decode+encode is confirmed by fresh MIM job status, not an unavailable
+GPU-load tool. The500ms CPU175 stress picture remains malformed, NOT_WORKING
+for sustained readability, not a packet-transport or whole-device PASS.
+GSY-CAP-001 now resolves selected delegate capabilities instead of assuming all
+IJK codecs. Both GSY175 real recovery61.328/64.402s,232 owned captions/seek/
+pause86.354/77.837s and175 unavailable HTTP fallback69.333/68.573s pass.
+The device closes COMPLETE_WITH_EXPLICIT_LIMITS; no speaker or native MPEG-2
+DVD pass is implied. Original175 captionfalse,15 preferences/group and exact
+power restored, both servers zero jobs/contexts. Temporary fixture/import
+retired; completed raw recoverable under rootdeleteme. Compact final details:
+artifacts/results/DEVICE-002/owned-watch-recovery.json.
+
+No tablet HDMI capture is connected. Bounded ADB screenshots/recordings verify
+rendered UI/visible captions, combined with independent Surface, selected
+decoder, advancing A/V counters, server clocks and crash/lifecycle checks.
+This is software-composited visual evidence, not physical HDMI presentation,
+speaker audibility or measured speaker/display A/V sync. Mirroring is optional;
+it must not replace independent clocks or alter the measured playback load.
+
+| Tablet gate | Status | Acceptance / remaining evidence |
+|---|---|---|
+| ADB/model/OS/ABI/authorization | PASS | Actual SM-P610/API33, ARM64/ARM32, timeout0 verified; persistent pairing |
+| APK installation | PASS | Guarded initial381 baseline and current67 touch/alignment candidate; no app-data clear |
+| Installed APK identity | PASS | Initial381/67/167/6b71/644 and currentc62911ae independently stream-hashed; current debug identity matches built candidate; native rows retain earlier provenance |
+| Platform codec inventory | PASS_INVENTORY_ONLY |29 video/35 audio; Exynos AVC/HEVC hardware, no advertised Android MPEG-2 decoder; not playback proof |
+| First-run/user identity/settings | PASS | User175/232 wizards done, actual generated identity,15 current preferences restored after each group and original power checkpoint |
+| Touch long-press/icon alignment | PASS | Final67 candidate actual175/232 holds, four aligned columns, correct Audio/Video/CC targets; no custom/remote remap |
+| Native codec/backends and decoded AC-3 | PARTIAL_PASS_WITH_EXPLICIT_LIMIT |40 available hardware rows pass: Media3/Legacy/both GSY delegates10 each, actual Exynos and resolved delegates. Supplemental Media3 HEVC/VPx visual rows pass. TABLET-IJK-001 closes best effort: original UK AVC101.939s still NOT_WORKING on actual Exynos; no silent fallback PASS or blanket IJK blacklist |
+| Seek/pause/STOP-rewatch/HOME/teardown | PASS_SUPPORTED_ROWS | Four typed-output paths pass lifecycle/extended controls. IJK clean same-coded MP4126.416s has real changing HOME/user-resume/3 replay pictures after guarded Surface correction; original UK remains NOT_WORKING. Unqualified native/probe/prefix/read-reset/startup-order trials withdrawn; original source/options retained |
+| CEA/Teletext/DVB/SPU and authority | PARTIAL_PASS | All four typed backend native DVB/STV Teletext subsets and corrected232 Fixed CEA paths are independently readable/passing. TABLET-CC-001 is closed, including strict owned Copy20s Off/On and seek recovery; DVD SPU still needs a supported video path |
+| Native DVD menus/title/navigation/cadence | UNSUPPORTED_SAFE_REFUSAL / OPTIONAL_TRANSFORM_PASS | No MPEG-2 video decoder: current6b71 native refusal37.277s avoids audio-only playback.232 transformed93.543s renders Exynos AVC/readable authored title, chapter+/chapter-/pause/play and cadence0.999422; not stock native menus/SPU or strict owned Direct |
+| Owned Copy/Transcode/fallback/GPU | PASS_SUPPORTED_SCOPE_WITH_EXPLICIT_LIMITS |232 Copy controls121.551s/zero orphans and Off/On104.151s readable DVB/seeks. Negotiated single-segment non-DVD owned Transcode, actual H.264, recovery/latest intent/seek/pause and unavailable-service fallback pass;232 fresh VAAPI job has GPU decode+encode. CPU175500ms CEA readability NOT_WORKING;2s readable controls pass. Earlier ordinary Fixed VAAPI encode/CPU decode is not relabeled full GPU |
+| Touchscreen/menu/back/layout/rotation | PASS |91.196s all four requested postures retain declared landscape2000x1200 and A/V;900ms hold opens menu, four right-icon pairs align and Back recovers; two rotation settings/15 prefs restored |
+| Physical speaker A/V sync | UNMEASURED | No HDMI/audio capture/webcam measurement; not a software-counter PASS |
+
+Test-only keep-awake snapshots/restores original power values. A manual session
+owns the tablet checkpoint; nested gates borrow it. End that owner after tests
+or when handing back for a prolonged user-dependent pause, and begin a fresh
+one on resumption. Completed raw has retired recoverably; compact final results
+remain under artifacts/results/DEVICE-002. Only minimum unresolved175500ms/IJK
+evidence and persistent warm cache stay in artifacts/active/DEVICE-002.
+
+### ONN v1 and Pro affected-row refresh (2026-10-07)
+
+ONN v1 is sti6140d360/Android14/API34; Pro is SNA/Android14/API34.
+Stock `.175` is tested first, with optional owned HTTP on `.232` afterward.
+These are affected rows, not a repeat of every historical codec/player matrix.
+Every settings-changing run checkpoints/restores preferences and temporary
+keep-awake settings:58 preferences on v1, initially9 and currently15 on Pro
+after the user's subsequent setup changes. Preserve those changes.
+The Pro uses its actual first-run client identity, not a borrowed test ID.
+
+| Device / path | Result |
+|---|---|
+| v1, stock Pull, Media3 / legacy Exo / GSY | PASS: CEA/Teletext/DVB, seeks/pause and Home/manual-pause recovery |
+| v1, stock native DVD | PASS: authored root/Languages/root/main, ALADDIN approximate9-minute landing, advancing A/V and1.000789x measured clock cadence |
+| v1, `.232` owned Transcode | PASS: strict HTTP ownership, readable HDMI CEA, seek/pause, VAAPI hardware decode/encode with deinterlacingOff |
+| v1, `.232` owned Copy | PASS: strict ownership through controls and final state; initial health samples can be transiently unhealthy before bounded sustained recovery |
+| Pro, stock Pull, Media3 / GSY legacy CEA | PASS: STV Off/CC1/CC2 cycle, seek/pause and independently readable HDMI captions |
+| Pro, stock legacy Exo / Media3 MPEG-2 Home | PASS: exact reproduced frozen-video failure corrected by scoped Surface replacement; same connection, manual pause and teardown |
+| Pro, stock GSY legacy AVC Home | PASS: normal Surface switching works without the v1 AVC exception |
+| Pro, stock Teletext | PASS: STV cycle, FF/REW, pause/PLAY, continuing event225 and readable HDMI text |
+| Pro, stock GSY Media3 DVB | PASS: normal discovered bitmap service, Off/On continuity, seek recovery and visible HDMI bitmap |
+| Pro, stock native DVD | PASS: authored root/Languages/root/main, ALADDIN approximate landing/0.999508x measured cadence/pause, held chapters and actual HDMI video.18 drops/5 skips/6 release gaps are recorded, not hidden or certified HD200 parity. |
+| Pro, held DVD scan | PASS on381ae608: scan-only muted audio PES exclusion, first46.492s and same9min54.901s, both FF/RW256x, release A/V, PLAY cancel and TS separation. Earlier settled retry alone was not proof. |
+| Pro, normal DVD after scan correction | PASS on381ae608: ALADDIN70.112s,0.999803x over10173ms, video579/audio318, pause/resume;22 drops/2 skips/6 release gaps/13 nonpositive releases recorded. Authored startup71.975s and menu27.578s; USB HDMI picture/audio and Languages/SPU highlight. |
+| Pro, `.232` owned Transcode | PASS on5f419983:115.834s, strict active HTTP/control/settled ownership, FF2969/REW3092ms, pause, readable HDMI CEA; real VAAPI decode/encode with deinterlacingOff. Separate wizard complete, actual SageMC Dynamic Menu by nielm. |
+| Pro, `.232` owned Copy/rejected seek | Copy73.020s passes strict controls; controlled real409 gate29.307s preserves retained epoch and advancing A/V, then normal90s public seek recovers. The original intermittent server rejection cause remains unproven. |
+
+Compact v1 details: `artifacts/results/MATRIX-003/onn-v1-affected.json`.
+Pro compact details: `artifacts/results/MATRIX-003/onn-pro-affected.json`.
+Compact written results replace completed/corrected raw captures, which retire
+recoverably under workspace deleteme. Preserve unique open server-rejection and
+cold-start automation-timeout evidence, not the already completed wizard.
+v1 uses0d55918; Pro uses381ae608, retaining the509c01ad MPEG-2 policy. The added policy
+matches only SNA/API34/MPEG-2, leaving v1 and all older-API device behavior
+unchanged. Completed Shield/Fire TV results remain valid. Explicit DVB is a
+local bitmap renderer, not proof of stock STV CC1/CC2 bitmap support. Copy
+does not claim a transcoded caption side channel or zero-latency seeking.
+DVD clock cadence does not certify frame-perfect HD200 visual parity.
+`.175` is CPU-constrained with no usable hardware transcoding. Native DVD/Pull
+are not software video encoding; bounded failing/repeated scan windows show
+no transcoder/throttling and modest measured utilization, not proof against
+all host contention. Use `.232` for hardware Transcode gates. Later scan-only
+PES changes affect native DVD previews, not successful HLS/Copy/caption paths;
+carry forward those already measured rows instead of repeating whole matrices.
+
+### Shield Tube affected-row refresh (2026-10-06)
+
+Physical Shield `sif`/Android11/API30 rows use DEV004, stock `.175`/SageMC
+first and `.232`/Stock STV for optional MIM. All 44 persisted preferences and
+temporary power changes are restored per run; Non-Pro and Pro are untouched.
+These are affected rows, not a repeat of every historical codec/player matrix.
+
+| Server / player | Affected result |
+|---|---|
+| Stock `.175`, Media3 Pull | Readable fast CEA, CC Off/CC1/CC2, FF/REW and pause/resume; independent HDMI video/audio proof |
+| Stock `.175`, Media3 native DVD | Authored root/Languages/root/main menu control and advancing A/V; long ALADDIN cadence 0.99987x over 15 seconds, no new dropped frames, pause/resume and hardware NVIDIA MPEG-2 |
+| Stock `.175`, Media3 UK Pull | Taskmaster DVB bitmap Off/On and seek recovery; Breakfast Teletext through STV CC1/CC2 with idle-clock continuity and English AC-3 audio |
+| Stock `.175`, GSY legacy Exo Pull | UK H.264/AC-3 hardware A/V; seek/jump/pause/STOP-exact-rewatch plus HOME/return/surface recreation and manual-pause preservation |
+| Stock `.175`, legacy Exo Pull | Readable fast CEA after FF/REW and pause/resume on the updated APK |
+| `.232`, Media3 owned Transcode | Verified Direct HTTP ownership, active CEA side channel, visible HDMI captions and seek/pause recovery; VAAPI hardware decode/encode, deinterlace Off |
+| `.232`, GSY/Media3 owned Transcode | Two corrected stable-idle startup gates pass owned HTTP at startup and after seeks/pause; readable HDMI CEA and non-silent audio, no crash |
+
+Stock/UK/DVD baseline rows used APK `38efadaa`; the HTTP policy correction
+and legacy-Exo follow-up use `9404b200`. The only packaged change between them
+is the shared HTTP permission: previously passing raw MiniClient/Pull/DVD
+paths do not use that policy, so their measured evidence is retained rather
+than repeating unrelated rows. Compact details are in
+`artifacts/results/MATRIX-003/shield-affected.json`.
+
+The short authored DVD loop reset its title clock during a cadence window;
+that observation is invalid, not a decoder failure. Its separate menu gate
+and long ALADDIN cadence gate passed. DVB's actual discovered row was 2, not
+0; the normal menu selected it correctly, and the test oracle was corrected.
+Declared CEA compatibility formats in UK inventory do not prove CEA payload.
+Explicit DVB uses the client-local renderer, not stock STV CC1/CC2 bitmap
+support. Neither this refresh nor the accepted DVD clock measurement certifies
+frame-exact HD200 parity. User subsequently requested the Pro refresh before
+publication; its current results are tracked above. The Shield rows alone
+did not alone close MATRIX-003. The later Pro/shared-extractor affected checks
+now complete that parent; final evidence synchronization is recorded in the
+TASKS.md ledger (revision190), with per-row APK provenance preserved.
+
 ### SageTV CC versus subtitles
 
 The stock STV's `Off/CC1/CC2` control is broadcast closed-caption authority,
@@ -660,6 +850,22 @@ Intel QSV remains an experimental option but is not the commissioned default:
 direct physical runs reproducibly exited with signal/return code 139. The
 stable default order is `vaapi,qsv,nvenc,software`, with hardware decode off so
 A/53 caption data survives the MPEG-2 input path.
+## Current SageMC native DVD timed-skip acceptance
+
+On2026-10-07 the current381ae608 candidate passes actual timed FF/RW remote
+keys and independent stock API skips on non-Pro AFTMM/API25 with stock175/
+SageMC. Settled decoded source/server clocks and HDMI elapsed labels advance;
+pause/resume and STOP/exact-path ALADDIN rewatch pass.113 preferences and the
+user's timed-skip profile are restored unchanged. See
+`artifacts/results/DVD-003/timed-skip.json` and the diagnostics procedure.
+The old experimental frozen-label defect's cause is not proven, and this is
+not frame-exact DVD precision or matched HD200 presentation certification.
+No new runtime/Core/STV/key change or unrelated matrix rerun was required.
+
+Tab S6 Lite SM-P610/Android13/API33 readiness is verified through paired ADB;
+its tested/native and outstanding media rows are recorded under DEVICE-002
+above. An authorized ADB connection alone is not a tablet playback PASS.
+
 ## Optional unified HD media-player graphics capability
 
 The Android client includes an opt-in implementation of the SageTV core

@@ -14,6 +14,24 @@ MEDIA_SESSION = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/
 
 
 class BackgroundSessionTests(unittest.TestCase):
+    def test_surface_policy_is_shared_by_both_exo_generations(self):
+        for name in ("exoplayer2/Exo2SurfaceVideoRenderer.java", "media3/SurfaceVideoRenderer.java"):
+            source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video" / name).read_text(encoding="utf-8")
+            self.assertIn("VideoSurfaceCodecPolicy.recreateOnReplacement", source)
+            self.assertIn("super.codecNeedsSetOutputSurfaceWorkaround(name)", source)
+            for unrelated in ("seekTo", "setPlayWhenReady", "SageCommand", "postDelayed"):
+                self.assertNotIn(unrelated, source)
+
+    def test_encoded_offset_lifecycle_gate_checks_applied_path(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("--encoded-offset-ms", script)
+        self.assertIn('"dev_set_active_audio"', script)
+        self.assertIn('"passthrough_offset_enabled": True', script)
+        self.assertIn('"audioOffsetPath"', script)
+        self.assertIn('"HOME/return"', script)
+        self.assertIn('"user-pause HOME/return"', script)
+        self.assertIn('"explicit PLAY"', script)
+
     def test_legacy_exo_tracks_surface_view_lifecycle(self):
         source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("setVideoSurfaceView((SurfaceView) context.getVideoView())", source)

@@ -92,6 +92,20 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 });
             }
 
+            Preference diagnosticsSettings = findPreference("diagnostics_settings");
+            if (diagnosticsSettings != null)
+            {
+                diagnosticsSettings.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
+                {
+                    @Override public boolean onPreferenceClick(Preference preference)
+                    {
+                        startActivity(new Intent(SettingsFragment.this.getActivity(),
+                                DiagnosticsSettingsActivity.class));
+                        return true;
+                    }
+                });
+            }
+
             p = this.findPreference(Keys.disable_sleep);
             if (p != null)
             {
@@ -145,7 +159,6 @@ public class SettingsFragment extends PreferenceFragmentCompat
     
             
             
-            p = findPreference(Keys.use_log_to_sdcard);
             Preference smbProfiles = findPreference("smb_settings");
             if (smbProfiles != null)
             {
@@ -185,40 +198,8 @@ public class SettingsFragment extends PreferenceFragmentCompat
                     }
                 });
             }
-            p.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
-            {
-                @Override
-                public boolean onPreferenceChange(Preference preference, Object newValue)
-                {
-                    AppUtil.initLogging(SettingsFragment.this.getActivity(), (Boolean) newValue);
-                    return true;
-                }
-            });
-            
-            Preference share_log = findPreference("share_log");
-            share_log.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    shareLog();
-                    return true;
-                }
-            });
-            
             final ListPreference defaultPlayer = (ListPreference) findPreference(Keys.default_player);
             final ListPreference decodingMethod = (ListPreference) findPreference(Keys.decoding_method);
-            final ListPreference loglevel = (ListPreference) findPreference(Keys.log_level);
-            loglevel.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
-            {
-                @Override
-                public boolean onPreferenceChange(Preference preference, Object newValue)
-                {
-                    AppUtil.setLogLevel((String) newValue);
-                    updateListSummary(loglevel, R.string.summary_list_loglevels_preference, newValue);
-                    return true;
-                }
-            });
 
             defaultPlayer.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
             {
@@ -388,8 +369,6 @@ public class SettingsFragment extends PreferenceFragmentCompat
                     prefs.getString(Keys.default_player, "exoplayer"));
             updateListSummary(decodingMethod, R.string.summary_list_decoding_method,
                     prefs.getString(Keys.decoding_method, "hardware"));
-            updateListSummary(loglevel, R.string.summary_list_loglevels_preference,
-                    prefs.getString(Keys.log_level, "debug"));
             updateListSummary(streammode, R.string.summary_list_streaming_mode_preference, prefs.getStreamingMode());
             
             final Preference version = findPreference("version");

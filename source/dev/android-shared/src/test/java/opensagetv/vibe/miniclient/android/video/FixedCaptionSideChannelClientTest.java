@@ -111,18 +111,77 @@ public class FixedCaptionSideChannelClientTest
         }
     }
 
+    @Test
+    public void deliversPrefetchedPairsBetweenHttpPollsAndHonorsPause() throws Exception
+    {
+        SimpleHttpServer server = new SimpleHttpServer(new AtomicInteger(),
+                "{\"contractVersion\":1,\"packets\":[[1,1000,\"04c849\"]," +
+                "[2,1033,\"04c849\"],[3,1066,\"04c849\"]],\"cursor\":3,\"reset\":false}");
+        server.start();
+        FixedCaptionSideChannelClient client = new FixedCaptionSideChannelClient();
+        Object owner = new Object();
+        AtomicInteger count = new AtomicInteger();
+        CountDownLatch first = new CountDownLatch(1);
+        CountDownLatch second = new CountDownLatch(1);
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge((pts, dur, data, flags) -> {
+            int number = count.incrementAndGet();
+            if (number == 1) first.countDown();
+            if (number == 2) second.countDown();
+        });
+        try
+        {
+            client.startClaimed("http://127.0.0.1:" + server.port(), SESSION_TOKEN);
+            assertTrue(client.attach(owner, bridge));
+            client.updatePlaybackClock(owner, 1000L);
+            assertTrue(first.await(4, TimeUnit.SECONDS));
+            int polls = server.captionRequests.get();
+            client.updatePlaybackClock(owner, 1034L);
+            // Old250ms network-owned draining cannot satisfy this budget.
+            assertTrue("prefetched caption still waits for HTTP polling",
+                    second.await(180, TimeUnit.MILLISECONDS));
+            assertEquals("finer delivery must not increase HTTP traffic", polls,
+                    server.captionRequests.get());
+            client.setPaused(owner, true);
+            client.updatePlaybackClock(owner, 1067L);
+            Thread.sleep(200L);
+            assertEquals("paused service emitted a future pair", 2, count.get());
+            client.setPaused(owner, false);
+            long deadline = System.currentTimeMillis() + 1000L;
+            while (count.get() < 3 && System.currentTimeMillis() < deadline)
+                Thread.sleep(20L);
+            assertEquals(3, count.get());
+        }
+        finally
+        {
+            client.stop();
+            server.close();
+        }
+    }
+
     /** Dependency-free loopback HTTP stub; Android unit tests use a bootclasspath without jdk.httpserver. */
     private static final class SimpleHttpServer implements AutoCloseable, Runnable
     {
         private final ServerSocket socket;
         private final AtomicInteger teardownCount;
+        private final String captionsBody;
+        private final AtomicInteger captionRequests = new AtomicInteger();
         private final AtomicBoolean running = new AtomicBoolean(true);
         private Thread thread;
+        private final CountDownLatch blockedPoll = new CountDownLatch(1);
+        private final CountDownLatch releasePoll = new CountDownLatch(1);
+        private boolean blockSecondPoll;
 
         SimpleHttpServer(AtomicInteger teardownCount) throws IOException
         {
+            this(teardownCount, "{\"contractVersion\":1," +
+                    "\"packets\":[[1,1250,\"04c849\"]],\"cursor\":1,\"reset\":false}");
+        }
+
+        SimpleHttpServer(AtomicInteger teardownCount, String captionsBody) throws IOException
+        {
             this.socket = new ServerSocket(0);
             this.teardownCount = teardownCount;
+            this.captionsBody = captionsBody;
         }
 
         int port() { return socket.getLocalPort(); }
@@ -170,9 +229,16 @@ public class FixedCaptionSideChannelClientTest
                     reply(client, 200, "{\"contractVersion\":1," +
                             "\"sessionToken\":\"" + SESSION_TOKEN + "\"}");
                 else if (path.startsWith("/v1/captions"))
-                    reply(client, 200, "{\"contractVersion\":1," +
-                            "\"packets\":[[1,1250,\"04c849\"]]," +
-                            "\"cursor\":1,\"reset\":false}");
+                {
+                    int number = captionRequests.incrementAndGet();
+                    if (blockSecondPoll && number == 2)
+                    {
+                        blockedPoll.countDown();
+                        try { releasePoll.await(2L, TimeUnit.SECONDS); }
+                        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                    }
+                    reply(client, 200, captionsBody);
+                }
                 else if (path.startsWith("/v1/sessions/status"))
                     reply(client, 200, "{\"contractVersion\":1," +
                             "\"state\":\"active\",\"nextCursor\":2}");
@@ -202,6 +268,7 @@ public class FixedCaptionSideChannelClientTest
 
         @Override public void close() throws IOException
         {
+            releasePoll.countDown();
             running.set(false);
             socket.close();
             if (thread != null)
@@ -212,6 +279,43 @@ public class FixedCaptionSideChannelClientTest
                     Thread.currentThread().interrupt();
                 }
             }
+        }
+    }
+
+    @Test
+    public void slowHttpPollDoesNotBatchAlreadyBufferedCaptionPairs() throws Exception
+    {
+        SimpleHttpServer server = new SimpleHttpServer(new AtomicInteger(),
+                "{\"contractVersion\":1,\"packets\":[[1,1000,\"04c849\"]," +
+                "[2,1033,\"04c849\"]],\"cursor\":2,\"reset\":false}");
+        server.blockSecondPoll = true;
+        server.start();
+        FixedCaptionSideChannelClient client = new FixedCaptionSideChannelClient();
+        Object owner = new Object();
+        CountDownLatch first = new CountDownLatch(1);
+        CountDownLatch second = new CountDownLatch(1);
+        AtomicInteger count = new AtomicInteger();
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge((pts, duration, data, flags) -> {
+            if (count.incrementAndGet() == 1) first.countDown();
+            else second.countDown();
+        });
+        try
+        {
+            client.startForTest("127.0.0.1", server.port());
+            assertTrue(client.attach(owner, bridge));
+            client.updatePlaybackClock(owner, 1000L);
+            assertTrue(first.await(3L, TimeUnit.SECONDS));
+            assertTrue(server.blockedPoll.await(2L, TimeUnit.SECONDS));
+            client.updatePlaybackClock(owner, 1034L);
+            assertTrue("HTTP blocked presentation of an already-buffered CEA pair",
+                    second.await(180L, TimeUnit.MILLISECONDS));
+            assertEquals("delivery must not add HTTP polls", 2, server.captionRequests.get());
+        }
+        finally
+        {
+            server.releasePoll.countDown();
+            client.stop();
+            server.close();
         }
     }
 }

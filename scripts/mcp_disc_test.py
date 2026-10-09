@@ -29,6 +29,14 @@ def safe_label(path: str) -> str:
     return label.strip("-")[:64] or "dvd"
 
 
+def parse_dvd_wire_selector(value: str) -> int:
+    """Accept old decimal values or explicit hexadecimal DVD wire selectors."""
+    try:
+        return int(value, 0)
+    except ValueError:
+        return int(value, 10)
+
+
 def configured_disc_targets(cases: list[dict], selection_mode: str) -> list[tuple[str, str, str]]:
     """Translate generic fixture records into the server's supported launch path.
 
@@ -136,13 +144,46 @@ def wait_player_state(client: MCPProcess, expected_state: int,
     )
 
 
+def cadence_window(before: dict, after: dict, host_elapsed_ms: int) -> tuple[int, str]:
+    """Use the health samples' device clock, not delayed ADB reply delivery.
+
+    Both output counters and player position are captured on the device. The
+    second broadcast can finish several seconds after that sample. Counting
+    that delivery latency as playback time creates a false slow-DVD result.
+    Keep the host measurement as a diagnostic and retain it for older APKs
+    which do not publish the existing health timestamp.
+    """
+    first = int(before.get("health_capturedMonotonicMs", -1))
+    last = int(after.get("health_capturedMonotonicMs", -1))
+    if first >= 0 and last > first:
+        return last - first, "device_health_monotonic"
+    return max(1, host_elapsed_ms), "host_delivery_clock_legacy_fallback"
+
+
+def cadence_subject_ready(state: dict) -> bool:
+    """Only real title output, never a looping menu or decoder transition."""
+    return (bool(state.get("playerActive"))
+            and bool(state.get("health_isPlaying"))
+            and not bool(state.get("dvdHighlightVisible"))
+            and int(state.get("health_videoRendered", -1)) > 0
+            and int(state.get("health_audioRendered", -1)) > 0)
+
+
 def observe_playback_cadence(client: MCPProcess, duration_s: float) -> dict:
     """Measure sustained DVD clock/output progress against monotonic wall time."""
     before = call_dict(client, "dev_player_state", timeout=30.0)
+    require(cadence_subject_ready(before),
+            "DVD cadence requires verified main-title output, not menu/startup; "
+            "requested skip-menus is not proof the server skipped the menu: "
+            + str(compact_state(before)))
     started_ns = time.monotonic_ns()
     time.sleep(duration_s)
     after = call_dict(client, "dev_player_state", timeout=30.0)
-    elapsed_ms = max(1, (time.monotonic_ns() - started_ns) // 1_000_000)
+    require(cadence_subject_ready(after),
+            "DVD cadence observation ended in menu/startup; not a slow-playback verdict: "
+            + str(compact_state(after)))
+    host_elapsed_ms = max(1, (time.monotonic_ns() - started_ns) // 1_000_000)
+    elapsed_ms, clock_source = cadence_window(before, after, host_elapsed_ms)
 
     def delta(key: str) -> int:
         return int(after.get(key, 0)) - int(before.get(key, 0))
@@ -151,6 +192,8 @@ def observe_playback_cadence(client: MCPProcess, duration_s: float) -> dict:
     return {
         "requestedObserveMs": int(duration_s * 1000),
         "wallElapsedMs": elapsed_ms,
+        "clockSource": clock_source,
+        "hostDeliveryElapsedMs": host_elapsed_ms,
         "mediaTimeDeltaMs": media_delta_ms,
         "playerPositionDeltaMs": delta("health_playerPositionMs"),
         "realtimeRatio": media_delta_ms / elapsed_ms,
@@ -179,6 +222,7 @@ def compact_state(state: dict) -> dict:
         "player", "videoDecoder", "audioDecoder", "videoOutputCount",
         "audioOutputCount", "renderedFirstFrameCount", "playerError",
         "mediaTimeMs", "sageTimelineMs", "health_playerPositionMs",
+        "health_capturedMonotonicMs",
         "health_playWhenReady", "health_isPlaying", "health_isLoading",
         "health_videoRendered", "health_audioRendered",
         "health_videoDropped", "health_videoSkipped", "health_audioDropped",
@@ -203,7 +247,8 @@ def compact_state(state: dict) -> dict:
         "dvdAvSampleDeltaUs", "dvdVideoTimestampCorrectionCount",
         "dvdMpeg2TimestampRepairEnabled", "dvdMpeg2ReportedFrameRateHz",
         "dvdMpeg2SequenceFrameRateHz", "dvdMpeg2EffectiveFieldDurationUs",
-        "dvdMpeg2TelecineCadenceSeen", "dvdDiscontinuityRebaseCount",
+        "dvdMpeg2TelecineCadenceSeen", "dvdMpeg2SoftTelecineConfirmed",
+        "dvdMpeg2SoftTelecinePictureRewriteCount", "dvdDiscontinuityRebaseCount",
         "dvdPtsTrace", "dvdFrameMetadataCount", "dvdStc45Khz",
         "dvdLogicalClockBaseMs", "dvdRenderedVideoClockDeltaUs",
         "dvdLastFramePresentationDeltaUs", "dvdLastFrameReleaseDeltaUs",
@@ -258,6 +303,10 @@ def main() -> int:
                               "multiple discs. This avoids the optional Vibe exact-path event."))
     parser.add_argument("--expect-startup-failure-path", action="append", default=[],
                         help="Exact invalid/empty DVD path that must fail safely; repeat as needed")
+    parser.add_argument("--expect-unsupported-native-video", action="store_true",
+                        help=("For a valid native DVD on a device with no selected MPEG-2 "
+                              "decoder, require the explicit client refusal and no audio-only "
+                              "playback. This is not a successful DVD playback gate."))
     parser.add_argument("--paths-file", default="",
                         help="UTF-8 file containing one exact indexed DVD directory per line")
     parser.add_argument("--fixture-mode", default="",
@@ -312,6 +361,9 @@ def main() -> int:
                         help="Maximum permitted difference from --start-ms")
     parser.add_argument("--seek-timeout-s", type=float, default=30.0,
                         help="Maximum time for the initial positioning seek and A/V recovery")
+    parser.add_argument("--seek-attempts", type=int, default=1,
+                        help=("Server-owned positioning attempts (default 1 prevents a "
+                              "visual comparison scene from replaying; maximum 3)"))
     parser.add_argument("--cadence-observe-s", type=float, default=0.0,
                         help=("Measure sustained main-feature media-clock/output progress "
                               "for this many seconds"))
@@ -331,15 +383,17 @@ def main() -> int:
     parser.add_argument("--continue-on-failure", action="store_true")
     parser.add_argument("--leave-playing", action="store_true",
                         help="Single-disc diagnostic only: leave the session active")
+    parser.add_argument("--visual-title-hold-s", type=float, default=0.0,
+                        help="Bounded 0..60s test-only active-title window for external HDMI capture")
     parser.add_argument("--screenshot", action="store_true")
     parser.add_argument("--screenshot-each-command", action="store_true",
                         help="Capture physical-state evidence after every command")
     parser.add_argument("--verify-command-recovery", action="store_true",
                         help="Require healthy A/V recovery after transport/track commands")
-    parser.add_argument("--expect-audio-selector", type=int,
-                        help="Fail unless the final requested and applied DVD audio selector match")
-    parser.add_argument("--expect-subtitle-selector", type=int,
-                        help="Fail unless the final DVD subtitle selector matches")
+    parser.add_argument("--expect-audio-selector", type=parse_dvd_wire_selector,
+                        help="Expected packed DVD wire audio code, e.g. 0xBD81 for AC3 track1; not logical index1")
+    parser.add_argument("--expect-subtitle-selector", type=parse_dvd_wire_selector,
+                        help="Expected DVD wire subpicture flags/index, e.g. 0x40 for enabled track0; not logical index0")
     parser.add_argument("--expect-media-time-min-ms", type=int,
                         help="Fail unless final SageTV DVD media time is at least this value")
     parser.add_argument("--expect-media-time-max-ms", type=int,
@@ -347,6 +401,8 @@ def main() -> int:
     parser.add_argument("--output", default="",
                         help="Optional JSON evidence path inside the project")
     args = parser.parse_args()
+    if not 0.0 <= args.visual_title_hold_s <= 60.0:
+        parser.error("--visual-title-hold-s must be 0..60 seconds")
 
     expected_failures = {
         value.strip() for value in args.expect_startup_failure_path if value.strip()
@@ -401,6 +457,7 @@ def main() -> int:
     require(args.start_ms >= -1, "--start-ms must be -1 (disabled) or non-negative")
     args.seek_tolerance_ms = max(0, min(int(args.seek_tolerance_ms), 30_000))
     args.seek_timeout_s = max(1.0, min(float(args.seek_timeout_s), 180.0))
+    args.seek_attempts = max(1, min(int(args.seek_attempts), 3))
     # Long-duration cadence faults on physical TV devices may appear only after
     # several minutes. Keep the run bounded, but do not silently turn an
     # explicitly requested ten-minute commissioning gate into three minutes.
@@ -590,6 +647,35 @@ def main() -> int:
                         storage_warmup["outcome"] = "recent_media_uses_normal_gate"
                 result["storageWarmup"] = storage_warmup
                 result["startup"] = started
+                if args.expect_unsupported_native_video:
+                    require(args.disc_policy == "native" and args.mim_direct_mode == "off",
+                            "Unsupported native-video oracle requires Native, Direct off")
+                    require(not bool(started.get("passed")),
+                            "Unsupported native DVD unexpectedly passed video startup")
+                    rejected = call_dict(client, "dev_player_state", timeout=30.0)
+                    require("native_dvd_video_decoder_unavailable"
+                            in str(rejected.get("trapRecent", "")),
+                            "Native DVD failed without the explicit missing-decoder refusal")
+                    require(not bool(rejected.get("playerActive"))
+                            or int(rejected.get("state", -1)) in (4, 5),
+                            "Unsupported native DVD left a playing/loaded session")
+                    require(not bool(rejected.get("health_isPlaying", False))
+                            and int(rejected.get("health_audioRendered", -1)) <= 0,
+                            "Unsupported native DVD started an audio-only renderer")
+                    after = call_dict(client, "dev_crash_probe", timeout=30.0)
+                    require(not bool(after.get("signatureDetected"))
+                            and baseline.get("signatureFingerprint", "")
+                            == after.get("signatureFingerprint", ""),
+                            "Unsupported native DVD changed the crash signature")
+                    result.update({"passed": True, "expectedUnsupportedNativeVideo": True,
+                                   "playbackPassed": False, "state": compact_state(rejected),
+                                   "refusalEvidence": "native_dvd_video_decoder_unavailable"})
+                    if args.screenshot:
+                        result["screenshot"] = call_dict(client, "take_screenshot", {
+                            "label": "dvd-unsupported-native-video"}, timeout=30.0)
+                    results.append(result)
+                    print(f"PASS safe-unsupported-native-video [{index}/{len(targets)}]: {target_value}")
+                    continue
                 if target_kind == "path" and target_value in expected_failures:
                     require(not bool(started.get("passed")),
                             f"Invalid DVD unexpectedly started: {started}")
@@ -630,6 +716,7 @@ def main() -> int:
                         "tolerance_ms": args.seek_tolerance_ms,
                         "timeout_s": args.seek_timeout_s,
                         "stable_ms": args.verify_ms,
+                        "max_attempts": args.seek_attempts,
                     }, timeout=args.seek_timeout_s + 30.0)
                     require(bool(positioned.get("passed")),
                             f"DVD positioning seek did not recover A/V: {positioned}")
@@ -649,6 +736,9 @@ def main() -> int:
                         "reachedMs": reached_ms,
                         "toleranceMs": args.seek_tolerance_ms,
                         "recoveryMs": positioned.get("recoveryMs"),
+                        "attemptCount": positioned.get("seekAttemptCount"),
+                        "finalRequestedMs": positioned.get("finalRequestedMs"),
+                        "transport": positioned.get("seekTransport"),
                         "measurement": positioned.get("measurement"),
                     }
                     print(f"PASS: positioned {target_value} at {reached_ms} ms "
@@ -934,6 +1024,19 @@ def main() -> int:
                     require(final_media_time_ms <= args.expect_media_time_max_ms,
                             "DVD media time above expected maximum: "
                             f"expected <= {args.expect_media_time_max_ms}, state={state}")
+                if args.visual_title_hold_s > 0:
+                    require(state.get("dvdHighlightVisible") is False,
+                            "Title visual hold cannot use a looping authored menu")
+                    result["visualTitleHold"] = {
+                        "seconds": args.visual_title_hold_s,
+                        "before": compact_state(state),
+                    }
+                    print(f"VISUAL TITLE HOLD: {args.visual_title_hold_s:.1f}s", flush=True)
+                    hold_deadline = time.monotonic() + args.visual_title_hold_s
+                    while time.monotonic() < hold_deadline:
+                        time.sleep(min(1.0, hold_deadline - time.monotonic()))
+                    result["visualTitleHold"]["after"] = compact_state(
+                        call_dict(client, "dev_player_state", timeout=30.0))
                 after = call_dict(client, "dev_crash_probe", timeout=30.0)
                 require(not bool(after.get("signatureDetected")),
                         f"Crash signature detected: {after}")
@@ -995,6 +1098,7 @@ def main() -> int:
             "startMs": args.start_ms,
             "seekToleranceMs": args.seek_tolerance_ms,
             "seekTimeoutSeconds": args.seek_timeout_s,
+            "seekAttempts": args.seek_attempts,
             "cadenceObserveSeconds": args.cadence_observe_s,
             "storageWarmupTimeoutSeconds": args.storage_warmup_timeout_s,
             "slowStartupThresholdMs": args.slow_startup_ms,

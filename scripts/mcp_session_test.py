@@ -25,6 +25,7 @@ from sagetv_dev_mcp.config import (
 
 from mcp_seek_suite import MCPProcess, call_dict, initialize, tool_call
 from mcp_ui_roots import is_automation_root
+from mcp_caption_test import require_mim_direct_ownership
 from mcp_config_values import (
     DECODING_SELECTIONS,
     STREAMING_SELECTIONS,
@@ -72,6 +73,13 @@ def main() -> int:
         ),
     )
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="")
+    parser.add_argument("--mim-direct-startup-fault",
+                        choices=("off", "direct-only", "direct-and-pull"), default="off",
+                        help="Debug-only bounded startup fallback proof; direct-only keeps the real source")
+    parser.add_argument("--expect-mim-stock-fallback", default="",
+                        choices=("", "unsupported_video_stock_fixed", "unavailable_stock_fixed",
+                                 "unsupported_player_stock_fixed"),
+                        help="Require the stated safe ordinary Fixed fallback, never an owned-transport PASS")
     parser.add_argument(
         "--smb-mappings",
         default=default_smb_mappings(),
@@ -118,6 +126,12 @@ def main() -> int:
         help="Require non-empty locally rendered captions before and after navigation",
     )
     parser.add_argument(
+        "--fixed-caption-side-channel",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Enable the server caption side channel for owned Fixed caption gates (default: auto)",
+    )
+    parser.add_argument(
         "--caption-mode",
         choices=("cc1", "cc2", "dvb"),
         default="cc1",
@@ -158,6 +172,12 @@ def main() -> int:
         parser.error("--require-mim-direct-owned requires --mim-direct-mode copy or transcode")
     if args.require_mim_direct_owned and args.player != "media3":
         parser.error("strict owned-transport proof currently requires --player media3")
+    if (args.require_captions and args.streaming == "fixed"
+            and args.mim_direct_mode != "off" and args.caption_mode in ("cc1", "cc2")):
+        parser.error(
+            "owned Fixed CEA is rendered by SageTV event 225; use "
+            "mcp-caption-test --legacy-extender-callback for its caption gate"
+        )
 
     client = MCPProcess()
     try:
@@ -177,6 +197,14 @@ def main() -> int:
         if not clean.get("readyToLaunch") or clean.get("stopped", {}).get("running"):
             raise RuntimeError(f"Dev app could not be stopped cleanly before launch: {clean}")
 
+        caption_side_channel_override = None
+        if args.fixed_caption_side_channel == "on":
+            caption_side_channel_override = True
+        elif args.fixed_caption_side_channel == "off":
+            caption_side_channel_override = False
+        elif args.require_captions and args.mim_direct_mode != "off":
+            caption_side_channel_override = True
+
         print("STEP: apply playback settings before connection/video start")
         configured = call_dict(client, "dev_set_player_config", {
             "player": args.player,
@@ -185,6 +213,7 @@ def main() -> int:
             "gsy_engine": args.gsy_engine,
             "mim_direct_mode": args.mim_direct_mode,
             "mim_direct_deinterlace": args.mim_direct_deinterlace,
+            "fixed_caption_side_channel_enabled": caption_side_channel_override,
             # Caption rendering cannot be inferred from the user's preserved
             # setting: a previous DVB choice is valid for a UK fixture but
             # intentionally selects nothing in a CEA-only fixture.  Make the
@@ -235,6 +264,19 @@ def main() -> int:
         print("PASS: SageTV connection ready at a supported automation root")
         print(json.dumps(ready.get("state", {}), indent=2, sort_keys=True))
 
+        if args.mim_direct_startup_fault != "off":
+            if args.mim_direct_mode == "off" or args.require_mim_direct_owned:
+                raise RuntimeError("Startup fault needs opted-in Direct and cannot assert Direct ownership")
+            fault_state = call_dict(client, "dev_player_state", timeout=30.0)
+            if fault_state.get("mimDirectSessionState") != "ready_" + args.mim_direct_mode:
+                raise RuntimeError("Startup fault precondition failed: Direct is not negotiated ready; "
+                                   + str(fault_state.get("mimDirectSessionState")))
+            armed = call_dict(client, "dev_set_mim_direct_late_fallback_fault", {
+                "enabled": True,
+                "include_pull_failure": args.mim_direct_startup_fault == "direct-and-pull",
+            }, timeout=30.0)
+            if not armed.get("armed"):
+                raise RuntimeError("Debug startup fault was not armed")
         if args.server_path.strip():
             print(f"STEP: play exact server MediaFile path on this MiniClient: {args.server_path!r}")
             started = call_dict(client, "dev_play_server_path", {
@@ -242,7 +284,12 @@ def main() -> int:
                 "timeout_s": args.playback_timeout_s,
                 "verify_ms": args.verify_ms,
                 "restart_from_beginning": args.restart_from_beginning,
-            }, timeout=args.playback_timeout_s + 35.0)
+            # The stock Core MCP path performs a bounded exact-path index
+            # lookup (up to 180 s) and Watch call (up to 75 s) before this
+            # tool begins its own playback-health wait.  The outer MCP reply
+            # budget must cover those serial bounds; otherwise it can time
+            # out while the requested video is already rendering.
+            }, timeout=args.playback_timeout_s + 320.0)
         else:
             print(f"STEP: play video by name on this MiniClient: {args.video_name!r}")
             started = call_dict(client, "dev_play_video", {
@@ -253,6 +300,40 @@ def main() -> int:
         print(json.dumps(started, indent=2, sort_keys=True))
         if not started.get("passed"):
             raise RuntimeError(f"Video did not start with verified A/V playback: {started.get('reason')}")
+        def require_expected_stock_fallback():
+            fallback = call_dict(client, "dev_player_state", timeout=30.0)
+            if (fallback.get("mimDirectSessionState") != args.expect_mim_stock_fallback
+                    or fallback.get("mimDirectNegotiatedMode")
+                    or fallback.get("playbackSource") == "MIM_DIRECT"):
+                raise RuntimeError("Expected ordinary Fixed fallback was not observed: "
+                                   + str(fallback.get("mimDirectSessionState")))
+            print("PASS: ordinary Fixed fallback only: " + args.expect_mim_stock_fallback)
+        if args.expect_mim_stock_fallback:
+            if args.require_mim_direct_owned or args.mim_direct_mode == "off":
+                raise RuntimeError("Stock fallback oracle needs an opted-in request, not owned/off")
+            require_expected_stock_fallback()
+        if args.mim_direct_startup_fault != "off":
+            fallback = call_dict(client, "dev_player_state", timeout=30.0)
+            if fallback.get("mimDirectSessionState") != "late_failure_stock_fixed_reconnect":
+                raise RuntimeError("One-shot ordinary Fixed recovery not observed: "
+                                   + str(fallback.get("mimDirectSessionState")))
+            if fallback.get("playbackSource") == "MIM_DIRECT":
+                raise RuntimeError("Recovery incorrectly retained Direct ownership")
+            # On MPEG-2-less devices a new connection alone is insufficient:
+            # public Watch must produce real video before the captured Seek.
+            # Do not count the first frame or async Watch acceptance as proof
+            # that the final source-position restoration actually happened.
+            recovery = str(fallback.get("mimDirectWatchRecoveryState", "off"))
+            if recovery not in ("off", "ready"):
+                deadline = time.monotonic() + 35.0
+                while recovery in ("requesting_watch", "waiting_for_video", "requesting_seek") and time.monotonic() < deadline:
+                    time.sleep(0.25)
+                    fallback = call_dict(client, "dev_player_state", timeout=30.0)
+                    recovery = str(fallback.get("mimDirectWatchRecoveryState", "off"))
+                if recovery != "seek_requested":
+                    raise RuntimeError("Plugin recovery did not finish actual-video/Seek stages: " + recovery)
+                print("PASS: plugin fresh Watch/actual-video/Seek recovery completed")
+            print("PASS: real A/V recovered through bounded ordinary Fixed reconnect")
         print("PASS: requested video started on this MiniClient and real playback is advancing")
 
         if args.require_mim_direct_owned:
@@ -282,7 +363,8 @@ def main() -> int:
                 )
             if str(owned.get("playbackSource", "")) != "MIM_DIRECT":
                 failures.append("source=" + str(owned.get("playbackSource", "")))
-            if not data_source.endswith("Media3MimDirectHttpDataSource"):
+            if not data_source.endswith(("Media3MimDirectHttpDataSource",
+                                         "Exo2MimDirectHttpDataSource")):
                 failures.append("dataSource=" + data_source)
             print("MIM DIRECT OWNERSHIP: " + json.dumps({
                 "requestedMode": args.mim_direct_mode,
@@ -347,7 +429,19 @@ def main() -> int:
                     )
                     return last
                 time.sleep(0.25)
-            raise RuntimeError(f"STV captions were not rendered after {label}: {last}")
+            diagnostic_keys = (
+                "playbackSource", "mimDirectSessionState", "fixedCaptionSideChannelState",
+                "fixedCaptionAttached", "fixedCaptionForwarding",
+                "fixedCaptionClockUpdateCount", "fixedCaptionReceivedPackets",
+                "fixedCaptionLastPacketPtsMs", "fixedCaptionLastPollClockMs",
+                "subtitleTrackCount", "selectedSubtitleTrack", "subtitleCueUpdateCount",
+                "subtitleNonEmptyCueCount", "currentSubtitleCueText", "mediaTimeMs",
+            )
+            diagnostic = {key: last.get(key) for key in diagnostic_keys}
+            raise RuntimeError(
+                f"STV captions were not rendered after {label}: "
+                + json.dumps(diagnostic, sort_keys=True)
+            )
 
         caption_state = wait_for_captions("startup") if args.require_captions else {}
 
@@ -390,12 +484,26 @@ def main() -> int:
                     f"PASS: {label} reached sustained A/V after a transient Fixed/MIM restart; "
                     f"initial={result.get('initialHealthFailureReason', '')}"
                 )
+            # An exhausted short fixture can report an initially healthy frame
+            # (or a briefly successful eventual probe) and then finish at the
+            # media end state. Never count that as seek/pause recovery. This
+            # matters especially when SageTV resumes near the end of a test
+            # recording before the first FF command.
+            if int(result.get("afterState", -1)) == 5:
+                raise RuntimeError(
+                    f"{label} reached end-of-media during the navigation gate; "
+                    "restart the fixture at a safe position before retesting"
+                )
             if args.require_captions:
                 caption_state = wait_for_captions(
                     label,
                     int(caption_state.get("subtitleCueUpdateCount", 0) or 0),
                     int(caption_state.get("subtitleNonEmptyCueCount", 0) or 0),
                 )
+            if args.require_mim_direct_owned:
+                # A transient restart may recover on the same owned source or
+                # fall back safely. Only the former proves this requested gate.
+                require_mim_direct_ownership(client, args.mim_direct_mode, "after " + label)
             return result
 
         if args.run_seek_health:
@@ -428,7 +536,7 @@ def main() -> int:
                     "timeout_s": args.playback_timeout_s,
                     "verify_ms": args.verify_ms,
                     "restart_from_beginning": args.restart_from_beginning,
-                }, timeout=args.playback_timeout_s + 35.0)
+                }, timeout=args.playback_timeout_s + 320.0)
             elif args.video_name:
                 restarted = call_dict(client, "dev_play_video", {
                     "video_name": args.video_name,
@@ -508,6 +616,10 @@ def main() -> int:
                 if args.require_captions:
                     caption_state = wait_for_captions("STOP_PLAY")
 
+        if args.require_mim_direct_owned:
+            require_mim_direct_ownership(client, args.mim_direct_mode, "settled after session controls")
+        if args.expect_mim_stock_fallback:
+            require_expected_stock_fallback()
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         print("CRASH CHECK: " + json.dumps(crash, indent=2, sort_keys=True))
         if crash.get("signatureDetected"):
@@ -519,6 +631,11 @@ def main() -> int:
         print(f"MCP SESSION AUTOMATION: FAIL\n{exc}", file=sys.stderr)
         return 1
     finally:
+        if args.mim_direct_startup_fault != "off":
+            try:
+                call_dict(client, "dev_set_mim_direct_late_fallback_fault", {"enabled": False}, timeout=30.0)
+            except Exception as exc:
+                print(f"WARN: fault cleanup failed: {exc}", file=sys.stderr)
         if args.exit != "none":
             try:
                 result = call_dict(client, "dev_exit_session", {"stop_app": args.exit == "stop"}, timeout=30.0)

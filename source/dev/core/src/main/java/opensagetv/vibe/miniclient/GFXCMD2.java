@@ -118,7 +118,7 @@ public class GFXCMD2 {
         this.client = client;
         this.windowManager = client.getUIRenderer();
         this.myConn = client.getCurrentConnection();
-        this.lifecycleFrameCommands = new GfxLifecycleFrameCommands(windowManager);
+        this.lifecycleFrameCommands = new GfxLifecycleFrameCommands(client, windowManager);
         this.drawingCommands = new GfxDrawingCommands(client, windowManager);
         this.surfaceVideoCommands = new GfxSurfaceVideoCommands(client, windowManager, handles);
         this.fontCommands = new GfxFontCommands(client, myConn);

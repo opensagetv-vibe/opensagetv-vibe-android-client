@@ -3,6 +3,7 @@ package opensagetv.vibe.miniclient.android.video.ijkplayer;
 import android.media.session.PlaybackState;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.view.SurfaceView;
+import android.view.SurfaceHolder;
 
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
@@ -47,6 +48,8 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     private long growingPullSeekOffsetMs = -1L;
     private long growingPullSeekLastRawMs = -1L;
     private boolean growingPullSeekClockRelative;
+    private volatile SurfaceHolder videoSurfaceHolder;
+    private volatile SurfaceHolder.Callback videoSurfaceCallback;
 
     public IJKMediaPlayerImpl(AndroidUIController activity)
     {
@@ -391,6 +394,8 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
             IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_ERROR);
 
             player.setDisplay(((SurfaceView) context.getVideoView()).getHolder());
+            bindVideoSurface(((SurfaceView)context.getVideoView()).getHolder(),
+                    listenerPlayer,listenerSession);
 
             PrefStore playerPrefs = MiniclientApplication.get().getClient().properties();
             DecodingMethod decodingMethod = IjkDecoderOptions.apply((IjkMediaPlayer) player, playerPrefs);
@@ -587,6 +592,9 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                     {
                         setAudioTrack(initialAudioStreamPos);
                     }
+                    // Discovery can precede native prepare. Retry once here;
+                    // later inventory changes use the same guarded callback.
+                    onTeletextSubtitleTracksChanged();
                 }
             });
 
@@ -622,7 +630,10 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         super.seek(timeInMS);
         if (consumeMimDirectSeekHandled())
             return;
-        if (player == null || stoppedForResume || state == NO_STATE || state == LOADED_STATE || state == STOPPED_STATE)
+        // PLAY can arrive during native prepare and set our state before IJK
+        // accepts seeks. Preserve the latest request, including zero, rather
+        // than letting native reject it and later replay an older bookmark.
+        if (player == null || !playerReady || stoppedForResume || state == NO_STATE || state == LOADED_STATE || state == STOPPED_STATE)
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
@@ -777,6 +788,26 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     }
 
     @Override
+    protected void onTeletextSubtitleTracksChanged()
+    {
+        final PlaybackSessionController.Token captionSession = currentPlaybackSession();
+        final IMediaPlayer captionPlayer = player;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                // A queued discovery callback must not select a caption on a
+                // newer stream or a replacement native player. Prepare owns
+                // the retry when discovery arrived before playerReady.
+                if (!playerReady || captionPlayer == null
+                        || player != captionPlayer
+                        || !isCurrentPlaybackSession(captionSession)) return;
+                applyConfiguredClosedCaptionSlot();
+            }
+        });
+    }
+
+    @Override
     public SubtitleTrack[] getSubtitleTracks()
     {
         return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
@@ -814,8 +845,77 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         return selectedTeletextTrackOr(DISABLE_TRACK);
     }
 
+    private void bindVideoSurface(final SurfaceHolder holder,
+            final IMediaPlayer displayPlayer,
+            final PlaybackSessionController.Token displaySession)
+    {
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (player!=displayPlayer || !isCurrentPlaybackSession(displaySession)) return;
+                unbindVideoSurface();
+                SurfaceHolder.Callback callback=new SurfaceHolder.Callback()
+                {
+                    private boolean attached=holder.getSurface()!=null && holder.getSurface().isValid();
+                    private boolean current()
+                    {
+                        return videoSurfaceCallback==this && videoSurfaceHolder==holder
+                                && player==displayPlayer && isCurrentPlaybackSession(displaySession);
+                    }
+                    private void attach(SurfaceHolder next)
+                    {
+                        if (!current() || attached || next.getSurface()==null
+                                || !next.getSurface().isValid()) return;
+                        try
+                        {
+                            displayPlayer.setDisplay(next);
+                            attached=true;
+                            PlaybackDebugTrap.record("ijk_surface_rebound",IJKMediaPlayerImpl.this);
+                        }
+                        catch (RuntimeException surfaceFailure)
+                        {
+                            log.warn("IJK surface rebind unavailable",surfaceFailure);
+                        }
+                    }
+                    @Override public void surfaceCreated(SurfaceHolder next) { attach(next); }
+                    @Override public void surfaceChanged(SurfaceHolder next,int format,int width,int height)
+                    { attach(next); }
+                    @Override public void surfaceDestroyed(SurfaceHolder previous)
+                    {
+                        if (!current()) return;
+                        attached=false;
+                        try { displayPlayer.setDisplay(null); }
+                        catch (RuntimeException surfaceFailure)
+                        { log.warn("IJK surface detach unavailable",surfaceFailure); }
+                        PlaybackDebugTrap.record("ijk_surface_detached",IJKMediaPlayerImpl.this);
+                    }
+                };
+                videoSurfaceHolder=holder;
+                videoSurfaceCallback=callback;
+                holder.addCallback(callback);
+            }
+        });
+    }
+
+    private void unbindVideoSurface()
+    {
+        final SurfaceHolder holder=videoSurfaceHolder;
+        final SurfaceHolder.Callback callback=videoSurfaceCallback;
+        // Invalidate synchronously so a queued event cannot target a released
+        // native player; actual View callback removal remains UI-thread owned.
+        videoSurfaceHolder=null;
+        videoSurfaceCallback=null;
+        if (holder==null || callback==null) return;
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run() { holder.removeCallback(callback); }
+        });
+    }
+
     protected void releasePlayer()
     {
+        unbindVideoSurface();
         stoppedForResume = false;
         if(mediaSession != null)
         {

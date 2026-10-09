@@ -8,6 +8,52 @@ import static org.junit.Assert.assertTrue;
 
 public class MimDirectSessionClientTest
 {
+    @Test public void mediaHttpErrorsDoNotExposeResponseBodySecrets()
+    {
+        assertEquals("http_404_media_not_ready", MimDirectSessionClient.mediaResponseTagForDiagnostics(
+                404, "{\"error\":\"media_not_ready\",\"token\":\"private\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertEquals("http_404_unknown_media", MimDirectSessionClient.mediaResponseTagForDiagnostics(
+                404, "{\"error\":\"unknown_media\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertEquals("http_404_unclassified", MimDirectSessionClient.mediaResponseTagForDiagnostics(
+                404, "{\"error\":\"private token or filename\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertEquals("http_unknown_unclassified", MimDirectSessionClient.mediaResponseTagForDiagnostics(-1, null));
+        assertEquals("http_404_unclassified", MimDirectSessionClient.mediaResponseTagForDiagnostics(404, new byte[4097]));
+    }
+    @Test public void observedMediaSessionReportsOnlyClosedDiagnosticTags()
+    {
+        String base = "http://server:31910";
+        assertEquals("current", MimDirectSessionClient.compareMediaUri(base, "new",
+                base + "/v1/direct/media/new/seg_000001.ts"));
+        assertEquals("current", MimDirectSessionClient.compareMediaUri(base, "new",
+                base + "/v1/direct/media/new/stream.m3u8"));
+        assertEquals("retired", MimDirectSessionClient.compareMediaUri(base, "new",
+                base + "/v1/direct/media/old/seg_000001.ts"));
+        assertEquals("foreign", MimDirectSessionClient.compareMediaUri(base, "new",
+                "http://another:31910/v1/direct/media/new/seg_000001.ts"));
+        assertEquals("foreign", MimDirectSessionClient.compareMediaUri(base, "new",
+                base + "/ordinary.ts"));
+        assertEquals("unavailable", MimDirectSessionClient.compareMediaUri(base, "new", ""));
+        assertEquals("unavailable", MimDirectSessionClient.compareMediaUri(base, "new", "bad uri"));
+        assertEquals("inactive", MimDirectSessionClient.compareMediaUri(base, "", base));
+    }
+    @Test public void restartRejectionDiagnosticsDoNotExposeResponseSecrets()
+    {
+        assertEquals("http_409_direct_caption_slot_unavailable",
+                MimDirectSessionClient.restartRejectionTag(409,
+                        "{\"error\":\"direct_caption_slot_unavailable\"}"));
+        assertEquals("http_502_mim_direct_restart_failed",
+                MimDirectSessionClient.restartRejectionTag(502,
+                        "{\"error\":\"mim_direct_restart_failed\"}"));
+        assertEquals("http_404_unknown_or_finished_session",
+                MimDirectSessionClient.restartRejectionTag(404,
+                        "{\"error\":\"unknown_or_finished_session\"}"));
+        assertEquals("http_500_unclassified",
+                MimDirectSessionClient.restartRejectionTag(500,
+                        "{\"error\":\"private path or credential\",\"sessionToken\":\"secret\"}"));
+        assertEquals("http_503_unclassified",
+                MimDirectSessionClient.restartRejectionTag(503, "invalid reply"));
+    }
+
     @Test
     public void normalizesDeinterlacePolicy()
     {
@@ -78,6 +124,16 @@ public class MimDirectSessionClientTest
                 "{\"requestedStartMs\":86400000,\"startMs\":56000}",
                 "startMs", -1L));
         assertEquals(7L, MimDirectSessionClient.longValue("{}", "startMs", 7L));
+    }
+
+    @Test public void captionClockUsesTheRestartedFfmpegTimeline()
+    {
+        assertEquals(12_000L, MimDirectSessionClient.relativeCaptionClock(
+                42_000L, 30_000L));
+        assertEquals(0L, MimDirectSessionClient.relativeCaptionClock(
+                29_000L, 30_000L));
+        assertEquals(12_000L, MimDirectSessionClient.relativeCaptionClock(
+                12_000L, 0L));
     }
 
     @Test public void legacyIjkRetainsCopyButFallsBackFromDirectTranscode()

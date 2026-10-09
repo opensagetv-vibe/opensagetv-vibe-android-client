@@ -10,7 +10,10 @@ import re
 import sys
 import time
 
-from mcp_lifecycle_test import MCPProcess, call_dict, initialize, require, wait_automation_ready
+from mcp_lifecycle_test import (
+    MCPProcess, call_dict, initialize, require, wait_automation_ready,
+    clear_restored_playback,
+)
 from mcp_smoke_test import compact_tool_result, tool_call
 from mcp_config_values import add_fixed_encoding_args, fixed_config_from_args, validate_fixed_config
 from mcp_playback_test import start_recording_via_search
@@ -57,6 +60,49 @@ def fixed_caption_callback_active(state: dict) -> bool:
     )
 
 
+def caption_clock_diagnostic(state: dict) -> str:
+    """Bounded snapshot around a capture; never enable timing-altering CC logs."""
+    keys = ("health_playerPositionMs", "health_isPlaying", "health_playWhenReady",
+            "mediaTimeMs", "sageTimelineMs", "fixedCaptionLastPollClockMs",
+            "fixedCaptionLastPacketPtsMs", "legacyCaptionCallbackCount",
+            "legacyCaptionWireEventCount", "currentSubtitleCueText")
+    return json.dumps({key: state.get(key) for key in keys}, ensure_ascii=True)
+
+
+def checkpoint_server_caption_state(client: MCPProcess) -> str:
+    """Read the existing public per-UI setting before the gate changes it."""
+    state = str(call_dict(client, "dev_stv_caption_state", timeout=30.0).get("state", "")).strip()
+    require(bool(state), "Cannot checkpoint the server's caption setting")
+    return state
+
+
+def restore_server_caption_state(client: MCPProcess, original: str) -> None:
+    """Set and verify the captured value while its UI context is still alive."""
+    restored = call_dict(client, "dev_set_stv_caption_state", {"state": original}, timeout=30.0)
+    require(str(restored.get("state", "")).strip() == original,
+            "Server caption setting did not restore to its checkpoint")
+
+
+def mim_direct_owned(state: dict, mode: str) -> bool:
+    """A requested mode or playable legacy fallback is not owned HTTP proof."""
+    return (state.get("mimDirectNegotiatedMode") == mode
+            and state.get("mimDirectSessionState") in {
+                "active_" + mode, "active_" + mode + "_startup_seek_suppressed"}
+            and state.get("playbackSource") == "MIM_DIRECT"
+            and str(state.get("health_dataSourceClass", "")).endswith("MimDirectHttpDataSource"))
+
+
+def require_mim_direct_ownership(client: MCPProcess, mode: str, phase: str) -> None:
+    """Check startup and settled ownership without exposing endpoint secrets."""
+    state = call_dict(client, "dev_player_state", timeout=30.0)
+    safe = {key: state.get(key) for key in (
+        "mimDirectNegotiatedMode", "mimDirectSessionState", "playbackSource",
+        "health_dataSourceClass", "fixedCaptionSideChannelState")}
+    require(mim_direct_owned(state, mode),
+            f"Direct ownership missing ({phase}); legacy fallback is not a Direct PASS: {safe}")
+    print("PASS: verified MIM Direct ownership " + phase + " " + json.dumps(safe))
+
+
 def subtitle_track_rows(state: dict) -> list[tuple[int, str]]:
     """Return the player's raw track id and codec for each displayed row."""
     rows: list[tuple[int, str]] = []
@@ -92,6 +138,61 @@ def subtitle_track_codec(state: dict, raw_id: int) -> str:
         if candidate == raw_id:
             return codec
     return ""
+
+
+def resolve_requested_codec_track(state: dict, codec: str) -> int | None:
+    """Inspect discovered IDs; never assume DVB/Teletext occupies row zero.
+
+    Prefer the already-selected matching language/service. This is an oracle
+    for normal CC-menu selection, not an instruction to override that choice.
+    """
+    matches = [raw_id for raw_id, kind in subtitle_track_rows(state)
+               if kind == codec.upper()]
+    try:
+        selected = int(state.get("selectedSubtitleTrackRaw", -1))
+    except (TypeError, ValueError):
+        selected = -1
+    return selected if selected in matches else matches[0] if matches else None
+
+
+def caption_renderer_disabled(state: dict, codec: str) -> bool:
+    """Require the actual renderer's Off evidence, not another backend's fields."""
+    if state.get("selectedSubtitleTrack") != -1:
+        return False
+    if codec == "TELETEXT":
+        return state.get("teletextOverlayVisible") is False and not bool(
+            state.get("subtitleOverlayAttached", False))
+    return state.get("subtitleOverlayAttached") is False and not bool(
+        state.get("teletextOverlayVisible", False))
+
+
+def caption_update_count(state: dict, codec: str) -> int:
+    key = "teletextCueUpdateCount" if codec == "TELETEXT" else "subtitleCueUpdateCount"
+    return int(state.get(key) or 0)
+
+
+def caption_progressed(state: dict, codec: str, before_count: int) -> bool:
+    # A late queued cue is not recovery if its player is already errored or
+    # stopped. Missing health fields retain compatibility with small unit
+    # fixtures; explicit negative real-player evidence must never pass.
+    # Unsupported renderer probes (IJK/System) export native playing separately.
+    # Their Exo-only isPlaying field remains false even while native output and
+    # the caption clock advance. Do not promote them to renderer-counter health,
+    # ignore an actual native pause, or treat a missing native flag as recovery.
+    playing_key = ("health_basicIsPlaying" if state.get("health_probeSupported") is False
+                   else "health_isPlaying")
+    if state.get("health_errorState") is True or state.get(playing_key) is False:
+        return False
+    if playing_key == "health_basicIsPlaying" and state.get(playing_key) is not True:
+        return False
+    if caption_update_count(state, codec) <= before_count:
+        return False
+    if codec == "TELETEXT":
+        return bool(str(state.get("currentTeletextCueText") or "").strip()) and bool(
+            state.get("teletextOverlayVisible", False))
+    return (caption_time_count(str(state.get("currentSubtitleCueText") or "")) >= 2
+            or int(state.get("currentSubtitleCueCount") or 0) > 0) and bool(
+        state.get("subtitleOverlayAttached", False))
 
 
 def wait_snapshot(client: MCPProcess, predicate, description: str, timeout_s: float) -> dict:
@@ -137,6 +238,10 @@ def main() -> int:
         help="Delegate used when --player gsyplayer is selected",
     )
     parser.add_argument("--streaming", choices=("dynamic", "push", "pull", "fixed"), default="pull")
+    parser.add_argument(
+        "--renderer", choices=("keep", "opengl", "gdx"), default="keep",
+        help="Select only the UI renderer for a controlled caption presentation comparison",
+    )
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
     parser.add_argument(
         "--mim-direct-mode",
@@ -150,8 +255,19 @@ def main() -> int:
         default="auto",
         help="MIM-owned Transcode deinterlace policy",
     )
+    parser.add_argument(
+        "--fixed-caption-side-channel",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Temporarily set the optional Fixed/MIM caption side channel for this gate",
+    )
     add_fixed_encoding_args(parser)
     parser.add_argument("--track-index", type=int, default=0)
+    parser.add_argument("--require-mim-direct-owned", action="store_true",
+                        help="Fail if requested Direct captions instead use a safe legacy fallback")
+    parser.add_argument("--track-codec", type=str.upper,
+                        choices=("CEA608", "CEA708", "DVB", "TELETEXT"), default="",
+                        help="Resolve the expected normal-menu track by discovered codec, not a fixed row")
     parser.add_argument(
         "--toggle-off-on",
         action="store_true",
@@ -197,8 +313,9 @@ def main() -> int:
         choices=("stv", "debug"),
         default="stv",
         help=(
-            "Caption authority. 'stv' requires SageTV to select the track and never "
-            "uses the Android debug selector; 'debug' retains the diagnostic selector."
+            "Caption authority. 'stv' verifies STV or configured normal-menu selection "
+            "without the Android debug selector; explicit DVB is client-local. "
+            "'debug' retains the diagnostic selector."
         ),
     )
     parser.add_argument(
@@ -226,9 +343,25 @@ def main() -> int:
             "Off/CC1/CC2/Off/CC1 states and capture each state without VIDEO_CC_STATE"
         ),
     )
+    parser.add_argument(
+        "--stv-state-before-seek",
+        choices=("Off", "CC1", "CC2"),
+        default="",
+        help="Set one SageTV caption state before the seek gate without a full state cycle",
+    )
     parser.add_argument("--playback-timeout-s", type=float, default=60.0)
     parser.add_argument("--cue-timeout-s", type=float, default=45.0)
     parser.add_argument("--verify-ms", type=int, default=3000)
+    parser.add_argument("--pause-resume", action="store_true",
+                        help="Verify paused clock stability and resumed raw caption delivery")
+    parser.add_argument(
+        "--unified-graphics", choices=("keep", "on", "off"), default="keep",
+        help="Temporarily control unified GFX surfaces for this caption gate",
+    )
+    parser.add_argument(
+        "--stv-state-hold-s", type=float, default=2.0,
+        help="Seconds to hold each Off/CC1/CC2 state before its screenshot",
+    )
     parser.add_argument(
         "--preserve-resume",
         action="store_true",
@@ -249,6 +382,8 @@ def main() -> int:
     )
     parser.add_argument("--hold-s", type=float, default=0.0,
                         help="Keep selected captions active briefly for visual inspection")
+    parser.add_argument("--pre-seek-hold-s", type=float, default=0.0,
+                        help="Bounded idle capture window before Android screenshots/seeks (maximum 30s)")
     parser.add_argument(
         "--timeline-hold-s",
         type=float,
@@ -278,6 +413,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.legacy_extender_callback and args.expect_no_legacy_callback:
         parser.error("--legacy-extender-callback and --expect-no-legacy-callback are mutually exclusive")
+    if args.track_codec and (args.authority != "stv" or args.legacy_extender_callback):
+        parser.error("--track-codec verifies normal-menu local selection, not debug/event-225 selection")
+    if args.require_mim_direct_owned and (args.streaming != "fixed" or args.mim_direct_mode == "off"):
+        parser.error("--require-mim-direct-owned requires Fixed with Copy or Transcode")
     if args.verify_local_stv_handoff:
         if args.authority != "stv":
             parser.error("--verify-local-stv-handoff requires --authority stv")
@@ -297,6 +436,7 @@ def main() -> int:
         parser.error(str(exc))
 
     client = MCPProcess()
+    original_server_caption_state = None
     try:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
@@ -313,6 +453,10 @@ def main() -> int:
             "decoding": args.decoding,
             "mim_direct_mode": args.mim_direct_mode,
             "mim_direct_deinterlace": args.mim_direct_deinterlace,
+            "fixed_caption_side_channel_enabled": (
+                None if args.fixed_caption_side_channel == "auto"
+                else args.fixed_caption_side_channel == "on"
+            ),
             "preferred_audio_language": args.preferred_audio_language,
             "preferred_subtitle_language": args.preferred_subtitle_language,
             "preferred_caption_standard": args.preferred_caption_standard,
@@ -322,14 +466,26 @@ def main() -> int:
             "caption_cc1_language": args.caption_cc1_language,
             "caption_cc2_type": args.caption_cc2_type,
             "caption_cc2_language": args.caption_cc2_language,
+            "unified_graphics_surfaces": (
+                None if args.unified_graphics == "keep"
+                else args.unified_graphics == "on"
+            ),
             **fixed_config,
         })
         call_dict(client, "dev_connect_server", {
             "address": args.server_address,
             "port": args.server_port,
             "save": False,
+            "renderer": "" if args.renderer == "keep" else args.renderer,
         })
         wait_automation_ready(client)
+        if args.authority == "stv":
+            original_server_caption_state = checkpoint_server_caption_state(client)
+            print("PASS: server caption setting checkpointed before test controls")
+        # The STV can restore its last video after initial UI readiness. Use
+        # the same bounded stock-command idle gate as lifecycle tests before
+        # exact-path Watch; otherwise two producers/seeks race in this harness.
+        clear_restored_playback(client)
         if args.media_file_id is not None:
             started = call_dict(client, "dev_play_media_file_id", {
                 "media_file_id": args.media_file_id,
@@ -365,6 +521,8 @@ def main() -> int:
                 "restart_from_beginning": not args.preserve_resume,
             }, timeout=args.playback_timeout_s + 35.0)
         require(bool(started.get("passed")), f"Initial playback failed: {started}")
+        if args.require_mim_direct_owned:
+            require_mim_direct_ownership(client, args.mim_direct_mode, "startup")
 
         if args.expect_no_legacy_callback:
             fallback_state = wait_snapshot(
@@ -395,6 +553,8 @@ def main() -> int:
                 f"negotiation or event-225 output; capture={compact_tool_result(screenshot)}"
             )
             print(f"ANDROID LEGACY CAPTION SAFE FALLBACK ({args.player}): PASS")
+            if args.require_mim_direct_owned:
+                require_mim_direct_ownership(client, args.mim_direct_mode, "settled")
             return 0
 
         tracks = wait_snapshot(
@@ -507,6 +667,32 @@ def main() -> int:
                     f"drainDelta={clock_drain_delta} "
                     f"mediaDeltaMs={clock_media_delta_ms} wireDelta={wire_delta}"
                 )
+            if args.stv_state_before_seek:
+                changed = call_dict(client, "dev_set_stv_caption_state", {
+                    "state": args.stv_state_before_seek,
+                }, timeout=30.0)
+                require(
+                    args.stv_state_before_seek.casefold()
+                    in str(changed.get("state", "")).casefold(),
+                    f"SageTV did not enter {args.stv_state_before_seek}: {changed}",
+                )
+                print(f"PASS: SageTV caption state set to {args.stv_state_before_seek} before seek")
+                time.sleep(3.0)
+                if args.pre_seek_hold_s > 0:
+                    window = min(30.0, args.pre_seek_hold_s)
+                    print(f"PRE-SEEK HOLD: {window:.1f}s idle HDMI capture window", flush=True)
+                    time.sleep(window)
+                print("DIAGNOSTIC: pre-capture caption clocks " + caption_clock_diagnostic(
+                    call_dict(client, "dev_player_state", timeout=30.0)))
+                baseline = tool_call(
+                    client,
+                    "take_screenshot",
+                    {"label": f"caption-{args.player}-{args.streaming}-legacy-callback-before-seek"},
+                    timeout=30.0,
+                )
+                print(f"PASS: captured pre-seek STV-caption baseline: {compact_tool_result(baseline)}")
+                print("DIAGNOSTIC: post-capture caption clocks " + caption_clock_diagnostic(
+                    call_dict(client, "dev_player_state", timeout=30.0)))
             if args.cycle_stv_caption_states:
                 expected_states = (
                     ("Off", "off"),
@@ -548,7 +734,7 @@ def main() -> int:
                         f"event-225 continuity while SageTV captions are {requested_state}",
                         args.cue_timeout_s,
                     )
-                    time.sleep(2.0)
+                    time.sleep(max(0.0, args.stv_state_hold_s))
                     capture = tool_call(
                         client,
                         "take_screenshot",
@@ -561,7 +747,7 @@ def main() -> int:
                         timeout=30.0,
                     )
                     print(
-                        f"PASS: SageTV standard CC state {reported!r}; "
+                        f"PASS: SageTV standard CC state and event-225 wire continuity {reported!r}; "
                         f"event225={callback_state.get('legacyCaptionWireEventCount')} "
                         f"localCueText={callback_state.get('currentSubtitleCueText')!r} "
                         f"capture={compact_tool_result(capture)}"
@@ -599,13 +785,46 @@ def main() -> int:
                     f"PASS: seek {seek_index}/{len(args.seek_command)} {command} recovered "
                     f"event-225 output in {seek.get('recoveryMs')} ms"
                 )
+            if args.pause_resume:
+                tool_call(client, "firetv_key", {"key": "PAUSE"}, timeout=30.0)
+                # A Direct seek replaces the producer asynchronously. Observe
+                # the one PAUSE request completing within the existing budget;
+                # do not assume the server/media worker finishes in one second
+                # or replay the key while a replacement is still in flight.
+                paused = wait_snapshot(client, lambda state:
+                                       int(state.get("health_playerPositionMs", -1)) >= 0
+                                       and state.get("health_playWhenReady") is False
+                                       and not bool(state.get("health_errorState", False)),
+                                       "requested PAUSE to reach the current player", args.cue_timeout_s)
+                time.sleep(1.5)
+                held = call_dict(client, "dev_player_state", timeout=30.0)
+                require("health_playerPositionMs" in paused and "health_playerPositionMs" in held,
+                        "paused player clock unavailable")
+                require(int(paused["health_playerPositionMs"]) >= 0
+                        and int(held["health_playerPositionMs"]) >= 0
+                        and held.get("health_playWhenReady") is False,
+                        "PAUSE did not hold a valid inactive playback clock")
+                require(abs(int(held["health_playerPositionMs"]) - int(paused["health_playerPositionMs"])) <= 100,
+                        "caption clock check advanced playback while paused")
+                require(not bool(held.get("health_errorState", False)), "paused caption session errored")
+                pause_wire = int(held.get("legacyCaptionWireEventCount", 0))
+                tool_call(client, "firetv_key", {"key": "PLAY"}, timeout=30.0)
+                wait_snapshot(client, lambda state:
+                              int(state.get("legacyCaptionWireEventCount", 0)) > pause_wire
+                              and int(state.get("health_playerPositionMs", -1)) > int(held["health_playerPositionMs"])
+                              and not bool(state.get("health_errorState", False)),
+                              "advancing player clock and captions after pause/resume", args.cue_timeout_s)
+                print("PASS: pause held player clock; PLAY resumed caption delivery and playback")
             screenshot = tool_call(
                 client,
                 "take_screenshot",
                 {"label": f"caption-{args.player}-{args.streaming}-legacy-callback"},
                 timeout=30.0,
             )
-            print(f"PASS: captured SageTV-rendered caption evidence: {compact_tool_result(screenshot)}")
+            print(
+                "PASS: captured STV-mode frame for separate visual caption review; "
+                f"wire delivery alone does not prove rendered text: {compact_tool_result(screenshot)}"
+            )
             if args.hold_s > 0:
                 print(
                     f"HOLD: legacy callback session remains active for {args.hold_s:.1f}s "
@@ -614,9 +833,33 @@ def main() -> int:
                 hold_deadline = time.monotonic() + args.hold_s
                 while time.monotonic() < hold_deadline:
                     time.sleep(min(1.5, hold_deadline - time.monotonic()))
+                settled = tool_call(
+                    client,
+                    "take_screenshot",
+                    {"label": f"caption-{args.player}-{args.streaming}-legacy-callback-settled"},
+                    timeout=30.0,
+                )
+                print(
+                    "PASS: captured settled STV-caption frame after hold for separate "
+                    f"visual review: {compact_tool_result(settled)}"
+                )
+                settled_state = call_dict(client, "dev_player_state", timeout=30.0)
+                print(
+                    "DIAGNOSTIC: settled Fixed-caption timing "
+                    f"state={settled_state.get('fixedCaptionSideChannelState')} "
+                    f"packets={settled_state.get('fixedCaptionReceivedPackets')} "
+                    f"lastPacketPtsMs={settled_state.get('fixedCaptionLastPacketPtsMs')} "
+                    f"lastPollClockMs={settled_state.get('fixedCaptionLastPollClockMs')} "
+                    f"wireEvents={settled_state.get('legacyCaptionWireEventCount')}"
+                )
             crash = call_dict(client, "dev_crash_probe", timeout=30.0)
             require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
-            print(f"ANDROID LEGACY CAPTION CALLBACKS ({args.player}): PASS")
+            print(
+                f"ANDROID LEGACY CAPTION CALLBACK TRANSPORT ({args.player}): PASS; "
+                "rendered text requires separate screenshot review"
+            )
+            if args.require_mim_direct_owned:
+                require_mim_direct_ownership(client, args.mim_direct_mode, "settled after controls")
             return 0
         before_updates = int(tracks.get("subtitleCueUpdateCount", 0))
         before_teletext_updates = int(tracks.get("teletextCueUpdateCount", 0))
@@ -625,8 +868,15 @@ def main() -> int:
             require(bool(selected.get("accepted")), f"Caption track selection was rejected: {selected}")
             selected_player_index = int(selected.get("playerIndex", args.track_index))
         else:
-            selected_player_index = resolve_requested_track_raw(tracks, args.track_index)
-            print("PASS: Android subtitle selector was not invoked; waiting for SageTV STV authority")
+            if args.track_codec:
+                tracks = wait_snapshot(client, lambda state:
+                    resolve_requested_codec_track(state, args.track_codec) is not None,
+                    f"discovered {args.track_codec} track", 20.0)
+                selected_player_index = resolve_requested_codec_track(tracks, args.track_codec)
+            else:
+                selected_player_index = resolve_requested_track_raw(tracks, args.track_index)
+            print("PASS: Android subtitle selector was not invoked; waiting for normal STV/menu authority "
+                  "(explicit DVB remains client-local)")
         selected_state = wait_snapshot(
             client,
             lambda state: int(state.get("selectedSubtitleTrackRaw", -1)) == selected_player_index,
@@ -797,8 +1047,7 @@ def main() -> int:
             require(bool(disabled.get("accepted")), f"Caption disable was rejected: {disabled}")
             wait_snapshot(
                 client,
-                lambda state: int(state.get("selectedSubtitleTrack", 0)) == -1
-                    and not bool(state.get("subtitleOverlayAttached", True)),
+                lambda state: caption_renderer_disabled(state, selected_codec),
                 "caption renderer disable",
                 10.0,
             )
@@ -893,7 +1142,7 @@ def main() -> int:
             seek_settle_ms = args.seek_settle_ms
             if seek_settle_ms is None:
                 seek_settle_ms = 3000 if args.streaming in ("dynamic", "push") else 1000
-            before_seek_cues = int(rendered.get("subtitleCueUpdateCount", 0))
+            before_seek_cues = caption_update_count(rendered, selected_codec)
             seek = call_dict(client, "dev_run_seek_check", {
                 "commands": [command],
                 "expected_net_ms": 0,
@@ -907,12 +1156,7 @@ def main() -> int:
             require(bool(seek.get("passed")), f"Seek {seek_index} ({command}) failed: {seek}")
             rendered = wait_snapshot(
                 client,
-                lambda state: int(state.get("subtitleCueUpdateCount", 0)) > before_seek_cues
-                    and (
-                        caption_time_count(str(state.get("currentSubtitleCueText", ""))) >= 2
-                        or int(state.get("currentSubtitleCueCount", 0)) > 0
-                    )
-                    and bool(state.get("subtitleOverlayAttached", False)),
+                lambda state: caption_progressed(state, selected_codec, before_seek_cues),
                 f"caption recovery after seek {seek_index} ({command})",
                 args.cue_timeout_s,
             )
@@ -920,6 +1164,30 @@ def main() -> int:
                 f"PASS: seek {seek_index}/{len(args.seek_command)} {command} recovered "
                 f"A/V and stable captions in {seek.get('recoveryMs')} ms"
             )
+        if args.pause_resume:
+            # The callback branch has its own wire/clock pause gate. Local
+            # DVB/Teletext must execute this flag too, against their own cues.
+            tool_call(client, "firetv_key", {"key": "PAUSE"}, timeout=30.0)
+            paused = wait_snapshot(client, lambda state:
+                int(state.get("state", -1)) == 3
+                and int(state.get("health_playerPositionMs", -1)) >= 0,
+                "local caption playback paused", args.cue_timeout_s)
+            time.sleep(1.0)
+            held = call_dict(client, "dev_player_state", timeout=30.0)
+            require(int(held.get("state", -1)) == 3, "local caption pause state lost")
+            require(abs(int(held.get("health_playerPositionMs", -1))
+                        - int(paused["health_playerPositionMs"])) <= 100,
+                    "local caption playback clock advanced while paused")
+            require(not bool(held.get("health_errorState", False)), "local caption pause errored")
+            held_updates = caption_update_count(held, selected_codec)
+            tool_call(client, "firetv_key", {"key": "PLAY"}, timeout=30.0)
+            rendered = wait_snapshot(client, lambda state:
+                int(state.get("state", -1)) == 2
+                and int(state.get("health_playerPositionMs", -1))
+                    > int(held["health_playerPositionMs"])
+                and caption_progressed(state, selected_codec, held_updates),
+                "local captions and playback resumed after pause", args.cue_timeout_s)
+            print("PASS: local caption pause held the clock; PLAY resumed real cue progress")
         if args.show_stv_timeline:
             sync_before = rendered
             caption_before_ms = stable_caption_time_ms(str(sync_before.get("currentSubtitleCueText", "")))
@@ -1011,6 +1279,8 @@ def main() -> int:
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
         print(f"ANDROID CAPTIONS ({args.player}): PASS")
+        if args.require_mim_direct_owned:
+            require_mim_direct_ownership(client, args.mim_direct_mode, "settled after controls")
         return 0
     except Exception as exc:
         print(f"ANDROID CAPTIONS ({args.player}): FAIL\n{exc}", file=sys.stderr)
@@ -1023,6 +1293,14 @@ def main() -> int:
             print(f"WARN: caption diagnostics failed: {diagnostic_exc}", file=sys.stderr)
         return 1
     finally:
+        caption_restore_failed = False
+        if original_server_caption_state is not None:
+            try:
+                restore_server_caption_state(client, original_server_caption_state)
+                print("PASS: server caption setting restored before disconnect")
+            except Exception as exc:
+                caption_restore_failed = True
+                print(f"FAIL: server caption restoration: {exc}", file=sys.stderr)
         try:
             if args.authority == "debug":
                 call_dict(client, "dev_set_subtitle_track", {"index": -1}, timeout=30.0)
@@ -1033,6 +1311,8 @@ def main() -> int:
         except Exception:
             pass
         client.close()
+        if caption_restore_failed:
+            raise RuntimeError("Server caption restoration failed; gate cannot be marked PASS")
 
 
 if __name__ == "__main__":

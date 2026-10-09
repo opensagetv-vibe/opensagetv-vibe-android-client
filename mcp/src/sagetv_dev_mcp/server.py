@@ -14,13 +14,14 @@ from mcp.server import MCPServer
 
 from .adb import AdbClient
 from .config import load_config, load_test_environment
-from .core_mcp_api import CoreMcpApiClient, discover_sage_control
+from .core_mcp_api import CoreMcpApiClient, core_mcp_required, discover_sage_control
 from .sagex_api import SagexApiClient, SagexApiError
 from .sequence import parse_sequence_script
 from .trace_analysis import analyze_jsonl
 
 cfg = load_config()
-adb = AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt)
+adb = AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt,
+                install_timeout_seconds=cfg.install_timeout_seconds)
 atexit.register(adb.close)
 mcp = MCPServer("SageTV Dev Fire TV MCP")
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -39,7 +40,13 @@ def _sage_control_session(server_address: str, client_id: str) -> tuple[object, 
     key = (str(server_address).strip(), str(client_id).strip())
     cached = _sage_control_sessions.get(key)
     if cached is not None:
-        return cached
+        # A commissioning MCP can stay alive while its ignored TOML is edited.
+        # Never retain a legacy Sagex session after Core MCP becomes required;
+        # rediscovery will either select the healthy plugin or report its real
+        # configuration/authentication/health failure.
+        if not core_mcp_required(key[0]) or isinstance(cached[0], CoreMcpApiClient):
+            return cached
+        _sage_control_sessions.pop(key, None)
     sagex = discover_sage_control(key[0])
     context = sagex.resolve_context(key[1])
     resolved = (sagex, context)
@@ -192,8 +199,10 @@ def _compact_state(state: dict) -> dict:
         "appStartedActivityCount", "appBackground",
         "backgroundSessionTimeoutMs", "backgroundSessionTimeoutDeadlineMonotonicMs",
         "backgroundSessionTimeoutCount",
-        "fixedCaptionSideChannelState", "mimDirectRequestedMode",
-        "mimDirectNegotiatedMode", "mimDirectSessionState",
+        "fixedCaptionSideChannelState", "fixedCaptionReceivedPackets",
+        "fixedCaptionLastPacketPtsMs", "fixedCaptionLastPollClockMs",
+        "mimDirectRequestedMode",
+        "mimDirectNegotiatedMode", "mimDirectSessionState", "mimDirectWatchRecoveryState",
         "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "playbackRate", "timelineSource", "serverAnchorMs",
         "serverRequestedSeekMs", "serverSeekSequence", "serverSeekMonotonicMs", "serverSeekWallMs", "serverSeekAgeMs",
         "serverFlushSequence", "serverFlushMonotonicMs", "serverFlushAgeMs",
@@ -202,6 +211,7 @@ def _compact_state(state: dict) -> dict:
         "serverMuxTimeMs", "clientBufferTimeMs", "clientBufferAvailableBytes",
         "lastPushPayloadBytes", "lastPushFlags", "lastPushReply",
         "dvdSessionPending", "dvdPushedBytes", "dvdLastReadBytes",
+        "dvdEpochPushedBytes", "dvdDecoderBufferedAheadMs",
         "dvdDrainPollCount", "dvdDrainReadyCount", "detailedPushSampleSequence",
         "dvdInitCount", "dvdPushCommandCount", "dvdPushMediaCount",
         "dvdNewCellCount", "dvdClutCount", "dvdSpuControlCount",
@@ -223,8 +233,10 @@ def _compact_state(state: dict) -> dict:
         "dvdVideoTimestampCorrectionCount", "dvdMpeg2TimestampRepairEnabled",
         "dvdMpeg2ReportedFrameRateHz", "dvdMpeg2SequenceFrameRateHz",
         "dvdMpeg2EffectiveFieldDurationUs", "dvdMpeg2TelecineCadenceSeen",
-        "dvdDiscontinuityRebaseCount", "dvdPtsTrace", "dvdFrameMetadataCount",
-        "dvdStc45Khz", "dvdLogicalClockBaseMs", "dvdRenderedVideoClockDeltaUs",
+        "dvdDiscontinuityRebaseCount", "dvdPtsTrace", "dvdScanTiming", "dvdFrameMetadataCount",
+        "dvdVirtualSkipActive", "dvdVirtualSkipTargetMs", "dvdVirtualSkipResult",
+        "dvdTimeScrollActive", "dvdTimeScrollEntryPositionMs", "dvdTimeScrollSteps",
+        "dvdStc45Khz", "dvdLogicalClockBaseMs", "dvdNormalSourceClock", "dvdRenderedVideoClockDeltaUs",
         "dvdLastFramePresentationDeltaUs", "dvdLastFrameReleaseDeltaUs",
         "dvdMaxFrameReleaseDeltaUs", "dvdFrameReleaseGapCount",
         "dvdFrameReleaseNonPositiveCount", "dvdFrameReleaseUnder10MsCount",
@@ -255,8 +267,16 @@ def _compact_state(state: dict) -> dict:
         "currentSubtitleCueCount", "lastSubtitleCueText", "currentSubtitleCueText",
         "subtitleOverlayAttached", "subtitleStateError",
         "selectedAudioTrack", "audioTrackCount", "audioTracks", "audioStateError",
+        "audioOutputMode", "audioOffsetSupported", "audioOffsetMs",
+        "passthroughAudioOffsetEnabled", "audioOffsetPath",
         "health_probeSupported", "health_probeProvider", "health_probeReason",
+        "health_firstVideoFrameRendered",
+        "health_capturedMonotonicMs",
         "health_topLevelPlayerClass", "health_backendClass", "health_backendPlayerClass", "health_dataSourceClass",
+        "health_directSourceSession",
+        "health_directMediaItemSession",
+        "health_directErrorSession", "health_directErrorAsset",
+        "health_directErrorCode", "health_directErrorSegmentIndex",
         "health_dataSourceOpenCount", "health_dataSourceOpenWaitMs", "health_dataSourceLastOpenPosition",
         "sourceOpenMonotonicMs", "sourceFirstReadMonotonicMs", "sourceFirstReadPosition",
         "health_dataSourceLastOpenMonotonicMs", "health_dataSourceFirstReadAfterOpenMonotonicMs",
@@ -280,6 +300,7 @@ def _compact_state(state: dict) -> dict:
         "health_bufferLeft", "health_lastFileReadPos",
         "health_pushMode", "health_playerReady", "health_seekPending", "health_flushed", "health_errorState", "health_retryCount",
         "health_playbackState", "health_playWhenReady", "health_isPlaying", "health_isLoading",
+        "health_basicIsPlaying",
         "health_playerPositionMs", "health_bufferedPositionMs", "health_durationMs", "health_playerError",
         "health_videoMime", "health_videoCodecString", "health_videoDecoder", "health_videoDecoderKind",
         "health_videoWidth", "health_videoHeight", "health_videoRendered", "health_videoSkipped", "health_videoDropped",
@@ -404,6 +425,20 @@ def _playback_health_from_pair(
         advancing = False
     details["timeline_advancing_fallback"] = advancing
     details["verdict_basis"] = "timeline_fallback"
+    backend = str(after.get("health_backendClass") or after.get("playerClass") or "")
+    video_expected = bool(expect_video) if expect_video is not None else any(
+        int(state.get("health_videoWidth", 0) or 0) > 0 for state in (before, after)
+    )
+    if (backend.endswith(".IJKMediaPlayerImpl") and video_expected
+            and "health_firstVideoFrameRendered" in after):
+        # Native IJK may advance the audio/timeline while its MediaCodec video
+        # path is permanently blank. New debug APKs expose the existing real
+        # rendering-start callback; do not convert that clock into a video PASS.
+        # Older APKs retain their explicitly weaker timeline fallback and still
+        # need independent visual evidence. Audio-only playback is unchanged.
+        frame_seen = bool(after["health_firstVideoFrameRendered"])
+        details["video_first_frame_verified"] = frame_seen
+        return advancing and frame_seen, details
     return advancing, details
 
 
@@ -1405,6 +1440,11 @@ def dev_open_smb_profile_settings() -> dict:
     return adb.open_smb_profile_settings()
 
 @mcp.tool()
+def dev_open_diagnostics_settings() -> dict:
+    """Open the production diagnostics settings screen in the debug APK."""
+    return adb.open_diagnostics_settings()
+
+@mcp.tool()
 def dev_player_events() -> dict:
     """Read the debug APK exact-event playback trap ring, including event-time A/V counters."""
     result = adb.player_event_traps()
@@ -1422,6 +1462,16 @@ def dev_set_datasource_capture(enabled: bool = True) -> dict:
     """Enable/disable a bounded raw Push-byte capture for the next playback."""
     return adb.set_datasource_capture(enabled)
 
+@mcp.tool()
+def dev_set_native_dvd_codec_fault(enabled: bool = True) -> dict:
+    """Debug-only one-shot output withholding to gate retained-queue DVD recovery.
+
+    Stock sage.SageTV.api/apiUI cannot control a local Android MediaCodec's
+    output callback. Existing stock Core MCP still owns Watch/menu/seek; this
+    local debug operation adds no Core patch, MiniClient event or socket fault.
+    """
+    return adb.set_native_dvd_codec_fault(enabled)
+
 
 @mcp.tool()
 def dev_checkpoint_settings() -> dict:
@@ -1436,14 +1486,17 @@ def dev_restore_settings() -> dict:
 
 
 @mcp.tool()
-def dev_set_mim_direct_late_fallback_fault(enabled: bool = True) -> dict:
+def dev_set_mim_direct_late_fallback_fault(enabled: bool = True,
+                                        include_pull_failure: bool = True) -> dict:
     """Arm/clear the debug APK's one-shot late Fixed fallback fault.
 
     The next eligible MIM Direct playback forces Direct creation and its
     original Pull fallback to fail. The client must reconnect once with Direct
     suppressed for that connection and resume through ordinary SageTV Fixed.
+    Set include_pull_failure=False to retain the real original source and
+    verify unsupported-video track discovery rather than a forced URL error.
     """
-    return adb.set_mim_direct_late_fallback_fault(enabled)
+    return adb.set_mim_direct_late_fallback_fault(enabled, include_pull_failure)
 
 
 @mcp.tool()
@@ -1675,11 +1728,46 @@ def dev_connect_server(server_name: str = "", address: str = "", port: int = 310
                               save=save, renderer=renderer)
 
 
+def _wait_exit_background_settled(timeout_s: float = 5.0) -> dict:
+    """Observe explicit HOME before one force-stop; never replay the exit.
+
+    Android6 can start its phone launcher from a pending activity transition
+    after force-stop has killed the playback process. Put all Dev tasks behind
+    Android HOME before stopping so killing the foreground activity cannot
+    expose a previous Dev task. Never count a restarted background process as
+    successful teardown. This is bounded
+    read-only test coordination, not a production playback/lifecycle change.
+    """
+    deadline = time.monotonic() + timeout_s
+    stable_since = None
+    previous_activity = ""
+    last = {}
+    while time.monotonic() < deadline:
+        last = adb.app_status()
+        if not last.get("running"):
+            return {"settled": True, "basis": "already_stopped"}
+        activity = str(last.get("resumedActivity", ""))
+        background = bool(activity) and not bool(last.get("foreground"))
+        now = time.monotonic()
+        if background:
+            if activity != previous_activity:
+                stable_since = now
+            elif stable_since is not None and now - stable_since >= 0.5:
+                return {"settled": True, "basis": "stable_background"}
+        else:
+            stable_since = None
+        previous_activity = activity
+        time.sleep(0.1)
+    return {"settled": False, "basis": "bounded_navigation_timeout"}
+
+
 @mcp.tool()
 def dev_exit_session(stop_app: bool = False) -> dict:
     """Disconnect from SageTV and return to the MiniClient server screen. If stop_app is true, force-stop the Dev package after disconnecting."""
     result = adb.exit_session()
     if stop_app:
+        result["homeBeforeStop"] = adb.key("HOME")
+        result["exitNavigation"] = _wait_exit_background_settled()
         result["force_stop"] = adb.force_stop()
         deadline = time.monotonic() + 15.0
         status = adb.app_status()
@@ -2652,6 +2740,12 @@ def dev_set_active_audio(
 
 
 @mcp.tool()
+def dev_set_audio_track(index: int) -> dict:
+    """Debug-only: select a discovered active-media audio track by zero-based ordinal."""
+    return adb.set_audio_track(index)
+
+
+@mcp.tool()
 def dev_seek_relative(delta_ms: int) -> dict:
     """Seek the active Android player directly by a caller-supplied signed millisecond delta."""
     return adb.seek_relative(int(delta_ms))
@@ -2661,6 +2755,17 @@ def dev_seek_relative(delta_ms: int) -> dict:
 def dev_frame_step(amount: int = 1) -> dict:
     """Step the paused Pull/SMB player by a non-zero signed frame count."""
     return adb.frame_step(int(amount))
+
+
+@mcp.tool()
+def dev_dvd_arrow_hold(key: str, hold_ms: int = 200) -> dict:
+    """Queue one bounded foreground DVD direction/FF/RW DOWN/UP pair; no replay or preferences."""
+    codes = {"UP": 19, "DOWN": 20, "LEFT": 21, "RIGHT": 22, "FF": 90, "RW": 89}
+    normalized = str(key).strip().upper()
+    duration = int(hold_ms)
+    if normalized not in codes or not 20 <= duration <= 12000:
+        raise ValueError("DVD key must be UP/DOWN/LEFT/RIGHT/FF/RW and hold_ms 20..12000")
+    return adb.dev_control("dvd_arrow_hold", keycode=codes[normalized], hold_ms=duration)
 
 
 @mcp.tool()
@@ -3213,7 +3318,8 @@ def dev_seek_time(target_ms: int, tolerance_ms: int = 2000, timeout_s: float = 1
 
 @mcp.tool()
 def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
-                         timeout_s: float = 30.0, stable_ms: int = 1200) -> dict:
+                         timeout_s: float = 30.0, stable_ms: int = 1200,
+                         max_attempts: int = 1) -> dict:
     """Seek through SageTV's UI VideoFrame and verify landing plus A/V recovery.
 
     This is the required positioning path for server-owned Push and DVD
@@ -3226,6 +3332,7 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     tolerance_ms = max(0, min(int(tolerance_ms), 30000))
     timeout_s = max(1.0, min(float(timeout_s), 180.0))
     stable_ms = max(250, min(int(stable_ms), 10000))
+    max_attempts = max(1, min(int(max_attempts), 3))
 
     before = adb.player_state_snapshot()
     if not bool(before.get("connected")) or not bool(before.get("playerActive")):
@@ -3254,16 +3361,27 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     replies: list[dict] = []
     requested_ms = target_ms
     previous_stc_count = int(before.get("dvdStcCount", -1))
-    max_attempts = 3
     for attempt in range(max_attempts):
         replies.append(issue_server_seek(requested_ms))
         anchor_ms = -1
+        # Stock MiniDVDPlayer can accept the public Seek(long) call while it is
+        # still replacing the startup title/cell, then discard that first
+        # request as the new reader becomes authoritative.  Do not spend the
+        # entire gate timeout waiting on that already-lost request.  Give each
+        # bounded attempt its own observation window and retry the same target
+        # when no new STC anchor was emitted.  This stays entirely on the
+        # supported VideoFrame API and never substitutes a client-local Push
+        # seek for server-owned DVD positioning.
+        attempts_left = max_attempts - attempt
+        remaining_before_attempt = max(0.0, deadline - time.monotonic())
+        attempt_window_s = min(10.0, remaining_before_attempt / max(1, attempts_left))
+        attempt_deadline = min(deadline, time.monotonic() + max(1.0, attempt_window_s))
         # DVD VM sector interpolation can land on a nearby VOBU. Observe the
         # exact STC anchor emitted for that landing, then issue at most two
         # bounded correction seeks. This makes a requested comparison scene
         # deterministic without lying about the media clock or touching the
         # decoder's cell-local position.
-        while time.monotonic() < deadline:
+        while time.monotonic() < attempt_deadline:
             last = adb.player_state_snapshot()
             try:
                 reached_ms = _snapshot_media_time(last)
@@ -3279,8 +3397,14 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
             time.sleep(0.25)
         if reached_ms >= 0 and abs(reached_ms - target_ms) <= tolerance_ms:
             break
-        if anchor_ms < 0 or attempt + 1 >= max_attempts:
+        if attempt + 1 >= max_attempts:
             break
+        if anchor_ms < 0:
+            # No DVD STC means the server never committed the requested
+            # reader generation.  Retry the exact same public seek after the
+            # bounded observation period; any player/output failure remains
+            # visible to the final recovery assertion below.
+            continue
         error_ms = anchor_ms - target_ms
         if abs(error_ms) <= tolerance_ms:
             reached_ms = anchor_ms
@@ -3320,6 +3444,12 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
 def dev_show_active_player_adjustments() -> dict:
     """Open the debug APK's live Active Player Adjustments screen."""
     return adb.show_active_player_adjustments()
+
+
+@mcp.tool()
+def dev_show_av_sync_test() -> dict:
+    """Open the embedded common-clock A/V fixture for a physical camera/mic gate."""
+    return adb.show_av_sync_test()
 
 
 @mcp.tool()

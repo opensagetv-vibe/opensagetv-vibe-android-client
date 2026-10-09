@@ -5,7 +5,10 @@ set -euo pipefail
 # MPEG-TS, 1920x1080 interlaced MPEG-2 at 30000/1001 fps, dual AC-3 audio,
 # and real in-band CEA-608 CC1 plus CEA-708 Service 1 carried as ATSC A/53
 # GA94 user_data. Burned-in PTS/frame text makes stale video after a seek
-# visible; the caption clock updates every 0.5 seconds independently.
+# visible; the caption clock updates every 0.5 seconds independently. This
+# cadence stresses packet delivery and seeks but does not give SageTV's STV
+# renderer a stable visual dwell. For a visual CC1/Off/CC1 gate, generate a
+# separate short file with generate_a53_seek_fixture.py --caption-interval 2.0.
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 output_path="${1:-artifacts/test-media/VibeSeekTest-1080i-MPEG2-AC3-CC.ts}"

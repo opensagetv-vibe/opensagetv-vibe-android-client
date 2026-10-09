@@ -185,6 +185,9 @@ public interface PrefStore
          */
         String debug_log_unmapped_keypresses = "debug_log_unmapped_keypresses";
 
+        /** Capture bounded, redacted evidence after a meaningful Push rebuffer. */
+        String automatic_push_stall_diagnostics = "automatic_push_stall_diagnostics";
+
         /**
          * If set to true, then when the app pauses, it will tear down
          */
@@ -210,6 +213,9 @@ public interface PrefStore
 
         /** Fall back to the stock/native DVD path when an optional Vibe path is unavailable. */
         String disc_compatibility_fallback = "disc_compatibility_fallback";
+
+        /** Native-only decoder lifecycle/one-shot startup recovery; off preserves ordinary Media3 rendering. */
+        String disc_decoder_compatibility_recovery = "disc_decoder_compatibility_recovery";
 
         /** Native DVD MPEG-2 missing-PTS repair: auto, on, or off. */
         String disc_mpeg2_timestamp_repair = "disc_mpeg2_timestamp_repair";

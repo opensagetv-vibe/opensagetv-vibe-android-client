@@ -9,6 +9,7 @@ and an explicitly selectable UI test; it is no longer the default launch path.
 from __future__ import annotations
 
 from sagetv_dev_mcp.config import default_server_address, default_server_value
+from sagetv_dev_mcp.core_mcp_api import core_mcp_required
 
 import argparse
 import json
@@ -198,6 +199,11 @@ def main() -> int:
     parser.add_argument("--text", required=True, help="Required SageTV MediaFile name; UI Search is only a fallback")
     parser.add_argument("--server-path", default="", help="Prefer an exact server-side MediaFile path through the opt-in Vibe protocol extension")
     parser.add_argument(
+        "--restart-from-beginning",
+        action="store_true",
+        help="For exact-path fixtures, ask SageTV to start a new Watch at the beginning",
+    )
+    parser.add_argument(
         "--force-ui-search",
         action="store_true",
         help="Bypass direct Watch/WatchNow and explicitly exercise the native SageTV Search UI",
@@ -293,6 +299,7 @@ def main() -> int:
 
         path_start = None
         path_error = ""
+        required_core_mcp = core_mcp_required(args.server)
         if args.server_path.strip():
             print(f"STEP: start exact server MediaFile path: {args.server_path!r}")
             try:
@@ -300,10 +307,16 @@ def main() -> int:
                     "server_path": args.server_path,
                     "timeout_s": args.playback_timeout_s,
                     "verify_ms": args.verify_ms,
+                    "restart_from_beginning": args.restart_from_beginning,
                 }, timeout=args.playback_timeout_s + 35.0)
                 print(json.dumps(path_start, indent=2, sort_keys=True))
             except Exception as exc:
                 path_error = str(exc)
+                if required_core_mcp:
+                    raise RuntimeError(
+                        "Required Core MCP exact-path control failed; refusing Sagex/search fallback: "
+                        + path_error
+                    ) from exc
                 print(f"WARN: exact server-path control unavailable: {path_error}")
             if path_start is not None and path_start.get("passed"):
                 print("PASS: exact server-path playback started")
@@ -327,6 +340,11 @@ def main() -> int:
                     print(json.dumps(direct_start, indent=2, sort_keys=True))
                 except Exception as exc:
                     direct_error = str(exc)
+                    if required_core_mcp:
+                        raise RuntimeError(
+                            "Required Core MCP direct control failed; refusing UI Search fallback: "
+                            + direct_error
+                        ) from exc
                     print(f"WARN: direct MediaFile control unavailable; trying UI Search fallback: {direct_error}")
 
             if direct_start is not None and direct_start.get("passed"):

@@ -5,6 +5,55 @@ from sagetv_dev_mcp import server
 
 
 class PlaybackHealthTest(unittest.TestCase):
+    def test_compact_state_retains_safe_direct_session_attribution_not_raw_uri(self):
+        fields = {"health_directSourceSession": "unavailable", "health_directMediaItemSession": "current",
+                  "health_directErrorSession": "retired", "health_directErrorAsset": "playlist",
+                  "health_directErrorCode": "http_404_unknown_media", "health_directErrorSegmentIndex": -1}
+        self.assertEqual(fields, server._compact_state({**fields,
+                         "directSourceUri": "private endpoint", "sessionToken": "private"}))
+
+    def test_compact_state_preserves_native_playing_without_promoting_probe(self):
+        fields = {"health_probeSupported": False, "health_isPlaying": False,
+                  "health_basicIsPlaying": True}
+        self.assertEqual(fields, server._compact_state({**fields, "privateToken": "private"}))
+
+    def test_ijk_audio_clock_cannot_certify_blank_video(self):
+        before = {"playerActive": True, "state": 2, "mediaTimeMs": 1000,
+                  "playerClass": "example.IJKMediaPlayerImpl", "health_videoWidth": 1920,
+                  "health_firstVideoFrameRendered": False}
+        after = {**before, "mediaTimeMs": 2000}
+        passed, details = server._playback_health_from_pair(before, after)
+        self.assertFalse(passed)
+        self.assertTrue(details["timeline_advancing_fallback"])
+        self.assertFalse(details["video_first_frame_verified"])
+        self.assertIn("health_firstVideoFrameRendered", server._compact_state(after))
+
+    def test_ijk_first_frame_plus_clock_retains_weaker_fallback(self):
+        before = {"playerActive": True, "state": 2, "mediaTimeMs": 1000,
+                  "playerClass": "example.IJKMediaPlayerImpl", "health_videoWidth": 1920,
+                  "health_firstVideoFrameRendered": True}
+        passed, details = server._playback_health_from_pair(before, {**before, "mediaTimeMs": 2000})
+        self.assertTrue(passed)
+        self.assertEqual("timeline_fallback", details["verdict_basis"])
+        self.assertTrue(details["video_first_frame_verified"])
+
+    def test_ijk_audio_only_and_older_debug_fallback_unchanged(self):
+        before = {"playerActive": True, "state": 2, "mediaTimeMs": 1000,
+                  "playerClass": "example.IJKMediaPlayerImpl", "health_videoWidth": 1920,
+                  "health_firstVideoFrameRendered": False}
+        self.assertTrue(server._playback_health_from_pair(before, {**before, "mediaTimeMs": 2000}, expect_video=False)[0])
+        before.pop("health_firstVideoFrameRendered")
+        self.assertTrue(server._playback_health_from_pair(before, {**before, "mediaTimeMs": 2000})[0])
+
+    def test_compact_state_retains_existing_dvd_push_drain_probes(self):
+        fields = {"dvdEpochPushedBytes": 24000000, "dvdDecoderBufferedAheadMs": 2400,
+                  "lastPushReply": 0, "dvdLastReadBytes": 23000000}
+        self.assertEqual(fields, server._compact_state({**fields, "notNeeded": 42}))
+
+    def test_compact_state_retains_existing_dvd_normal_source_clock(self):
+        fields = {"dvdNormalSourceClock": "count=1,capacity=64,presentationUs=2000000,mappedSourceMs=3200000"}
+        self.assertEqual(fields, server._compact_state({**fields, "notNeeded": 42}))
+
     @staticmethod
     def _preview_state():
         return {
@@ -57,6 +106,11 @@ class PlaybackHealthTest(unittest.TestCase):
         compact = server._compact_state({**fields, "unrelated": "discarded"})
         self.assertEqual(fields, compact)
 
+    def test_compact_state_retains_device_capture_clock_for_cadence(self):
+        self.assertEqual({"health_capturedMonotonicMs": 28578},
+                         server._compact_state({"health_capturedMonotonicMs": 28578,
+                                                "unrelated": "discarded"}))
+
     def test_compact_state_retains_background_session_ownership(self):
         fields = {
             "appVisibilityState": "BACKGROUND_APP_PAUSED",
@@ -83,6 +137,15 @@ class PlaybackHealthTest(unittest.TestCase):
         }
         compact = server._compact_state({**fields, "unrelated": "discarded"})
         self.assertEqual(fields, compact)
+
+    def test_compact_state_retains_fixed_caption_packet_diagnostics(self):
+        fields = {
+            "fixedCaptionSideChannelState": "active",
+            "fixedCaptionReceivedPackets": 25,
+            "fixedCaptionLastPacketPtsMs": 12450,
+            "fixedCaptionLastPollClockMs": 12300,
+        }
+        self.assertEqual(fields, server._compact_state({**fields, "unrelated": "discarded"}))
 
     def test_stream_expectations_detect_audio_and_video(self):
         self.assertEqual(

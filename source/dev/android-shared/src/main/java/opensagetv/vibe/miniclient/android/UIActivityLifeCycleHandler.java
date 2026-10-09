@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ResultReceiver;
+import android.os.SystemClock;
 //import android.support.v4.media.session.MediaButtonReceiver;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.view.MotionEvent;
@@ -131,8 +132,11 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     });
     private Future<?> connectionFuture;
     private volatile boolean destroyed;
-    private static final long MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS = 100L;
-    private Intent pendingMimDirectFallbackActivity;
+    private static final long REPLACEMENT_ACTIVITY_RESTART_DELAY_MS = 100L;
+    private static final long GRAPHICS_RECOVERY_COOLDOWN_MS = 60_000L;
+    private static final AtomicLong lastGraphicsRecoveryMs = new AtomicLong();
+    private Intent pendingReplacementActivity;
+    private boolean graphicsRecoveryPending;
     private BackgroundSessionOwner backgroundSessionOwner;
     private boolean keepSessionInBackground;
     private boolean resumeBackgroundPlayback;
@@ -298,10 +302,10 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
             {
                 // Preserve the historical teardown policy for users who have
                 // not explicitly enabled bounded background sessions.
-                // A pending MIM fallback is a connection/renderer handoff,
-                // not a user STOP. Preserve SageTV's watch state so the same
-                // client ID can restore it through ordinary Fixed.
-                if (pendingMimDirectFallbackActivity == null
+                // A pending replacement is a connection/renderer handoff
+                // (MIM fallback or graphics-context recovery), not a user
+                // STOP. Preserve SageTV's watch state for the same client ID.
+                if (pendingReplacementActivity == null
                         && client.getCurrentConnection() != null
                         && client.getCurrentConnection().getMediaCmd() != null)
                 {
@@ -456,8 +460,32 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                         // before Core can choose and launch a Fixed/MIM job.
                         // The controller is a no-op unless Fixed, opt-in and a
                         // valid local token are all present.
+                        java.util.List<String> nativeVideo =
+                                opensagetv.vibe.miniclient.media.VideoCodec.getAllSageTVNames();
+                        if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode())
+                                && "transcode".equalsIgnoreCase(client.properties().getString(
+                                        opensagetv.vibe.miniclient.prefs.PrefStore.Keys.mim_direct_mode, "off")))
+                            client.prepareCodecs(nativeVideo,
+                                    opensagetv.vibe.miniclient.media.AudioCodec.getAllSageTVNames(),
+                                    opensagetv.vibe.miniclient.media.Container.getAllSageTVNames(),
+                                    opensagetv.vibe.miniclient.media.Container.getAllSageTVNames());
                         client.setMimDirectTransportMode(MiniclientApplication.get()
-                                .getMimDirectSession().prepare(si, client.properties()));
+                                .getMimDirectSession().prepare(si, client.properties(),
+                                        android.text.TextUtils.join(",", nativeVideo)));
+                        client.setMimDirectSourceAcceptance(MiniclientApplication.get()
+                                .getMimDirectSession().requiresPluginWatchRecovery());
+                        if ("unsupported_video_stock_fixed".equals(MiniclientApplication.get()
+                                .getMimDirectSession().stateForDiagnostics()))
+                            runOnUiThread(new Runnable()
+                            {
+                                @Override public void run()
+                                {
+                                    if (!destroyed)
+                                        Toast.makeText(activity,
+                                                "Owned Transcode unavailable on this device; using ordinary Fixed playback",
+                                                Toast.LENGTH_LONG).show();
+                                }
+                            });
                         if (client.getMimDirectTransportMode().isEmpty())
                             MiniclientApplication.get().getFixedCaptionSideChannel()
                                     .start(si, client.properties());
@@ -470,6 +498,14 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                         }
                         if (!client.publishConnectedIfCurrent(connection))
                             connection.close();
+                        else {
+                            final MiniClientConnection published=connection;
+                            MiniclientApplication.get().getMimDirectSession()
+                                    .onFreshConnectionForWatchRecovery(published,() ->
+                                            !destroyed && client.getCurrentConnection()==published
+                                                    && client.getUIRenderer()!=null
+                                                    && client.getUIRenderer().isFirstFrameRendered());
+                        }
                     }
                     catch (final IOException e)
                     {
@@ -575,7 +611,8 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     {
         log.debug("Closing MiniClient Connection");
         MiniclientApplication.get().getFixedCaptionSideChannel().stop();
-        MiniclientApplication.get().getMimDirectSession().stop();
+        MiniclientApplication.get().getMimDirectSession()
+                .stopForActivityReplacement(pendingReplacementActivity !=null);
         client.setMimDirectTransportMode("");
         ActivePlayerProcessOverlay.hide();
         cancelPendingBackgroundResume();
@@ -616,8 +653,8 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
         {
             log.error("Error shutting down client", t);
         }
-        final Intent fallbackActivity = pendingMimDirectFallbackActivity;
-        pendingMimDirectFallbackActivity = null;
+        final Intent fallbackActivity = pendingReplacementActivity;
+        pendingReplacementActivity = null;
         if (fallbackActivity != null)
         {
             final Context appContext = activity.getApplicationContext();
@@ -627,7 +664,7 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                 {
                     appContext.startActivity(fallbackActivity);
                 }
-            }, MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS);
+            }, REPLACEMENT_ACTIVITY_RESTART_DELAY_MS);
         }
     }
 
@@ -936,19 +973,23 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     @Override
     public void onMimDirectFallbackReconnect(MimDirectFallbackReconnectEvent event)
     {
-        if (destroyed)
+        if (destroyed || pendingReplacementActivity !=null)
             return;
+        if (event.pluginWatchRecovery && !MiniclientApplication.get()
+                .getMimDirectSession().hasPendingPluginWatchRecovery()) return;
         final ServerInfo server = client.getConnectedServerInfo();
         if (server == null)
         {
             log.warn("Cannot recover MIM Direct fallback without server identity");
             return;
         }
+        if (event.pluginWatchRecovery && !MiniclientApplication.get()
+                .getMimDirectSession().commitPluginWatchRecoveryHandoff()) return;
         log.warn("MIM Direct and Pull startup failed; reconnecting once for ordinary Fixed ({})",
                 event.reason);
         MiniClientConnection connection = client.getCurrentConnection();
         client.setMimDirectTransportMode("");
-        if (connection != null && connection.requestTransportRenegotiationReconnect())
+        if (!event.pluginWatchRecovery && connection != null && connection.requestTransportRenegotiationReconnect())
         {
             MiniclientApplication.get().getMimDirectSession()
                     .useInPlaceStockFixedReconnect();
@@ -968,11 +1009,47 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
      */
     private void restartMiniClientActivityForStockFixed(final ServerInfo server)
     {
+        scheduleMiniClientActivityReplacement(server);
+    }
+
+    private void scheduleMiniClientActivityReplacement(final ServerInfo server)
+    {
         final Intent replacement = new Intent(activity, activity.getClass());
         replacement.putExtra(ARG_SERVER_INFO, server);
         replacement.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        pendingMimDirectFallbackActivity = replacement;
+        pendingReplacementActivity = replacement;
         activity.finish();
+    }
+
+    @Override
+    public void requestGraphicsContextRecovery()
+    {
+        // GLSurfaceView invokes this from its GL thread. Never close its
+        // connection or Activity there; the existing handoff does that on the
+        // main thread while preserving the stock server's watch state.
+        runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (destroyed || graphicsRecoveryPending || pendingReplacementActivity != null)
+                    return;
+                final ServerInfo server = client.getConnectedServerInfo();
+                if (server == null)
+                    return;
+                long now = SystemClock.elapsedRealtime();
+                long previous = lastGraphicsRecoveryMs.get();
+                if (previous > 0L && now - previous < GRAPHICS_RECOVERY_COOLDOWN_MS)
+                {
+                    log.warn("Suppressing repeated OpenGL context recovery within {} ms",
+                            GRAPHICS_RECOVERY_COOLDOWN_MS);
+                    return;
+                }
+                lastGraphicsRecoveryMs.set(now);
+                graphicsRecoveryPending = true;
+                log.warn("Reconnecting MiniClient to replace invalid OpenGL texture and surface handles");
+                scheduleMiniClientActivityReplacement(server);
+            }
+        });
     }
 
     boolean hideNavigationDialog()

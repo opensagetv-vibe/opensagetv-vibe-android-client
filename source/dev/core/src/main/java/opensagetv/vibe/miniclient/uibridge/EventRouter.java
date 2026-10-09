@@ -18,6 +18,7 @@ public class EventRouter
     public static void postCommand(MiniClient client, int command)
     {
         log.debug("Post Command Called:  " + command);
+        client.observePlaybackCommand(SageCommand.parseByID(command));
 
         // Keep the historical low-latency repeated-Pause behavior. The player
         // contract now reports unsupported explicitly; in that case SageTV gets
@@ -44,6 +45,7 @@ public class EventRouter
     public static void postCommand(MiniClient client, SageCommand command)
     {
         log.debug("Post SageCommandCalled: " + command.getDisplayName() + " Key:" + command.getKey() + " EventCode:" + command.getEventCode());
+        client.observePlaybackCommand(command);
 
         if (client.isVideoPaused() && command == SageCommand.PAUSE
                 && client.getPlayer().frameStep(1))

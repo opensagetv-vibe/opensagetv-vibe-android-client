@@ -44,6 +44,49 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="DVD Playback"
+        android:summary="Mappings used during a DVD title; authored DVD menus always use directional navigation"
+        android:key="dvdplaying">
+
+        <SwitchPreferenceCompat
+            android:key="dvdplaying_hold_arrows"
+            android:title="DVD arrow navigation"
+            android:summary="Default: Left/Right select a Time Scroll position; Center accepts, Back or Play cancels. Hold Up/Down one second to repeat chapter changes; short taps do nothing. DVD menu arrows stay immediate. Turn off to use saved arrow mappings."
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            android:key="dvdplaying_hold_scan"
+            android:title="DVD FF/RW tap and hold"
+            android:summary="Default: tap changes one scan rate; hold increases the rate up to 256x; release after a hold resumes Play. Play or opposite taps reducing the scan to off cancel it. Applies only during DVD titles. Turn off to use saved FF/RW mappings."
+            android:defaultValue="true" />
+
+        <ListPreference
+            android:dialogTitle="Left"
+            android:key="dvdplaying_left"
+            android:summary="%s"
+            android:title="Left"/>
+
+        <ListPreference
+            android:dialogTitle="Right"
+            android:key="dvdplaying_right"
+            android:summary="%s"
+            android:title="Right"/>
+
+        <ListPreference
+            android:dialogTitle="Hold Left"
+            android:key="dvdplaying_left_long_press"
+            android:summary="%s"
+            android:title="Hold Left"/>
+
+        <ListPreference
+            android:dialogTitle="Hold Right"
+            android:key="dvdplaying_right_long_press"
+            android:summary="%s"
+            android:title="Hold Right"/>
+
+    </PreferenceCategory>
+
 
     <PreferenceCategory
         android:title="Default (Remote Controls)"

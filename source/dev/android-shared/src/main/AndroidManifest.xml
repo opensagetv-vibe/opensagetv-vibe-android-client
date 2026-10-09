@@ -8,8 +8,15 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- SageTV/MIM serves configured LAN media and capabilities over HTTP.
+         Servers may use arbitrary user-configured IPs/hostnames, so a static
+         domain allow-list cannot represent that existing transport contract.
+         Android 9+ otherwise rejects those requests before negotiation. This
+         explicit opt-in neither enables optional Direct mode nor changes TLS
+         certificate validation. Use trusted networks for plain-HTTP servers. -->
     <application
         android:name=".MiniclientApplication"
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher_v2"
@@ -75,6 +82,11 @@
             android:name=".ui.settings.HomeBackgroundSettingsActivity"
             android:exported="false"
             android:label="@string/background_session_settings_title"
+            android:theme="@style/Theme.PhoneTheme" />
+        <activity
+            android:name=".ui.settings.DiagnosticsSettingsActivity"
+            android:exported="false"
+            android:label="Diagnostics Settings"
             android:theme="@style/Theme.PhoneTheme" />
         <activity
             android:name=".ui.settings.DiscPlaybackSettingsActivity"

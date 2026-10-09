@@ -84,8 +84,10 @@ import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
 import opensagetv.vibe.miniclient.video.PlaybackFailureClassifier;
 import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
+import opensagetv.vibe.miniclient.video.CaptionClockCadence;
 import opensagetv.vibe.miniclient.video.MediaReplacementPolicy;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
+import opensagetv.vibe.miniclient.video.NativeDvdVideoSupportPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSeekPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
@@ -285,6 +287,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private Media3PcmAudioProcessor pcmAudioProcessor;
     private EncodedPassthroughOffsetController passthroughOffsetController;
     private Runnable pendingPassthroughOffsetReanchor;
+    // A live encoded-offset change must discard samples stamped with the old
+    // offset. Rebuilding at CLOSEST_SYNC can move an interlaced broadcast TS
+    // by part of a GOP and create a new A/V error. Limit exact seeking to this
+    // retained-position rebuild; normal remote, Comskip, and resume seeks keep
+    // their existing sync-point policy.
+    private volatile boolean exactAudioOffsetReanchorSeekPending;
     private int initialAudioTrackIndex = -1;
     /** SageTV's packed DVD private-stream request, retained across cell replacements. */
     private volatile int requestedDvdAudioStream = -1;
@@ -409,6 +417,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private volatile boolean dvdSegmentReaderEnded;
     private volatile boolean dvdRenderedFirstFrameInEpoch;
     private volatile boolean dvdPauseAfterFirstFrame;
+    private volatile float dvdServerTrickRate = 1.0f;
+    private volatile boolean dvdSkipPulseActive;
+    private volatile boolean dvdPreviewDrainPending;
+    private volatile float dvdPreviewDrainSpeed = 1.0f;
+    private volatile boolean dvdRateTransitionPending;
+    private volatile long dvdRateTransitionAnchorMs;
+    private volatile boolean dvdTrickAudioSuspended;
+    private volatile long dvdInteractiveStartDeadlineMs;
     // Original SageTV extenders apply MEDIACMD_DVD_STC to their hardware
     // decoder clock and report that absolute clock to MiniDVDPlayer. Media3
     // periods are deliberately rebased to zero after a DVD FLUSH, so retain
@@ -447,6 +463,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private volatile long dvdLastEpochCrc32;
     private volatile long dvdLastEpochFingerprintBytes;
     private Runnable progressRunnable;
+    private Runnable captionClockRunnable;
     private final PullSeekRecoveryMonitor pullSeekRecoveryMonitor = new PullSeekRecoveryMonitor();
     private final PlaybackMediaContext mediaContext = new PlaybackMediaContext();
     private PlayerRuntimeConfig runtimeConfig = PlayerRuntimeConfig.capture(PlayerRuntimeConfig.Backend.MEDIA3);
@@ -495,6 +512,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 playerReady, seekPending, flushed, errorState, retryCount,
                 isMimDirectMediaUrlActive() ? "MIM_DIRECT" : "");
     }
+
 
     @Override
     public boolean hasRenderedFirstVideoFrame()
@@ -723,10 +741,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     public long getPlaybackPosition()
     {
-        // seek() deliberately holds playbackPositionLock while it asks the
-        // MIM Direct service to replace/re-anchor an HTTP session. UI-thread
-        // diagnostics, overlays, and SageTV timeline reads must not wait on
-        // that bounded network operation. The volatile value is the last
+        // UI-thread diagnostics, overlays, and SageTV timeline reads must
+        // not wait on a pending Direct replacement. The volatile value is the last
         // renderer-proven position and is the correct continuity value until
         // the replacement player's progress callback publishes a newer one.
         return currentPlaybackPosition;
@@ -757,7 +773,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 long latestAudioUs = factory.getLatestAudioSampleUs();
                 if (latestVideoUs != C.TIME_UNSET)
                     bufferedEdgeMs = Math.max(bufferedEdgeMs, latestVideoUs / 1_000L);
-                if (latestAudioUs != C.TIME_UNSET)
+                if (!dvdTrickAudioSuspended && latestAudioUs != C.TIME_UNSET)
                     bufferedEdgeMs = Math.max(bufferedEdgeMs, latestAudioUs / 1_000L);
             }
         }
@@ -848,6 +864,142 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     }
 
     @Override
+    public boolean onServerDvdTrickMode(float rate, long bytePosition)
+    {
+        if (!dvdPushMode || dvdTransformedTransport) return false;
+        if (Float.compare(dvdServerTrickRate, rate) == 0)
+            return false;
+        float previousRate = dvdServerTrickRate;
+        long transitionAnchorMs = Math.max(0L, getPlayerMediaTimeMillis(0L));
+        dvdServerTrickRate = rate;
+        if (rate != 1.0f) updateDvdTrickAudioSuspension(true);
+        boolean replacementEpoch = false;
+        if (rate == 1.0f)
+        {
+            dvdSkipPulseActive = false;
+            dvdPreviewDrainPending = false;
+            applyDvdPreviewDrainSpeed(1.0f);
+            // Restore authored timing only when scanning ends. Stock Core
+            // normally supplies its own FLUSH/STC for this normal-play seek;
+            // reuse it rather than rebuilding twice. HD300 ProcessPushFlags
+            // likewise restores 1x and flushes on reverse-to-normal, not on
+            // every scan-rate step.
+            if (!dvdRepreparePending)
+            {
+                flush();
+                dvdLogicalClockBaseMs = transitionAnchorMs;
+                replacementEpoch = true;
+            }
+            dvdRateTransitionAnchorMs = dvdLogicalClockBaseMs;
+            dvdRateTransitionPending = true;
+        }
+        else
+        {
+            // Preserve the player, decoder and byte epoch throughout FF/RW.
+            // Change extractor behavior at the actual flagged byte boundary.
+            ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+            if (factory != null) factory.queueTrickRate(bytePosition, rate);
+            if (previousRate == 1.0f || dvdPreviewDrainPending)
+            {
+                // Speed through the already-decoded normal-play reserve
+                // instead of destroying it. Once the first sparse scan frame
+                // reaches presentation, its timestamps already encode the
+                // requested rate and this temporary speed returns to 1x.
+                dvdPreviewDrainPending = true;
+                applyDvdPreviewDrainSpeed(Math.min(16f, Math.abs(rate)));
+            }
+        }
+        if (rate == 1.0f) updateDvdTrickAudioSuspension(false);
+        // Trick play is intentionally sparse. Waiting for the ordinary five-
+        // second DVD reserve would make every FF/RW rate change appear idle.
+        dvdInteractiveStartDeadlineMs = android.os.SystemClock.elapsedRealtime() + 4000L;
+        PlaybackDebugTrap.recordDetailed("dvd_server_trick_rate", this,
+                "rate=" + rate + ";bytePosition=" + bytePosition);
+        return replacementEpoch;
+    }
+
+    private void applyDvdPreviewDrainSpeed(final float speed)
+    {
+        dvdPreviewDrainSpeed = speed;
+        final ExoPlayer target = player;
+        final PlaybackSessionController.Token session = currentPlaybackSession();
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (target != null && player == target && isCurrentPlaybackSession(session))
+                    target.setPlaybackParameters(new androidx.media3.common.PlaybackParameters(
+                            dvdPreviewDrainSpeed));
+            }
+        });
+    }
+
+    @Override public boolean supportsNativeDvdSkipPulse()
+    {
+        return dvdPushMode && !dvdTransformedTransport;
+    }
+    @Override public void setNativeDvdSkipPulseActive(boolean active)
+    {
+        dvdSkipPulseActive = active;
+    }
+
+    @Override public int getBufferLeft()
+    {
+        int available = super.getBufferLeft();
+        if (!dvdPushMode || dvdTransformedTransport || dvdServerTrickRate == 1f
+                || available < 0) return available;
+        // Stock MiniDVDPlayer queues NAV records when it pushes bytes, not
+        // when the decoder presents them. Large raw reserves make its return
+        // to 1x reseek ahead of a reverse preview. Bound that lookahead while
+        // leaving the physical circular buffer and wire ABI unchanged.
+        return DvdScanBufferPolicy.available(available, PushBufferDataSource.PIPE_SIZE,
+                dvdSkipPulseActive);
+    }
+
+    /**
+     * Emulates the extender's separate video scan clock and audio-source
+     * pause.  Audio must not remain Media3's master clock while the server is
+     * sending sparse I-frame-oriented DVD scan data; otherwise its continuous
+     * AC-3 timestamps can outrun video and stall 8x/16x playback.  Restoring
+     * 1x re-enables the selected DVD audio stream after the server's normal
+     * resume seek/re-anchor.
+     */
+    private void updateDvdTrickAudioSuspension(final boolean suspend)
+    {
+        if (dvdTrickAudioSuspended == suspend)
+            return;
+        dvdTrickAudioSuspended = suspend;
+        Runnable apply = new Runnable()
+        {
+            @Override public void run()
+            {
+                if (trackSelector == null || player == null)
+                    return;
+                MappingTrackSelector.MappedTrackInfo trackInfo =
+                        trackSelector.getCurrentMappedTrackInfo();
+                int rendererIndex = findRendererIndex(trackInfo, C.TRACK_TYPE_AUDIO);
+                DefaultTrackSelector.Parameters.Builder builder =
+                        trackSelector.buildUponParameters();
+                if (rendererIndex != C.INDEX_UNSET)
+                    builder.setRendererDisabled(rendererIndex,
+                            suspend || exclusiveDiagnosticAudioSuspended);
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,
+                        suspend || exclusiveDiagnosticAudioSuspended);
+                trackSelector.setParameters(builder.build());
+                if (!suspend && !exclusiveDiagnosticAudioSuspended)
+                    applyRequestedDvdAudioTrack();
+                PlaybackDebugTrap.recordDetailed(
+                        suspend ? "dvd_trick_audio_suspended"
+                                : "dvd_trick_audio_resumed",
+                        Media3MediaPlayerImpl.this,
+                        "rate=" + dvdServerTrickRate);
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) apply.run();
+        else context.runOnUiThread(apply);
+    }
+
+    @Override
     public void signalPushSegmentEnd()
     {
         if (dvdPushMode && dataSource instanceof Media3PushDataSource)
@@ -893,7 +1045,16 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         return;
                     ResilientDvdPsExtractorsFactory nativeFactory = dvdExtractorsFactory;
                     if (nativeFactory != null)
+                    {
                         nativeFactory.beginRepreparedEpoch(getDvdPtsOffset90KhzForDebug());
+                        // A decoder reprepare resets the extractor timestamp
+                        // state, but the server may remain at the same scan
+                        // rate and therefore send no logical rate transition.
+                        // Reapply the active extender scan clock at byte zero
+                        // of the replacement epoch.
+                        if (Float.compare(dvdServerTrickRate, 1.0f) != 0)
+                            nativeFactory.queueTrickRate(0L, dvdServerTrickRate);
+                    }
                     ExtractorsFactory epochFactory = dvdEpochExtractorsFactory;
                     MediaSource replacementSource = mediaSource;
                     if (dvdSource != null && epochFactory != null && dvdMediaUri != null)
@@ -1124,9 +1285,23 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     }
 
     @Override
+    public long getMediaTimeMillis(long lastServerTime)
+    {
+        if (dvdPushMode && dvdRateTransitionPending)
+        {
+            if (dvdRepreparePending || dvdReprepareScheduled || !dvdRenderedFirstFrameInEpoch)
+                return dvdRateTransitionAnchorMs;
+            dvdRateTransitionPending = false;
+        }
+        return super.getMediaTimeMillis(lastServerTime);
+    }
+
+    @Override
     public long getPlayerMediaTimeMillis(long lastServerTime)
     {
         long position = this.getPlaybackPosition();
+        if (dvdPushMode && player != null && android.os.Looper.myLooper() == player.getApplicationLooper())
+            position = player.getCurrentPosition();
 
         //log.debug("Media3Logging - getPlayerMediaTimeMillis Called lastServerTime=" + Utils.toHHMMSS(lastServerTime) + " position=" + Utils.toHHMMSS(position));
 
@@ -1137,7 +1312,21 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
 
         if (dvdPushMode)
+        {
+            ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+            if (dvdServerTrickRate != 1.0f && factory != null)
+            {
+                long sourceMs = factory.getScanSourceTimeMs(position * 1000L);
+                if (sourceMs != C.TIME_UNSET)
+                    return sourceMs;
+            }
+            else if (factory != null)
+            {
+                long sourceMs = factory.getNormalSourceTimeMs(position * 1000L);
+                if (sourceMs != C.TIME_UNSET) return Math.max(0L, sourceMs);
+            }
             return dvdLogicalClockBaseMs + position;
+        }
         return lastServerTime + position;
     }
 
@@ -1149,6 +1338,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         {
             // Wire value is an unsigned 32-bit clock in 45 kHz units.
             dvdLogicalClockBaseMs = ((long) stc & 0xFFFFFFFFL) * 1_000L / 45_000L;
+            if (dvdRateTransitionPending)
+                dvdRateTransitionAnchorMs = dvdLogicalClockBaseMs;
         }
     }
 
@@ -1316,6 +1507,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public float getPlaybackRate()
     {
+        if (dvdPushMode && Float.compare(dvdServerTrickRate, 1.0f) != 0)
+            return dvdServerTrickRate;
         return playbackRateController.getRate();
     }
 
@@ -1572,6 +1765,19 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public void seek(long timeInMS)
     {
+        if (mimDirectController().owns(this))
+        {
+            // Direct replacement performs bounded HTTP. Never hold the
+            // position lock across it: the UI progress callback also takes
+            // that lock to publish position, so even a lock-free diagnostic
+            // getter cannot prevent an ANR when that callback blocks first.
+            // Ownership/session fencing remains in the shared controller;
+            // a concurrent STOP must not fall through to the retired epoch.
+            resetLegacyCaptionsForDiscontinuity();
+            super.seek(timeInMS);
+            if (!consumeMimDirectSeekHandled()) seekPending = false;
+            return;
+        }
         try
         {
             playbackPositionLock.lock();
@@ -1827,8 +2033,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 TrackGroup selectedGroup = groups.get(groupIndex);
                 DefaultTrackSelector.Parameters.Builder builder =
                         trackSelector.buildUponParameters();
-                builder.setRendererDisabled(rendererIndex, false);
-                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+                if (!exclusiveDiagnosticAudioSuspended && !dvdTrickAudioSuspended)
+                {
+                    builder.setRendererDisabled(rendererIndex, false);
+                    builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+                }
                 builder.clearOverridesOfType(C.TRACK_TYPE_AUDIO);
                 builder.addOverride(new TrackSelectionOverride(selectedGroup, 0));
                 trackSelector.setParameters(builder.build());
@@ -1851,7 +2060,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             return;
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
         builder.clearOverridesOfType(C.TRACK_TYPE_AUDIO);
-        builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+        if (!exclusiveDiagnosticAudioSuspended && !dvdTrickAudioSuspended)
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
         trackSelector.setParameters(builder.build());
     }
 
@@ -1947,10 +2157,20 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             // FLUSH and before replacement MPEG bytes; dvdSetStc() then
             // replaces this fallback with the authoritative cell clock.
             if (!dvdRepreparePending)
+            {
+                // A stock cell transition can FLUSH during a scan without a
+                // rate change. Preserve its rendered source clock too. A zero
+                // reply while the new decoder epoch is being prepared makes
+                // MiniDVDPlayer pick the wrong queued NAV on return to 1x.
+                dvdRateTransitionAnchorMs = Math.max(0L, getPlayerMediaTimeMillis(0L));
+                dvdRateTransitionPending = true;
                 dvdLogicalClockBaseMs += getPlaybackPosition();
+            }
             if (dvdSource != null)
                 dvdSource.suspendReads();
             super.flush();
+            dvdInteractiveStartDeadlineMs =
+                    android.os.SystemClock.elapsedRealtime() + 4000L;
             PlaybackDebugTrap.record("dvd_flush_preserve_surface", this);
             // Do not immediately reprepare here. Authored static menus can
             // send only SPU commands after FLUSH and rely on the last decoded
@@ -2003,6 +2223,26 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         context.runOnUiThread(reprepare);
     }
 
+    /** Called only for known absent native DVD video, never an initial transport URL. */
+    private void rejectNativeDvdVideoUnavailable()
+    {
+        errorState = true;
+        eos = true;
+        state = EOS_STATE;
+        playerReady = false;
+        if (player != null)
+        {
+            player.setPlayWhenReady(false);
+            player.stop();
+        }
+        endTeletextPresentation();
+        PlaybackDebugTrap.record("native_dvd_video_decoder_unavailable", this);
+        log.logWarning("Native DVD rejected: no selected MPEG-2 video decoder");
+        context.showErrorMessage("Native DVD video is unavailable: no MPEG-2 "
+                + "decoder for the selected decoding mode. Use a supported "
+                + "transformed DVD mode if available.", "DVD playback");
+    }
+
     @Override
     protected void setupPlayer(String sageTVurl)
     {
@@ -2029,6 +2269,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         dvdEpochExtractorsFactory = null;
         dvdRenderedFirstFrameInEpoch = false;
         dvdPauseAfterFirstFrame = false;
+        dvdServerTrickRate = 1.0f;
+        dvdPreviewDrainPending = false;
+        dvdPreviewDrainSpeed = 1.0f;
+        dvdRateTransitionPending = false;
+        dvdRateTransitionAnchorMs = 0L;
+        dvdTrickAudioSuspended = false;
+        dvdInteractiveStartDeadlineMs = 0L;
         dvdLogicalClockBaseMs = 0;
         initialAudioTrackIndex = -1;
         requestedDvdAudioStream = dvdPushMode && preSetupDvdAudioRequest >= 0
@@ -2100,7 +2347,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         passthroughOffsetEnabled, audioOffsetMs) : null;
         Media3AudioExtensionRenderersFactory audioRenderersFactory =
                 new Media3AudioExtensionRenderersFactory(
-                        context.getContext(), audioPassthroughEnabled, audioOffsetMs);
+                        context.getContext(), audioPassthroughEnabled, audioOffsetMs,
+                        dvdPushMode && !dvdTransformedTransport,
+                        prefs.getBoolean(PrefStore.Keys.disc_decoder_compatibility_recovery, true));
         pcmAudioProcessor = audioRenderersFactory.getPcmAudioProcessor();
         DefaultRenderersFactory renderersFactory = audioRenderersFactory;
         // Keep MediaCodec priority. The exact-version Media3 FFmpeg extension
@@ -2128,6 +2377,31 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         Media3CodecSelector mediaCodecSelector = new Media3CodecSelector(decodingMethod,
                 decoderAttemptTelemetry, sessionDecoderExclusions);
         renderersFactory.setMediaCodecSelector(mediaCodecSelector);
+        if (dvdPushMode && !dvdTransformedTransport
+                && "native".equals(prefs.getString(PrefStore.Keys.disc_playback_policy, "auto")))
+        {
+            try
+            {
+                if (NativeDvdVideoSupportPolicy.shouldReject(dvdPushMode,
+                        dvdTransformedTransport, mediaCodecSelector.getDecoderInfos(
+                                MimeTypes.VIDEO_MPEG2, false, false).size()))
+                {
+                    // Stock MiniDVDPlayer bypasses ordinary file-codec negotiation.
+                    // Reject before creating an audio renderer: a valid native DVD
+                    // must not masquerade as successful audio-only playback. EOS
+                    // makes the existing Push capacity reply terminal, so the
+                    // server can stop its pusher without a new protocol command.
+                    rejectNativeDvdVideoUnavailable();
+                    return;
+                }
+            }
+            catch (androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException queryFailure)
+            {
+                // Unknown inventory is not proof that video is unsupported.
+                log.logWarning("Native DVD codec preflight unavailable: "
+                        + queryFailure.getMessage());
+            }
+        }
         // The selector has already constrained this ordered list to the chosen
         // policy. Let Media3 try the next candidate when codec initialization
         // fails: Hardware stays hardware-only, Software stays software-only,
@@ -2151,6 +2425,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     .setPreferredAudioLanguage(preferredAudioLanguage));
             log.logDebug("Preferred audio language: " + preferredAudioLanguage);
         }
+
+        // The calibration dialog owns the exclusive HDMI/encoded AudioTrack.
+        // An audio-output rebuild can already be queued when that dialog
+        // suspends the old player. Carry the suspension into the replacement
+        // selector so it cannot acquire a second direct AC-3 track.
+        if (exclusiveDiagnosticAudioSuspended || dvdTrickAudioSuspended)
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true));
 
 
         boolean preparedGrowingMediaServerPull = false;
@@ -2220,10 +2502,21 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             LoadControl dvdLoadControl = new DvdPushLoadControl(
                     new DvdPushLoadControl.DrainState()
                     {
+                        @Override public boolean isScanning()
+                        {
+                            return dvdServerTrickRate != 1.0f;
+                        }
+                        @Override public long scanBufferUs()
+                        {
+                            return dvdSkipPulseActive ? 1_000_000L : 2_000_000L;
+                        }
                         @Override public boolean shouldDrainImmediately()
                         {
                             return dvdSegmentReaderEnded || dvdRepreparePending
-                                    || dvdReprepareScheduled;
+                                    || dvdReprepareScheduled
+                                    || dvdServerTrickRate != 1.0f
+                                    || android.os.SystemClock.elapsedRealtime()
+                                    < dvdInteractiveStartDeadlineMs;
                         }
                     });
             builder.setLoadControl(dvdLoadControl);
@@ -2276,6 +2569,15 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!dvdPushMode)
                     return;
+                ResilientDvdPsExtractorsFactory scanFactory = dvdExtractorsFactory;
+                if (dvdPreviewDrainPending && dvdServerTrickRate != 1.0f
+                        && scanFactory != null
+                        && scanFactory.getScanSourceTimeMs(presentationTimeUs) != C.TIME_UNSET)
+                {
+                    dvdPreviewDrainPending = false;
+                    applyDvdPreviewDrainSpeed(1.0f);
+                    PlaybackDebugTrap.record("dvd_scan_reserve_drained", Media3MediaPlayerImpl.this);
+                }
                 long previousPresentationUs = dvdLastFramePresentationUs;
                 long previousReleaseNs = dvdLastFrameReleaseNs;
                 dvdLastFramePresentationUs = presentationTimeUs;
@@ -2404,6 +2706,36 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onTracksChanged(Tracks tracks)
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                // Transformed DVD opens an empty native URL before its first
+                // title payload switches transport. Only actual unsupported
+                // MPEG-2 discovery rejects Auto/Hybrid, not that initial URL.
+                boolean unsupportedMpeg2 = false;
+                boolean supportedVideo = false;
+                for (Tracks.Group group : tracks.getGroups())
+                    for (int i = 0; i < group.length; i++)
+                    {
+                        String mime = group.getTrackFormat(i).sampleMimeType;
+                        if (mime == null || !mime.startsWith("video/")) continue;
+                        boolean supported = group.isTrackSupported(i, true);
+                        supportedVideo |= supported;
+                        unsupportedMpeg2 |= MimeTypes.VIDEO_MPEG2.equals(mime) && !supported;
+                        if (mimDirectController().requiresPluginWatchRecovery())
+                            log.logInfo("Recovery video discovery: mime=" + mime + ", support=" + group.getTrackSupport(i));
+                    }
+                if (NativeDvdVideoSupportPolicy.shouldRejectDiscoveredVideo(
+                        dvdPushMode && !dvdTransformedTransport,
+                        unsupportedMpeg2, supportedVideo))
+                {
+                    rejectNativeDvdVideoUnavailable();
+                    return;
+                }
+                // An unsupported video renderer can be omitted while audio
+                // reaches READY; Media3 need not emit onPlayerError. Escalate
+                // only the negotiated failed-Direct/original-Pull case, before
+                // any video frame, with actual unsupported MPEG-2 discovery.
+                if (!dvdPushMode && !pushMode && unsupportedMpeg2 && !supportedVideo
+                        && requestStockFixedReconnectForMimPullFailure("media3_unsupported_mpeg2_track"))
+                    return;
                 decoderAttemptTelemetry.recordTrackChange();
                 applyPublishedSubtitleSelection();
                 // Track discovery is incremental for DVD private_stream_1.
@@ -2703,6 +3035,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onRenderedFirstFrame()
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                if (exactAudioOffsetReanchorSeekPending && !pushMode)
+                {
+                    listenerPlayer.setSeekParameters(SeekParameters.CLOSEST_SYNC);
+                    exactAudioOffsetReanchorSeekPending = false;
+                    PlaybackDebugTrap.record("passthrough_offset_exact_seek_complete",
+                            Media3MediaPlayerImpl.this);
+                }
                 firstVideoFrameRendered = true;
                 notifyPostSeekPushFirstFrame();
                 if (dataSource instanceof Media3PullDataSource)
@@ -2720,6 +3059,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             Media3MediaPlayerImpl.this);
                 }
                 dvdRenderedFirstFrameInEpoch = true;
+                dvdInteractiveStartDeadlineMs = 0L;
                 if (dvdPushMode && dvdPauseAfterFirstFrame && !playRequested)
                 {
                     dvdPauseAfterFirstFrame = false;
@@ -2792,7 +3132,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         .getClient().getCurrentConnection();
                 boolean serverRendersCaptions = subtitleConnection != null
                         && subtitleConnection.isSubtitleCallbackEnabled()
-                        && legacyCaptionBridge.isForwardingCurrentStream();
+                        && (legacyCaptionBridge.isForwardingCurrentStream()
+                            || isFixedCaptionForwardingForDebug());
                 if (showCaptions && !serverRendersCaptions && subView != null)
                 {
                     subView.setCues(cueGroup.cues);
@@ -2838,7 +3179,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         createCaptionAwareExtractorsFactory(true));
                 mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
-                player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
+                player.setSeekParameters(exactAudioOffsetReanchorSeekPending
+                        ? SeekParameters.EXACT : SeekParameters.CLOSEST_SYNC);
                 log.logDebug("Pull extractor seek tuning enabled. TS timestamp search bytes: "
                         + (TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * runtimeConfig.getTsSearchMultiplier()));
             }
@@ -2985,11 +3327,27 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     long currentPositionMs = guardGrowingPullPosition(
                             reportedPositionMs, listenerSession, listenerPlayer);
                     Media3MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
-                    scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
-                    updateFixedCaptionClock(currentPositionMs);
+                    ResilientDvdPsExtractorsFactory scanFactory = dvdExtractorsFactory;
+                    if (dvdPushMode && dvdServerTrickRate != 1f && scanFactory != null)
+                    {
+                        // The reserve's temporary high-speed clock can cross
+                        // the first preview before it renders (Media3 drops
+                        // late pictures without the metadata callback). End
+                        // the speed override by clock crossing as well, and
+                        // keep future sparse previews ahead of the playhead.
+                        scanFactory.setScanPresentationFloorUs(currentPositionMs * 1000L
+                                + (Math.abs(dvdServerTrickRate) >= 128f ? 16_667L : 33_333L));
+                        if (dvdPreviewDrainPending && scanFactory.getScanSourceTimeMs(
+                                currentPositionMs * 1000L) != C.TIME_UNSET)
+                        {
+                            dvdPreviewDrainPending = false;
+                            applyDvdPreviewDrainSpeed(1f);
+                            PlaybackDebugTrap.record("dvd_scan_reserve_clock_crossed", Media3MediaPlayerImpl.this);
+                        }
+                    }
                     currentBufferedPosition = listenerPlayer.getBufferedPosition();
                     promoteConfirmedPullTailToEos();
-                    progressHandler.postDelayed(sessionProgress[0], 500);
+                    progressHandler.postDelayed(sessionProgress[0], dvdPreviewDrainPending ? 50 : 500);
                 }
                 else if (isCurrentPlaybackSession(listenerSession))
                 {
@@ -3000,6 +3358,34 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         progressRunnable = sessionProgress[0];
 
         progressHandler.postDelayed(progressRunnable, 0);
+        startCaptionClockUpdates(listenerSession, listenerPlayer);
+    }
+
+    /** Deliver raw captions near their rendered PTS, not in timeline-sized bursts. */
+    private void startCaptionClockUpdates(final PlaybackSessionController.Token session,
+                                         final ExoPlayer expectedPlayer)
+    {
+        captionClockRunnable = new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                if (captionClockRunnable != this || !isCurrentPlaybackSession(session)
+                        || player != expectedPlayer)
+                    return;
+                long currentPositionMs = expectedPlayer.getCurrentPosition();
+                scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
+                // Direct HLS uses a relative clock after seek; retain the
+                // existing absolute recording offset for its source captions.
+                updateFixedCaptionClock(mimDirectController().adjustPosition(
+                        Media3MediaPlayerImpl.this, currentPositionMs));
+                boolean active = legacyCaptionBridge.isForwardingCurrentStream()
+                        || isFixedCaptionForwardingForDebug();
+                progressHandler.postDelayed(this, CaptionClockCadence.delayMs(
+                        expectedPlayer.isPlaying(), active));
+            }
+        };
+        progressHandler.post(captionClockRunnable);
     }
 
     /**
@@ -3073,6 +3459,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     private void cancelProgressUpdates()
     {
+        if (captionClockRunnable != null)
+        {
+            progressHandler.removeCallbacks(captionClockRunnable);
+            captionClockRunnable = null;
+        }
         if (progressRunnable != null)
         {
             progressHandler.removeCallbacks(progressRunnable);
@@ -3177,6 +3568,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         return factory != null && factory.isMpeg2TelecineCadenceSeen();
     }
 
+    public boolean isDvdMpeg2SoftTelecineConfirmedForDebug()
+    {
+        ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+        return factory != null && factory.isMpeg2SoftTelecineConfirmed();
+    }
+
+    public long getDvdMpeg2SoftTelecinePictureRewriteCountForDebug()
+    {
+        ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+        return factory == null ? 0L : factory.getMpeg2SoftTelecinePictureRewriteCount();
+    }
+
     public String getMpeg2InterlaceObservationForDebug()
     {
         ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
@@ -3238,6 +3641,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 + ",aUs=" + factory.getLatestAudioPesUs();
     }
 
+    public String getDvdScanTimingForDebug()
+    {
+        ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+        return factory == null ? "unavailable" : factory.describeScanTiming();
+    }
+
     private String describeDvdTimestampDecision(long presentationTimeUs)
     {
         ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
@@ -3247,6 +3656,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
     public long getDvdFrameMetadataCountForDebug() { return dvdFrameMetadataCount; }
     public long getDvdLogicalClockBaseMsForDebug() { return dvdLogicalClockBaseMs; }
+    /** Existing bounded snapshots only; reads cached clock metadata, never polls a decoder. */
+    public String getDvdNormalSourceClockForDebug()
+    {
+        ResilientDvdPsExtractorsFactory factory = dvdExtractorsFactory;
+        return factory == null ? "unavailable" : factory.describeNormalClock(getPlaybackPosition() * 1000L);
+    }
     public long getDvdRenderedVideoClockDeltaUsForDebug()
     {
         ExoPlayer currentPlayer = player;
@@ -3442,10 +3857,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 DefaultTrackSelector.Parameters.Builder builder =
                         trackSelector.buildUponParameters();
                 if (rendererIndex != C.INDEX_UNSET)
-                    builder.setRendererDisabled(rendererIndex, false);
-                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
+                    builder.setRendererDisabled(rendererIndex, dvdTrickAudioSuspended);
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO,
+                        dvdTrickAudioSuspended);
                 trackSelector.setParameters(builder.build());
-                if (dvdPushMode) applyRequestedDvdAudioTrack();
+                if (dvdPushMode && !dvdTrickAudioSuspended)
+                    applyRequestedDvdAudioTrack();
                 PlaybackDebugTrap.recordDetailed("diagnostic_audio_resumed",
                         Media3MediaPlayerImpl.this, "backend=media3");
             }
@@ -3511,7 +3928,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     }
                     retainedAudioRebuildDataSource = expectedDataSource;
                     if (!pushMode)
+                    {
                         playbackStartPosition = positionMs;
+                        exactAudioOffsetReanchorSeekPending =
+                                reason.startsWith("passthrough-offset-reanchor:");
+                    }
                     playRequested = resume;
                     eos = false;
                     state = resume ? PLAY_STATE : PAUSE_STATE;
@@ -3634,24 +4055,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 pendingPassthroughOffsetReanchor = null;
                 if (expectedPlayer == null || player != expectedPlayer) return;
-                long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
-                try
-                {
-                    // The active extractor already owns the same atomic
-                    // controller, so changing an offset never requires an
-                    // AudioTrack/player teardown. A same-position seek only
-                    // flushes timestamps queued before the new value.
-                    expectedPlayer.seekTo(positionMs);
-                    PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
-                            Media3MediaPlayerImpl.this,
-                            "reason=" + reason + ", positionMs=" + positionMs);
-                }
-                catch (RuntimeException ex)
-                {
-                    // The atomic value still applies to future extracted
-                    // samples if a live/unseekable source rejects the flush.
-                    log.logError("Unable to re-anchor Media3 passthrough offset", ex);
-                }
+                // A same-position seek can remain entirely inside Media3's
+                // SampleQueue. Those samples already contain the old shifted
+                // timestamps, so a live reset may otherwise take the whole
+                // buffered-ahead interval to become audible. Reuse the bounded
+                // audio-output rebuild path to create a fresh extractor and
+                // decoder generation. The retained-position setup uses EXACT
+                // only for this offset re-anchor, avoiding an added GOP jump.
+                boolean accepted = requestAudioOutputRebuild(
+                        "passthrough-offset-reanchor:" + reason);
+                PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
+                        Media3MediaPlayerImpl.this,
+                        "reason=" + reason + ", rebuildAccepted=" + accepted);
             }
         };
         progressHandler.postDelayed(pendingPassthroughOffsetReanchor, 200L);
@@ -3834,8 +4249,20 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             // transition records the requested track as selected while
                             // the still-disabled renderer emits no cues until playback is
                             // recreated.
-                            parametersBuilder.setRendererDisabled(rendererIndex, false);
-                            parametersBuilder.setTrackTypeDisabled(trackType, false);
+                            if (trackType != C.TRACK_TYPE_AUDIO
+                                    || (!exclusiveDiagnosticAudioSuspended
+                                    && !dvdTrickAudioSuspended))
+                            {
+                                parametersBuilder.setRendererDisabled(rendererIndex, false);
+                                parametersBuilder.setTrackTypeDisabled(trackType, false);
+                            }
+
+                            // A retained selection (notably the audio track
+                            // restored after a live output/offset rebuild) may
+                            // already own an override for this renderer type.
+                            // Replace it atomically so an explicit selection
+                            // cannot snap back to the restored/default group.
+                            parametersBuilder.clearOverridesOfType(trackType);
 
                             //parametersBuilder.setSelectionOverride(trackType, trackGroup, override);
                             parametersBuilder.addOverride(override);
@@ -3843,7 +4270,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
                             trackSelector.setParameters(parametersBuilder.build());
                             log.logDebug("JVL - Track change executed: TrackType=" + trackType + " TrackGroup=" + trackGroup + " TrackIndex=" + trackIndex);
-                            selectedSubtitleTrack = groupIndex;
+                            if (trackType == C.TRACK_TYPE_TEXT)
+                                selectedSubtitleTrack = groupIndex;
                         }
                         else
                         {

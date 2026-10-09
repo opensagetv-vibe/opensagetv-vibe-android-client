@@ -29,7 +29,7 @@ dev_exec() {
   # credentials stay in the ignored test-environment TOML.
   local commissioning_env=()
   local commissioning_name
-  for commissioning_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD SAGETV_CORE_MCP_BASE SAGETV_CORE_MCP_TOKEN SAGETV_TEST_DEVICE_ALIAS SAGETV_TEST_SERVER_ALIAS SAGETV_TEST_SERVER_ADDRESS; do
+  for commissioning_name in SAGETV_SAGEX_BASE SAGETV_WEB_BASE SAGETV_SAGEX_PORTS SAGETV_SAGEX_USER SAGETV_SAGEX_PASSWORD SAGETV_CORE_MCP_BASE SAGETV_CORE_MCP_TOKEN SAGETV_TEST_DEVICE_ALIAS SAGETV_ADB_SERIAL SAGETV_TEST_SERVER_ALIAS SAGETV_TEST_SERVER_ADDRESS; do
     if [[ -n "${!commissioning_name:-}" ]]; then
       commissioning_env+=("$commissioning_name=${!commissioning_name}")
     fi
@@ -84,10 +84,22 @@ configured_device_serial() {
 run_scoped_adb() {
   local explicit_target=false
   local argument
+  # ADB's -d/-e/-s selectors are global options and only have that meaning
+  # before the subcommand. Command-local options can reuse the same spelling
+  # (notably `adb logcat -d` for dump-and-exit) and must not disable automatic
+  # device scoping.
   for argument in "$@"; do
     case "$argument" in
       -s|--serial|-d|-e)
         explicit_target=true
+        break
+        ;;
+      --)
+        break
+        ;;
+      -*)
+        ;;
+      *)
         break
         ;;
     esac
@@ -195,8 +207,29 @@ run_automated_mcp_test() {
   dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" restore
   dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" checkpoint
 
+  # Protect long, idle physical gates from the device's display timeout without
+  # permanently changing user settings. A stale checkpoint from an interrupted
+  # host process is restored by `begin` before this test's values are captured.
+  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/android_test_keep_awake.py" begin --scope automated
+
   local test_status=0
   local restore_status=0
+  local awake_restore_status=0
+  local cleanup_complete=false
+  cleanup_automated_mcp_test() {
+    if [[ "$cleanup_complete" == true ]]; then
+      return
+    fi
+    cleanup_complete=true
+    set +e
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/android_test_keep_awake.py" end --scope automated
+    awake_restore_status=$?
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" restore
+    restore_status=$?
+  }
+  trap cleanup_automated_mcp_test EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   set +e
   dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_client_id.py" --ensure "$client_id" --quiet
   test_status=$?
@@ -204,13 +237,17 @@ run_automated_mcp_test() {
     dev_exec python3 "$CONTAINER_WORKSPACE/scripts/$script" "${filtered[@]}"
     test_status=$?
   fi
-  dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_settings_transaction.py" restore
-  restore_status=$?
+  cleanup_automated_mcp_test
+  trap - EXIT INT TERM
   set -e
+  if ((awake_restore_status != 0)); then
+    echo "ERROR: Android test keep-awake settings could not be restored" >&2
+  fi
   if ((restore_status != 0)); then
     echo "ERROR: automated test settings could not be restored" >&2
   fi
   if ((test_status != 0)); then return "$test_status"; fi
+  if ((awake_restore_status != 0)); then return "$awake_restore_status"; fi
   return "$restore_status"
 }
 
@@ -249,6 +286,12 @@ case "${1:-help}" in
   config-check)
     shift
     dev_exec python3 "$CONTAINER_WORKSPACE/scripts/test_environment_config.py" "$@"
+    ;;
+  test-awake)
+    shift
+    # Manual bounded session for multi-command physical work. `begin` recovers
+    # any interrupted prior session; `end` restores the exact original values.
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/android_test_keep_awake.py" "$@"
     ;;
   mcp-telemetry)
     shift
@@ -375,6 +418,11 @@ case "${1:-help}" in
     # Physically separate decode/sink evidence from passthrough claims for AC3/EAC3/DTS.
     run_automated_mcp_test mcp_audio_capability_matrix.py "$@"
     ;;
+  mcp-audio-track-test)
+    shift
+    # Select both tracks of one commissioned multi-audio recording and require A/V recovery.
+    run_automated_mcp_test mcp_audio_track_test.py "$@"
+    ;;
   mcp-hardware-codec-matrix)
     shift
     # Strict generated-fixture matrix on the commissioned non-Pro Fire TV.
@@ -405,6 +453,18 @@ case "${1:-help}" in
     # Remote MiniDVDPlayer startup/STOP/crash gate; accepts repeated exact disc paths.
     run_automated_mcp_test mcp_disc_test.py "$@"
     ;;
+  mcp-av-sync-screen)
+    shift
+    # Deterministically open the embedded full-screen A/V calibration surface.
+    # This physical framing preflight does not alter saved player/audio settings.
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_av_sync_screen.py" "$@"
+    ;;
+  mcp-set-active-audio)
+    shift
+    # Physical A/V A/B checks must not leave a calibration/settings menu over
+    # the content or depend on how many Back presses each dialog requires.
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/mcp_set_active_audio.py" "$@"
+    ;;
   dvd-fixture)
     shift
     # Deterministic authored DVD: menus, chapters, two audio languages and
@@ -422,6 +482,12 @@ case "${1:-help}" in
     # Redistributable bouncing-ball impact/flash/click pattern embedded in the
     # Android client and used by its local A/V Sync Test.
     dev_exec python3 "$CONTAINER_WORKSPACE/scripts/generate_av_sync_fixture.py" "$@"
+    ;;
+  server-av-sync-fixture)
+    shift
+    # PBS/OTA-profile common-clock fixture for stock Push and optional Fixed
+    # physical camera/microphone comparison. The caller supplies its output.
+    dev_exec python3 "$CONTAINER_WORKSPACE/scripts/generate_pbs_av_sync_fixture.py" "$@"
     ;;
   codec-fixtures)
     shift
@@ -579,6 +645,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   client-id [--show|--set ID|--generate]  Show/set/generate the persisted SageTV client ID
   mcp-test                      Run end-to-end MCP protocol smoke test (no Codex/Node)
   config-check                  Validate the shared local test-environment TOML
+  test-awake begin|end|status   Manage a scoped device keep-awake test session
   mcp-telemetry [max_events]    Read legacy telemetry status through MCP
   mcp-seek-test [options]       Automate seek/pause checks on the currently playing recording
   mcp-seek-time --target-ms N   Debug seek active playback to exact passed time (0 = beginning)
@@ -602,14 +669,18 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-caption-test --server-path PATH [options]  Verify STV-driven caption discovery, selection, and rendered cues
   mcp-codec-capability-test [options] Verify MediaCodec inventory and fallback-mode playback evidence
   mcp-audio-capability-matrix [options] Characterize AC3/EAC3/DTS decode, sink, and fallback evidence
+  mcp-audio-track-test --server-path PATH [options] Verify live selectable-audio-track transitions
   mcp-hardware-codec-matrix [options] Run generated codecs with strict hardware evidence on non-Pro .25
   mcp-stop-key-test [options] Verify Android MEDIA_STOP mapping and playback teardown
   mcp-push-telemetry-test --server-path PATH      Verify detailed Push bandwidth/buffer/datasource telemetry
   mcp-live-test [options]       Verify server-driven live TV and optional channel changes
   mcp-eof-test [options]        Verify exact completed-file EOF without process death
   mcp-disc-test [options]       Verify remote DVD startup/STOP/crash; use --start-ms 480000 for Aladdin motion tests
+  mcp-av-sync-screen             Open the embedded full-screen A/V calibration surface through MCP
   dvd-fixture [options]         Author the deterministic DVD test fixture in the unified container
   seek-fixture [OUTPUT] [SECONDS] Generate the captioned A/V-sync/Comskip MPEG-TS fixture
+  av-sync-fixture [options]       Regenerate the embedded common-clock A/V fixture
+  server-av-sync-fixture --output PATH [options]  Generate the PBS-profile server fixture
   codec-fixtures [options]       Generate and ffprobe the Kodi-derived hardware-codec matrix
   mcp-frame-step-test --server-path PATH [options]  Verify paused command 28 and unsupported behavior
   mcp-fast-switch-test --initial-path PATH --switch-path PATH [options]  Verify retained Media3 Pull/SMB replacement

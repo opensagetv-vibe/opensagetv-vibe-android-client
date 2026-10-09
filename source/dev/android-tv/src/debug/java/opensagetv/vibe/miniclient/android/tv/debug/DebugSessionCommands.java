@@ -11,9 +11,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.opengl.GLSurfaceView;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.Socket;
 
 import opensagetv.vibe.miniclient.MenuHint;
 import opensagetv.vibe.miniclient.MiniClient;
+import opensagetv.vibe.miniclient.MiniClientConnection;
 import opensagetv.vibe.miniclient.SageCommand;
 import opensagetv.vibe.miniclient.ServerInfo;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
@@ -22,6 +27,7 @@ import opensagetv.vibe.miniclient.android.ActivePlayerAdjustmentsDialog;
 import opensagetv.vibe.miniclient.android.ActivePlayerProcessOverlay;
 import opensagetv.vibe.miniclient.android.gdx.MiniClientGDXActivity;
 import opensagetv.vibe.miniclient.android.opengl.MiniClientOpenGLActivity;
+import opensagetv.vibe.miniclient.android.opengl.OpenGLRenderer;
 import opensagetv.vibe.miniclient.android.tv.MainActivity;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.EventRouter;
@@ -34,6 +40,48 @@ final class DebugSessionCommands
 
     private DebugSessionCommands()
     {
+    }
+
+    static String dvdArrowHold(Context context, Intent intent)
+    {
+        final MiniClient client = requireClient(context);
+        final MiniClientConnection connection = client.getCurrentConnection();
+        final Activity activity = UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        final opensagetv.vibe.miniclient.MiniPlayerPlugin player = client.getPlayer();
+        if (activity == null || player == null || connection == null || connection.getMediaCmd() == null
+                || !connection.getMediaCmd().isDvdSessionPending() || player.isDvdMenuNavigationActive())
+            throw new IllegalStateException("foreground DVD title required");
+        final int key = parseBoundedInt(intent.getStringExtra("keycode"), -1, 19, 90);
+        if ((key < 19 || key > 22) && key != android.view.KeyEvent.KEYCODE_MEDIA_REWIND
+                && key != android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+            throw new IllegalArgumentException("DVD direction or dedicated FF/RW required");
+        final int holdMs = parseBoundedInt(intent.getStringExtra("hold_ms"), 200, 20, 12000);
+        final Handler main = new Handler(Looper.getMainLooper());
+        // Always post instead of dispatching synchronously inside the broadcast
+        // receiver. No View/IME dispatch or retry of an ordered key gesture.
+        main.post(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (client.getCurrentConnection() != connection || client.getPlayer() != player
+                        || UIActivityLifeCycleHandler.getResumedActivityForDebug() != activity) return;
+                final long downTime = android.os.SystemClock.uptimeMillis();
+                activity.dispatchKeyEvent(new android.view.KeyEvent(downTime, downTime,
+                        android.view.KeyEvent.ACTION_DOWN, key, 0));
+                main.postDelayed(new Runnable()
+                {
+                    @Override public void run()
+                    {
+                        if (client.getCurrentConnection() != connection || client.getPlayer() != player
+                                || UIActivityLifeCycleHandler.getResumedActivityForDebug() != activity) return;
+                        activity.dispatchKeyEvent(new android.view.KeyEvent(downTime,
+                                android.os.SystemClock.uptimeMillis(), android.view.KeyEvent.ACTION_UP, key, 0));
+                    }
+                }, holdMs);
+            }
+        });
+        return "op=dvd_arrow_hold;keycode=" + key + ";holdMs=" + holdMs
+                + ";queued=true;inputPath=foreground_activity_dispatch";
     }
 
     static String connectServer(Context context, Intent intent)
@@ -190,6 +238,23 @@ final class DebugSessionCommands
         return "op=test_current_video;confirmationShown=true";
     }
 
+    static String showAvSyncTest(Context context)
+    {
+        final android.app.Activity activity =
+                UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        if (activity == null)
+            throw new IllegalStateException("no resumed MiniClient playback activity");
+        requireConnectedClient(context);
+        activity.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                ActivePlayerAdjustmentsDialog.showAvSyncTest(activity);
+            }
+        });
+        return "op=av_sync_test;shown=true;fixture=embedded_common_clock";
+    }
+
     static String setActivePlayerOverlay(Context context, Intent intent)
     {
         final android.app.Activity activity =
@@ -237,6 +302,86 @@ final class DebugSessionCommands
                     "active transport/backend cannot refresh video output locally");
         return "op=refresh_video_output;accepted=true"
                 + ";transportUnchanged=true;serverSeek=false";
+    }
+
+    /**
+     * Debug APK only: close this session's graphics read socket so the normal
+     * MiniClient type-5 reconnect path runs against an unchanged stock server.
+     * Reflection keeps this fault injector out of release-client/Core APIs.
+     */
+    static String forceGfxReadFault(Context context, Intent intent) throws Exception
+    {
+        if (!"close_gfx_socket".equals(clean(intent.getStringExtra("confirm"))))
+            throw new IllegalArgumentException("confirm=close_gfx_socket is required");
+        String expectedServer = clean(intent.getStringExtra("expected_server"));
+        if (expectedServer.isEmpty())
+            throw new IllegalArgumentException("expected_server is required");
+        MiniClientConnection connection = requireConnectedClient(context).getCurrentConnection();
+        if (connection == null)
+            throw new IllegalStateException("no active MiniClient connection");
+
+        int rejectedReconnectAttempts = parseBoundedInt(
+                intent.getStringExtra("reject_reconnect_attempts"), 0, 0, 1);
+        if (rejectedReconnectAttempts > 0) {
+            Method armReject = MiniClientConnection.class.getDeclaredMethod(
+                    "armGfxReconnectRejectForTest", int.class);
+            armReject.setAccessible(true);
+            armReject.invoke(connection, rejectedReconnectAttempts);
+        }
+
+        Field serverField = MiniClientConnection.class.getDeclaredField("msi");
+        serverField.setAccessible(true);
+        ServerInfo server = (ServerInfo) serverField.get(connection);
+        if (server == null || !expectedServer.equals(server.address))
+            throw new IllegalStateException("active server does not match expected_server");
+
+        Field workersField = MiniClientConnection.class.getDeclaredField("connectionWorkers");
+        workersField.setAccessible(true);
+        Object workers = workersField.get(connection);
+        Method gfxSocket = workers.getClass().getDeclaredMethod("gfxSocket");
+        gfxSocket.setAccessible(true);
+        Socket socket = (Socket) gfxSocket.invoke(workers);
+        if (socket == null || socket.isClosed())
+            throw new IllegalStateException("no open graphics socket");
+        int localPort = socket.getLocalPort();
+        socket.close();
+        return "op=gfx_read_fault;server=" + safe(server.address)
+                + ";localPort=" + localPort + ";closed=true;mediaSocketUntouched=true"
+                + ";rejectedReconnectAttempts=" + rejectedReconnectAttempts;
+    }
+
+    /** Debug-only lifecycle gate; does not change the server or media socket. */
+    static String simulateGfxContextRecreation(Context context, Intent intent) throws Exception
+    {
+        if (!"recreate_gfx_context".equals(clean(intent.getStringExtra("confirm"))))
+            throw new IllegalArgumentException("confirm=recreate_gfx_context is required");
+        String expectedServer = clean(intent.getStringExtra("expected_server"));
+        if (expectedServer.isEmpty())
+            throw new IllegalArgumentException("expected_server is required");
+        MiniClient client = requireConnectedClient(context);
+        MiniClientConnection connection = client.getCurrentConnection();
+        Field serverField = MiniClientConnection.class.getDeclaredField("msi");
+        serverField.setAccessible(true);
+        ServerInfo server = (ServerInfo) serverField.get(connection);
+        if (server == null || !expectedServer.equals(server.address))
+            throw new IllegalStateException("active server does not match expected_server");
+        if (!(client.getUIRenderer() instanceof OpenGLRenderer))
+            throw new IllegalStateException("OpenGL renderer is not active");
+        final OpenGLRenderer renderer = (OpenGLRenderer) client.getUIRenderer();
+        Field viewField = OpenGLRenderer.class.getDeclaredField("glView");
+        viewField.setAccessible(true);
+        GLSurfaceView view = (GLSurfaceView) viewField.get(renderer);
+        if (view == null)
+            throw new IllegalStateException("OpenGL view is not ready");
+        view.queueEvent(new Runnable()
+        {
+            @Override public void run()
+            {
+                renderer.onSurfaceCreated(null, null);
+            }
+        });
+        return "op=gfx_context_recreated;server=" + safe(server.address)
+                + ";queued=true;serverUntouched=true";
     }
 
     static String inputTextNative(Context context, Intent intent)

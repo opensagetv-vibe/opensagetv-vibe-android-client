@@ -8,6 +8,23 @@ DEBUG = ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/
 
 
 class ConnectionLifecycleDiagnosticsTests(unittest.TestCase):
+    def test_transcode_unsafe_native_fallback_is_rejected_before_core_negotiation(self):
+        video = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video"
+        direct = (video / "MimDirectSessionClient.java").read_text()
+        self.assertIn('"unsupported_video_stock_fixed"', direct)
+        self.assertIn("supportsTranscodePullFallback(nativeVideoCodecs)", direct)
+        self.assertLess(direct.index("supportsTranscodePullFallback(nativeVideoCodecs)"),
+                        direct.index('Response capabilities = request("GET"'))
+        lifecycle = (video.parent / "UIActivityLifeCycleHandler.java").read_text()
+        self.assertIn("client.prepareCodecs(nativeVideo,", lifecycle)
+        self.assertIn('android.text.TextUtils.join(",", nativeVideo)', lifecycle)
+        connection = (CORE / "MiniClientConnection.java").read_text()
+        self.assertNotIn("sourceVideoCodecs", connection)
+        script = (ROOT / "scripts/mcp_session_test.py").read_text()
+        self.assertIn('"direct-only", "direct-and-pull"', script)
+        self.assertIn('args.mim_direct_startup_fault == "direct-and-pull"', script)
+        self.assertIn('"late_failure_stock_fixed_reconnect"', script)
+
     def test_mim_direct_late_failure_reconnect_is_typed_bounded_and_stock_compatible(self):
         lifecycle = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/UIActivityLifeCycleHandler.java").read_text()
         listener = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/VibeEventListener.java").read_text()
@@ -19,9 +36,10 @@ class ConnectionLifecycleDiagnosticsTests(unittest.TestCase):
         self.assertIn("restartMiniClientActivityForStockFixed(server)", lifecycle)
         self.assertIn("requestTransportRenegotiationReconnect()", lifecycle)
         self.assertIn("useInPlaceStockFixedReconnect()", lifecycle)
-        self.assertIn("pendingMimDirectFallbackActivity", lifecycle)
-        self.assertIn("MIM_FALLBACK_ACTIVITY_RESTART_DELAY_MS", lifecycle)
-        self.assertIn("pendingMimDirectFallbackActivity == null", lifecycle)
+        # GFX recovery and MIM fallback share the same bounded Activity handoff.
+        self.assertIn("pendingReplacementActivity", lifecycle)
+        self.assertIn("REPLACEMENT_ACTIVITY_RESTART_DELAY_MS", lifecycle)
+        self.assertIn("pendingReplacementActivity == null", lifecycle)
         self.assertIn("new Intent(activity, activity.getClass())", lifecycle)
         self.assertIn("appContext.startActivity(fallbackActivity)", lifecycle)
         self.assertIn("hasRenderedFirstVideoFrame()", base)

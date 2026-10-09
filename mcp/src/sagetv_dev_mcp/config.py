@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ except ModuleNotFoundError:  # Python 3.10
 DEFAULT_DEV_PACKAGE = "opensagetv.vibe.miniclient.debug"
 DEFAULT_CLIENT_ID = "44:45:56:30:30:31"
 DEFAULT_SERVER_ADDRESS = "192.0.2.20"
+DEFAULT_INSTALL_TIMEOUT_SECONDS = 180.0
 SENSITIVE_KEY_PARTS = ("password", "username", "credential", "secret", "token", "key")
 
 
@@ -48,6 +50,19 @@ def _table(data: dict[str, Any], *keys: str) -> dict[str, Any]:
 
 def _string(value: Any, default: str = "") -> str:
     return str(value).strip() if value is not None else default
+
+
+def validated_install_timeout_seconds(value: Any) -> float:
+    message = "install_timeout_seconds must be a finite number from 30 to 900"
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(message)
+    try:
+        timeout = float(value)
+    except OverflowError as exc:
+        raise ValueError(message) from exc
+    if not math.isfinite(timeout) or not 30 <= timeout <= 900:
+        raise ValueError(message)
+    return timeout
 
 
 @dataclass(frozen=True)
@@ -88,6 +103,11 @@ class TestEnvironment:
             return value
         # Schema-1 compatibility.
         return _string(self.data.get("device")) if name is None else ""
+
+    def install_timeout_seconds(self, name: str | None = None) -> float:
+        return validated_install_timeout_seconds(
+            self.device(name).get("install_timeout_seconds", DEFAULT_INSTALL_TIMEOUT_SECONDS)
+        )
 
     def server(self, name: str | None = None) -> dict[str, Any]:
         servers = _table(self.data, "servers")
@@ -269,6 +289,12 @@ class TestEnvironment:
         for device_name, device in _table(self.data, "devices").items():
             if not isinstance(device, dict):
                 continue
+            try:
+                validated_install_timeout_seconds(
+                    device.get("install_timeout_seconds", DEFAULT_INSTALL_TIMEOUT_SECONDS)
+                )
+            except ValueError as exc:
+                errors.append(f"devices.{device_name}.{exc}")
             stv_by_server = device.get("stv_by_server", {})
             if stv_by_server and (
                 not isinstance(stv_by_server, dict)
@@ -472,6 +498,7 @@ class Config:
     adb: str = "adb"
     artifact_dir: Path = Path("artifacts/firetv")
     aapt: str = ""
+    install_timeout_seconds: float = DEFAULT_INSTALL_TIMEOUT_SECONDS
 
 
 def load_config() -> Config:
@@ -493,4 +520,5 @@ def load_config() -> Config:
         adb=os.environ.get("SAGETV_ADB", _string(data.get("adb"), "adb")),
         artifact_dir=artifact_dir,
         aapt=os.environ.get("SAGETV_AAPT", _string(data.get("aapt"))),
+        install_timeout_seconds=environment.install_timeout_seconds(),
     )

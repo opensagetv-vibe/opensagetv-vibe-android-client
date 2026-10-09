@@ -76,7 +76,7 @@ class Api36TargetTests(unittest.TestCase):
         self.assertIn('files[i].lastModified() > fileToShare.lastModified()', settings)
 
         prefs = (
-            DEV / "android-shared" / "src" / "main" / "res" / "xml" / "prefs.xml"
+            DEV / "android-shared" / "src" / "main" / "res" / "xml" / "diagnostics_prefs.xml"
         ).read_text()
         logging_section = prefs[prefs.index('android:key="use_log_to_sdcard"') - 100:]
         logging_section = logging_section[:logging_section.index('</PreferenceCategory>')]

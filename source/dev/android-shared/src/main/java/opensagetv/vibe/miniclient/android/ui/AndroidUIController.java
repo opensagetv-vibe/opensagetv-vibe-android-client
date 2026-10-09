@@ -23,6 +23,9 @@ public interface AndroidUIController {
     void showErrorMessage(String message, String cause);
     void runOnUiThread(Runnable runnable);
 
+    /** Rebuild the MiniClient UI when Android loses its OpenGL context. */
+    void requestGraphicsContextRecovery();
+
     View getVideoView();
     View getUIView();
     TextView getPleaseWaitText();

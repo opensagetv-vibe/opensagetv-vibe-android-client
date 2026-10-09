@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="Automatic Incident Capture">
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="automatic_push_stall_diagnostics"
+            android:summary="Save a bounded, redacted incident after an already-playing Push stream buffers for at least 1.5 seconds"
+            android:title="Automatic Push-stall diagnostics" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Diagnostic Export">
+        <Preference
+            android:key="export_diagnostics"
+            android:summary="Create the same redacted bundle available from the playback diagnostics menu"
+            android:title="Export diagnostic bundle" />
+        <Preference
+            android:key="diagnostics_smb_settings"
+            android:summary="Configure On request, Always, or Off export to an independent SMB destination"
+            android:title="SMB diagnostic export" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Logging">
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="use_log_to_sdcard"
+            android:summary="@string/summary_use_log_to_sdcard_acceleration_preference"
+            android:title="@string/title_use_log_to_sdcard_preference" />
+        <ListPreference
+            android:defaultValue="debug"
+            android:dialogTitle="@string/dialog_title_list_loglevels_preference"
+            android:entries="@array/entries_list_loglevels_preference"
+            android:entryValues="@array/entryvalues_list_loglevels_preference"
+            android:key="log_level"
+            android:summary="@string/summary_list_loglevels_preference"
+            android:title="@string/title_list_loglevels_preference" />
+        <Preference
+            android:key="share_log"
+            android:summary="Share the newest app-private log using another application"
+            android:title="Share newest app log" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Debug Logging">
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="debug_log_unmapped_keypresses"
+            android:summary="@string/summary_debug_log_unmapped_keypresses_preference"
+            android:title="@string/title_debug_log_unmapped_keypresses_preference" />
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="debug_ar"
+            android:summary="@string/summary_debug_ar_preference"
+            android:title="@string/title_debug_ar_preference" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -80,7 +80,23 @@ final class ResilientDvdPsExtractorsFactory implements ExtractorsFactory
         timestampState.queuePtsOffset90Khz(bytePosition, ptsOffset90Khz);
     }
 
+    void queueTrickRate(long bytePosition, float rate)
+    {
+        timestampState.queueTrickRate(bytePosition, rate);
+    }
+
     long getLatestVideoSampleUs() { return timestampState.getLatestVideoSampleUs(); }
+    long getScanSourceTimeMs(long presentationUs)
+    {
+        return timestampState.scanSourceTimeMs(presentationUs);
+    }
+    long getNormalSourceTimeMs(long presentationUs)
+    {
+        return timestampState.normalSourceTimeMs(presentationUs);
+    }
+    String describeNormalClock(long presentationUs) { return timestampState.describeNormalClock(presentationUs); }
+    String describeScanTiming() { return timestampState.describeScanTiming(); }
+    void setScanPresentationFloorUs(long floorUs) { timestampState.setScanPresentationFloorUs(floorUs); }
     long getLatestAudioSampleUs() { return timestampState.getLatestAudioSampleUs(); }
     long getVideoCorrectionCount() { return timestampState.getVideoCorrectionCount(); }
     long getDiscontinuityRebaseCount() { return timestampState.getDiscontinuityRebaseCount(); }
@@ -110,6 +126,14 @@ final class ResilientDvdPsExtractorsFactory implements ExtractorsFactory
     long getMpeg2ProgressiveFrameCount() { return timestampState.getMpeg2ProgressiveFrameCount(); }
     long getMpeg2InterlacedFrameCount() { return timestampState.getMpeg2InterlacedFrameCount(); }
     long getMpeg2FieldPictureCount() { return timestampState.getMpeg2FieldPictureCount(); }
+    boolean isMpeg2SoftTelecineConfirmed()
+    {
+        return timestampState.isMpeg2SoftTelecineConfirmed();
+    }
+    long getMpeg2SoftTelecinePictureRewriteCount()
+    {
+        return timestampState.getMpeg2SoftTelecinePictureRewriteCount();
+    }
     boolean isMpeg2PictureTimestampRepairEnabled() { return repairMpeg2PictureTimestamps; }
 
 }

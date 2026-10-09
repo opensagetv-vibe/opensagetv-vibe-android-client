@@ -1,0 +1,4 @@
+# Analysis-test dependencies only; not APK libraries or MCP runtime changes.
+# Match the versions used to qualify the physical A/V analysis tooling.
+numpy==2.5.1
+scipy==1.18.0

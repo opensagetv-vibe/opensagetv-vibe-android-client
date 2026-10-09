@@ -91,8 +91,14 @@ final class GfxDrawingCommands {
             case GFXCMD2.GFXCMD_DRAWTEXTURED:
                 if (length == 40) {
                     int handle = i(data, 16);
+                    opensagetv.vibe.miniclient.uibridge.ImageHolder image =
+                            client.getImageCache().get(handle);
+                    if (image == null) {
+                        client.getImageCache().reportMissingDraw(handle);
+                        return 0;
+                    }
                     renderer.drawTexture(i(data, 0), i(data, 4), i(data, 8), i(data, 12),
-                            handle, client.getImageCache().get(handle), i(data, 20), i(data, 24),
+                            handle, image, i(data, 20), i(data, 24),
                             i(data, 28), i(data, 32), i(data, 36));
                     client.getImageCache().registerImageAccess(handle);
                 } else {

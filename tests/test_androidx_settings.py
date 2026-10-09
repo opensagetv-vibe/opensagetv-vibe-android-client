@@ -47,7 +47,10 @@ class AndroidXSettingsTests(unittest.TestCase):
 
     def test_media_mapping_switches_match_the_compat_fragment_type(self):
         text = (SETTINGS_XML / "media_mappings_prefs.xml").read_text(encoding="utf-8")
-        self.assertEqual(text.count("<SwitchPreferenceCompat"), 4)
+        # Four general switches plus the two qualified DVD gesture controls.
+        self.assertEqual(text.count("<SwitchPreferenceCompat"), 6)
+        for key in ("dvdplaying_hold_arrows", "dvdplaying_hold_scan"):
+            self.assertIn('android:key="' + key + '"', text)
         self.assertNotIn("<SwitchPreference\n", text)
         fragment = (SETTINGS / "MediaMappingsFragment.java").read_text(encoding="utf-8")
         self.assertIn("SwitchPreferenceCompat spSmartRemote", fragment)

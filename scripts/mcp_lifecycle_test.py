@@ -9,6 +9,7 @@ teardown.
 from __future__ import annotations
 
 from sagetv_dev_mcp.config import default_server_address, default_server_value
+from sagetv_dev_mcp.core_mcp_api import discover_sage_control
 
 import argparse
 import json
@@ -24,6 +25,55 @@ from mcp_ui_roots import wait_automation_root
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def authored_dvd_root(path: str) -> str:
+    """Constrain automatic menu activation to the generated, labelled fixture."""
+    normalized = path.replace("\\", "/").rstrip("/")
+    if normalized.endswith("/VIDEO_TS"):
+        normalized = normalized[:-len("/VIDEO_TS")]
+    return normalized if normalized.endswith("/OpenSageTV_Vibe_Test_DVD") else ""
+
+
+def select_authored_dvd_title(client: MCPProcess, server: str, path: str) -> dict:
+    """Verify the exact public MediaFile before activating its known Play item."""
+    expected = authored_dvd_root(path)
+    require(bool(expected), "--authored-dvd-title requires the generated authored DVD")
+    initial = call_dict(client, "dev_player_state", timeout=30.0)
+    require(bool(initial.get("dvdSessionPending")), "No active DVD for title selection")
+    control = discover_sage_control(server)
+    context = control.resolve_context(str(initial["clientId"]))
+    media = control.ui_state(context).get("media", {})
+    require(any(authored_dvd_root(str(p)) == expected for p in media.get("paths", [])),
+            "Refusing lifecycle title keys on an unverified DVD volume")
+    control.remote_command(context, "DVD Menu")
+    root = wait_for_player_predicate(
+        client, lambda s: bool(s.get("dvdHighlightVisible"))
+        and bool(s.get("health_isPlaying")), "authored root menu", timeout_s=30)
+    cell = int(root.get("dvdNewCellCount", -1))
+    control.remote_command(context, "Select")
+    title = wait_for_player_predicate(
+        client, lambda s: not bool(s.get("dvdHighlightVisible"))
+        and int(s.get("dvdNewCellCount", -1)) > cell
+        and bool(s.get("health_isPlaying"))
+        and int(s.get("health_videoRendered", -1)) > 2
+        and int(s.get("health_audioRendered", -1)) > 2,
+        "actual authored main title", timeout_s=45)
+    return {"verifiedMediaFileId": media.get("mediaFileId"),
+            "titleCell": title.get("dvdNewCellCount"), "menu": False}
+
+
+def require_encoded_offset(state: dict, offset_ms: int, phase: str) -> None:
+    """Assert the negotiated encoded clock policy survived a lifecycle phase."""
+    observed = {key: state.get(key) for key in (
+        "audioOffsetMs", "passthroughAudioOffsetEnabled", "audioOffsetPath",
+        "health_errorState", "health_playerError")}
+    require(int(state.get("audioOffsetMs", 999999)) == offset_ms,
+            f"{phase} lost encoded offset {offset_ms} ms: {observed}")
+    require(bool(state.get("passthroughAudioOffsetEnabled")),
+            f"{phase} disabled encoded offset: {observed}")
+    require("passthrough clock offset" in str(state.get("audioOffsetPath", "")),
+            f"{phase} did not apply the encoded clock path: {observed}")
 
 
 def wait_automation_ready(client: MCPProcess, timeout_s: float = 30.0) -> dict:
@@ -84,11 +134,20 @@ def wait_for_app_stopped(client: MCPProcess, timeout_s: float = 20.0) -> dict:
     raise RuntimeError(f"Timed out waiting for Fire OS process teardown: {last}")
 
 
+def capture_phase_images(client: MCPProcess, label: str) -> dict:
+    first=call_dict(client,"take_screenshot",{"label":label+"-first"},timeout=30.0)
+    time.sleep(2.0)
+    second=call_dict(client,"take_screenshot",{"label":label+"-settled"},timeout=30.0)
+    return {"first":first,"second":second,"visualStatus":"PENDING_INDEPENDENT_REVIEW"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the Android completed-playback lifecycle gate")
     parser.add_argument("--server-address", default=default_server_address())
     parser.add_argument("--server-port", type=int, default=int(default_server_value("miniclient_port", 31099)))
     parser.add_argument("--server-path", default="")
+    parser.add_argument("--authored-dvd-title", action="store_true",
+                        help="Verify generated authored DVD and activate its main title before lifecycle checks")
     parser.add_argument("--video-name", default="",
                         help="Start an exact indexed MediaFile through Sagex/WebRemote on stock SageTV")
     parser.add_argument("--search-text", default="",
@@ -116,13 +175,21 @@ def main() -> int:
     )
     parser.add_argument("--playback-timeout-s", type=float, default=45.0)
     parser.add_argument("--verify-ms", type=int, default=1500)
+    parser.add_argument("--encoded-offset-ms", type=int,
+                        help="Apply encoded passthrough offset and assert retention across HOME/pause/resume")
     parser.add_argument("--report", default="",
                         help="Optional JSON evidence path")
+    parser.add_argument("--capture-phase-images", action="store_true",
+                        help="Bounded screenshots for independent visual review, not automatic picture PASS")
+    parser.add_argument("--restart-from-beginning", action="store_true",
+                        help="Start exact-path fixtures at origin; default keeps saved-position behavior")
     args = parser.parse_args()
     start_selectors = sum(bool(value.strip()) for value in
                           (args.server_path, args.video_name, args.search_text))
     require(start_selectors == 1,
             "exactly one of --server-path, --video-name, or --search-text is required")
+    require(not args.authored_dvd_title or bool(authored_dvd_root(args.server_path)),
+            "--authored-dvd-title requires an exact generated authored-DVD path")
     args.repeat = max(0, min(args.repeat, 10))
     args.background_seconds = max(1.0, min(args.background_seconds, 30.0))
     args.session_timeout_seconds = max(0, min(args.session_timeout_seconds, 86400))
@@ -131,6 +198,10 @@ def main() -> int:
                 "--expect-session-timeout requires a non-zero timeout")
         require(args.background_seconds > args.session_timeout_seconds,
                 "--background-seconds must exceed --session-timeout-seconds")
+    if args.encoded_offset_ms is not None:
+        require(-4000 <= args.encoded_offset_ms <= 4000,
+                "--encoded-offset-ms must be within -4000..4000")
+        require(args.player != "ijkplayer", "IJK cannot apply encoded clock offsets")
 
     client = MCPProcess()
     evidence = {
@@ -223,10 +294,40 @@ def main() -> int:
                 "server_path": args.server_path,
                 "timeout_s": args.playback_timeout_s,
                 "verify_ms": args.verify_ms,
+                "restart_from_beginning": args.restart_from_beginning,
             }, timeout=args.playback_timeout_s + 35.0)
         require(bool(started.get("passed")), f"Initial playback failed: {started}")
+        if args.authored_dvd_title:
+            evidence["dvdTitleSelection"] = select_authored_dvd_title(
+                client, args.server_address, args.server_path)
+            title_output = call_dict(client, "dev_wait_for_playback_started", {
+                "timeout_s": args.playback_timeout_s, "verify_ms": args.verify_ms,
+                "expect_video": True, "expect_audio": True,
+            }, timeout=args.playback_timeout_s + 20)
+            require(bool(title_output.get("passed")), "Authored title did not establish real A/V")
+            print("PASS: verified authored main title before lifecycle, not a looping menu")
+        if args.encoded_offset_ms is not None:
+            adjusted = call_dict(client, "dev_set_active_audio", {
+                "output": "passthrough",
+                "offset_ms": args.encoded_offset_ms,
+                "passthrough_offset_enabled": True,
+            }, timeout=45.0)
+            require(bool(adjusted.get("accepted")),
+                    f"Encoded offset adjustment failed: {adjusted}")
+            settled = call_dict(client, "dev_wait_for_playback_started", {
+                "timeout_s": args.playback_timeout_s,
+                "verify_ms": args.verify_ms,
+                "expect_video": True,
+                "expect_audio": True,
+            }, timeout=args.playback_timeout_s + 20.0)
+            require(bool(settled.get("passed")),
+                    f"Encoded output did not settle after adjustment: {settled}")
         surface_before = call_dict(client, "dev_player_state", timeout=30.0)
+        if args.encoded_offset_ms is not None:
+            require_encoded_offset(surface_before, args.encoded_offset_ms, "initial playback")
         evidence["initialPlayback"] = surface_before
+        if args.capture_phase_images:
+            evidence["initialImage"] = capture_phase_images(client,"lifecycle-"+args.player+"-initial")
         connection_generation = int(surface_before.get("connectionGeneration", -1))
         require(connection_generation > 0, f"Missing connection generation: {surface_before}")
         require(
@@ -347,6 +448,10 @@ def main() -> int:
                     f"A/V recovery used a replacement connection: {resumed_state}")
 
         surface_after = call_dict(client, "dev_player_state", timeout=30.0)
+        if args.capture_phase_images:
+            evidence["homeReturnImage"] = capture_phase_images(client,"lifecycle-"+args.player+"-home-return")
+        if args.encoded_offset_ms is not None:
+            require_encoded_offset(surface_after, args.encoded_offset_ms, "HOME/return")
         evidence["foregroundReturn"] = surface_after
         require(
             bool(surface_after.get("health_surfaceValid"))
@@ -399,6 +504,9 @@ def main() -> int:
         require(int(preserved_user_pause.get("backgroundPlayRequestCount", -1))
                 == play_requests_before_user_pause,
                 f"User-paused return incorrectly auto-resumed playback: {preserved_user_pause}")
+        if args.encoded_offset_ms is not None:
+            require_encoded_offset(preserved_user_pause, args.encoded_offset_ms,
+                                   "user-pause HOME/return")
         print("PASS: manual pause survived HOME/return without an automatic PLAY")
         evidence["userPauseReturn"] = preserved_user_pause
         call_dict(client, "dev_sage_command", {"command": "play"}, timeout=30.0)
@@ -410,6 +518,14 @@ def main() -> int:
         }, timeout=args.playback_timeout_s + 20.0)
         require(bool(user_resume.get("passed")),
                 f"Explicit PLAY did not resume the preserved user-paused session: {user_resume}")
+        if args.capture_phase_images:
+            evidence["userResumeImage"] = capture_phase_images(client,"lifecycle-"+args.player+"-user-resume")
+        if args.encoded_offset_ms is not None:
+            resumed_offset_state = call_dict(client, "dev_player_state", timeout=30.0)
+            require_encoded_offset(resumed_offset_state, args.encoded_offset_ms,
+                                   "explicit PLAY")
+            evidence["encodedOffsetAfterResume"] = resumed_offset_state
+            print(f"PASS: encoded {args.encoded_offset_ms} ms offset retained across HOME, pause, and resume")
 
         for iteration in range(1, args.repeat + 1):
             if args.video_name:
@@ -438,6 +554,14 @@ def main() -> int:
                     "verify_ms": args.verify_ms,
                 }, timeout=args.playback_timeout_s + 35.0)
             require(bool(replay.get("passed")), f"Repeated playback {iteration} failed: {replay}")
+            if args.authored_dvd_title:
+                select_authored_dvd_title(client, args.server_address, args.server_path)
+                replay_title = call_dict(client, "dev_wait_for_playback_started", {
+                    "timeout_s": args.playback_timeout_s, "verify_ms": args.verify_ms,
+                    "expect_video": True, "expect_audio": True,
+                }, timeout=args.playback_timeout_s + 20)
+                require(bool(replay_title.get("passed")),
+                        f"Repeated authored title {iteration} did not establish real A/V")
             print(f"PASS: repeated exact-path playback {iteration}/{args.repeat}")
 
         final_crash = call_dict(client, "dev_crash_probe", timeout=30.0)

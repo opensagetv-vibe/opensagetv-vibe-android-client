@@ -1,5 +1,36 @@
 # OpenSageTV Vibe Android Client contributor rules
 
+## Task fix and server-boundary policy
+
+Apply this policy to every task workflow, including dependency fixes across
+Vibe repositories. Fix and test necessary plugins and update the test-server
+plugin without asking again solely for repository-boundary approval.
+
+Prefer the Android client, then a stock-compatible plugin. Change non-stock
+`.232` Core only for a proven production defect that neither can correct;
+document the API gap and alternatives, keep optional negotiation and safe
+stock/older-client fallback, and run affected compatibility tests. Never patch
+Core merely to simplify testing.
+
+Stock `.175` installation changes are limited to plugin installation/update.
+Do not modify its stock Sage.jar, stock FFmpeg, Core binaries, or server
+installation/configuration files. Preserve user settings, recordings and
+unrelated clients; reversible supported SageTV playback APIs remain allowed.
+
+Non-stock `.232` restarts are authorized for task updates without asking
+again; coordinate them with active test guards and preserve data/settings.
+  Always ask the user before restarting stock `.175`, even when it appears idle,
+  unless an explicit user-granted bounded restart window is active. Record
+  its UTC expiry in the task/handoff, and check expiry and revocation before
+  every restart. After expiry or revocation, ask again; stock files stay protected.
+
+Update owning TASKS.md, linked dependencies and the workspace suggested order
+as work changes; move completed checkoffs into the checklist change ledger.
+Test only affected gates, preserve unrelated completed matrices, and do not
+stop independent authorized work for a status question or a dependency-only
+permission request. Unrelated work, publication, destructive actions and
+interruption of recordings/other users still require their own authority.
+
 These instructions apply to humans, Codex, and other AI tools working in this
 repository.
 
@@ -31,10 +62,39 @@ Reordering retains the original ID and is recorded in the ledger. Remove a task
 only when the user explicitly requests removal, and preserve that decision in
 the ledger.
 
+Whenever an Android task is added, completed, removed, deferred, unblocked, or
+changes dependencies, review the **Suggested Android execution order** in the
+workspace-wide `../../task.md`. Update it only when the dependency graph or
+matrix timing actually changes; keep stable IDs and keep detailed acceptance
+criteria authoritative in this repository's `TASKS.md`. During implementation,
+run focused affected gates. Run broad pre-release matrices only after all
+release-bound client changes are stable, then publish, then run the affected-
+only post-release device matrix. A late shared-player change reruns only the
+rows and final matrix portion whose evidence it invalidates, never every
+completed matrix by default.
+
+In the same task-status edit, increment the checklist revision, add its ledger
+entry, reconcile both suggested orders, and update both order-review stamps to
+that revision. Remove completed task IDs from the order; when a sub-gate is
+complete but its parent remains open, describe the next unfinished gate rather
+than the completed prerequisite. Run `python scripts/task_order_check.py` before
+commit. The validator fails on a stale revision or completed ordered task.
+
 ## Workspace boundary
 
-- Modify only `opensagetv-vibe-android-client` unless the user explicitly puts
-  another repository in scope.
+- Normally modify only `opensagetv-vibe-android-client`. The user's standing
+  rule also authorizes bounded fixes/tests in a Vibe plugin repository when
+  its proven defect blocks the active Android task, including plugin updates
+  on the test server. Do not ask again solely because the fix crosses that
+  repository boundary. Follow the workspace plugin-defect rule; stock `.175`
+  changes are limited to plugin installation/update, never stock Core or
+  server installation/configuration file changes. Unrelated work stays out
+  of scope; preserve user settings and test only the affected gates.
+  The user also permits necessary Core/non-stock `.232` fixes after proving
+  that client/plugin alternatives cannot express the production correction.
+  Document that gap, preserve optional negotiation and stock/older-client
+  fallback, and test affected compatibility. This never permits changing
+  stock `.175` or using Core modifications only to make testing easier.
 - Never create release downloads, extracted verification trees, or independent
   Git clones as sibling directories under `C:\TMP_SAGETV_DOCKER\projects`.
   Put disposable work under the workspace-level `artifacts/temp` directory
@@ -50,6 +110,28 @@ the ledger.
 - `source/dev` is active. `source/existing` is a frozen comparison tree.
 - Preserve checked-in Gradle wrappers, MCP tooling, tests, scripts, required
   `.aar`/`.jar`/`.so` files, and baseline manifests.
+
+## Artifact retirement after testing
+
+- Follow `WORKFLOW.md`'s capture and artifact retirement procedure after every
+  test session and before commit/release. Move no-longer-needed files to the
+  workspace-root `deleteme/`, preserving workspace-relative paths; do not
+  automatically delete that folder.
+- Use workspace `artifacts/temp/` for disposable staging and project
+  `artifacts/active/<stable-task-ID>/` for current captures/logs with explicit
+  output paths. Do not create new cleanup-quarantine folders or loose root
+  screenshots. At completion/correction, retire raw logs and snapshots too;
+  keep only the written result and an optional compact final report in
+  `artifacts/results/<stable-task-ID>/`.
+- Completed gates and corrected failures retain their written result,
+  build/device/server/settings and meaningful observations, not every raw
+  screenshot/video forever. Preserve only raw evidence required by a release,
+  published documentation, open investigation or active A/B comparison.
+- Do not retire canonical fixtures, current APK/build inputs, settings,
+  persistent ADB keys, databases, source, or unique open-failure evidence.
+  Inspect mixed folders and tracked-file ownership, validate exact paths and
+  reject reparse-point traversal. Record retirement in workspace
+  `artifacts/CLEANUP_REPORT.md` and annotate historical raw-evidence references.
 
 ## Documentation and release policy
 
@@ -84,6 +166,36 @@ Normal Linux/WSL commands use `./dev.sh`; native Windows uses `dev.cmd`
 Both must select the sibling unified build environment and reuse
 `opensagetv-vibe-dev`. This repository must not define or build a second Android
 development image/container.
+
+Never call an unqualified host `adb`. A host installation and host PATH entry
+are deliberately unnecessary: the supported platform-tools binary and
+persistent authorization keys are inside `opensagetv-vibe-dev`. On Windows use
+`dev.cmd connect` and `dev.cmd adb <device-command>`; on Linux/WSL use
+`./dev.sh connect` and `./dev.sh adb <device-command>`. For a one-command device
+or server change, set `SAGETV_TEST_DEVICE_ALIAS` and
+`SAGETV_TEST_SERVER_ALIAS` before invoking the wrapper, then remove the
+overrides. Do not change `config/firetv.toml` just to run a temporary gate.
+For explicit new-device readiness, preserve `SAGETV_ADB_SERIAL` in both native
+Windows environment lists and the Linux container allowlist. Do not silently
+drop that override and test the previously active device. Prefer a persistent
+alias once commissioned, and verify reported serial/model before any mutation.
+When native Windows reuses the already-running container, preserve both Docker
+working directory `/workspace/android-client` and
+`SAGETV_WORKSPACE=/workspace/android-client`. The entrypoint resolves its
+marker files from that environment variable, not from `-w`; omitting it causes
+a false missing-workspace failure even when the ADB key and device are valid.
+Keep the `dev.ps1` source-contract assertion for this paired invariant.
+The MCP ADB client must verify `adb_allowed_connection_time=0` with one-shot,
+idempotent shell commands before opening its reusable interactive shell. Fire OS
+may close a persistent shell created immediately after `adb connect`; do not
+move authorization bootstrap back into that startup race or add implicit retry
+of ordered runtime commands.
+On Android6 a remote PTY can echo/redraw input even with local pipes. Preserve
+the bounded startup-only echo/prompt/ready-marker handshake before runtime
+commands; do not strip arbitrary runtime output or replay a failed command.
+CLI command dispatch must close its owned AdbClient in `finally` on success,
+early return and exceptions. Do not reset the shared ADB server or persistent
+keys to clean up a diagnostic shell; the MCP server already registers exit cleanup.
 
 Use `./update.sh` or `update.cmd` for incremental packages. Before extraction,
 the runner must reject corrupt ZIPs, unsafe/duplicate paths, missing/mismatched
@@ -126,6 +238,12 @@ Record skipped device tests as SKIPPED, never PASS.
   Change Sage.jar, FFmpeg/MIM, or another server component only as a last
   resort for behavior that stock SageTV cannot express; keep every such
   extension optional, negotiated, and backed by a safe stock fallback.
+- Investigate every failed affected matrix row before closure. Prefer a
+  bounded Android-client correction when the existing server protocol provides
+  enough information; do not change Core/plugins first or count playable
+  fallback as proof that a requested transport passed. If the fixture or test
+  oracle is wrong, prove and document that distinction with corrected physical
+  evidence instead of changing production playback to hide the measurement.
 - Legacy ExoPlayer remains the default until physical commissioning says
   otherwise.
 - Preserve Push/Pull/Fixed behavior and do not merge their ownership semantics.

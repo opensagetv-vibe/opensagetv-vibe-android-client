@@ -90,6 +90,7 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
     private final RendererReadinessGate readiness = new RendererReadinessGate();
     private final PlaybackStartupFrameGuard playbackStartupFrameGuard = new PlaybackStartupFrameGuard();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean surfaceCreated;
     boolean inFrame=false;
 
     boolean disableRenderQueue = false;
@@ -1019,6 +1020,17 @@ public class OpenGLRenderer implements UIRenderer<OpenGLTexture>, GLSurfaceView.
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+        // EGL can discard a context even with setPreserveEGLContextOnPause(true).
+        // All cached texture/FBO names then belong to the old context. Their
+        // numeric IDs may be recycled, so drawing can silently produce wrong
+        // SageMC text/artwork rather than a GL error. A repaint cannot repair
+        // the server/client cache agreement; rebuild the connection once.
+        if (surfaceCreated && client.getCurrentConnection() != null
+                && client.getCurrentConnection().isConnected()) {
+            log.warn("OpenGL context recreated with a live MiniClient connection; rebuilding graphics session");
+            activity.requestGraphicsContextRecovery();
+        }
+        surfaceCreated = true;
         create();
     }
 

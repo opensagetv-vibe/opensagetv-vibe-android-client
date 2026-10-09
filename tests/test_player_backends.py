@@ -30,6 +30,68 @@ def unified_dockerfile() -> Path:
 
 
 class PlayerBackendRefactorTests(unittest.TestCase):
+    def test_direct_session_attribution_is_bounded_and_does_not_export_uri(self):
+        probe = (DEV / "android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/PlaybackHealthProbe.java").read_text()
+        session = (SHARED / "video/MimDirectSessionClient.java").read_text()
+        self.assertIn('"getLastRequestedUriForDebug", ""', probe)
+        self.assertIn('append(out, p + "directSourceSession", directSourceSession)', probe)
+        self.assertNotIn('append(out, p + "directSourceUri"', probe)
+        body = session.split("static String compareMediaUri", 1)[1].split("/** Caption tap", 1)[0]
+        for tag in ("current", "retired", "foreign", "unavailable", "inactive"):
+            self.assertIn('"' + tag + '"', body)
+        self.assertNotIn("return observedUri", body)
+        self.assertNotIn("return token", body)
+
+    def test_legacy_direct_health_reports_real_http_source_and_observes_teletext(self):
+        exo = (SHARED / "video/exoplayer2/Exo2MediaPlayerImpl.java").read_text()
+        observer = (SHARED / "video/exoplayer2/Exo2MimDirectHttpDataSource.java").read_text()
+        self.assertIn('isMimDirectMediaUrlActive() ? "MIM_DIRECT" : ""', exo)
+        self.assertIn("? dataSource : mimDirectDiagnosticDataSource", exo)
+        self.assertIn("mimDirectDiagnosticDataSource = created", exo)
+        self.assertGreaterEqual(exo.count("mimDirectDiagnosticDataSource = null;"), 2)
+        self.assertIn("TeletextSubtitleEngine.observe(SOURCE, -1L", observer)
+        self.assertIn('value.endsWith(".ts")', observer)
+        self.assertIn("return delegate.open(dataSpec);", observer)
+
+    def test_rejected_owned_restart_cannot_seek_the_old_hls_epoch(self):
+        base = (SHARED / "video/BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
+        body = base.split("private boolean rebindMimDirectForSeek", 1)[1].split("public void setServerEOS", 1)[0]
+        failed = body.split("if (replacementUrl == null)", 1)[1].split("lastRestartWasClamped", 1)[0]
+        self.assertIn("mimDirectController().owns(this)", failed)
+        self.assertIn("seekPending = false;", failed)
+        self.assertIn("msg_mim_direct_seek_retained", failed)
+        self.assertIn("return true;", failed)
+        self.assertIn("return false;", failed)
+        self.assertNotIn("seekToImpl(", failed)
+
+    def test_owned_direct_http_seek_precedes_ui_position_lock(self):
+        for backend in ("media3/Media3MediaPlayerImpl.java", "exoplayer2/Exo2MediaPlayerImpl.java"):
+            source = (SHARED / "video" / backend).read_text(encoding="utf-8")
+            seek = source.split("public void seek(long timeInMS)", 1)[1]
+            before_lock = seek.split("playbackPositionLock.lock();", 1)[0]
+            self.assertIn("if (mimDirectController().owns(this))", before_lock)
+            self.assertIn("super.seek(timeInMS);", before_lock)
+            self.assertIn("if (!consumeMimDirectSeekHandled()) seekPending = false;", before_lock)
+            self.assertIn("return;", before_lock)
+
+    def test_recovery_failure_keeps_gsy_adapter_as_control_owner(self):
+        source = (SHARED / "video/MimDirectSessionClient.java").read_text(encoding="utf-8")
+        adapter = (SHARED / "video/gsy/GSYMediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn("watchRecovery.sourceMatches(source ->", source)
+        self.assertIn("currentPlayer).isPlaybackOwner(source)", source)
+        self.assertNotIn("getDelegateForDebug", source)
+        guard = adapter.split("public boolean isPlaybackOwner(Object candidate)", 1)[1].split("}", 1)[0]
+        self.assertIn("candidate == this", guard)
+        self.assertIn("candidate == delegate", guard)
+        self.assertNotIn("delegate.stop", guard)
+
+    def test_codec_discovery_resolves_active_gsy_delegate_before_negotiation(self):
+        options = (SHARED / "AndroidMiniClientOptions.java").read_text(encoding="utf-8")
+        getter = options.split("private PlayerBackend getPlayerBackend()", 1)[1].split("private boolean", 1)[0]
+        self.assertIn("PlayerBackend.codecCapabilityBackend(", getter)
+        self.assertIn("ActivePlayerSessionOverrides.resolveBackend(", getter)
+        self.assertIn("ActivePlayerSessionOverrides.resolveGsyEngine(", getter)
+
     def test_base_player_matches_baseline_or_reviewed_stock_server_fullscreen_patch(self):
         rel = "android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/BaseMediaPlayerImpl.java"
         baseline_rel = "android-shared/src/main/java/sagex/miniclient/android/video/BaseMediaPlayerImpl.java"
@@ -232,7 +294,29 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # can restart a stalled ordinary Push reader once without sending a
         # second seek or changing the STV-owned Comskip target.
         reviewed_post_seek_push_recovery_hash = "c0dfac43c638649c6e9a2e1b0314f8a2fc3602578a9e8d2b283c5a9b7c6d39d6"
+        # Optional diagnostics now observe ordinary Push buffering episodes
+        # and record a bounded snapshot only when the user enables them. They
+        # do not change buffering, seeking, decoder, or recovery behavior.
+        reviewed_push_stall_diagnostics_hash = "8935ae7abd9bc592f67f0c874df8875e1d6b0298ae284712b152fc07251c3f39"
+        # Match the already-reviewed digest in validate_project.py: Direct
+        # caption PTS is translated back to the replacement session's domain.
+        # This test update does not change BaseMediaPlayerImpl or its behavior.
+        reviewed_direct_caption_relative_clock_hash = "247cf3afce63f160dc99c61678b1c8fa1d2da073687d6c59ae1b917e2a1c249c"
+        # Rejected Direct replacement consumes the failed owned seek instead
+        # of applying an absolute source target to the retained local HLS epoch.
+        # Stock transports remain unchanged and the user receives failure feedback.
+        reviewed_direct_rejected_seek_hash = "a8655ada8abaa8f360ac466a20d32deb1e1719dbe61b270467a208c591fdf3f4"
+        # Inventory-only default-no-op hook; IJK retries its configured slot
+        # at discovery/prepare with player and session guards.
+        reviewed_ijk_teletext_discovery_hash = "4bd416002e9588e3dcc761a3e459b43287d28718dc4c6e53e0fe3e227ea0eff5"
+        # Scoped stock-plugin recovery observes existing source/seek/play/pause
+        # intent and the actual new decoder frame. Its worker posts one fresh
+        # Activity event only after bounded reservation; ordinary paths retain
+        # their existing event and no decoder-clock polling is introduced.
+        reviewed_plugin_watch_recovery_hash = "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367"
         self.assertIn(dev_hash, {
+            reviewed_plugin_watch_recovery_hash,
+            reviewed_ijk_teletext_discovery_hash,
             baseline_hash,
             reviewed_fullscreen_hash,
             reviewed_push_load_hash,
@@ -278,6 +362,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_mim_direct_growing_recovery_hash,
             reviewed_load_rectangle_race_hash,
             reviewed_post_seek_push_recovery_hash,
+            reviewed_push_stall_diagnostics_hash,
+            reviewed_direct_caption_relative_clock_hash,
+            reviewed_direct_rejected_seek_hash,
         }, rel)
 
     def test_push_flush_timeline_hold_is_bounded_to_established_non_dvd_push(self):
@@ -394,10 +481,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("findRendererIndex(mappedTrackInfo, RenderType)", player)
         self.assertIn("trackInfo.getRendererType(rendererIndex) == trackType", player)
         self.assertIn("getTrackSupport(rendererIndex, groupIndex, trackIndex)", player)
+        self.assertIn("parametersBuilder.clearOverridesOfType(trackType)", player)
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.100")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.101")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -1103,6 +1191,15 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         generator = (ROOT / "scripts/generate_av_sync_fixture.py").read_text(
             encoding="utf-8"
         )
+        server_generator = (
+            ROOT / "scripts/generate_pbs_av_sync_fixture.py"
+        ).read_text(encoding="utf-8")
+        webcam_capture = (
+            ROOT / "scripts/capture_av_sync_webcam.py"
+        ).read_text(encoding="utf-8")
+        webcam_analyzer = (
+            ROOT / "scripts/analyze_av_sync_webcam.py"
+        ).read_text(encoding="utf-8")
         asset = DEV / "android-shared/src/main/assets/vibe_av_sync_ball.ts"
         self.assertTrue(asset.is_file())
         self.assertGreater(asset.stat().st_size, 500_000)
@@ -1124,18 +1221,86 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("STEP_MS = 25", dialog)
         self.assertIn("OFFSET_APPLY_DEBOUNCE_MS = 250L", dialog)
         self.assertIn("pendingOffsetApply", dialog)
-        self.assertIn("500-410*abs(sin(PI*t))", generator)
+        self.assertIn("505-415*abs(sin(PI*max(mod(t\\\\,2)-0.2\\\\,0)/1.8))", generator)
+        self.assertIn("mod(t,2)", generator)
+        self.assertIn("200 ms impact hold", server_generator)
+        self.assertIn("s=96x96", generator)
+        self.assertIn("color=yellow", generator)
+        self.assertIn("bright_neutral", webcam_analyzer)
+        self.assertIn("corner_arm_counts", webcam_analyzer)
         self.assertIn("drawbox=x=0:y=596", generator)
+        self.assertIn("color=red:t=fill", generator)
+        self.assertIn("enable='lt(mod(t\\\\,2)\\\\,0.075)'", generator)
+        self.assertNotIn("drawbox=x=iw/2-3", generator)
+        self.assertIn("1920x1080", server_generator)
+        self.assertIn('"-c:v", "mpeg2video"', server_generator)
+        self.assertIn('"-c:a", "ac3"', server_generator)
+        self.assertIn('"-flags", "+ildct+ilme"', server_generator)
+        self.assertIn('"-field_order", "tt"', server_generator)
+        self.assertIn("783-623*abs(sin(PI*max(mod(t\\\\,2)-0.2\\\\,0)/1.8))", server_generator)
+        self.assertIn("mod(t,2)", server_generator)
+        self.assertIn("color=red:t=fill", server_generator)
+        self.assertIn("enable='lt(mod(t\\\\,2)\\\\,0.075)'", server_generator)
+        self.assertNotIn("drawbox=x=iw/2-3", server_generator)
+        self.assertIn("s=108x108", server_generator)
+        self.assertIn('"--video-only"', webcam_capture)
+        self.assertIn('"--skip-camera-reset"', webcam_capture)
+        self.assertIn("reset_directshow_camera.ps1", webcam_capture)
+        camera_reset = (
+            ROOT / "scripts/reset_directshow_camera.ps1"
+        ).read_text(encoding="utf-8")
+        self.assertIn("CameraControlProperty.Zoom", camera_reset)
+        self.assertIn("CameraControlProperty.Pan", camera_reset)
+        self.assertIn("CameraControlProperty.Tilt", camera_reset)
+        self.assertIn("zoom.After -ne $zoom.Default", camera_reset)
+        self.assertIn('camera_reset["afterOpen"] = reset_camera(args.camera)', webcam_capture)
+        self.assertIn("POST_OPEN_RESET_DELAY_SECONDS", webcam_capture)
+        self.assertIn("subprocess.Popen(", webcam_capture)
+        self.assertIn("VIBE_FFMPEG_PATH", webcam_capture)
+        self.assertIn('"-f",\n        "dshow"', webcam_capture)
+        self.assertIn('source += f":audio={args.microphone}"', webcam_capture)
+        self.assertNotIn("import gi", webcam_capture)
+        self.assertIn("cannot close the A/V-sync gate", webcam_capture)
+        self.assertIn("positive means audio click occurred after ball impact", webcam_analyzer)
+        self.assertIn("if len(pairs) < 3", webcam_analyzer)
+        self.assertIn("cameraResolutionLimitMilliseconds", webcam_analyzer)
+        self.assertIn('"--expected-offset-ms"', webcam_analyzer)
+        self.assertIn('"--baseline-offset-ms"', webcam_analyzer)
+        self.assertIn("medianBaselineCorrectedMilliseconds", webcam_analyzer)
+        self.assertIn("medianResidualFromExpectedMilliseconds", webcam_analyzer)
+        self.assertIn("impact + expected_seconds", webcam_analyzer)
+        self.assertIn("DEFAULT_WINDOWS_FFMPEG", webcam_analyzer)
+        self.assertIn("DEFAULT_WINDOWS_FFPROBE", webcam_analyzer)
+        self.assertIn("VIBE_FFMPEG_PATH", webcam_analyzer)
+        self.assertIn("VIBE_FFPROBE_PATH", webcam_analyzer)
+        self.assertIn("allFourYellowCornersVisible", webcam_analyzer)
+        self.assertIn("physicalGateEligible", webcam_analyzer)
+        self.assertIn("showAvSyncTest(Activity activity)", menu)
         self.assertIn("widthPixels * 0.35f", dialog)
         self.assertIn("Gravity.BOTTOM | Gravity.RIGHT", dialog)
+        self.assertIn("controlParams.bottomMargin = dp(100)", dialog)
         self.assertIn("LinearLayout.LayoutParams.MATCH_PARENT, dp(24)", dialog)
         self.assertIn("player.setMediaSource(createFixtureSource(), positionMs)", dialog)
         self.assertIn("activity, passthrough, 0", dialog)
         self.assertIn("timingController.setOffsetMillis(offsetMs[0])", dialog)
         self.assertIn('"Calibration offset applied: "', dialog)
+        self.assertIn('"Click %.3f s after ball"', dialog)
+        self.assertIn('"Ball %.3f s after click"', dialog)
+        self.assertIn('"Ball impact and click together"', dialog)
+        self.assertIn('offsetApplyPending ? "   Applying\\u2026" : "   Applied"', dialog)
         self.assertIn("handler.removeCallbacks(pendingOffsetEvidence)", dialog)
         self.assertIn("0.015*sin(2*PI*220*t)", generator)
         self.assertIn("onFinished(offsetMs[0])", dialog)
+        self.assertIn("registerActivityLifecycleCallbacks", dialog)
+        self.assertIn("unregisterActivityLifecycleCallbacks", dialog)
+        self.assertIn("onActivityStopped(Activity candidate)", dialog)
+        self.assertIn("onActivityPaused(Activity candidate)", dialog)
+        self.assertIn("onActivityPrePaused(Activity candidate)", dialog)
+        self.assertIn("player.pause()", dialog)
+        self.assertIn("player.setPlayWhenReady(false)", dialog)
+        self.assertIn("player.clearMediaItems()", dialog)
+        self.assertIn("if (candidate == activity) finish(false)", dialog)
+        self.assertIn("onDismiss(DialogInterface ignored) { finish(true); }", dialog)
         self.assertIn("Media3AvSyncTestDialog.show", menu)
         self.assertIn("Keep the center column completely clear", generator)
         self.assertIn("BALL IMPACT", generator)
@@ -1144,6 +1309,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn('"-c:a", "ac3"', generator)
         self.assertIn('"-ar", "48000"', generator)
         self.assertIn("av-sync-fixture)", (ROOT / "dev.sh").read_text(encoding="utf-8"))
+        self.assertIn("server-av-sync-fixture)", (ROOT / "dev.sh").read_text(encoding="utf-8"))
 
     def test_exclusive_av_sync_diagnostic_releases_and_restores_encoded_audio_sink(self):
         interface = (DEV / "core/src/main/java/opensagetv/vibe/miniclient/MiniPlayerPlugin.java").read_text(
@@ -1163,9 +1329,25 @@ class PlayerBackendRefactorTests(unittest.TestCase):
                           player_rel)
             self.assertIn('"diagnostic_audio_suspended"', player, player_rel)
             self.assertIn('"diagnostic_audio_resumed"', player, player_rel)
+            # A queued output rebuild must carry the dialog's exclusive
+            # encoded-AudioTrack lease into its replacement selector.
+            setup = player[player.index("trackSelector = new DefaultTrackSelector("):]
+            setup = setup[:setup.index("ExoPlayer.Builder builder =")]
+            self.assertRegex(setup, r"if \(exclusiveDiagnosticAudioSuspended(?: \|\| dvdTrickAudioSuspended)?\)",
+                          player_rel)
+            self.assertIn("setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)", setup,
+                          player_rel)
+            self.assertIn("trackType != C.TRACK_TYPE_AUDIO\n", player,
+                          player_rel)
         gsy = (SHARED / "video/gsy/GSYMediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("d().suspendAudioForExclusiveDiagnostic()", gsy)
         self.assertIn("d().resumeAudioAfterExclusiveDiagnostic()", gsy)
+        media3 = (SHARED / "video/media3/Media3MediaPlayerImpl.java").read_text(
+            encoding="utf-8"
+        )
+        dvd_audio = media3[media3.index("private void applyRequestedDvdAudioTrack()"):]
+        dvd_audio = dvd_audio[:dvd_audio.index("private int resolveDvdAudioTrackGroup(")]
+        self.assertRegex(dvd_audio, r"if \(!exclusiveDiagnosticAudioSuspended(?: && !dvdTrickAudioSuspended)?\)")
 
     def test_media3_and_legacy_exo_enforce_pcm_and_rebuild_live_source(self):
         cases = (
@@ -1214,6 +1396,12 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             )[1].split("public String getSelected", 1)[0]
             self.assertIn("if (pushMode)", reanchor, player_rel)
             self.assertIn('"passthrough_offset_push_deferred"', reanchor, player_rel)
+            self.assertIn("requestAudioOutputRebuild(", reanchor, player_rel)
+            self.assertNotIn("seekTo(positionMs)", reanchor, player_rel)
+            self.assertIn("exactAudioOffsetReanchorSeekPending", player, player_rel)
+            self.assertIn("? SeekParameters.EXACT : SeekParameters.CLOSEST_SYNC", player,
+                          player_rel)
+            self.assertIn("passthrough_offset_exact_seek_complete", player, player_rel)
             self.assertIn("controller.setOffsetMillis", player, player_rel)
             self.assertRegex(
                 player,

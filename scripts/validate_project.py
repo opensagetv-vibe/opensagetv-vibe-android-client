@@ -12,6 +12,8 @@ SRC = Path(os.environ.get("SAGETV_DEV_SOURCE", str(WORKSPACE / "source/dev")))
 EXISTING = Path(os.environ.get("SAGETV_EXISTING_SOURCE", str(WORKSPACE / "source/existing")))
 FROZEN_BASELINE = Path(os.environ.get("SAGETV_FROZEN_BASELINE", str(WORKSPACE / "source/FROZEN_BASELINE.sha256")))
 
+from task_order_check import check_task_order
+
 
 def unified_dockerfile() -> Path:
     candidates: list[Path] = []
@@ -70,6 +72,10 @@ def active_firebase_hits(root: Path):
 
 
 def main() -> int:
+    try:
+        print(check_task_order(WORKSPACE))
+    except ValueError as exc:
+        fail(f"Android execution-order review is stale: {exc}")
     if not SRC.exists() or not (SRC / ".dev-refactor.json").exists():
         fail("Dev source/refactor is missing. The full project should include source/dev.")
     full_existing = EXISTING.exists() and (EXISTING / "gradlew").exists()
@@ -429,6 +435,29 @@ def main() -> int:
             # The server retains seek-target ownership, and Pull, Direct,
             # DVD, external, and System-player paths remain unchanged.
             "c0dfac43c638649c6e9a2e1b0314f8a2fc3602578a9e8d2b283c5a9b7c6d39d6",
+            # Reviewed bounded Push-stall diagnostics hook. Existing backend
+            # BUFFERING/READY callbacks supply observation-only state to a
+            # default-on but independently switchable incident recorder. It
+            # performs no healthy-playback sampling, changes no player or
+            # datasource control, and resets with the owning load/release.
+            "8935ae7abd9bc592f67f0c874df8875e1d6b0298ae284712b152fc07251c3f39",
+            # Reviewed Fixed/MIM Direct caption-clock conversion. The server
+            # tap restarts its PTS at each owned seek while SageTV continues
+            # to report absolute media time; only the optional caption clock
+            # is translated back to that Direct-session-relative domain.
+            "247cf3afce63f160dc99c61678b1c8fa1d2da073687d6c59ae1b917e2a1c249c",
+            # Reviewed failed Direct restart handling: retain the owned HLS
+            # epoch without falling through to an absolute backend seek of
+            # that old representation. Clear pending intent/report rejection;
+            # ordinary stock/DVD/Pull paths and server target ownership remain.
+            "a8655ada8abaa8f360ac466a20d32deb1e1719dbe61b270467a208c591fdf3f4",
+            # Inventory-only default-no-op hook; only IJK retries its virtual
+            # caption slot. MINIMX-IJK-CC-001 physical gate remains required.
+            "4bd416002e9588e3dcc761a3e459b43287d28718dc4c6e53e0fe3e227ea0eff5",
+            # Scoped optional plugin recovery observes source/seek/play/pause
+            # intent and actual new-decoder video, then worker-captured custody
+            # authorizes one fresh Activity. Ordinary stock paths unchanged.
+            "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")

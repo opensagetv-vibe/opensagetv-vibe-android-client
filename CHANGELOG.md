@@ -1,5 +1,532 @@
 # Changelog
 
+## 0.5.101 - 2026-10-08
+
+- Consolidate the qualified audio, DVD remote/cadence, caption, graphics,
+  navigation, older-device and negotiated MIM recovery updates since0.5.100.
+  Retain per-device evidence and explicit unsupported/not-working results;
+  no repeated broad hardware matrix is implied by this release.
+- Preserve the existing GitHub Dev sideload signer/package and increase the
+  version code to2101110. Fix stale CI contracts and pin host-only numerical
+  test dependencies in an isolated environment, not the APK or MCP runtime.
+  Affected JVM156/MCP161 and stock non-Pro Pull startup/seek/pause controls
+  pass; physical device limitations and optional companion gates stay explicit.
+
+- Add negotiated stock-plugin Watch/video/Seek recovery for MPEG-2-less owned
+  Transcode startup failures, retaining the exact source and latest intent.
+  Stock175 Media3/legacy failure and nonzero/canceled-ticket gates pass;
+  both GSY delegates also pass real recovery, owned-caption and unavailable-
+  service gates; DEVICE-002 closes with explicit hardware/visual limitations.
+  Missing/old plugin retains ordinary Fixed; no normal playback MCP dependency.
+- Keep Direct HTTP seek outside the UI progress-position lock in both Exo
+  families, preventing the reproduced diagnostic-broadcast ANR. Normal owned
+  A/V, seeking and pause pass on stock175; readable2s captions pass175/232.
+- Resolve GSY codec negotiation through its selected Media3/legacy delegate
+  instead of the IJK assume-all branch, without changing IJK/user overrides.
+- Fail closed on expired UI handoff custody with worker-only HTTP cleanup;
+  identity guards preserve the GSY adapter and never stop an unrelated source.
+
+- Validate the stock public-API prerequisite for tablet MIM recovery: fresh
+  Watch,42-second source seek and paused-state restoration pass on `.175`
+  with reviewed source-burned timestamps and exact settings restoration.
+  Correct the Fixed-Push epoch/FLUSH test oracle; do not change runtime clocks.
+  That prerequisite is integrated and affected GSY/cleanup gates are complete.
+- Record exact final tablet provenance and retire completed raw evidence
+  recoverably. CPU175500ms CEA readability remains NOT_WORKING; slower2s
+  controls pass175/232. Original UK IJK and native-DVD/speaker limitations
+  stay explicit. Restore preferences/power/175 captionfalse, verify zero jobs,
+  and preserve stock Core/root FFmpeg; no unrelated matrix rerun/publication.
+
+- Preserve the newest pending IJK seek until native preparation completes,
+  including seeks to zero. Rebind recreated video Surfaces with guarded,
+  display-only callbacks and remove the observer before native release.
+  Tablet clean-file and MiniMX original-file HOME/replay pictures pass;
+  the tablet's original UK IJK hardware startup remains NOT_WORKING.
+
+- Complete MiniMX/API23 device validation with preserved user settings, stock
+  compatibility and optional owned Copy/Transcode/DVD controls. Keep unsupported
+  hardware and the unresolved native reverse-preview limit explicit in its
+  matrix; no ineffective workaround or false decoder fallback pass is retained.
+
+- Give legacy Exo and its GSY delegate the same optional Direct HLS TS observer
+  as Media3: actual HTTP source ownership appears in bounded diagnostics and
+  Direct segment bytes reach the existing Teletext decoder. Ordinary HTTP and
+  stock Pull/Push paths retain their existing data sources. MiniMX physical
+  owned Copy/Teletext controls and readable STV captions pass; stock Pull smoke
+  also passes. The separate Copy-seek stall was corrected in the server plugin's
+  unfinished-segment retention, not by changing client retries or clocks.
+
+- Clarify DVD test selectors as packed wire IDs, preserving decimal arguments
+  and accepting hexadecimal. A bounded title-only HDMI capture window avoids
+  mistaking an ended title/root menu for audio or subtitle evidence. Five
+  focused tests and MiniMX stock-server readable SPU/selected440Hz audio pass;
+  no production playback change was needed for the incorrect test expectation.
+
+- Correct caption test oracles to observe Teletext's own renderer and cue
+  counters, and execute the local-caption pause/resume flag. Five oracle tests,
+  corrected IJK Teletext and four targeted DVB caption-pause gates pass. Earlier
+  valid codec/toggle/seek evidence is retained without repeating whole matrices.
+
+- Retry IJK's persisted caption slot when Teletext inventory arrives and when
+  native preparation completes. The retry is UI-thread/session/player guarded,
+  not diagnostic polling. MINIMX-IJK-CC-001 closes with readable IJK Teletext,
+  Off/On/seeks/pause and an unchanged Media3 STV Teletext smoke test, preserving
+  app/server settings. Video/audio/clock and server transport are unchanged.
+
+- Add an explicit safety-only codec-harness selection so remaining malformed-
+  input checks do not repeat completed positive codec rows. Two selection
+  tests pass; planned or unavailable negative assets remain distinct from
+  physically verified containment. MiniMX's four CEA/Teletext/DVB extractor
+  paths pass controls, readable captures and app/server settings restoration.
+
+- Preserve the server's persisted CC choice as well as Android preferences
+  during caption gates, through existing public API checkpoint/verified restore
+  before disconnect. MINIMX-STATE-001 closes with5 restore/31 authority/38
+  automation tests and actual legacy CEA167.113s;27 app preferences restored.
+  An uncaptured historical server baseline is not guessed or reset.
+
+- Preserve opaque UI-context hints even when a hex ID resembles scientific
+  notation, and resolve the actual public server context before DVD fixture
+  controls. Require actual title output for DVD cadence; a requested skip-
+  menus flag alone is not proof. MINIMX-DVD-TEST-001 closes with76 ADB/4 cadence/
+  3 menu tests, actual menu cycle56.930s/readable title,0.96716 bounded title
+  cadence and advancing HDMI timestamps/audio;27 preferences restored.
+
+- Scope a MiniMX AM2/API23 MPEG2 Surface-replacement candidate to the exact
+  observed OMX decoder. It preserves source/audio/clock rather than restarting
+  the whole player. MINIMX-SURFACE-001 closes with all four affected MPEG2
+  renderer paths and native DVD134.826s HOME/manual-pause recovery, readable
+  authored menus/title and independent HDMI;27 preferences restored.
+- Send HOME once and observe bounded background navigation before one
+  diagnostic Dev force-stop. Browser-settle-only trial failed post-playback
+  and is not a verified correction. MINIMX-EXIT-001 closes with6 revised tests
+  and actual legacy MPEG2 lifecycle137.393s/no PID or pending termination;
+ 27 preferences restored. Ordinary session-only exit remains unchanged.
+
+- Save a bounded per-device SDK install timeout (30..900 seconds/default180).
+  MiniMX's private profile uses600 for its slower optimizer; no retry or data
+  reset added. CLI/MCP propagation and all149 MCP tests pass; other profiles
+  retain180. Outer callers must allow the configured budget plus margin.
+- Publish retained Pull diagnostic counters without waiting for the loader's
+  network-owned monitor; volatile long reads are atomic on ARM32. A MiniMX
+  ANR trace proves the debug snapshot lock;15 focused JVM tests/build pass.
+  MINIMX-IO-001 closes with actual stock175 MPEG2 STOP/PLAY recovery128.306s,
+  responsive diagnostics and27 preferences restored; no general I/O-timeout claim.
+- Hardware-only matrix rows with a complete software-only/missing decoder
+  inventory are explicitly unsupported, not fallback PASS. Unknown/malformed
+  inventory still exercises the real gate; six behavior/two capture tests pass.
+- Correct Android6 test-control launch/process diagnostics: resolve only
+  installed Dev components when `cmd` is absent, reject vendor pidof's system
+  PID list, and use plain ps for the legacy header-only -A response.142 MCP
+  tests pass; MiniMX launch/status and TV-browser Settings return verified.
+  Its updated APK hash matches on device;27 saved preferences preserved.
+- Close each CLI-owned ADB diagnostic shell on success, early return and
+  exceptions. Four cleanup tests and all135 MCP tests pass; a real MiniMX
+  connection leaves no orphan shell. Shared ADB server, keys and app untouched.
+- Clarify the existing `Use TV server browser` setting for remote-controlled
+  boxes as well as phones/tablets, and apply its selection when returning from
+  Settings without an app restart. Preserve default/native feature detection,
+  user choice and preserved-playback resume priority; prevent duplicate redirects.
+  Focused routing/add-server/fullscreen tests and MiniMX physical Settings
+  return to the TV browser pass; its original user preference is restored.
+- Normalize each newly opened MCP shell before runtime commands on older
+  Android6 PTY transports, avoiding echoed prompts/redraw in diagnostics while
+  retaining authorization ordering, serialization and no runtime replay.
+  Actual MiniMX API23/Samsung API33 connections and65 ADB/130 MCP tests pass.
+  Keep configuration unit fixtures isolated from ambient device/server aliases.
+  Use the equivalent stable foreground intent flag for Android6 debug
+  broadcasts; actual API23/API33 capability queries,131 MCP tests and49
+  affected contracts pass without ordered-command replay.
+- Report IJK's actual decoder identity from its existing MediaInfo on demand
+  in debug snapshots. Do not promote callback/clock or decoder selection to
+  visible-video proof; a tablet queueing trial remained blank and was withdrawn.
+
+- Reject native DVD with bounded feedback when the selected decoding policy
+  has no MPEG-2 video decoder, instead of starting sound without a picture.
+  Preserve unknown queries, ordinary media, transformed DVD and supported
+  native decoders; no server change or silent software fallback. Preserve the
+  initial native URL before transformed output through actual-track discovery.
+  TABLET-DVD-001 closes with stock safe refusal and transformed chapter/pause/
+  cadence controls; six policy/three source tests and APK inspection pass.
+
+- Contain the observed malformed CEA-708 bit-offset failure inside each text
+  decoder's existing checked-error recovery path. Wrap only CEA-708 in Media3
+  and legacy Exo/GSY delegates, preserving other formats and unrelated failures;
+  avoid restarting video/audio because a caption packet is malformed. Focused
+  adapter and four affected-backend physical gates pass under TABLET-CC-001.
+
+- Prefer actual native CEA in encoded Fixed output when available, using the
+  existing current-player caption evidence. Preserve the source tap for
+  outputs that strip CEA; do not accumulate duplicate source packets. Encoded-
+  only isolation proves the source choice; TABLET-CC-001 is closed with readable
+  CEA and strict owned Copy DVB Off/On/seek recovery. Preserve source fallback;
+  no server producer repair or full-GPU claim.
+
+- Safely retain ordinary Fixed when opted-in owned Transcode cannot provide
+  its required native H.264/MPEG-2 Pull fallback. Preserve saved requests,
+  Copy/off and actual native capabilities; disclose the fallback in diagnostics
+  and a bounded user notice. Rejected source-capability/fresh-session recovery
+  experiments are withdrawn. Full MPEG-2-less owned support and remaining
+  physical gates stay open under TABLET-MIM-001; no release PASS claimed.
+
+- Prevent debug/MCP IJK video gates from treating an advancing audio clock as
+  rendered picture. Expose its existing first-frame callback without continuous
+  telemetry or runtime decoding changes. A settled SM-P610 hardware AVC failure
+  remains under TABLET-IJK-001; prior clock-only IJK verdicts are not full video
+  passes. Preserve the other four backends' measured output evidence.
+
+- Fix the unset one-finger touch-hold default to open the Android navigation
+  panel instead of sending SageTV Options. Preserve all explicit OPTIONS,
+  NONE/custom and multi-finger mappings, remote keys and existing preferences;
+  no migration or server change. Align the two right-bottom icon rows in the
+  touch/shared layouts without changing IDs or actions; retain aligned notouch
+  columns. Four resolver tests and all-layout regression cover those boundaries.
+  Actual SM-P610 touch holds on175/232 and stock175 AVC/AC3 playback verify
+  aligned rows, correct Audio/Video/CC targets, seek/pause and retained15 prefs.
+
+- Start the user-requested Tab S6 Lite full device matrix, using bounded ADB
+  visual recordings/screenshots when HDMI capture is unavailable. Actual
+  SM-P610/Android13 installs the current candidate with matching installed
+  checksum; normal first-run is complete. Forty supported hardware rows and
+  four typed-output backend lifecycle paths pass; IJK picture remains open.
+  Caption corrections, safe unsupported native DVD and optional transformed
+  controls pass. Four posture/touch/Back/icon-alignment rows retain declared
+  landscape and actual A/V, with original rotation/app settings restored.
+  IJK UK hardware AVC and full owned Transcode support remain open.
+  Separate codec inventory from playback and physical speaker-sync evidence.
+
+- Preserve explicit ADB serial overrides across Windows and Linux wrappers,
+  so a new-device readiness check cannot silently probe the active device.
+  Add queued Tab S6 Lite commissioning (DEVICE-002); persistent-key wireless
+  pairing verifies actual SM-P610/Android13/API33 and timeout0. Later guarded
+  installation and measured tablet playback are recorded separately above.
+- Add a bounded DVD timed-skip regression gate using actual post-FLUSH
+  decoded A/V, source and server clocks, with separate visible STV evidence.
+  Preserve the existing source-clock field in MCP snapshots; exclude stale
+  draining frames and normal OSD auto-hide from fault attribution. This is
+  diagnostic tooling, not a new production playback fix.
+- Close DVD-003 on the current candidate with actual stock175/non-Pro timed
+  FF/RW skips, advancing decoded/server/visible timeline, pause/resume and
+  STOP/exact-path ALADDIN rewatch. Preserve113 preferences and the user's
+  SageMC profile. The old experimental build's freeze is not reproduced;
+  its original root cause and frame-exact landing remain uncertified.
+
+- Complete MATRIX-003's requested affected ONN Pro rows and retain earlier
+  Shield/ONN v1/Fire TV evidence with per-row build provenance. Pro stock175
+  caption/lifecycle/native DVD controls and optional232 owned Copy/Transcode
+  with real GPU/readable CEA pass. Shared API25 native-scan follow-up uses the
+  existing bounded public rate API; preserve SageMC's user-selected timed
+  skips rather than changing settings for a rate-key oracle. Restore15/113
+  preferences, retire completed raw evidence recoverably, and keep unique
+  original rejection/automation-timeout evidence without guessed fault claims.
+
+- Avoid a native DVD scan drain stall on stock servers by excluding muted
+  MPEG/AC-3 audio PES from the sparse preview queue while FF/RW is active.
+  Preserve normal-play audio, SPU/highlights, source positioning and remote
+  mappings. ONN Pro's exact nine-minute ALADDIN reproduction and a second
+  full scan now reach256x in both directions and restore advancing A/V on
+  release; normal movie cadence/pause/audio and authored menu cycles pass.
+  Document `.175`'s CPU/no hardware-transcoding limitation and correlate
+  measured utilization, actual jobs and drain state instead of assuming
+  every native-playback stall is server encoding or a decoder fault.
+
+- Prevent a rejected owned Direct seek from falling through to a local seek
+  in the retained HLS representation, which uses a different time origin.
+  Keep the current stream/position, clear the pending intent and tell the user
+  that the seek could not be completed. Stock seeks and successful owned
+  replacements retain their existing paths; server rejection cause remains
+  independently diagnosed.
+
+- Distinguish bounded MIM Direct restart HTTP rejection categories from an
+  opaque IOException in client diagnostics. Export only status and a closed
+  set of known error codes, never tokens, URLs or arbitrary response text.
+  Preserve the existing session-retention and seek behavior; this improves
+  fault evidence rather than claiming an intermittent restart fix.
+
+- Improve the bounded DVD scan test's failure evidence: retain its last full
+  decoder/buffer/drain/UI probe and collect diagnostics before cleanup Play
+  can erase a stalled condition. Correct the actual-player class field.
+  A new regression and all17 remote-input source checks pass. This is test
+  tooling, not a claimed correction of the intermittent Pro scan64 stall.
+
+- Fix ONN Pro SNA/Android14 MPEG-2 video freezing after Home while audio keeps
+  playing. Extend the proven Surface-replacement policy only to this observed
+  decoder/device/API tuple; preserve the Pro's passing AVC behavior. The exact
+  failed legacy row and Media3 follow-up pass on the corrected candidate with
+  same-session A/V, user-pause persistence and clean teardown. No server,
+  audio-clock or remote-key change; nine first-run preferences are restored.
+
+- Complete affected ONN non-Pro/v1 `.141` validation on the current candidate:
+  stock `.175` captions/seek/pause/HOME, native DVD menus and ALADDIN playback,
+  and `.232` owned Copy/Transcode with readable HDMI CEA/DVB and confirmed VAAPI
+  decode/encode. Preserve all58 preferences/power settings and earlier
+  Shield/Fire TV evidence. ONN Pro `.50` is now commissioned and its affected
+  checks run before publication at the user's request; do not infer its results
+  from ONN v1 or label untested paths PASS.
+- Strengthen the session test's strict Direct gate after every seek/pause and
+  final settled state, reusing the caption gate's ownership predicate. A safe
+  fallback or retained failed-restart status cannot count as an owned-mode PASS.
+  139 focused Python checks and the scoped vendor-policy unit test pass; rerun
+  only the affected Copy row, not unrelated completed matrices.
+
+- Correct ONN sti6140d360/Android14 AVC video freezing and MPEG-2 A/V stalling
+  after Home. Media3 and legacy Exo, including GSY delegates, use their supported
+  codec-recreation path when replacing this decoder's Surface. The exact
+  previously failing AVC GSY/legacy and Media3 plus MPEG-2 legacy stock175 rows pass
+  same-connection A/V recovery, manual-pause persistence, replay and teardown,
+  restoring all58 saved preferences. Scope the exception to the observed
+  device/API/decoder; preserve audio, media queues, clocks, remote commands and
+  existing upstream workarounds. Attachment-lifetime retention alone failed and
+  was removed. No Core or server-plugin change is required.
+
+- Allow configured SageTV/MIM HTTP endpoints on Android 9+ through the shared
+  manifest's cleartext opt-in; preserve HTTPS certificate verification and
+  optional-feature defaults. Shield Tube/API30 previously fell back to legacy
+  Fixed even with a ready server API. The same test now proves owned Transcode,
+  readable fast STV captions, FF/REW and pause/resume, with server VAAPI decode
+  and encode enabled. No Core, STV or plugin change was required.
+- Strengthen Direct caption gates with `--require-mim-direct-owned`: verify
+  negotiated mode, session and HTTP source at startup and after controls. A
+  playable safe fallback no longer counts as Direct evidence. Observe a single
+  PAUSE request completing within the existing budget before measuring clock
+  hold; do not assume one-second server completion or replay remote keys.
+  Before exact-path Watch, wait for restored STV playback to become idle using
+  the existing stock-command lifecycle helper. Focused 30 caption
+  authority and 51 player-backend checks pass; merged debug APK inspection
+  confirms the network-policy attribute.
+
+- Make local-caption matrix expectations discovery-based with
+  `mcp-caption-test --track-codec DVB|TELETEXT`. Preserve the normal menu's
+  matching language/service; do not assume the actual subtitle is track zero
+  or enable a debug selector. Two focused tests cover dynamic IDs and selected
+  service preservation. A short DVD loop is not an uninterrupted cadence
+  oracle; document using a long main feature for that measurement.
+- Shield Tube affected MATRIX-003 rows pass on stock .175 and modified .232:
+  native DVD menus/ALADDIN cadence/audio, UK Teletext/DVB/AC-3, CEA, seek,
+  STOP-rewatch and HOME/manual-pause lifecycle. Two GSY/Media3 Direct reruns
+  verify ownership after controls and readable HDMI captions with corrected
+  test startup/pause observation; original failed attempts remain recorded.
+  All44 preferences/power restored. This completes Shield's affected rows,
+  not the entire cross-device matrix; the later ONN rows are tracked separately.
+
+- Fix fast CEA caption delivery without changing SageTV Core or STV. Media3
+  and legacy Exo (including their GSY delegates) pace raw captions on a
+  session-owned 33 ms active clock instead of the 500 ms timeline timer.
+  Optional Fixed/MIM uses one ordered presentation worker independent of
+  bounded HTTP fetching; request rate, pause, session ownership and fallback
+  remain unchanged. A blocked-HTTP regression fails before and passes after
+  the worker separation. Focused 20 Java/74 Python checks and APK inspection pass.
+- Non-Pro .25 affected caption rows pass on stock .175 and modified .232:
+  readable 500 ms updates, STV Off/CC1/CC2 transitions, FF/REW and pause/resume,
+  legacy Exo, both GSY delegates, and MIM Direct Transcode. Idle USB HDMI
+  captures verify startup and post-seek timing with CC tracing off; delayed
+  Android screenshots are not an absolute timing oracle. Gray moving rectangles
+  also exist in the original testsrc2 video, not in the caption renderer.
+  MIM0.4.9 VAAPI hardware decode/encode is verified. Saved settings are restored;
+  other-device matrix rows remain after publication, not falsely marked PASS.
+
+- Affected Non-Pro MATRIX-003 controls pass on stock175 Pull and232 owned Copy;
+  stock175 CEA is visibly readable after seeks, and232 native authored DVD
+  root/submenu/main playback passes.232 captions have passing event225 delivery
+  but initially blank rendered text on both Pull and Transcode with the fast
+  500 ms stress fixture; the correction and physical rechecks above supersede
+  that failure without rewriting its historical result.
+  All113 preferences restored after each guarded run. These original baseline
+  rows preceded the correction; they do not imply a whole/other-device matrix PASS.
+
+- Close DVD-002 under the user's functional acceptance of working playback and
+  skipping, without requiring exact DVD seek landing. Preserve the observed
+  stock-server overshoot and uncertified HD200 frame-parity limitation; neither
+  is relabelled as a precision/presentation PASS. Start only affected Non-Pro
+  MATRIX-003 rows on .175/.232; other devices remain after publication and
+  DVD-003 timed-skip timeline remains deferred.
+
+- Correct DVD cadence diagnostics to compare device-captured positions against
+  the same device's health clock, not delayed ADB reply delivery; retain the
+  host interval and explicitly labelled older-APK fallback. Three tests pass.
+- Native-DVD MediaTek MPEG-2 rendering avoids a reproduced synchronous flush
+  hang by releasing before disable and affected keyframe position reset.
+  Three menu-to-title cycles pass with advancing A/V; configured codec
+  queueing and other transports/codecs remain unchanged. A longer title reopen
+  reproduced queued input/no video output, addressed by the optional recovery
+  below. Stock seek overshoot and uncertified presentation parity are recorded
+  limitations under the user's revised functional acceptance.
+  The stable-Surface follow-up failed its bounded gate and was reverted. Both
+  queueing modes then passed controlled cycles; queueing defaults stay unchanged.
+  Default Fire TV-key cycles and natural-end/root/title restart pass.
+- Add optional Native DVD decoder recovery in the main DVD settings. An affected
+  decoder with queued input but no output may restart once using retained local
+  samples, not a server seek or stream rebuild. A held output and slow/empty input
+  are excluded. The first-buffer metadata record is debug-only and payload-free;
+  local one-shot output fault testing does not alter Core/GFX/socket state.
+  Synthetic stock .175/Non-Pro recovery passed with exactly one codec restart
+  and advancing A/V. Final normal menu/audio/pause/STOP-rewatch gates passed;
+  ALADDIN clocks1.00083x with no new drops/gaps. DVD-002 is closed under revised
+  functional acceptance; no release or whole MATRIX-003 closure is claimed.
+- DVD cursor diagnostics retain the actual key-down target rather than a late
+  server landing echo; four tests preserve precision checks and the separately
+  deferred timed-skip scope. Stock STV popup/preview arrows and stock .175
+  STOP/restart pass. No Core, STV, server-plugin or saved-setting change.
+- Track user-deferred SageMC timed-skip timeline separately as DVD-003. Permit
+  the requested Non-Pro MATRIX-003 rows after DVD-002 closure; other device
+  rows remain after publication. DVD-002 functional closure is recorded above;
+  no whole cross-device matrix closure is claimed.
+
+- Deferred the SageMC FF/RW timed-skip timeline investigation at the user's
+  request. Preserved reproduction evidence and bounded source-clock diagnostics;
+  the experimental clock-history change is not a verified fix or release gate.
+
+- Add Last/Previous Channel between Page Up/Down with a matching vector icon,
+  using stock event 60. Three source contracts and physical focus checks pass.
+- Refine sparse-menu focus per user request: prefer the same row/column, then
+  the nearest icon ahead on another row/column. Eight focus tests and physical
+  horizontal/vertical fallback checks pass.
+- Work in progress: restrict DVD gestures to full-screen playback without a
+  STV popup; preview video retains ordinary arrows. Bounds/menu guard tests and
+  build pass, while final SageMC menu ownership validation remains open.
+
+- Fix sparse long-press menu focus in both directions: preserve columns on
+  Up/Down and rows on Left/Right, skip empty cells, and stay at axis edges.
+  Six focused unit tests and physical non-Pro menu checks pass.
+- Expose DVD FF/RW tap-and-hold as a separate default-on main DVD key-mapping
+  option alongside default-on arrow navigation. Preserve disabled choices
+  and custom mappings; do not reset settings on APK installation.
+
+- DVD dedicated FF/RW: a tap changes one scan rate, holds ramp through 256x
+  with bounded acknowledgement, and releasing a hold resumes Play. Play or
+  opposite taps reducing the scan to off resume normal 1x; no wire-zero rate.
+  Remove Android DVD/rate scan banners while retaining the STV timeline,
+  Left/Right Time Scroll and deliberate Up/Down chapter behavior. Focused
+  stock `.175` / non-Pro physical gates pass; broader DVD-002 remains open.
+
+- Work in progress: DVD Left/Right uses the stock STV Time Scroll seek cursor,
+  Center accepts, and Back/Play cancels. Dedicated FF/RW uses the tap/hold scan
+  behavior above; deliberate held Up/Down chapter changes and authored-menu arrows
+  are preserved. No Companion runtime plugin or modified Sage.jar is required.
+
+
+- Retire no-longer-needed local artifacts to workspace-root `deleteme/` after
+  testing and before commit/release. Completed gates and corrected failures
+  keep their written results rather than every raw capture. Preserve active
+  investigations, fixtures, settings, ADB identities and current build outputs.
+
+- Work in progress: align native DVD scan previews with actual source PTS
+  distance at 2x/4x/8x/16x in either direction, suspend scan audio, and preserve
+  the source clock across local rate reprepare. Keep SageMC's existing rate
+  listeners/labels and Play/Pause cancellation. Focused tests pass; physical
+  scan/skip acceptance remains open and this is not a published release.
+
+- Close MIMFIX-003 after its final stock-server legacy-extender gate passed on
+  a replacement HD200. Physical HDMI/audio evidence covers MPEG-2/AC-3/CEA,
+  H.264 codec transitions, authored-DVD navigation and subpictures, STOP/Home
+  context retention, and a growing 5.1-to-7.1 transition. UK samples retained
+  stable H.264/AC-3 playback; stock Teletext/DVB non-rendering was verified as
+  an old stock-FFmpeg limitation. Automatic Power Off 1.0.7, not a Vibe
+  component, caused the observed extender shutdowns and was removed.
+- Complete the remaining stock-Windows `.185` current-plugin MIMFIX-003
+  lifecycle rows on non-Pro `.25`. Direct Transcode and Direct Copy each
+  retained plugin-owned HTTP playback through seek, pause, repeated start,
+  Stop/exact rewatch, and clean teardown. A real `SageTV64` restart cleared the
+  active Direct session; the plugin returned ready, and a fresh post-restart
+  Direct Transcode session recovered sustained A/V. Final checks found zero
+  active sessions and zero MIM/FFmpeg launcher processes, with all 110 Android
+  settings and sleep policy restored.
+- Close SEEK-001 using the existing exact Pro marker/long-press evidence, the
+  user's visible Pro acceptance, and a focused non-Pro reference against stock
+  `.175`. The generated fixture's real SageTV right/Comskip command landed
+  video and audio exactly at `180000 ms`, recovered in `572 ms`, and continued
+  advancing without a backing-up loop or playback failure.
+- Close the stock-server DVD/GFX reconnect regression on Fire TV Pro. The
+  bounded type-5 retry now survives a forced first-attempt rejection, and the
+  optional stock-compatible Client Extension verifies the DVD reader clock and
+  repeats public `Seek(long)` when stock DVD Push acknowledges without moving
+  its STC. ALADDIN retained its title/position, hardware Media3 A/V, and clean
+  Stop/teardown; SageMC artwork/text also remained complete after reconnect.
+- Discard a partially read graphics command after MiniClient GFX socket
+  reconnect instead of dispatching stale bytes to the renderer. The previous
+  generated-DVD fault left SageMC mostly black with fragmented text; two
+  non-Pro/stock-server post-fix repeats returned readable SageMC, including
+  the My TV list. Repeated non-Pro and Pro forced reconnect/Stop gates now pass.
+- Add bounded fresh-session recovery when Android recreates OpenGL while a
+  MiniClient connection still holds old texture/surface handles. The non-Pro
+  stock-server debug trigger restored SageMC. This guards context loss; the
+  DVD/GFX reconnect fix above addresses a separately confirmed frame bug.
+- Recover missing SageMC image handles after DVD/GFX transitions using bounded
+  standard MiniClient unload/repaint events. Avoid OpenGL null-texture errors
+  without clearing app data or changing the stock server.
+- Completed the focused MIMFIX-003 CEA caption-after-seek visual comparison
+  on non-Pro `.25` with stock `.175` Pull, Vibe `.232` Direct, and stock
+  Windows `.185` Direct. The 2-second generated cue fixture shows legible STV
+  text after FF on every path; the 0.5-second fixture remains a stress source
+  whose individual stills can land between cues. Removed an ineffective
+  Fixed-caption delay, corrected the legacy callback flush lock order, and
+  added settled caption packet/clock diagnostics to the physical harness.
+  The FFmpeg plugin's Linux UDP caption tap correction is test-deployed on
+  `.232` but is not yet a published plugin release.
+- Closed AUDIO-005/006 on Fire TV Pro with stock `.175`: original TV/surround
+  webcam and alternate HDMI-capture timing evidence now joins passing
+  encoded-offset HOME/pause/resume/teardown checks for Media3, legacy Exo,
+  and both GSY delegates. The lifecycle test now asserts the applied
+  passthrough clock path. Encoded offset remains opt-in; any later shared
+  audio-path change receives only its affected physical rerun.
+- Rechecked the encoded A/V-offset range on the Pro's original TV/surround
+  route with the direct C920 camera/mic. Full-screen physical captures at
+  `-3.750/+3.750 s` tracked the requested changes within one camera frame;
+  both exact `-4.000/+4.000 s` endpoints appeared correctly in the UI and
+  zero reset returned to the nearby baseline. The analyzer now skips the
+  C920's transient pre-reset crop and avoids mistaking bright neutral bezel
+  glare for the authored corner marks. No automatic device-wide correction
+  was added.
+- Completed the Fire TV Pro/stock-server original-TV audio-path characterization
+  with a centered full-frame C920 camera/microphone gate. Encoded Media3,
+  legacy Exo, and their GSY delegates respond in the expected directions at
+  0/-400/+400 ms; decoded PCM also shows route delay. Source-matched PBS
+  NewsHour speech, source PTS, AudioTrack counters, and the authored fixture
+  do not support an automatic device-wide correction. The lifecycle matrix
+  was completed in the later AUDIO-005/006 closure above.
+- Completed the alternate direct-HDMI PCM A/B gate on the same Pro and stock
+  server. The full-raster fixture and source-matched PBS speech both showed a
+  large route difference versus the original TV/surround capture; the result
+  does not justify a fixed device-wide offset. The A/V analyzer now has a
+  direct-HDMI mode that requires all authored corners at 1920x1080 without
+  incorrectly requiring a camera bezel.
+- Added a menu-free live audio adjustment test command, exact-path
+  restart-from-beginning fixture control, and source-matched recording speech
+  analysis so future stock-server physical checks are reproducible.
+- Fixed an encoded A/V-sync diagnostic race: an in-flight player rebuild now
+  retains the calibration screen's exclusive AC-3 audio suspension, avoiding
+  competing direct `AudioTrack` creation. The MCP screen test also waits for
+  an accepted output change to become ready before opening calibration.
+- Reworked the embedded and PBS-profile server A/V-sync fixtures for physical
+  camera evidence. A lower-luminance ring now impacts at the common-clock audio
+  click, moves smoothly on every output frame, and holds only the measurable
+  impact for 200 ms so a 30 fps camera gets stable impact evidence.
+- Added direct C920 camera/microphone capture and offline signed-offset
+  analysis. The analyzer uses the capture's common Matroska clock, requires at
+  least three event pairs, and accepts the selected expected offset to avoid
+  repeating-pattern ambiguity across the full `-4000..+4000 ms` range.
+- Added a reproducible 1080i MPEG-2/AC-3 server-fixture command and the
+  `pbs_av_sync` fixture configuration. The generated source measured within one
+  30 fps camera frame at zero and correctly identified `+400`, `-400`, and
+  `+4000 ms` known-delay controls. Physical receiver validation remains open.
+- Added a dedicated **Diagnostics Settings** screen to the main settings menu.
+  It keeps automatic Push-stall capture, file logging, log level, unmapped-key
+  and aspect diagnostics, app-log sharing, diagnostic-bundle export, and the
+  independent SMB diagnostic destination together without resetting existing
+  saved values.
+- Added default-on, independently switchable automatic evidence capture for an
+  already-playing ordinary Push stream that remains in BUFFERING for at least
+  1.5 seconds. The recorder starts no healthy-playback timer, retains no media
+  bytes, URI, server address, credentials, or client identity, samples for at
+  most 30 seconds plus a three-second recovery tail, keeps at most four files,
+  and writes them only on a background executor.
+- Automatic Push-stall evidence now accompanies manual diagnostic ZIPs and the
+  Always-mode diagnostic session log. It correlates Push arrival/completion and
+  write backpressure, circular-buffer occupancy, decoder reads/waits, player
+  position/buffer/state, selected decoder, and connection generation so a
+  server supply pause, full client buffer, and extractor/render stall can be
+  distinguished without changing Push bytes or SageTV free-space replies.
+
 ## v0.5.100 - 2026-10-01
 
 - Added **Restart audio output** to the live Audio settings menu for Media3,

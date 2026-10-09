@@ -111,6 +111,7 @@ public class MiniclientApplication extends Application
 
         // start the client instance
         client = new MiniClient(options, Logger.getLogger("MiniClient"));
+        client.setPlaybackIntentListener(mimDirectSession::onUserPlaybackCommand);
 
         try
         {

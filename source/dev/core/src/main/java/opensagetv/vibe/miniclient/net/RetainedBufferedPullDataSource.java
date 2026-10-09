@@ -14,8 +14,12 @@ public final class RetainedBufferedPullDataSource extends BufferedPullDataSource
     private String retainedUri;
     private long observedSize = -1L;
     private boolean cacheEnabled;
-    private long rangeOpenCount;
-    private long sessionReuseCount;
+    // Read-only diagnostics are sampled on Android's main thread. open() owns
+    // this monitor across MediaServer I/O; a getter must never wait for SIZE.
+    // Writers remain serialized by open(). Volatile also makes each long
+    // observation atomic on the older 32-bit Android devices.
+    private volatile long rangeOpenCount;
+    private volatile long sessionReuseCount;
     private long lastFillEnd = -1L;
 
     public RetainedBufferedPullDataSource(String host, int bufferSize)
@@ -93,8 +97,8 @@ public final class RetainedBufferedPullDataSource extends BufferedPullDataSource
         return bytes;
     }
 
-    public synchronized long getRangeOpenCount() { return rangeOpenCount; }
-    public synchronized long getSessionReuseCount() { return sessionReuseCount; }
+    public long getRangeOpenCount() { return rangeOpenCount; }
+    public long getSessionReuseCount() { return sessionReuseCount; }
     public long getProbeCacheHitBytes() { return cache.getHitBytes(); }
     public long getProbeCacheMissCount() { return cache.getMissCount(); }
     public long getProbeCacheResidentBytes() { return cache.getResidentBytes(); }

@@ -71,6 +71,20 @@ public enum PlayerBackend
     }
 
     /**
+     * GSY selects a SageTV-aware delegate; it is not the native IJK runtime.
+     * Codec negotiation must use that delegate rather than treating GSY as
+     * an unknown native player and claiming every codec/container. System is
+     * experimental with Media3 fallback, so retain the conservative platform
+     * capability boundary rather than inventing software decoder support.
+     */
+    public static PlayerBackend codecCapabilityBackend(String backend, String gsyEngine)
+    {
+        PlayerBackend selected = fromPreference(backend);
+        if (selected != GSYPLAYER) return selected;
+        return "legacy_exo".equalsIgnoreCase(gsyEngine) ? EXOPLAYER : MEDIA3;
+    }
+
+    /**
      * Deterministic order for the navigation drawer's one-time/permanent switch action.
      */
     public PlayerBackend next()

@@ -102,6 +102,15 @@ These conditions and the server-visible connection type values are protocol
 compatibility behavior. A future connection generation may reject stale
 workers, but it must not change reconnect eligibility accidentally.
 
+DVD/GFX transitions can leave the server drawing an image handle that the
+client no longer has. A missing `GFXCMD_DRAWTEXTURED` handle must not reach an
+OpenGL draw runnable as a null holder. The client skips that draw, sends the
+existing image-unload reply (event 226) at a bounded per-handle rate, then
+requests one coalesced repaint (event 193) after the frame. Stock Core clears
+the reported native pointer and reloads the image on the repaint. This is a
+cache repair, not a new connection or server capability; it does not change
+the DVD reader's playback position.
+
 Playback generation is now a separate concern: `PlaybackSessionController`
 invalidates callbacks when a player load is replaced, stopped, or freed.
 Connection reconnect by itself does not create a new playback generation; the

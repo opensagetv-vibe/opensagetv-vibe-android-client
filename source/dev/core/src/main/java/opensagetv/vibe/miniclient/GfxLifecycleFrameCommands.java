@@ -8,9 +8,11 @@ import opensagetv.vibe.miniclient.uibridge.UIRenderer;
 
 /** Executes the INIT/DEINIT and frame-boundary GFX command family. */
 final class GfxLifecycleFrameCommands {
+    private final MiniClient client;
     private final UIRenderer<?> renderer;
 
-    GfxLifecycleFrameCommands(UIRenderer<?> renderer) {
+    GfxLifecycleFrameCommands(MiniClient client, UIRenderer<?> renderer) {
+        this.client = client;
         this.renderer = renderer;
     }
 
@@ -26,6 +28,7 @@ final class GfxLifecycleFrameCommands {
             case GFXCMD2.GFXCMD_FLIPBUFFER:
                 hasReturn[0] = 1;
                 renderer.flipBuffer();
+                client.getImageCache().flushMissingDrawRepaint();
                 return 0;
             case GFXCMD2.GFXCMD_STARTFRAME:
                 renderer.startFrame();

@@ -43,7 +43,10 @@ class PlaybackSessionControllerTests(unittest.TestCase):
             self.assertGreaterEqual(source.count(guard), 8, path.name)
             self.assertIn("Ignoring stale queued seek for a replaced playback session", source)
             self.assertIn("!isCurrentPlaybackSession(session)", source)
-            self.assertIn("progressHandler.postDelayed(sessionProgress[0], 500)", source)
+            initial_delay = ("dvdPreviewDrainPending ? 50 : 500"
+                             if path == BACKENDS[0] else "500")
+            self.assertIn("progressHandler.postDelayed(sessionProgress[0], " + initial_delay + ")", source)
+            self.assertIn("CaptionClockCadence.delayMs(", source)
             self.assertNotIn("progressHandler.postDelayed(progressRunnable, 500)", source)
             self.assertIn("progressHandler.removeCallbacks(progressRunnable)", source)
             self.assertIn("player != pausePlayer", source)

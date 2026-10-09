@@ -155,6 +155,12 @@ final class DebugStateProvider
         out.append(";inputLastLongPress=").append(KeyMapProcessor.isInputLastLongPressForDebug());
         out.append(";inputLastMappedCommand=")
                 .append(safe(KeyMapProcessor.getInputLastMappedCommandForDebug()));
+        out.append(";dvdVirtualSkipActive=").append(KeyMapProcessor.isDvdVirtualSkipActiveForDebug());
+        out.append(";dvdVirtualSkipTargetMs=").append(KeyMapProcessor.getDvdVirtualSkipTargetMsForDebug());
+        out.append(";dvdVirtualSkipResult=").append(KeyMapProcessor.getDvdVirtualSkipResultForDebug());
+        out.append(";dvdTimeScrollActive=").append(KeyMapProcessor.isDvdTimeScrollActiveForDebug());
+        out.append(";dvdTimeScrollEntryPositionMs=").append(KeyMapProcessor.getDvdTimeScrollEntryPositionForDebug());
+        out.append(";dvdTimeScrollSteps=").append(KeyMapProcessor.getDvdTimeScrollStepsForDebug());
         out.append(';').append(PlayerRuntimeTuning.compactWire());
         out.append(";activePlayerOverrides=")
                 .append(safe(ActivePlayerSessionOverrides.compactSummary()));
@@ -170,6 +176,15 @@ final class DebugStateProvider
         out.append(";fixedCaptionSideChannelState=").append(safe(
                 MiniclientApplication.get().getFixedCaptionSideChannel()
                         .stateForDiagnostics()));
+        out.append(";fixedCaptionReceivedPackets=").append(
+                MiniclientApplication.get().getFixedCaptionSideChannel()
+                        .receivedPacketCountForDiagnostics());
+        out.append(";fixedCaptionLastPacketPtsMs=").append(
+                MiniclientApplication.get().getFixedCaptionSideChannel()
+                        .lastPacketPtsMsForDiagnostics());
+        out.append(";fixedCaptionLastPollClockMs=").append(
+                MiniclientApplication.get().getFixedCaptionSideChannel()
+                        .lastPollClockMsForDiagnostics());
         out.append(";mimDirectRequestedMode=").append(safe(
                 prefs.getString(PrefStore.Keys.mim_direct_mode, "off")));
         out.append(";mimDirectDeinterlace=").append(safe(
@@ -179,6 +194,8 @@ final class DebugStateProvider
         out.append(";mimDirectSessionState=").append(safe(
                 MiniclientApplication.get().getMimDirectSession()
                         .stateForDiagnostics()));
+        out.append(";mimDirectWatchRecoveryState=").append(safe(
+                MiniclientApplication.get().getMimDirectSession().recoveryStateForDiagnostics()));
 
         // The DVD server VM can wait or loop before a player exists. Keep the
         // handshake visible in that exact failure state rather than hiding it
@@ -573,14 +590,21 @@ final class DebugStateProvider
                 .append(media3.getDvdMpeg2EffectiveFieldDurationUsForDebug());
         out.append(";dvdMpeg2TelecineCadenceSeen=")
                 .append(media3.isDvdMpeg2TelecineCadenceSeenForDebug());
+        out.append(";dvdMpeg2SoftTelecineConfirmed=")
+                .append(media3.isDvdMpeg2SoftTelecineConfirmedForDebug());
+        out.append(";dvdMpeg2SoftTelecinePictureRewriteCount=")
+                .append(media3.getDvdMpeg2SoftTelecinePictureRewriteCountForDebug());
         out.append(";dvdDiscontinuityRebaseCount=")
                 .append(media3.getDvdDiscontinuityRebaseCountForDebug());
         out.append(";dvdPtsTrace=").append(safe(media3.getDvdPtsTraceForDebug()));
+        out.append(";dvdScanTiming=").append(safe(media3.getDvdScanTimingForDebug()));
         out.append(";dvdFrameMetadataCount=")
                 .append(media3.getDvdFrameMetadataCountForDebug());
         out.append(";dvdStc45Khz=").append(media3.getDvdStcForDebug());
         out.append(";dvdLogicalClockBaseMs=")
                 .append(media3.getDvdLogicalClockBaseMsForDebug());
+        out.append(";dvdNormalSourceClock=")
+                .append(safe(media3.getDvdNormalSourceClockForDebug()));
         out.append(";dvdRenderedVideoClockDeltaUs=")
                 .append(media3.getDvdRenderedVideoClockDeltaUsForDebug());
         out.append(";dvdLastFramePresentationDeltaUs=")

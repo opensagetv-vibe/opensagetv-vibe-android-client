@@ -721,6 +721,17 @@ public class MediaCmd
                 //boolean noMoreData = flags == 0x80 && playa != null;
                 if (playa != null)
                 {
+                    if (dvdSessionPending)
+                    {
+                        float dvdTrickRate = decodeDvdTrickRate(flags);
+                        if (!Float.isNaN(dvdTrickRate)
+                                && playa.onServerDvdTrickMode(dvdTrickRate,
+                                        dvdEpochPushedBytes))
+                        {
+                            dvdEpochPushedBytes = 0;
+                            dvdDrainSignaledEpochBytes = Long.MIN_VALUE;
+                        }
+                    }
                     if (buffSize > 0)
                     {
                         if (pushMode && !dvdSessionPending
@@ -1280,6 +1291,24 @@ public class MediaCmd
         detailedPushSampleSequence = 0;
         detailedPushSampleMonotonicMs = -1;
         detailedPushSampleWallMs = -1;
+    }
+
+    /** Decode the signed 10.5 DVD rate carried by MiniDVDPlayer PUSH flags. */
+    static float decodeDvdTrickRate(int flags)
+    {
+        // 0x09 means discard B/P pictures and authored PTS.  Bits 16..30
+        // contain a signed 15-bit fixed-point rate with five fraction bits.
+        if ((flags & 0x09) == 0x09)
+        {
+            int encoded = (flags >>> 16) & 0x7FFF;
+            if ((encoded & 0x4000) != 0)
+                encoded -= 0x8000;
+            float rate = encoded / 32.0f;
+            return rate == 0.0f ? 1.0f : rate;
+        }
+        // 0x02 tells the native decoder to leave trick mode.  Other flags are
+        // unrelated DVD drain/EOS controls and must not change presentation.
+        return (flags & 0x02) != 0 ? 1.0f : Float.NaN;
     }
 
     private void resetDvdProtocolStats()

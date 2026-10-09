@@ -25,6 +25,9 @@ public enum SageCommand
     PLAY(7, "play", "Command_Play", "Play", -8492, true), // d
     FF(8, "ff", "Command_Skip_Fwd_Page_Right", "Skip Fwd/Page Right", -8496, true), // f
     REW(9, "rew", "Command_Skip_Bkwd_Page_Left", "Skip Bkwd/Page Left", -8504, true), // g
+    // Standard SageTV event 10. This enters/commits the STV-owned seek cursor,
+    // not a timeline keepalive; send once at each boundary, never on a timer.
+    TIME_SCROLL(10, "time_scroll", "Command_Time_Scroll", "Time Scroll", -1, true),
     CHANNEL_UP(11, "ch_up", "Command_Channel_Up_Page_Up","Channel Up/Page Up", -8576, true), // PgUp
     CHANNEL_DOWN(12, "ch_down", "Command_Channel_Down_Page_Down", "Channel Down/Page Down", -8572, true), // PgDn
     VOLUME_UP(13, "vol_up", "Command_Volume_Up", "Volume Up", -8640, true), // r
@@ -316,4 +319,3 @@ public enum SageCommand
     }
     
 }
-

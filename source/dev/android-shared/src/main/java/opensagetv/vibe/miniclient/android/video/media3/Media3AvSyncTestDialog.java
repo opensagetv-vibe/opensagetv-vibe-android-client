@@ -1,6 +1,7 @@
 package opensagetv.vibe.miniclient.android.video.media3;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.graphics.Color;
@@ -9,6 +10,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
@@ -88,6 +90,41 @@ public final class Media3AvSyncTestDialog
         private TextView status;
         private SeekBar slider;
         private Dialog dialog;
+        private boolean offsetApplyPending;
+        private boolean lifecycleRegistered;
+        private final Application.ActivityLifecycleCallbacks lifecycleCallbacks =
+                new Application.ActivityLifecycleCallbacks()
+                {
+                    @Override public void onActivityCreated(Activity candidate,
+                            Bundle state) { }
+                    @Override public void onActivityStarted(Activity candidate) { }
+                    @Override public void onActivityResumed(Activity candidate) { }
+                    @Override public void onActivityPrePaused(Activity candidate)
+                    {
+                        // API 29+ invokes this before Activity.onPause(),
+                        // removing Fire OS transition time from the audible
+                        // teardown path. Older devices retain onActivityPaused.
+                        if (candidate == activity) finish(false);
+                    }
+                    @Override public void onActivityPaused(Activity candidate)
+                    {
+                        // HOME, app switching, and several Fire OS exit paths
+                        // pause the activity well before (or without promptly)
+                        // stopping it. Release the standalone AudioTrack here
+                        // so calibration clicks cannot continue off-screen.
+                        if (candidate == activity) finish(false);
+                    }
+                    @Override public void onActivitySaveInstanceState(Activity candidate,
+                            Bundle state) { }
+                    @Override public void onActivityStopped(Activity candidate)
+                    {
+                        if (candidate == activity) finish(false);
+                    }
+                    @Override public void onActivityDestroyed(Activity candidate)
+                    {
+                        if (candidate == activity) finish(false);
+                    }
+                };
 
         Session(Activity activity, MiniPlayerPlugin active, Listener listener)
         {
@@ -102,6 +139,9 @@ public final class Media3AvSyncTestDialog
 
         void show()
         {
+            activity.getApplication().registerActivityLifecycleCallbacks(
+                    lifecycleCallbacks);
+            lifecycleRegistered = true;
             // Muting is insufficient for encoded playback: the active player
             // still owns the exclusive passthrough AudioTrack. Disable only
             // its audio renderer, leave video/transport running, and give the
@@ -117,7 +157,7 @@ public final class Media3AvSyncTestDialog
                 Toast.makeText(activity,
                         "Encoded A/V sync test is unavailable for this active player",
                         Toast.LENGTH_LONG).show();
-                finish();
+                finish(false);
                 return;
             }
             pendingStart = new Runnable()
@@ -144,7 +184,7 @@ public final class Media3AvSyncTestDialog
                 Log.e(TAG, "Unable to start the A/V synchronization test", failure);
                 Toast.makeText(activity, "Unable to start the A/V sync test: "
                         + failure.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-                finish();
+                finish(false);
             }
         }
 
@@ -223,7 +263,7 @@ public final class Media3AvSyncTestDialog
 
             status = text(16.0f, Color.WHITE, Gravity.CENTER);
             controls.addView(status, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, dp(30)));
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(46)));
 
             slider = new SeekBar(activity);
             slider.setMax((MAX_OFFSET_MS - MIN_OFFSET_MS) / STEP_MS);
@@ -243,8 +283,10 @@ public final class Media3AvSyncTestDialog
                             dp(600)),
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.BOTTOM | Gravity.RIGHT);
-            controlParams.bottomMargin = dp(18);
-            controlParams.rightMargin = dp(18);
+            // Keep the complete calibration panel above the authored impact
+            // line and flush right. This preserves the center impact and both
+            // lower yellow camera-registration corners.
+            controlParams.bottomMargin = dp(100);
             root.addView(controls, controlParams);
 
             slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener()
@@ -296,7 +338,7 @@ public final class Media3AvSyncTestDialog
             });
             dialog.setOnDismissListener(new DialogInterface.OnDismissListener()
             {
-                @Override public void onDismiss(DialogInterface ignored) { finish(); }
+                @Override public void onDismiss(DialogInterface ignored) { finish(true); }
             });
             dialog.show();
             Window window = dialog.getWindow();
@@ -314,6 +356,7 @@ public final class Media3AvSyncTestDialog
         private void applyTestOffset(int requested)
         {
             offsetMs[0] = clamp(requested);
+            offsetApplyPending = true;
             // A held remote key can generate an increment every few dozen
             // milliseconds. Reconfiguring the PCM processor or encoded clock
             // on every repeat creates timestamp discontinuities faster than
@@ -349,6 +392,8 @@ public final class Media3AvSyncTestDialog
                                 @Override public void run()
                                 {
                                     pendingOffsetEvidence = null;
+                                    offsetApplyPending = false;
+                                    updateStatus();
                                     Log.i(TAG, "Calibration offset applied: "
                                             + timingController.describe());
                                 }
@@ -365,20 +410,37 @@ public final class Media3AvSyncTestDialog
         private void updateStatus()
         {
             if (status == null) return;
+            int value = offsetMs[0];
+            String relationship = value > 0
+                    ? String.format(Locale.US, "Click %.3f s after ball", value / 1000.0f)
+                    : value < 0
+                    ? String.format(Locale.US, "Ball %.3f s after click", -value / 1000.0f)
+                    : "Ball impact and click together";
             status.setText((passthrough ? "Encoded" : "Decoded PCM")
-                    + "   Offset " + String.format(
-                    Locale.US, "%+.3f s", offsetMs[0] / 1000.0f));
+                    + "   Offset " + String.format(Locale.US, "%+.3f s", value / 1000.0f)
+                    + (offsetApplyPending ? "   Applying\u2026" : "   Applied")
+                    + "\n" + relationship);
         }
 
-        private void finish()
+        private void finish(boolean notifyListener)
         {
             if (!finished.compareAndSet(false, true)) return;
+            if (lifecycleRegistered)
+            {
+                activity.getApplication().unregisterActivityLifecycleCallbacks(
+                        lifecycleCallbacks);
+                lifecycleRegistered = false;
+            }
             if (pendingStart != null) handler.removeCallbacks(pendingStart);
             if (pendingOffsetApply != null) handler.removeCallbacks(pendingOffsetApply);
             if (pendingOffsetEvidence != null) handler.removeCallbacks(pendingOffsetEvidence);
             if (player != null)
             {
+                player.pause();
+                player.setPlayWhenReady(false);
+                player.setVolume(0.0f);
                 player.stop();
+                player.clearMediaItems();
                 player.release();
                 player = null;
             }
@@ -388,7 +450,9 @@ public final class Media3AvSyncTestDialog
                     active.resumeAudioAfterExclusiveDiagnostic();
                 active.setMute(previouslyMuted);
             }
-            if (listener != null) listener.onFinished(offsetMs[0]);
+            if (!notifyListener && dialog != null && dialog.isShowing())
+                dialog.dismiss();
+            if (notifyListener && listener != null) listener.onFinished(offsetMs[0]);
         }
 
         private TextView text(float size, int color, int gravity)

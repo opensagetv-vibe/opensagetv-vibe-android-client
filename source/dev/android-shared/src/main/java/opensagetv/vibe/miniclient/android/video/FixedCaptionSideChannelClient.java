@@ -19,8 +19,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import opensagetv.vibe.miniclient.ServerInfo;
+import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
+import opensagetv.vibe.miniclient.video.CaptionClockCadence;
+import opensagetv.vibe.miniclient.video.LegacySubtitleCallbackPolicy;
 
 /**
  * Optional, connection-scoped consumer for the Standard FFmpeg plugin's
@@ -44,17 +47,20 @@ public final class FixedCaptionSideChannelClient
     private static final long RESERVATION_RETRY_MS = 1_000L;
     private static final long FAILURE_RETRY_MS = 5_000L;
     private static final long RESERVATION_EXPIRED_MS = 62_000L;
+    private static final long NETWORK_POLL_INTERVAL_MS = 250L;
     private static final Pattern PACKET_PATTERN = Pattern.compile(
             "\\[\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*\"([0-9a-fA-F]*)\"\\s*\\]");
 
     private final Object lock = new Object();
     private ScheduledExecutorService executor;
+    private ScheduledExecutorService presentationExecutor;
     private long generation;
     private String baseUrl = "";
     private String reservationToken = "";
     private String sessionToken = "";
     private long reservationStartedMs;
     private volatile long nextActionMs;
+    private long nextPollMs;
     private long cursor;
     private volatile Object playbackOwner;
     private volatile LegacyExtenderCaptionBridge bridge;
@@ -62,6 +68,9 @@ public final class FixedCaptionSideChannelClient
     private volatile boolean paused;
     private volatile boolean skipBufferedRecords;
     private volatile String state = "disabled";
+    private volatile long receivedPacketCount;
+    private volatile long lastPacketPtsMs = -1L;
+    private volatile long lastPollClockMs = -1L;
 
     public void start(ServerInfo server, PrefStore preferences)
     {
@@ -114,7 +123,11 @@ public final class FixedCaptionSideChannelClient
             reservationToken = "";
             sessionToken = claimedSessionToken;
             cursor = 0L;
+            receivedPacketCount = 0L;
+            lastPacketPtsMs = -1L;
+            lastPollClockMs = -1L;
             nextActionMs = 0L;
+            nextPollMs = 0L;
             state = claimedSessionToken.isEmpty() ? "probing" : "active";
             executor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory()
             {
@@ -125,16 +138,65 @@ public final class FixedCaptionSideChannelClient
                     return thread;
                 }
             });
-            executor.scheduleWithFixedDelay(new Runnable()
+            executor.schedule(new Runnable()
             {
-                @Override public void run() { tick(activeGeneration); }
-            }, 0L, 250L, TimeUnit.MILLISECONDS);
+                @Override public void run()
+                {
+                    tick(activeGeneration);
+                    synchronized (lock)
+                    {
+                        if (generation != activeGeneration || executor == null)
+                            return;
+                        executor.schedule(this, NETWORK_POLL_INTERVAL_MS,
+                                TimeUnit.MILLISECONDS);
+                    }
+                }
+            }, 0L, TimeUnit.MILLISECONDS);
+            // HTTP may block for its existing 900ms read budget. Even a fast
+            // poll can take several picture intervals, so it must never own
+            // presentation. Exactly ONE separate worker emits prefetched CEA
+            // pairs; the player's UI thread only publishes the real clock.
+            // The bridge serializes ingestion and flushes without allowing
+            // two drainers to reorder SageTV's stateful 608 control words.
+            presentationExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "vibe-fixed-caption-clock");
+                thread.setDaemon(true);
+                return thread;
+            });
+            presentationExecutor.schedule(new Runnable()
+            {
+                @Override public void run()
+                {
+                    LegacyExtenderCaptionBridge current;
+                    boolean presenting;
+                    synchronized (lock)
+                    {
+                        if (generation != activeGeneration || presentationExecutor == null)
+                            return;
+                        current = bridge;
+                        presenting = current != null && playbackClockMs >= 0L
+                                && !paused && !skipBufferedRecords && !sessionToken.isEmpty();
+                    }
+                    if (current != null && !shouldForwardSourceCaptions())
+                        current.clearPending();
+                    else if (presenting)
+                        current.drainTo(playbackClockMs * 1000L);
+                    synchronized (lock)
+                    {
+                        if (generation == activeGeneration && presentationExecutor != null)
+                            presentationExecutor.schedule(this, presenting
+                                    ? CaptionClockCadence.ACTIVE_DELAY_MS
+                                    : NETWORK_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
+                    }
+                }
+            }, 0L, TimeUnit.MILLISECONDS);
         }
     }
 
     public void stop()
     {
         ScheduledExecutorService previous;
+        ScheduledExecutorService previousPresentation;
         String previousBase;
         String previousSession;
         String previousReservation;
@@ -142,14 +204,20 @@ public final class FixedCaptionSideChannelClient
         {
             generation++;
             previous = executor;
+            previousPresentation = presentationExecutor;
             previousBase = baseUrl;
             previousSession = sessionToken;
             previousReservation = reservationToken;
             executor = null;
+            presentationExecutor = null;
             baseUrl = "";
             reservationToken = "";
             sessionToken = "";
             cursor = 0L;
+            nextPollMs = 0L;
+            receivedPacketCount = 0L;
+            lastPacketPtsMs = -1L;
+            lastPollClockMs = -1L;
             playbackOwner = null;
             bridge = null;
             playbackClockMs = -1L;
@@ -157,6 +225,8 @@ public final class FixedCaptionSideChannelClient
             skipBufferedRecords = false;
             state = "disabled";
         }
+        if (previousPresentation != null)
+            previousPresentation.shutdown();
         if (previous != null)
         {
             final String tokenToRelease = !previousSession.isEmpty()
@@ -218,9 +288,8 @@ public final class FixedCaptionSideChannelClient
         if (playbackOwner != owner || positionMs < 0L)
             return;
         playbackClockMs = positionMs;
-        LegacyExtenderCaptionBridge current = bridge;
-        if (current != null)
-            current.drainTo(positionMs * 1000L);
+        // The single presentation worker owns delivery; the HTTP worker only
+        // enqueues packets. Never perform MiniClient I/O on this UI callback.
     }
 
     public void setPaused(Object owner, boolean value)
@@ -244,6 +313,29 @@ public final class FixedCaptionSideChannelClient
         return state;
     }
 
+    private boolean shouldForwardSourceCaptions()
+    {
+        Object owner = playbackOwner;
+        return LegacySubtitleCallbackPolicy.shouldForwardFixedSource(
+                owner instanceof MiniPlayerPlugin
+                        && ((MiniPlayerPlugin) owner).hasObservedCeaCaptionData());
+    }
+
+    public long receivedPacketCountForDiagnostics()
+    {
+        return receivedPacketCount;
+    }
+
+    public long lastPacketPtsMsForDiagnostics()
+    {
+        return lastPacketPtsMs;
+    }
+
+    public long lastPollClockMsForDiagnostics()
+    {
+        return lastPollClockMs;
+    }
+
     private void tick(long expectedGeneration)
     {
         String activeBase;
@@ -258,6 +350,8 @@ public final class FixedCaptionSideChannelClient
             activeSession = sessionToken;
         }
         long now = System.currentTimeMillis();
+        LegacyExtenderCaptionBridge activeBridge = bridge;
+        long clock = playbackClockMs;
         if (now < nextActionMs)
             return;
 
@@ -321,10 +415,11 @@ public final class FixedCaptionSideChannelClient
                 return;
             }
 
-            LegacyExtenderCaptionBridge activeBridge = bridge;
-            long clock = playbackClockMs;
             if (activeBridge == null || clock < 0L || paused)
                 return;
+            if (now < nextPollMs)
+                return;
+            nextPollMs = now + NETWORK_POLL_INTERVAL_MS;
 
             if (skipBufferedRecords)
             {
@@ -365,18 +460,31 @@ public final class FixedCaptionSideChannelClient
                 return;
             }
             CaptionBatch batch = parseCaptions(captions.body);
-            if (batch.reset)
-                activeBridge.clearPending();
-            if (bridge != activeBridge)
-                return;
-            for (CaptionPacket packet : batch.packets)
-                activeBridge.onCeaSample(packet.ptsMs * 1000L, packet.data);
+            lastPollClockMs = clock;
+            receivedPacketCount += batch.packets.length;
+            if (batch.packets.length > 0)
+                lastPacketPtsMs = batch.packets[batch.packets.length - 1].ptsMs;
             synchronized (lock)
             {
-                if (generation == expectedGeneration)
-                    cursor = batch.cursor;
+                // A response may finish after stop/restart or discontinuity.
+                // Reject it before it can pollute the replacement bridge.
+                if (generation != expectedGeneration || bridge != activeBridge
+                        || skipBufferedRecords)
+                    return;
+                if (batch.reset)
+                    activeBridge.clearPending();
+                // Poll/advance the cursor even when the encoded output owns
+                // CEA, but never accumulate or emit duplicate stateful control
+                // words. On a source/seek epoch without native packets, the
+                // existing bounded tap remains the fallback.
+                if (shouldForwardSourceCaptions())
+                {
+                    for (CaptionPacket packet : batch.packets)
+                        activeBridge.onCeaSample(packet.ptsMs * 1000L, packet.data);
+                }
+                else activeBridge.clearPending();
+                cursor = batch.cursor;
             }
-            activeBridge.drainTo(clock * 1000L);
         }
         catch (Exception failure)
         {

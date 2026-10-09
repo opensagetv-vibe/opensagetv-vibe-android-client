@@ -38,7 +38,13 @@ class SettingsTransactionContracts(unittest.TestCase):
         checkpoint = function.index('mcp_settings_transaction.py" checkpoint')
         client_id = function.index('mcp_client_id.py" --ensure')
         test_script = function.index('scripts/$script')
-        final_restore = function.rindex('mcp_settings_transaction.py" restore')
+        # Restoration lives inside the shared EXIT/INT/TERM cleanup function;
+        # its definition precedes the test, but the explicit invocation follows it.
+        cleanup_start = function.index("cleanup_automated_mcp_test()")
+        cleanup_end = function.index("\n  }", cleanup_start)
+        self.assertIn('mcp_settings_transaction.py" restore', function[cleanup_start:cleanup_end])
+        self.assertIn("trap cleanup_automated_mcp_test EXIT", function)
+        final_restore = function.rindex("\n  cleanup_automated_mcp_test")
         self.assertLess(stale_restore, checkpoint)
         self.assertLess(checkpoint, client_id)
         self.assertLess(client_id, test_script)

@@ -7,6 +7,16 @@ import static org.junit.Assert.assertTrue;
 
 public class LegacySubtitleCallbackPolicyTest
 {
+    @Test public void realNativeCeaOwnsCallbackWhenOutputRetainsIt()
+    {
+        assertFalse(LegacySubtitleCallbackPolicy.shouldForwardFixedSource(true));
+    }
+
+    @Test public void sourceTapRemainsForOutputWithoutNativeCea()
+    {
+        assertTrue(LegacySubtitleCallbackPolicy.shouldForwardFixedSource(false));
+    }
+
     @Test public void advertisesOnlyExtractorBackedPlayers()
     {
         assertTrue(LegacySubtitleCallbackPolicy.shouldAdvertise("exoplayer"));

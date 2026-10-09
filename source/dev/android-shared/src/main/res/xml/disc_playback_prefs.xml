@@ -27,6 +27,12 @@
         android:summary="@string/disc_compatibility_fallback_summary"
         android:title="@string/disc_compatibility_fallback_title" />
 
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="disc_decoder_compatibility_recovery"
+        android:summary="@string/disc_decoder_compatibility_recovery_summary"
+        android:title="@string/disc_decoder_compatibility_recovery_title" />
+
     <ListPreference
         android:defaultValue="auto"
         android:dialogTitle="@string/disc_mpeg2_timestamp_repair_title"

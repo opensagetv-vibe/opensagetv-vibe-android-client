@@ -34,6 +34,13 @@ public class MediaMappingsFragment extends PreferenceFragmentCompat implements P
         MediaMappingPreferences prefs = new MediaMappingPreferences(store);
         MediaMappingPreferences prefsVideoPlaying = new MediaMappingPreferences("videoplaying", store);
         MediaMappingPreferences prefsVideoPaused = new MediaMappingPreferences("videopaused", store);
+        MediaMappingPreferences prefsDvdPlaying = new MediaMappingPreferences("dvdplaying", store);
+        SwitchPreferenceCompat dvdHolds = (SwitchPreferenceCompat) findPreference("dvdplaying_hold_arrows");
+        dvdHolds.setChecked(prefsDvdPlaying.isDvdHeldArrowControlsEnabled());
+        dvdHolds.setOnPreferenceChangeListener(this);
+        SwitchPreferenceCompat dvdScan = (SwitchPreferenceCompat) findPreference("dvdplaying_hold_scan");
+        dvdScan.setChecked(prefsDvdPlaying.isDvdScanHoldControlsEnabled());
+        dvdScan.setOnPreferenceChangeListener(this);
 
         /*
         --------------------------------------------------------------------------------------------------------
@@ -141,6 +148,16 @@ public class MediaMappingsFragment extends PreferenceFragmentCompat implements P
         bindSageCommandListPreference("videoplaying_up_long_press", prefsVideoPlaying.getUpLongPress().getKey());
         bindSageCommandListPreference("videoplaying_down_long_press", prefsVideoPlaying.getDownLongPress().getKey());
 
+        // DVD title playback. Authored menus always reserve the direction keys
+        // for button navigation; these mappings apply only outside a menu.
+        bindSageCommandListPreference("dvdplaying_left", prefsDvdPlaying.getLeft().getKey());
+        bindSageCommandListPreference("dvdplaying_right", prefsDvdPlaying.getRight().getKey());
+        bindSageCommandListPreference("dvdplaying_left_long_press",
+                prefsDvdPlaying.getLeftLongPress().getKey());
+        bindSageCommandListPreference("dvdplaying_right_long_press",
+                prefsDvdPlaying.getRightLongPress().getKey());
+        setLegacyDvdArrowMappingsEnabled(!prefsDvdPlaying.isDvdHeldArrowControlsEnabled());
+
         //Video Paused
         pc = (PreferenceCategory) this.findPreference("videopaused");
         pc.setEnabled(spSmartRemote.isChecked());
@@ -203,6 +220,8 @@ public class MediaMappingsFragment extends PreferenceFragmentCompat implements P
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue)
     {
+        if ("dvdplaying_hold_arrows".equals(preference.getKey()))
+            setLegacyDvdArrowMappingsEnabled(!Boolean.TRUE.equals(newValue));
 
         //smart_remote_mappings
         if (preference.getKey().equals("smart_remote_mappings"))
@@ -216,5 +235,15 @@ public class MediaMappingsFragment extends PreferenceFragmentCompat implements P
         }
 
         return true;
+    }
+
+    private void setLegacyDvdArrowMappingsEnabled(boolean enabled)
+    {
+        for (String key : new String[]{"dvdplaying_left", "dvdplaying_right",
+                "dvdplaying_left_long_press", "dvdplaying_right_long_press"})
+        {
+            Preference entry = findPreference(key);
+            if (entry != null) entry.setEnabled(enabled);
+        }
     }
 }

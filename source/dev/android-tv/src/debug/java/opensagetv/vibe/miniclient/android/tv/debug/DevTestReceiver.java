@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import java.io.File;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
+import opensagetv.vibe.miniclient.android.ui.settings.DiagnosticsSettingsActivity;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
 import opensagetv.vibe.miniclient.util.VerboseLogging;
 
@@ -69,9 +70,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("mim_direct_late_fallback_fault".equals(op))
             {
                 boolean enabled = parseBoolean(clean(intent.getStringExtra("enabled")), true);
+                boolean failPull = parseBoolean(clean(intent.getStringExtra("fail_pull")), true);
                 ok("op=mim_direct_late_fallback_fault;" + MiniclientApplication
                         .get(context).getMimDirectSession()
-                        .setDebugLateFallbackFailure(enabled));
+                        .setDebugLateFallbackFailure(enabled, failPull));
             }
             else if ("settings_checkpoint".equals(op))
             {
@@ -88,6 +90,13 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("tuning_get".equals(op))
             {
                 ok("op=tuning_get;" + PlayerRuntimeTuning.compactWire());
+            }
+            else if ("native_dvd_codec_fault".equals(op))
+            {
+                boolean enabled = parseBoolean(clean(intent.getStringExtra("enabled")), false);
+                if (!opensagetv.vibe.miniclient.android.video.media3.NativeDvdCodecStartupFault.arm(context, enabled))
+                    throw new IllegalStateException("Native DVD codec fault requires a debug application");
+                ok("op=native_dvd_codec_fault;armed=" + enabled + ";oneShot=true;appliesNextNativeCodec=true");
             }
             else if ("capture_datasource".equals(op))
             {
@@ -140,6 +149,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugSessionCommands.showCurrentVideoTest(context));
             }
+            else if ("av_sync_test".equals(op))
+            {
+                ok(DebugSessionCommands.showAvSyncTest(context));
+            }
             else if ("active_player_overlay".equals(op))
             {
                 ok(DebugSessionCommands.setActivePlayerOverlay(context, intent));
@@ -153,9 +166,21 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugSessionCommands.refreshVideoOutput(context));
             }
+            else if ("gfx_read_fault".equals(op))
+            {
+                ok(DebugSessionCommands.forceGfxReadFault(context, intent));
+            }
+            else if ("gfx_context_recreated".equals(op))
+            {
+                ok(DebugSessionCommands.simulateGfxContextRecreation(context, intent));
+            }
             else if ("input_text_native".equals(op))
             {
                 ok(DebugSessionCommands.inputTextNative(context, intent));
+            }
+            else if ("dvd_arrow_hold".equals(op))
+            {
+                ok(DebugSessionCommands.dvdArrowHold(context, intent));
             }
             else if ("ime_hide".equals(op))
             {
@@ -197,6 +222,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugPlayerCommands.subtitle(context, intent));
             }
+            else if ("audio_track_control".equals(op))
+            {
+                ok(DebugPlayerCommands.audioTrack(context, intent));
+            }
             else if ("caption_mode".equals(op))
             {
                 ok(DebugPlayerCommands.captionMode(context, intent));
@@ -221,6 +250,13 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("profile_ui".equals(op))
             {
                 ok(DebugProfileCommands.openUi(context));
+            }
+            else if ("diagnostics_ui".equals(op))
+            {
+                Intent activity = new Intent(context, DiagnosticsSettingsActivity.class);
+                activity.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(activity);
+                ok("op=diagnostics_ui;launched=true");
             }
             else if ("skip_check".equals(op) || "comskip_check".equals(op) || "relative_seek_check".equals(op))
             {

@@ -20,6 +20,7 @@ public class ImageCache
     private long imageCacheSize;
     private java.util.Map<Integer, Long> lruImageMap = new java.util.HashMap<Integer, Long>();
     private java.util.Map<Integer, opensagetv.vibe.miniclient.uibridge.ImageHolder> imageMap = new java.util.HashMap<Integer, opensagetv.vibe.miniclient.uibridge.ImageHolder>();
+    private final MissingImageDrawRecovery missingDrawRecovery = new MissingImageDrawRecovery();
     private ILogger log;
 
     public ImageCache(MiniClient client, ILogger log)
@@ -75,6 +76,7 @@ public class ImageCache
             }
         }
         imageMap.clear();
+        missingDrawRecovery.reset();
         cleanupOfflineCache();
     }
 
@@ -95,6 +97,7 @@ public class ImageCache
             log.logWarning("ImageCache.put(" + imghandle + ") has image with different handle " + img.getHandle(), new Exception());
         }
         imageMap.put(imghandle, img);
+        missingDrawRecovery.restored(imghandle);
         long bytes = imageBytes(width, height);
         if (bytes < 0)
             throw new IllegalArgumentException("Invalid image dimensions " + width + "x" + height);
@@ -155,6 +158,27 @@ public class ImageCache
         MiniClientConnection activeConnection = client.getCurrentConnection();
         if (activeConnection != null && activeConnection.isConnected())
             activeConnection.postImageUnload(oldestImage);
+    }
+
+    /** The server may still reference an image handle lost across DVD/GFX transitions. */
+    public void reportMissingDraw(int handle)
+    {
+        MiniClientConnection activeConnection = client.getCurrentConnection();
+        if (activeConnection == null || !activeConnection.isConnected()) return;
+        if (missingDrawRecovery.reportMissing(handle, System.currentTimeMillis()))
+            activeConnection.postImageUnload(handle);
+    }
+
+    /** Notify the server after the frame's lost-handle replies have been sent. */
+    public void flushMissingDrawRepaint()
+    {
+        MiniClientConnection activeConnection = client.getCurrentConnection();
+        if (activeConnection == null || !activeConnection.isConnected()) return;
+        opensagetv.vibe.miniclient.uibridge.Dimension size =
+                client.getUIRenderer().getUISize();
+        if (size != null && size.width > 0 && size.height > 0 &&
+                missingDrawRecovery.flushRepaint(System.currentTimeMillis()))
+            activeConnection.postRepaintEvent(0, 0, size.width, size.height);
     }
 
     public void unloadImage(int handle) {

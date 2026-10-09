@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <string name="nav_last_channel">Last (Previous Channel)</string>
+
     <string name="app_name">SageTV MiniClient</string>
 
     <string name="media_player_preferences">Playback Settings</string>
@@ -93,6 +95,8 @@
     <string name="disc_skip_previews_title">Skip previews</string>
     <string name="disc_skip_previews_summary">Bypass preview titles but retain the main menu when supported by the connected server.</string>
     <string name="disc_compatibility_fallback_title">Use native compatibility fallback</string>
+    <string name="disc_decoder_compatibility_recovery_title">Native DVD decoder recovery</string>
+    <string name="disc_decoder_compatibility_recovery_summary">Guard affected MPEG-2 decoder resets and allow one local restart if queued video has no decoder output. Never seeks the server or changes codec queueing. Disable to keep the original Media3 renderer. Applies on the next DVD start or player rebuild.</string>
     <string name="disc_compatibility_fallback_summary">If an optional Disc playback path is unavailable, use the established SageTV DVD path and report the fallback. Disable to show an error instead.</string>
     <string name="disc_mpeg2_timestamp_repair_title">Native MPEG-2 timestamp repair</string>
     <string name="disc_mpeg2_timestamp_repair_summary">Complete missing DVD P-picture timestamps from MPEG-2 GOP order. Automatic applies the guarded Kodi-derived workaround to MediaTek and NVIDIA hardware decoders; Off preserves stock Media3 behavior.</string>
@@ -144,8 +148,8 @@
     <string name="title_detailed_buffer_stats">Detailed Push Buffer Stats</string>
     <string name="summary_detailed_buffer_stats">Send detailed push buffer statistics to the server</string>
     <string name="msg_change_aspect_ratio">Aspect Ratio: %s</string>
-    <string name="use_tv_ui_on_tablet_summary">Use TV UI on Phone/Tablet</string>
-    <string name="use_tv_ui_on_tablet_title">If enabled, then the leanback launcher will be used on a Phone/Tablet</string>
+    <string name="use_tv_ui_on_tablet_summary">Show the TV server browser for remote control on Android boxes, phones, and tablets.</string>
+    <string name="use_tv_ui_on_tablet_title">Use TV server browser</string>
     <string name="ijkplayer_preferences">IJKPlayer Preferences</string>
     <string name="ijk_disable_hardware_codec_mpeg2_preference">Some hardware devices have faulty MPEG2 hardware decoders.  If you have issues with mpeg2 video, enable this.</string>
     <string name="ijk_disable_hardware_codec_mpeg2_title">IJK: Disable MPEG2 Hardware Decoding</string>
@@ -241,4 +245,5 @@
     <string name="gsy_architecture_title">Engine Isolation</string>
     <string name="gsy_architecture_summary">GSY does not use or replace the legacy IJK native runtime. Auto uses Android System MediaPlayer for SageTV PUSH/PULL streams and Media3 for normal HTTP streams.</string>
 
+    <string name="msg_mim_direct_seek_retained">Seek could not be completed. Continuing at the current position.</string>
 </resources>

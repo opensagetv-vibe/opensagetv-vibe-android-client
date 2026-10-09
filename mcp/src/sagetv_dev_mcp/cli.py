@@ -10,7 +10,8 @@ from .config import load_config
 
 def client() -> tuple[AdbClient, object]:
     cfg = load_config()
-    return AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt), cfg
+    return AdbClient(serial=cfg.device, dev_package=cfg.dev_package, adb=cfg.adb, aapt=cfg.aapt,
+                     install_timeout_seconds=cfg.install_timeout_seconds), cfg
 
 
 def connect(adb: AdbClient) -> None:
@@ -36,34 +37,37 @@ def main() -> int:
 
     adb, cfg = client()
 
-    if args.command == "connect":
+    try:
+        if args.command == "connect":
+            connect(adb)
+            print(adb.devices())
+            print(json.dumps(adb.device_info(), indent=2))
+            return 0
+
+        # Every independently invoked unified-container device command reconnects so
+        # changed ADB/device state cannot leak between operations.
         connect(adb)
-        print(adb.devices())
-        print(json.dumps(adb.device_info(), indent=2))
+
+        if args.command == "install":
+            apk = (Path(args.apk).expanduser().resolve() if args.apk else cfg.artifact_dir / "OpenSageTV-Vibe-Android-Client-debug.apk")
+            detected = adb.detect_apk_package(apk)
+            print(f"Verified APK package: {detected}")
+            print(adb.install_dev_apk(apk, clean=args.clean))
+        elif args.command == "launch":
+            print(adb.launch())
+        elif args.command == "stop":
+            print(adb.force_stop())
+        elif args.command == "uninstall":
+            print(adb.uninstall())
+        elif args.command == "device-info":
+            print(json.dumps(adb.device_info(), indent=2))
+        elif args.command == "logcat":
+            print(adb.logcat_tail(args.lines, args.pattern))
+        else:
+            raise AssertionError(args.command)
         return 0
-
-    # Every independently invoked unified-container device command reconnects so
-    # changed ADB/device state cannot leak between operations.
-    connect(adb)
-
-    if args.command == "install":
-        apk = (Path(args.apk).expanduser().resolve() if args.apk else cfg.artifact_dir / "OpenSageTV-Vibe-Android-Client-debug.apk")
-        detected = adb.detect_apk_package(apk)
-        print(f"Verified APK package: {detected}")
-        print(adb.install_dev_apk(apk, clean=args.clean))
-    elif args.command == "launch":
-        print(adb.launch())
-    elif args.command == "stop":
-        print(adb.force_stop())
-    elif args.command == "uninstall":
-        print(adb.uninstall())
-    elif args.command == "device-info":
-        print(json.dumps(adb.device_info(), indent=2))
-    elif args.command == "logcat":
-        print(adb.logcat_tail(args.lines, args.pattern))
-    else:
-        raise AssertionError(args.command)
-    return 0
+    finally:
+        adb.close()
 
 
 if __name__ == "__main__":

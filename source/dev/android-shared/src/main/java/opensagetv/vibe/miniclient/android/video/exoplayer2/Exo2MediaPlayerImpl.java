@@ -84,6 +84,7 @@ import opensagetv.vibe.miniclient.video.PlaybackMediaContext;
 import opensagetv.vibe.miniclient.video.PlaybackFailureClassifier;
 import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
+import opensagetv.vibe.miniclient.video.CaptionClockCadence;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
 import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSeekPolicy;
@@ -132,6 +133,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     protected void onPlaybackLoadStarted()
     {
+        mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
         decoderAttemptTelemetry.reset();
         sessionDecoderExclusions.clear();
@@ -203,6 +205,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     protected void releaseDataSource()
     {
+        mimDirectDiagnosticDataSource = null;
         if (dataSource instanceof SessionOwnedDataSource)
             ((SessionOwnedDataSource) dataSource).releaseSession();
         super.releaseDataSource();
@@ -327,6 +330,10 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     private volatile boolean exclusiveDiagnosticAudioSuspended;
     private EncodedPassthroughOffsetController passthroughOffsetController;
     private Runnable pendingPassthroughOffsetReanchor;
+    // Offset re-anchoring rebuilds the Pull extractor so buffered samples get
+    // the new timestamps. Use an exact retained-position seek only for that
+    // rebuild; CLOSEST_SYNC remains the normal SageTV/Comskip seek policy.
+    private volatile boolean exactAudioOffsetReanchorSeekPending;
     private DataSource retainedAudioRebuildDataSource;
     private Exo2PcmAudioProcessor pcmAudioProcessor;
     private int initialAudioTrackIndex = -1;
@@ -443,6 +450,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 }
             };
     private Runnable progressRunnable;
+    private Runnable captionClockRunnable;
     private final PullSeekRecoveryMonitor pullSeekRecoveryMonitor = new PullSeekRecoveryMonitor();
     private final PlaybackMediaContext mediaContext = new PlaybackMediaContext();
     private PlayerRuntimeConfig runtimeConfig = PlayerRuntimeConfig.capture(PlayerRuntimeConfig.Backend.LEGACY_EXO);
@@ -475,9 +483,15 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     public PlaybackHealthSnapshot capturePlaybackHealthSnapshot()
     {
-        return new PlaybackHealthSnapshot(player, dataSource, pushMode,
-                playerReady, seekPending, flushed, errorState, retryCount);
+        DataSource healthDataSource = dataSource != null
+                ? dataSource : mimDirectDiagnosticDataSource;
+        return new PlaybackHealthSnapshot(player, healthDataSource, pushMode,
+                playerReady, seekPending, flushed, errorState, retryCount,
+                isMimDirectMediaUrlActive() ? "MIM_DIRECT" : "");
     }
+
+    /** Actual factory-created HLS child; snapshots must not invent ownership. */
+    private volatile DataSource mimDirectDiagnosticDataSource;
 
     @Override
     public boolean hasRenderedFirstVideoFrame()
@@ -1140,6 +1154,17 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     public void seek(long timeInMS)
     {
+        if (mimDirectController().owns(this))
+        {
+            // The UI progress setter needs playbackPositionLock. Direct's
+            // bounded HTTP replacement must not keep that lock while waiting
+            // for the server; retain shared owner/session fencing and never
+            // seek the retired representation after a concurrent STOP.
+            resetLegacyCaptionsForDiscontinuity();
+            super.seek(timeInMS);
+            if (!consumeMimDirectSeekHandled()) seekPending = false;
+            return;
+        }
         try
         {
             playbackPositionLock.lock();
@@ -1488,7 +1513,11 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     }
                     retainedAudioRebuildDataSource = expectedDataSource;
                     if (!pushMode)
+                    {
                         playbackStartPosition = positionMs;
+                        exactAudioOffsetReanchorSeekPending =
+                                reason.startsWith("passthrough-offset-reanchor:");
+                    }
                     playRequested = resume;
                     eos = false;
                     state = resume ? PLAY_STATE : PAUSE_STATE;
@@ -1615,21 +1644,16 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 pendingPassthroughOffsetReanchor = null;
                 if (expectedPlayer == null || player != expectedPlayer) return;
-                long positionMs = Math.max(0L, expectedPlayer.getCurrentPosition());
-                try
-                {
-                    // The active extractor already references this atomic
-                    // controller. Flush only pre-change timestamps; do not
-                    // release encoded AudioTrack/player state on the UI thread.
-                    expectedPlayer.seekTo(positionMs);
-                    PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
-                            Exo2MediaPlayerImpl.this,
-                            "reason=" + reason + ", positionMs=" + positionMs);
-                }
-                catch (RuntimeException ex)
-                {
-                    log.logError("Unable to re-anchor legacy Exo passthrough offset", ex);
-                }
+                // Legacy Exo also keeps timestamped extractor samples in its
+                // buffered SampleQueue across an in-buffer seek. Reuse the
+                // bounded rebuild so the final debounced value takes effect
+                // immediately. The one-shot retained seek is exact and normal
+                // SageTV/Comskip seek behavior remains unchanged.
+                boolean accepted = requestAudioOutputRebuild(
+                        "passthrough-offset-reanchor:" + reason);
+                PlaybackDebugTrap.recordDetailed("passthrough_offset_live_reanchor",
+                        Exo2MediaPlayerImpl.this,
+                        "reason=" + reason + ", rebuildAccepted=" + accepted);
             }
         };
         progressHandler.postDelayed(pendingPassthroughOffsetReanchor, 200L);
@@ -1694,6 +1718,26 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
             }
         });
+    }
+
+    /** Match Media3's terminal missing-video boundary without changing decoding policy. */
+    private void rejectNativeDvdVideoUnavailable()
+    {
+        errorState = true;
+        eos = true;
+        state = EOS_STATE;
+        playerReady = false;
+        if (player != null)
+        {
+            player.setPlayWhenReady(false);
+            player.stop();
+        }
+        endTeletextPresentation();
+        PlaybackDebugTrap.record("native_dvd_video_decoder_unavailable", this);
+        log.logWarning("Native DVD rejected: no selected MPEG-2 video decoder");
+        context.showErrorMessage("Native DVD video is unavailable: no MPEG-2 "
+                + "decoder for the selected decoding mode. Use a supported "
+                + "transformed DVD mode if available.", "DVD playback");
     }
 
     @Override
@@ -1827,6 +1871,29 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         CustomMediaCodecSelector mediaCodecSelector = new CustomMediaCodecSelector(decodingMethod,
                 decoderAttemptTelemetry, sessionDecoderExclusions);
         renderersFactory.setMediaCodecSelector(mediaCodecSelector);
+        if (dvdPushMode && !dvdTransformedTransport
+                && "native".equals(prefs.getString(PrefStore.Keys.disc_playback_policy, "auto")))
+        {
+            try
+            {
+                if (opensagetv.vibe.miniclient.video.NativeDvdVideoSupportPolicy.shouldReject(
+                        dvdPushMode, dvdTransformedTransport,
+                        mediaCodecSelector.getDecoderInfos(
+                                MimeTypes.VIDEO_MPEG2, false, false).size()))
+                {
+                    // Match Media3's native-DVD boundary using this backend's
+                    // own selector. No audio renderer, silent policy change or
+                    // retries; the existing stock Push EOS reply ends the reader.
+                    rejectNativeDvdVideoUnavailable();
+                    return;
+                }
+            }
+            catch (com.google.android.exoplayer2.mediacodec.MediaCodecUtil.DecoderQueryException queryFailure)
+            {
+                log.logWarning("Native DVD codec preflight unavailable: "
+                        + queryFailure.getMessage());
+            }
+        }
         // The selector has already constrained this ordered list to the chosen
         // policy. Let Exo try the next candidate when codec initialization
         // fails: Hardware stays hardware-only, Software stays software-only,
@@ -1843,6 +1910,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                     .setPreferredAudioLanguage(preferredAudioLanguage));
             log.logDebug("Preferred audio language: " + preferredAudioLanguage);
         }
+
+        // Preserve the calibration dialog's exclusive encoded-audio lease if
+        // an already queued output rebuild replaces this player while open.
+        if (exclusiveDiagnosticAudioSuspended)
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true));
 
 
         ExoPlayer.Builder builder = new ExoPlayer.Builder(context.getContext(), renderersFactory);
@@ -1941,6 +2014,29 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
                 {
+                    boolean unsupportedMpeg2 = false;
+                    boolean supportedVideo = false;
+                    for (Tracks.Group group : tracks.getGroups())
+                        for (int i = 0; i < group.length; i++)
+                        {
+                            String mime = group.getTrackFormat(i).sampleMimeType;
+                            if (mime == null || !mime.startsWith("video/")) continue;
+                            boolean supported = group.isTrackSupported(i, true);
+                            supportedVideo |= supported;
+                            unsupportedMpeg2 |= MimeTypes.VIDEO_MPEG2.equals(mime) && !supported;
+                            if (mimDirectController().requiresPluginWatchRecovery())
+                                log.logInfo("Recovery video discovery: mime=" + mime + ", support=" + group.getTrackSupport(i));
+                        }
+                    if (opensagetv.vibe.miniclient.video.NativeDvdVideoSupportPolicy
+                            .shouldRejectDiscoveredVideo(dvdPushMode && !dvdTransformedTransport,
+                                    unsupportedMpeg2, supportedVideo))
+                    {
+                        rejectNativeDvdVideoUnavailable();
+                        return;
+                    }
+                    if (!dvdPushMode && !pushMode && unsupportedMpeg2 && !supportedVideo
+                            && requestStockFixedReconnectForMimPullFailure("legacy_unsupported_mpeg2_track"))
+                        return;
                     decoderAttemptTelemetry.recordTrackChange();
                     applyPublishedSubtitleSelection();
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
@@ -2181,6 +2277,13 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             public void onRenderedFirstFrame()
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                if (exactAudioOffsetReanchorSeekPending && !pushMode)
+                {
+                    listenerPlayer.setSeekParameters(SeekParameters.CLOSEST_SYNC);
+                    exactAudioOffsetReanchorSeekPending = false;
+                    PlaybackDebugTrap.record("passthrough_offset_exact_seek_complete",
+                            Exo2MediaPlayerImpl.this);
+                }
                 firstVideoFrameRendered = true;
                 notifyPostSeekPushFirstFrame();
                 if (dataSource instanceof Exo2PullDataSource)
@@ -2249,7 +2352,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         .getClient().getCurrentConnection();
                 boolean serverRendersCaptions = subtitleConnection != null
                         && subtitleConnection.isSubtitleCallbackEnabled()
-                        && legacyCaptionBridge.isForwardingCurrentStream();
+                        && (legacyCaptionBridge.isForwardingCurrentStream()
+                            || isFixedCaptionForwardingForDebug());
                 if (showCaptions && !serverRendersCaptions && subView != null)
                     subView.setCues(cues);
                 else if (serverRendersCaptions && subView != null)
@@ -2290,7 +2394,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         createCaptionAwareExtractorsFactory(true));
                 mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
-                player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
+                player.setSeekParameters(exactAudioOffsetReanchorSeekPending
+                        ? SeekParameters.EXACT : SeekParameters.CLOSEST_SYNC);
                 log.logDebug("Pull extractor seek tuning enabled. TS timestamp search bytes: "
                         + (TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES * runtimeConfig.getTsSearchMultiplier()));
             }
@@ -2331,9 +2436,23 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         {
             ExtractorsFactory httpExtractors = withPassthroughOffset(
                     new DefaultExtractorsFactory());
-            mediaSource = new DefaultMediaSourceFactory(
-                    context.getContext(), httpExtractors)
-                    .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            if (isMimDirectMediaUrlActive())
+            {
+                DataSource.Factory directHttp = Exo2MimDirectHttpDataSource.factory(
+                        new Exo2MimDirectHttpDataSource.CreationListener()
+                        {
+                            @Override public void onCreated(DataSource created)
+                            { mimDirectDiagnosticDataSource = created; }
+                        });
+                mediaSource = new DefaultMediaSourceFactory(directHttp, httpExtractors)
+                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            }
+            else
+            {
+                mediaSource = new DefaultMediaSourceFactory(
+                        context.getContext(), httpExtractors)
+                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+            }
             player.setMediaSource(mediaSource, true);
             player.prepare();
         }
@@ -2380,8 +2499,6 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 {
                     long currentPositionMs = listenerPlayer.getCurrentPosition();
                     Exo2MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
-                    scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
-                    updateFixedCaptionClock(currentPositionMs);
                     progressHandler.postDelayed(sessionProgress[0], 500);
                 }
                 else if (isCurrentPlaybackSession(listenerSession))
@@ -2393,10 +2510,41 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         progressRunnable = sessionProgress[0];
 
         progressHandler.postDelayed(progressRunnable, 0);
+        startCaptionClockUpdates(listenerSession, listenerPlayer);
+    }
+
+    /** Same stock-extender caption cadence as Media3; GSY delegates inherit it. */
+    private void startCaptionClockUpdates(final PlaybackSessionController.Token session,
+                                         final ExoPlayer expectedPlayer)
+    {
+        captionClockRunnable = new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                if (captionClockRunnable != this || !isCurrentPlaybackSession(session)
+                        || player != expectedPlayer)
+                    return;
+                long currentPositionMs = expectedPlayer.getCurrentPosition();
+                scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
+                updateFixedCaptionClock(mimDirectController().adjustPosition(
+                        Exo2MediaPlayerImpl.this, currentPositionMs));
+                boolean active = legacyCaptionBridge.isForwardingCurrentStream()
+                        || isFixedCaptionForwardingForDebug();
+                progressHandler.postDelayed(this, CaptionClockCadence.delayMs(
+                        expectedPlayer.isPlaying(), active));
+            }
+        };
+        progressHandler.post(captionClockRunnable);
     }
 
     private void cancelProgressUpdates()
     {
+        if (captionClockRunnable != null)
+        {
+            progressHandler.removeCallbacks(captionClockRunnable);
+            captionClockRunnable = null;
+        }
         if (progressRunnable != null)
         {
             progressHandler.removeCallbacks(progressRunnable);
@@ -2520,8 +2668,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                             // and the text track type. Clear both switches when captions
                             // are selected again so Off -> CC1/CC2 works without restarting
                             // the media session.
-                            parametersBuilder.setRendererDisabled(rendererIndex, false);
-                            parametersBuilder.setTrackTypeDisabled(trackType, false);
+                            if (trackType != C.TRACK_TYPE_AUDIO
+                                    || !exclusiveDiagnosticAudioSuspended)
+                            {
+                                parametersBuilder.setRendererDisabled(rendererIndex, false);
+                                parametersBuilder.setTrackTypeDisabled(trackType, false);
+                            }
 
                             //parametersBuilder.setSelectionOverride(trackType, trackGroup, override);
                             parametersBuilder.addOverride(override);

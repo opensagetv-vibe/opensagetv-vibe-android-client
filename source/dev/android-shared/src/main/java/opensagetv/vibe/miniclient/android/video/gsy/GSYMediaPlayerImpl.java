@@ -138,6 +138,12 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
         return delegate;
     }
 
+    /** Identity-only recovery guard; callers still control this adapter, not its delegate. */
+    public boolean isPlaybackOwner(Object candidate)
+    {
+        return candidate == this || (delegate != null && candidate == delegate);
+    }
+
     public String getResolvedEngineForDebug() { return resolvedEngine.preferenceValue(); }
     public int getSystemFallbackCountForDebug() { return systemFallbackCount; }
     public String getSystemFallbackReasonForDebug() { return systemFallbackReason; }
@@ -236,6 +242,15 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     }
     @Override public void onServerPushAnchor(long anchorMs) {
         if (d() != null) d().onServerPushAnchor(anchorMs);
+    }
+    @Override public boolean onServerDvdTrickMode(float rate, long bytePosition) {
+        return d() != null && d().onServerDvdTrickMode(rate, bytePosition);
+    }
+    @Override public boolean supportsNativeDvdSkipPulse() {
+        return d() != null && d().supportsNativeDvdSkipPulse();
+    }
+    @Override public void setNativeDvdSkipPulseActive(boolean active) {
+        if (d() != null) d().setNativeDvdSkipPulseActive(active);
     }
     @Override public int getBufferLeft() { return d() == null ? 0 : d().getBufferLeft(); }
     @Override public long getBufferedPlaybackAheadMillis() { return d() == null ? -1L : d().getBufferedPlaybackAheadMillis(); }

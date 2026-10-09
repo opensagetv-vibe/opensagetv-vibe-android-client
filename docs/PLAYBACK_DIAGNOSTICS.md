@@ -1,11 +1,404 @@
 # Android playback diagnostic standard
 
+## DVD test selectors and asynchronous cursor evidence
+
+DVD audio/subpicture expectations use physical packed wire values (for example
+AC3 `0xBD81`, enabled SPU `0x40`), not zero-based UI indexes. Confirm readable
+SPU and the authored track's tone independently. `mcp_disc_test.py` offers
+`--visual-title-hold-s 0..60` for immediate HDMI capture during a main title;
+an ended finite title's root menu is not title/audio/subtitle proof.
+
+The cursor test must wait for fresh FLUSH, decoded source anchor and A/V after
+Center, not fail on the first stale server NAV response. Its default landing
+allowance remains4000ms; explicit15000ms is used only for user-accepted approximate
+DVD gates on MiniMX. Never redefine the requested target from its landing echo.
+On slow Android6, synchronous `--capture-cursor` can outlast the stock STV's
+cursor timeout before Center. Use independent HDMI capture without delaying
+acceptance to distinguish that observer effect from a client playback fault.
+
+Held-chapter testing may supplement the authoritative MCP controls with the
+explicit `--chapter-index-witness` read-only Sagex `GetDVDCurrentChapter` API.
+Require correctly directed authored ordinal changes; several rapid VM commands
+can precede one delivered NEWCELL, so that decoder counter alone cannot prove
+how many chapters were crossed. Unreadable API is a failure, never an implicit
+fallback or reason to change Core. Short taps still must not trigger a seek.
+
+Timed-skip clock verification trims only the initial post-FLUSH prefix before
+the first <=2000ms server/decoded-clock agreement, then requires sustained
+same-epoch advancing video, audio and clocks. The first ready frame can precede
+Core seek-guess expiry; persistent mismatch or any divergence after convergence
+still fails. Stock SageTV7 timed FF/RW must not be mislabeled SageMC smooth
+scanning; preserve the user's STV/profile and report these as separate gates.
+
+## IJK asynchronous Teletext selection
+
+Before Off/On, continuity and pause gates, verify the fixture's duration and
+captioned interval. Classic Holby is82.688s/23,569,848bytes: a late cue followed
+by its commercial break and EOF cannot satisfy a new-cue gate. Increasing
+the timeout does not create captions past EOF. Use the391.405s Breakfast
+sample for this affected IJK sequence, and retain the failed run as inadequate
+fixture evidence, not a proven renderer regression. Clock-only playback verdicts
+also require independent picture review after HOME/Surface recreation.
+
+For IJK/System, `health_probeSupported=false` means Exo renderer counters are
+unavailable; its Exo-only `health_isPlaying` default is not the native playing
+flag. The caption oracle uses the already exported `health_basicIsPlaying`
+only for that explicit unsupported-probe case. It still requires new nonempty
+visible cues, advancing media time, pause-clock stability and no player error.
+Missing/false native playing fails recovery; supported Exo paths still require
+their own `health_isPlaying`. This corrects the test, not native playback.
+
+When a Teletext service is discovered but IJK still reports selected raw8192,
+that is `DISABLE_TRACK`, not a CEA service or a decoder failure. Compare the
+inventory event with native prepare: unlike extractor-backed players, IJK has
+no native text onTracksChanged callback. MINIMX-IJK-CC-001's verified retry selects
+the configured caption slot at those two events with readiness, player-identity
+and playback-generation guards. The shared inventory hook is otherwise a no-op.
+Do not fix selection by polling a diagnostic getter or advertise native CEA/DVB
+support that this backend cannot expose. Require readable captions, Off/On
+continuity, seek/pause and stock compatibility before physical closure;
+source-contract tests alone are not closure.
+
+Local Teletext Off/seek checks use teletextOverlayVisible/teletextCueUpdateCount;
+IJK does not expose the extractor's generic text-overlay fields. An absent field
+is not disabled-renderer evidence. Local --pause-resume must actually log the
+paused clock hold and new cue progress after PLAY. Earlier local DVB reports
+before revision246 did not execute that flag; four focused rows now replace
+only those pause claims (MINIMX-CAPTION-TEST-003), not their valid other evidence.
+
+## Restore server caption state as well as app preferences
+
+SageTV VideoFrame.setCCState persists LAST_CC_STATE through uiMgr.putInt;
+restoring Android preferences alone does not undo test Off/CC1/CC2 changes.
+The caption runner captures the existing public server CC state after connect
+and before its controls, restores/verifies that exact value before disconnect
+on success/failure, and fails the gate if restoration fails. Do not assume Off
+or claim an uncaptured historical baseline was recovered. This uses supported
+caption API/MCP controls, not Core modifications or background instrumentation.
+
+## Snapshots must not wait on network-owned monitors
+
+MiniMX/API23 stock175 retained STOP/PLAY produced an ANR: main was waiting
+in RetainedBufferedPullDataSource.getSessionReuseCount from a debug event
+snapshot, while loader tid30 owned that monitor in a pending MediaServer SIZE
+reply. Keep counter writers serialized, but publish these diagnostic-only longs
+with volatile and read them without the I/O monitor (atomic on ARM32). Do not
+add continuous instrumentation or infer that a readable counter proves source
+I/O recovery. Blocked-monitor/publication JVM tests and actual128.306s STOP/PLAY
+recovery/snapshot/preference-restoration pass under MINIMX-IO-001. This is an
+observer-lock correction, not a general network timeout or decoder change.
+
+## IJK first-frame evidence on the tablet
+
+IJK's native audio/position clock can advance while its hardware video decoder
+fails. New debug snapshots include `health_firstVideoFrameRendered` from the
+existing real rendering-start callback. MCP rejects an IJK video startup with
+that signal false even when its timeline advances. This is not an Exo renderer
+counter or proof of sustained output; review bounded captures independently.
+Older debug APKs without this field retain their weaker clock fallback, never
+full visual proof. Audio-only IJK and typed Media3/legacy/GSY output gates keep
+their existing behavior. TABLET-IJK-001 documents the SM-P610/API33 failure.
+
+The SM-P610/API33 UK1080i IJK hardware row remains NOT_WORKING after bounded
+client-side experiments. Some start-from-origin controls rendered pictures,
+but saved-position startup still fails; all unqualified prefix/probe/native
+seek/order/buffer-reset workarounds were withdrawn. Do not infer a general
+Samsung/Exynos blacklist or a source-file defect: other client backends render
+the fixture and same-coded clean stream-copy controls render in IJK.
+
+One independent ordering defect was demonstrated: IJK rejected native seek0
+with invalid-state -3 while the client already reported PLAY during prepare.
+The client now queues the newest seek until playerReady, including zero, rather
+than losing it and later applying an older bookmark. This does not claim to
+fix the native UK hardware failure. Native/default source options and bytes
+remain unchanged. Real first-frame/decoder diagnostics and opt-in lifecycle
+phase images support future independent review, not automatic picture or
+physical speaker/HDMI A/V-sync certification. See TASKS.md for provenance.
+
 This document defines the evidence and experiment discipline for diagnosing
 OpenSageTV Vibe Android playback. Active work is tracked only in `TASKS.md`.
 Historical implementation results remain in `CHANGELOG.md`, `HANDOFF.md`, and
 the versioned matrix-review documents.
 
+The deterministic embedded/server A/V timing comparison and direct webcam
+evidence procedure are defined in [AV_SYNC_PHYSICAL_GATE.md](AV_SYNC_PHYSICAL_GATE.md).
+
+## HOME-return decoder output freeze
+
+For generated native DVD lifecycle, use `mcp_lifecycle_test.py
+--server-path /var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD
+--authored-dvd-title --player media3 --streaming dynamic --repeat 0
+--report <active-task-report>`. The flag verifies the exact public MediaFile
+and generated volume before activating its known Play button; it waits for a
+new non-menu cell and real A/V. Ordinary file lifecycle remains unchanged.
+A looping menu's pause/clock behavior is not main-title evidence. Similarly,
+cadence requires actual playing title output before/after its window; a
+requested skip-menus setting does not prove stock Core applied it.
+Preserve opaque uiContextHint bytes (even scientific-looking hex/leading
+zeros), but discover the actual public control context before fixture keys.
+
+Distinguish decoder output from READY/isPlaying or a moving timeline. On ONN
+sti6140d360/API34, stock175 UK AVC Pull returned from Home with advancing
+audio but fixed video counters, no crash/error and a valid shown1920x1080
+Surface. Repeated GSY legacy and direct Media3 gates reproduced it. Surface
+attachment lifetime alone did not prevent Activity background Surface loss.
+The independent MPEG-2 control froze both A/V after the same Surface switch;
+its observed decoder is also covered, and the exact legacy gate passes after
+correction. The evidence-scoped `VideoSurfaceCodecPolicy` uses each player's protected
+`codecNeedsSetOutputSurfaceWorkaround` hook: codec release/reinitialization on
+actual output replacement, keeping the player/source/audio queues and clock.
+It does not install a watchdog, seek/reload, or claim every Amlogic codec fails.
+Upstream behavior: [legacy Exo renderer](https://github.com/google/ExoPlayer/blob/r2.18.1/library/core/src/main/java/com/google/android/exoplayer2/video/MediaCodecVideoRenderer.java)
+and [Media3 renderer](https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java).
+
+Use `mcp_lifecycle_test.py --player media3` or `--player gsyplayer
+--gsy-engine legacy_exo`, stock exact-path UK Breakfast, `--streaming pull
+--decoding hardware --background-seconds 3 --repeat 1 --report <active-path>`.
+Require same connection identity, advancing video AND audio after return,
+user PAUSE still paused after a second Home/return, explicit PLAY recovery,
+replay and teardown. Inspect decoder release/init counts, not just test exit.
+Checkpoint/restore settings and bracket keep-awake as usual. Run only affected
+device/codec rows; combinations outside the explicitly observed tuples retain
+the players' upstream replacement policy.
+
+ONN Pro SNA/API34 has a separately proven MPEG-2 video-only freeze: output
+stays222/queued173 while audio advances after Home, despite a valid Surface.
+The same replacement hook fixes its exact legacy and Media3 lifecycle gates.
+Its AVC control passes with init1/release0, so AVC on SNA is not included.
+The commissioned ONN tuples are sti6140d360/API34 AVC and MPEG-2, and SNA/API34
+MPEG-2 (`c2.amlogic.*.decoder`). MiniMX AM2/API23 additionally reproduces
+MPEG2-only output stall on OMX.amlogic.mpeg2.decoder.awesome after HOME/return:
+audio advances, queued468/rendered386 remain fixed, valid Surface, no error.
+Its exact-device codec-replacement candidate is tracked in MINIMX-SURFACE-001;
+do not count the candidate as corrected before affected physical gates pass.
+Read ro.product.device independently: AM2 is Build.DEVICE, gxbaby is board.
+Revalidate these hooks on actual Home/return,
+including manual pause preservation; a successful ordinary seek is not proof.
+
+For an intermittent DVD held-scan failure, `mcp_dvd_scan_gesture_test.py`
+retains the last full bounded probe plus per-sample decoder inputs/outputs,
+byte/read/drain counters, UI context and acknowledged rate. On failure it
+collects diagnostics before cleanup sends PLAY. A moving timeline or a later
+passing retry does not establish a correction. Keep unique open evidence;
+retire completed independent rows only after their compact result is recorded.
+First-time SageTV STV setup is per client identity AND server: completing175
+does not commission232. A wizard before Watch is setup-required, not a
+Direct transport failure; finish manual setup before automated playback.
+
+Include server capacity in stall triage: `.175` is the CPU-constrained stock
+reference without hardware transcoding, while `.232` supplies GPU gates.
+Record actual transport/transcode jobs and available container utilization/
+throttling with decoder and Push-drain probes. Native DVD/Pull are not server
+video transcoding; lack of GPU support alone is not fault attribution. See
+[server capacity guidance](TEST_ENVIRONMENT.md#server-capacity-is-part-of-the-gate-not-a-client-verdict).
+
+For native DVD scan drain waits, compare epoch-pushed bytes with bytes consumed
+and the decoded-ahead value during `lastPushFlags=256` EMPTY polls. Free scan
+capacity is intentionally capped at1MiB; do not mistake it for the normal4MiB
+physical capacity. In the Pro9min reproduction all input was consumed while
+declared decoded tail jumped to6.020s and the last preview froze. Concurrent
+container sampling found no transcoder/throttling and modest CPU use.
+[Media3 1.11.0 ProgressiveMediaPeriod](https://github.com/androidx/media/blob/1.11.0/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/source/ProgressiveMediaPeriod.java)
+derives an unknown EOF duration from queued timestamps including disabled
+tracks. The scan-only audio-PES exclusion passes both full Pro scan rows,
+including the same9min reproduction (54.901s, both256x, release A/V/PLAY/TS
+controls); repeated EMPTY probes report0ms ahead rather than the prior6.020s.
+Normal ALADDIN cadence/audio/pause and authored root/Languages/root/title
+with visible SPU highlights also pass. This supports the bounded correction;
+it does not prove every possible scan stall has the same cause. Preserve the
+failure and exact candidate/settings/resource-window distinction in the
+compact result. No normal-play clock, audio offset, Core, keys or CPU limits
+were changed.
+
+SageMC's `sagemc/default_DVD_FFREW=true` routes FF/RW to timed skips rather
+than rate changes. The non-Pro user's deliberately selected profile is recorded
+in the deferred DVD-003 handoff; do not change it to satisfy a2x-rate oracle.
+Use `mcp_dvd_scan_gesture_test.py --decoder-only --output <active-report>` to
+isolate extraction via the existing public SetPlaybackRate plugin boundary.
+That API is capped at64x; this is not remote-key or256x evidence. Require
+actual new video output at each positive/negative rate and restored A/V at1x.
+Authored cell/decoder replacement can reset counters: rebase observations,
+never synthesize cumulative output or treat an accepted rate alone as PASS.
+
 ## Direct/MIM subtitle selection and seek replacement
+
+For stock ordinary Fixed Push recovery, the Android decoder epoch can reset to
+zero at FLUSH while stock Core adds its transcode seek offset in public
+GetRawMediaTime/GetMediaTime. A local epoch-only target poll is not a source
+position oracle. Require fresh advancing decoded A/V, same typed MediaFile and
+exact client context, public source time, and independently reviewed burned
+PTS. For paused restoration, await a new FLUSH generation before checking
+ready/paused and a held clock; an old ready player can reset during that sample.
+The controlled tablet proof passes playing/paused public Watch/42s Seek. This
+does not certify the unenabled plugin recovery HTTP candidate or automatic
+owned-Transcode fallback. Public Watch launches AsyncWatch and returns a task
+marker; defer exactly one Pause until independent replacement readiness,
+then queue Seek. Never synchronously query decoder clocks/state from OPENURL
+to implement initial-failure capture, or make MCP a runtime dependency.
+
+A failed owned Direct restart must not fall through to an ordinary local
+backend seek. The retained HLS representation has the preceding source-time
+origin. Vibe keeps that producer/real current clock, clears the pending intent
+and tells the user the seek failed. Diagnostic status distinguishes numeric
+HTTP rejection and a closed known-code vocabulary from I/O failures without
+exporting tokens/URLs/arbitrary responses. The strict ownership gate still
+rejects retained failed-restart status as a seek PASS.
+
+For a bounded negative gate, start an owned Copy fixture and run
+`mcp_direct_rejection_test.py --output <active-task-report>`. The verified
+four-slot provider must have exactly one owner before this gate. A public
+60-second seek establishes a nonzero epoch; three gate-owned Copy sessions
+force a real409 rejection. The150-second backend-isolation request must keep
+the old clock and advancing A/V. The gate releases only its own three tokens;
+never stop/prune unrelated sessions. Then prove a normal public seek succeeds
+after those slots are free. This fault injection is not a claim about the
+cause of an unrelated intermittent server rejection.
+
+The canonical generated seek fixture changes CEA captions every 0.5 seconds;
+use it for transport/seek stress, not as the sole visual STV-caption oracle.
+For a copyright-free visual CC1/Off/CC1 control, generate a short separate
+fixture with the compiled Vibe FFmpeg (set `FFMPEG` to its executable) and:
+
+```text
+python scripts/generate_a53_seek_fixture.py --duration 90 \
+  --caption-interval 2.0 --cc both --caption-prefix PTS \
+  --output <temporary-fixture-path>
+```
+
+Import the temporary file through the stock-compatible Core MCP plugin,
+resolve its MediaFile ID, and run `mcp-caption-test --media-file-id <id>` with
+`--legacy-server-caption-mode stv --authority stv
+--legacy-extender-callback --cycle-stv-caption-states
+--fixed-caption-side-channel on` for Fixed/MIM Direct. Inspect every
+screenshot: event-225 counts alone prove transport, not visible captions.
+The 2-second generated control passed stock Windows `.185`/non-Pro `.25` on
+2026-10-03, and a real-broadcast CC1 control passed stock `.175`/Pull. Keep
+private broadcast screenshots out of public reports. Remove the temporary
+import and file after testing and restore all client/device settings.
+
+Initially on2026-10-06, matched120s controls on modified `.232`/Stock STV and Non-Pro
+`.25` confirmed readable2s CEA updates on Pull and Direct Transcode after
+FF/REW, while freshly generated500ms updates produced empty/gray caption
+regions on Pull. Use the command above with `--duration 120` and intervals
+`2.0` and `0.5` for reproduction; record both hashes and enable only existing
+temporary fixtures in the ignored TOML. The16-character `PTS 00:00:00.000`
+row uses14 field1 pairs (six control/idle plus eight text), one pair per
+29.97fps picture (~467ms). The500ms schedule gives almost no settled viewing
+time and exercises the Core300ms roll-up animation. This explains why it is
+a stress fixture, not a standalone normal-display oracle; it does not prove
+which internal scheduling/render component is defective.
+
+Fast captions appeared with the existing bounded Core MCP `captions.trace`
+enabled, but repeating the same Off/On sequence with tracing disabled did not
+restore them. Trace output proved decoded characters/layout and zero parity
+errors, not a production fix. Always repeat a diagnostic result with tracing
+off and restore the prior property in `finally`; trace logging can perturb
+timing. Preserve the fast failure separately from passing2s visual controls.
+The corrected client separates raw CEA presentation from 500 ms timeline
+polling: Media3 and legacy Exo, including their GSY delegates, use a 33 ms
+active/session-owned caption clock. Optional Fixed/MIM presentation has one
+independent emitter; HTTP fetching retains its 250 ms budget and cannot block
+already-buffered caption delivery. Focused loopback tests cover frame-paced
+delivery, unchanged HTTP rate, a blocked poll, and pause/resume. Timeline,
+audio, seek, decoder, server/STV and plugin policies are not changed.
+
+Non-Pro .25 corrected fast-cue gates pass on stock .175 and modified .232 with
+CC tracing off, including seeks, STV Off/CC1/CC2 transitions, pause/resume and
+both GSY delegates. MIM Transcode USB HDMI capture also verifies real startup
+and post-seek caption timing. Use `--pre-seek-hold-s 20` with a bounded external
+HDMI recording before the harness takes Android screenshots. Android screencap
+can hold a video frame while newer UI captions appear; do not infer a permanent
+caption/audio offset from that capture alone. This flag defaults to zero,
+is bounded to 30 seconds, and changes no runtime setting. The player's real
+clock is recorded immediately around the Android capture for comparison.
+
+For a normal-menu DVB/Teletext gate use `--track-codec DVB` or
+`--track-codec TELETEXT` rather than assuming row zero. Raw extractor inventory
+can include CEA compatibility formats before the real broadcast subtitle PID;
+declaration is not proof of CEA payload. This selector only resolves the
+expected discovered ID and prefers the matching track already selected by the
+normal caption menu, preserving its language/service. It never invokes the
+debug track selector or claims that stock CC1/CC2 controls local DVB bitmaps.
+The existing ordinal flag remains available for explicit indexed diagnostics.
+
+Do not use the short looping authored DVD for a long uninterrupted cadence
+measurement. A natural title/cell transition may reset player counters and
+the title clock, making an end-minus-start delta negative despite healthy
+playback. Record the cell change and validate menus separately, then use a
+long main feature such as the configured `dvd_motion` fixture for cadence.
+Do not change production clocks to hide a fixture-boundary measurement.
+
+For an owned HTTP caption gate, add `--require-mim-direct-owned` with
+`--streaming fixed --mim-direct-mode copy|transcode`. The harness requires
+the negotiated mode, an active owned session, `MIM_DIRECT`, and the matching
+HTTP data source. A playable legacy Fixed fallback is safe compatibility
+behavior, not proof that Direct or its caption side channel passed.
+The check runs both at startup and after the control sequence. A retained
+session after a failed restart remains a recorded failure of this strict
+restart gate, even if its old HTTP stream and captions still play.
+
+Legacy Exo and its GSY delegate must retain the actual factory-created HLS
+child datasource in health snapshots, just like Media3. The ordinary retained
+Pull datasource is null for HLS; an active controller flag alone is not enough
+to certify transport ownership. The Direct-only HTTP observers also feed TS
+segment bytes (never M3U8 text) to the existing Teletext engine without changing
+HTTP retries or media bytes. MiniMX exposed this missing legacy diagnostic and
+observation boundary; do not weaken the ownership gate to accept blank sources.
+
+`health_directSourceSession` is an on-demand, token-free comparison between the
+last requested Direct HTTP child and the controller's current owned session.
+`retired` identifies a stale representation; `current` means the HTTP request
+addresses the current producer, not that the producer is healthy. `foreign`,
+`inactive`, and `unavailable` are explicit non-proof states. Correlate this tag
+with the provider's current playlist/job status after a failed seek. The probe
+does not subscribe, poll in the background, retry network requests or export
+the private URL/token. A successful short seek cannot erase a failed longer
+caption Off/On sequence: retain and investigate that separate result.
+
+HLS can pre-create an unopened key/media loader, so the latest factory child
+may legitimately be `unavailable`. `health_directMediaItemSession` separately
+compares the actual player-bound MediaItem against current ownership. Do not
+turn an unopened-child observation into a fake current-request result.
+
+On a current Direct error, bounded snapshots additionally report
+`health_directErrorSession`, `health_directErrorAsset` (playlist/segment/other),
+`health_directErrorSegmentIndex`, and `health_directErrorCode`. Only the closed
+provider codes `media_not_ready`/`unknown_media` and numeric HTTP status are
+recognized; arbitrary response bodies and request URLs/tokens remain private.
+These are read from the existing error on demand, not packet capture or an
+extra background listener. Caption recovery rejects explicit errored/stopped
+player health even if an old queued cue increments a counter.
+
+Wait for a stable idle STV before exact-path Watch. UI readiness alone does
+not mean the STV has finished asynchronously restoring its previous video.
+The caption harness reuses `clear_restored_playback` from the lifecycle gate
+to stop only its commissioned test client's restored playback through stock
+commands. It also observes the one PAUSE request reaching the current player
+within the existing observation budget, then verifies its clock remains held.
+Do not replay remote commands, force a different transport, or count an
+accepted command as completion to bypass these gates.
+
+Configured SageTV/MIM endpoints commonly use trusted-LAN HTTP. Android 9+
+defaults to rejecting cleartext traffic for current target versions; the
+shared application manifest explicitly opts in for these user-configured
+IP/hostname endpoints. This does not disable HTTPS certificate verification
+or turn on optional MIM playback. Inspect the merged APK manifest as well as
+source, then require actual ownership on a current Android device. On Shield
+Tube/API30, the same `.232` Transcode case fell back before the opt-in and
+verified owned HTTP plus active caption delivery afterward, without changing
+Core, STV or plugins. See the
+[Android network-security documentation](https://developer.android.com/privacy-and-security/security-config#CleartextTrafficPermitted).
+
+The generated testsrc2 pattern includes moving gray rectangles. Decode the
+same source frame with the compiled Vibe FFmpeg before treating those shapes
+as a corrupt subtitle window. The original19.520s source frame matches the
+gray region in the corrected HDMI capture. Partial newest roll-up text is
+normal during character arrival; inspect stable previous rows as well.
+
+See `artifacts/results/MATRIX-003/nonpro-affected.json` for measured before/after
+rows and exact APK hashes. Original failures remain historical records, with
+their corrective rows added separately; completed/corrected raw artifacts are
+retired recoverably rather than retained as active failures.
 
 An explicit subtitle/caption track chosen during an active session has higher
 priority than a persisted CC/DVB default when Media3 or legacy Exo publishes a
@@ -74,6 +467,24 @@ only these bounded debug trace files. `analyze_playback_trace` exports and
 summarizes DEINIT/reconnect/OPENURL cycles, requested/applied seeks, time to
 first frame, generations, trace gaps, and error/timeout events. Release APKs do
 not contain this recorder or its debug broadcast controls.
+
+Release and debug APKs also provide a separate, bounded automatic Push-stall
+incident recorder. It defaults on under **Settings > Diagnostics Settings >
+Automatic Push-stall diagnostics** and can be disabled independently of file
+logging and SMB export. It remains idle during healthy playback. After an
+already-playing ordinary Push stream stays in BUFFERING for at least 1.5
+seconds, it retains at most 30 seconds of incident samples and a three-second
+post-recovery tail, writes asynchronously, and keeps four files. Pull, SMB
+Direct, MIM Direct, DVD Push, initial startup buffering, and external players
+do not qualify.
+
+Each incident correlates Push arrival/completion and blocked-write time, ring
+used/free bytes, decoder read/wait cadence, player position/buffer/state,
+selected decoder, and connection generation/reconnect count. It contains no
+media bytes, media path or URI, server address, credentials, or client ID.
+Manual diagnostic ZIPs and Always-mode logs include the retained incidents.
+This is evidence only: it does not change bytes, free-space replies, seek
+destinations, buffering policy, or recovery behavior.
 
 The on-screen **Playback Stats** panel is the preferred first look during a
 physical reproduction. Use compact mode while watching for a symptom and
@@ -156,7 +567,7 @@ then set an offset only against the actual output path being watched.
 
 The client can create a bounded, redacted support bundle without requiring an
 email or file-manager app on the TV. Configure its destination under
-**Settings > SMB Direct Settings > Diagnostic export**. This destination and
+**Settings > Diagnostics Settings > SMB diagnostic export**. This destination and
 its anonymous-or-credential authentication are independent of both media SMB
 and configuration SMB.
 
@@ -495,6 +906,24 @@ after every physical experiment.
 
 ## Current evidence baseline
 
+For a client without HDMI capture, the hardware codec harness offers
+`--capture-each-case`. It streams a composited Android screenshot before
+cleanup/next Watch replaces that Surface. Review the generated fixture's
+burned filename, image and PTS independently; PNG creation is only
+`PENDING_VISUAL_REVIEW`, not an automatic visual PASS. Correlate actual
+`playerClass`, selected hardware decoder and advancing A/V output, not the
+stored default-player preference after settings restoration. This software
+capture does not measure physical HDMI/display presentation, speaker sound
+or A/V sync. Keep speaker/receiver timing unmeasured without physical capture.
+
+Tab S6 Lite SM-P610/API33 inventory has hardware AVC/HEVC/VP8/VP9 but no
+advertised Android MPEG-2 decoder. Run the available hardware cases and
+separately record unsupported native hardware/safe handling and any measured
+software/owned Transcode alternative; never count software decoding as a
+hardware PASS or change Core to manufacture that missing platform capability.
+Its stock175 normal first-run profile is verified SageTV7.xml, not the older
+non-Pro client's SageMC. STV setup is per generated identity and server.
+
 The `20260828_034725_player_tuning_matrix.json` results showed that the tested
 Media3 Pull timestamp-search, read-size, seek-policy, buffering, and codec-mode
 combinations did not fix long Comskip recovery. Eight-times TS search was the
@@ -710,6 +1139,52 @@ main-title playback, compare wall time with both `mediaTimeMs` and
 `health_isLoading`, AudioTrack underruns, reconnect counts, and the DVD frame
 release histogram.
 
+Compare captured output counters/positions against the matching device-side
+`health_capturedMonotonicMs` interval. ADB/MCP can deliver a snapshot seconds
+after that capture; including delivery delay creates a false slow-playback
+ratio. `mcp_disc_test` retains `hostDeliveryElapsedMs` separately and labels the
+older-APK host-clock fallback explicitly. A correct clock ratio alone does not
+prove visual telecine/field cadence or successful menu/seek recovery.
+
+For a menu-to-title stall, distinguish an empty buffer from a blocked native
+codec lifecycle and from queued-input/no-output. A verified development-app
+thread dump reproduced a MediaCodec.flush block during renderer disable on
+OMX.MTK MPEG-2. The scoped native-DVD renderer uses Media3's protected codec
+release hook before disable and an affected keyframe position reset; it does not replace ordinary-TV rendering or its
+clock. See [Media3 renderer lifecycle](https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/mediacodec/MediaCodecRenderer.java).
+The disable-only correction recovered once but failed on repeat. Releasing at
+the supported position-reset hook as well passed three real menu/title cycles.
+Media3 1.11's video flush-policy methods are final; do not override those methods,
+fork the library or use reflection to implement this scoped correction.
+Retain real A/V output evidence; buffering or an accepted command is not PASS.
+
+`Settings > Playback Settings > DVD Playback > Native DVD decoder recovery`
+controls the scoped native decoder lifecycle/recovery path. Off uses Media3's
+original renderer; changes apply at the next DVD start/rebuild. The one-shot
+startup restart requires eight queued inputs, no decoder output after four
+seconds, additional locally ready samples and a valid real Surface. It never
+changes queueing, decoding mode, stream/period, source clock or server position.
+It resumes at the next queued key picture, so the unrendered startup prefix may
+be skipped; it must not claim exact replay of those consumed inputs.
+
+Debug APKs record one first-input/output metadata pair per codec, without encoded
+payload. Distinguish a decoder with no output from an output held by scheduling.
+`dev_set_native_dvd_codec_fault` arms one local debug-only output-withholding
+experiment; always disarm it in finally. It validates the recovery boundary,
+not a real firmware failure's cause. Stock `sage.SageTV.api/apiUI` cannot alter
+Android MediaCodec callbacks; stock Core MCP still owns Watch/menu/seek, and the
+local debug receiver adds no Core patch, private event or GFX/socket fault.
+
+For DVD seek precision, distinguish requested cursor time from the server's
+actual destination NAV/STC. Stock DVD VM Seek interpolates sector count against
+elapsed time, so VBR discs can land away from the request. In the 2026-10-06
+ALADDIN gate, requesting 698170ms produced STC 31909878/45 = 709108ms; decoded
+source anchors near 709166ms agreed with that server destination, not the
+request. Do not hide the gap with a fabricated client clock or count a late
+GetMediaTime seek-guess/landing echo as an exact-target oracle. Preserve the
+key-down cursor intent, fresh FLUSH and decoded-source anchor. See
+[stock DVD VM seek](https://github.com/google/sagetv/blob/master/third_party/Ogle/java/sage/dvd/VM.java).
+
 Media3 DVD Push intentionally uses two buffering behaviors:
 
 - normal title playback starts and resumes after rebuffer only after building
@@ -723,3 +1198,73 @@ A menu gate must separately prove root-menu rendering, a submenu transition,
 and return/re-entry. Never raise the title reserve globally without checking
 the authored short-cell fixture, and never restore a zero rebuffer threshold
 merely to make menu cells drain.
+
+### SageMC DVD timed-skip timeline checks
+
+Preserve the user's SageMC Default DVD FF/REW profile. Timed SkipForward/
+SkipBackwards and rate scanning have different contracts; do not remap keys
+to make a test pass. With an advancing native title loaded, run
+`scripts/mcp_dvd_timed_skip_test.py --input remote --observe-s 20 --show-info
+--pause-resume --output artifacts/active/DVD-003/timed-remote.json` through
+the commissioned container and settings-restoring gate wrapper. `--input
+public` independently uses the stock-compatible Core MCP public skip API.
+
+Require a fresh FLUSH and sustained decoded audio/video output with
+`health_flushed=false`. Draining frames from before a FLUSH are not landing
+evidence. Compare source/server clocks in the same final FLUSH epoch using
+device capture times, not host RPC delay or the server's initial seek guess.
+Review an independent HDMI elapsed-label crop after one ordinary Info key;
+do not repeatedly Refresh or keep the OSD alive. Normal auto-hide is not a
+frozen label. Pause/resume and STOP/exact-path rewatch are separate controls.
+Approximate DVD landing remains accepted, not a frame-exact precision PASS.
+
+On2026-10-07 the current381ae608 candidate on stock175/non-Pro passes actual
+remote and public timed skips with advancing clocks/A/V and visible elapsed
+labels. This does not establish the original historical failure's root cause
+or justify restoring the reverted64-to1024 clock-history experiment. No new
+production playback/Core/STV/key patch was needed for this regression check.
+
+### Native DVD scan and jump checks
+
+The DVD arrow preset now uses stock Time Scroll rather than an FF/RW pulse:
+Left/Right enters/adjusts the STV cursor, Center commits, Back/Play cancels.
+Dedicated FF/RW keeps scanning and deliberately held Up/Down repeats chapters.
+Run `scripts/mcp_dvd_cursor_test.py --output artifacts/active/DVD-002/cursor.json`
+for cursor/cancel/dedicated-key gates and `scripts/mcp_dvd_held_arrow_test.py
+--phase chapters --output artifacts/active/DVD-002/chapters.json` for the chapter
+gate. The installed MCP bridge may lack Time Scroll; the explicit
+`--client-events` mode of `mcp_dvd_timescroll_test.py` sends existing MiniClient
+event 10 through the debug command tool, with no runtime-plugin dependency.
+Do not silently switch transports or blindly replay a TS command.
+
+The STV's accepted cursor destination/Core time echo is an expected-target
+oracle only. Require a real FLUSH, fresh decoded A/V counters and an independent
+source-anchor check. Playback continues while the UI handles TS, so a snapshot
+from before key DOWN is not an exact cursor-position oracle. TS intent fields
+are not acknowledgement that the STV has processed the command. Current forward
+source-anchor precision remains imperfect despite valid cursor/control
+interaction. For DVD-002, the user accepts approximate DVD destinations:
+functional skipping and resumed A/V are the closure gates, not exact landing.
+Retain the observed source-anchor error in diagnostics; do not relabel it as a
+precision PASS, fake the clock or relax an independently requested precision
+test. Frame-exact HD200 presentation parity is likewise not certified by the
+current30fps capture. DVD-003's SageMC timed-skip timeline has separate settled
+source/server/visible-label acceptance, completed on the current candidate.
+
+Use `scripts/mcp_dvd_remote_test.py --output artifacts/dvd002/scan.json` through
+the commissioned MCP container environment with a native DVD title loaded.
+The bounded gate checks every forward/reverse 2x/4x/8x/16x rate, source-time
+advance and decoded output, opposite-key decrease, and Play/Pause cancellation.
+Decoder counters reset at cell transitions; the harness sums bounded samples
+rather than declaring negative frame progress. Selected rate is not measured
+speed, and `sageTimelineMs` in the client snapshot is not independent proof of
+the STV's visible timeline. Correlate public server state and screen evidence.
+
+Stock DVD VM navigation distances are approximate authored VOBU-table choices:
+integer `abs(rate)/3`, clamped 1..14, based on half-second units and six
+previews/second. Preview pacing uses actual source distance when available;
+normal authored 1x timestamps and A/V remain separate. Independently verify
+return to Play at the displayed source position, especially after reverse
+scan crosses a cell boundary. Short skip, chapter jump and menu navigation
+are separate gates. A short FF/RW burst may approximate a skip but cannot
+prove an exact requested-time landing without a server seek operation.

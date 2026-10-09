@@ -172,6 +172,33 @@ def completed_short_fixture_state(started: dict, expected_mime: str) -> dict | N
     return state if clean_eof else None
 
 
+def hardware_mime_available(codec_profiles: str, expected_mime: str) -> bool | None:
+    """Classify hardware-only scope, not successful playback.
+
+    Unknown/malformed inventory must still exercise the real gate. A complete
+    inventory with only software decoders (or no decoder) for the MIME has no
+    hardware row to commission. Do not ask stock Core to transcode that row or
+    convert software playback into a hardware PASS on older devices.
+    """
+    entries = []
+    incomplete = False
+    for entry in str(codec_profiles or "").split("|"):
+        if not entry:
+            continue
+        fields = entry.split(",")
+        if (len(fields) < 4 or not fields[0] or not fields[2].startswith("video/")
+                or fields[3] not in ("hw", "sw", "unknown")):
+            incomplete = True
+            continue
+        entries.append((fields[2].lower(), fields[3]))
+    matches = [kind for mime, kind in entries if mime == expected_mime.lower()]
+    if "hw" in matches:
+        return True
+    if not entries or incomplete or "unknown" in matches:
+        return None
+    return False
+
+
 def supports_vp9_profile2(codec_profiles: str) -> bool:
     """Return true only when a hardware VP9 decoder advertises Profile 2 (value 4).
 
@@ -353,12 +380,9 @@ def start_fixture(client: MCPProcess, args: argparse.Namespace, name: str,
                   path: str, verify_ms: int, media_file_ids: dict[str, list[int]],
                   dismiss_stale_stop_popup: bool = False,
                   timeout_s: float | None = None) -> dict:
-    """Prefer stock-compatible indexed MediaFile control, then negotiated path."""
+    """Use the configured exact path first, with indexed lookup only as fallback."""
     effective_timeout_s = args.timeout_s if timeout_s is None else timeout_s
-    exact_first = (
-        args.media_selection_mode == "vibe_exact_path"
-        or (args.media_selection_mode == "auto" and not args.webserver_installed)
-    )
+    exact_first = args.media_selection_mode != "stock_web"
     if exact_first:
         direct = call_dict(client, "dev_play_server_path", {
             "server_path": path,
@@ -369,7 +393,7 @@ def start_fixture(client: MCPProcess, args: argparse.Namespace, name: str,
         direct["launchMethod"] = "vibe_exact_path"
         if bool(direct.get("passed")):
             return direct
-        if not args.webserver_installed:
+        if not args.webserver_installed or args.media_selection_mode == "vibe_exact_path":
             return direct
         direct_failure = direct
     else:
@@ -533,6 +557,8 @@ def main() -> int:
         help="hardware delegate to prove when --player gsyplayer is selected",
     )
     parser.add_argument("--streaming", choices=("pull", "push"), default="pull")
+    parser.add_argument("--safety-only", action="store_true",
+                        help="Run existing containment/unsupported-asset gates without repeating positive codec rows")
     parser.add_argument("--timeout-s", type=float, default=60.0)
     parser.add_argument(
         "--storage-warmup-timeout-s", type=float,
@@ -562,7 +588,13 @@ def main() -> int:
         "--max-cases", type=int,
         help="Run only this many positive codec rows (focused physical validation)",
     )
+    parser.add_argument(
+        "--capture-each-case", action="store_true",
+        help="Capture rendered Android output per positive row for independent visual review (not HDMI/audio evidence)",
+    )
     args = parser.parse_args()
+    if args.safety_only and (args.start_at or args.max_cases is not None):
+        parser.error("--safety-only cannot be combined with positive-row selection")
     if args.player != "gsyplayer" and args.gsy_engine != "media3":
         parser.error("--gsy-engine applies only to --player gsyplayer")
     if args.media_selection_mode == "stock_web" and not args.webserver_installed:
@@ -580,7 +612,8 @@ def main() -> int:
     storage_warmup: list[dict] = []
     artifact_root = Path(os.environ.get("SAGETV_ARTIFACT_DIR", "artifacts/firetv"))
     artifact_root.mkdir(parents=True, exist_ok=True)
-    resume_suffix = f"-from-{Path(args.start_at).stem}" if args.start_at else ""
+    resume_suffix = "-safety-only" if args.safety_only else (
+        f"-from-{Path(args.start_at).stem}" if args.start_at else "")
     limit_suffix = f"-first-{args.max_cases}" if args.max_cases else ""
     delegate_suffix = f"-{args.gsy_engine}" if args.player == "gsyplayer" else ""
     selected_device_alias = os.environ.get("SAGETV_TEST_DEVICE_ALIAS", "non_pro").strip() or "non_pro"
@@ -599,8 +632,9 @@ def main() -> int:
             "gsyEngine": args.gsy_engine if args.player == "gsyplayer" else "",
             "streaming": args.streaming,
             "decoding": "hardware",
-            "startAt": args.start_at or CASES[0][0],
-            "partialRun": bool(args.start_at or args.max_cases),
+            "startAt": "" if args.safety_only else args.start_at or CASES[0][0],
+            "partialRun": bool(args.safety_only or args.start_at or args.max_cases),
+            "safetyOnly": args.safety_only,
             "storageWarmupEnabled": not args.skip_storage_warmup,
             "storageWarmup": storage_warmup,
             "results": results,
@@ -619,7 +653,7 @@ def main() -> int:
         print("SKIP: hardware codec fixture/mode disabled in firetv.toml")
         return 0
 
-    selected_cases = CASES
+    selected_cases = [] if args.safety_only else CASES
     if args.start_at:
         start_index = next(
             index for index, case in enumerate(CASES) if case[0] == args.start_at
@@ -659,7 +693,11 @@ def main() -> int:
         baseline_crash = call_dict(client, "dev_crash_probe", timeout=30.0)
         capabilities = call_dict(client, "dev_codec_capabilities", timeout=30.0)
         profiles = str(capabilities.get("codecProfiles") or "")
-        if args.webserver_installed and args.media_selection_mode != "vibe_exact_path":
+        # Only an explicit stock-Web run may pay the cost and failure surface
+        # of a batch title lookup before playback. Auto mode always tries the
+        # known server path first and performs a title lookup only if that
+        # deterministic control is unavailable.
+        if args.webserver_installed and args.media_selection_mode == "stock_web":
             resolved = call_dict(client, "dev_resolve_video_names", {
                 "video_names": [
                     *[Path(name).stem for name, _mime, _verify_ms in selected_cases],
@@ -681,6 +719,19 @@ def main() -> int:
         for name, expected_mime, verify_ms in selected_cases:
             path = args.server_root.rstrip("/") + "/" + name
             row = {"name": name, "serverPath": path, "expectedMime": expected_mime}
+            if hardware_mime_available(profiles, expected_mime) is False:
+                row.update({
+                    "status": "SKIPPED_NO_HARDWARE_DECODER",
+                    "playbackAttempted": False,
+                    "reason": "platform inventory has no hardware decoder for " + expected_mime,
+                    "scope": "unsupported hardware-only row; not playback or fallback PASS",
+                    "classification": "platform API or legacy codec-name inventory, not output evidence",
+                })
+                results.append(row)
+                checkpoint("RUNNING")
+                print("SKIP: " + name + ": no hardware decoder for " + expected_mime)
+                first_row = False
+                continue
             if name == "vp9-profile2-10bit.mkv" and not supports_vp9_profile2(profiles):
                 row.update({
                     "status": "SKIPPED_UNSUPPORTED_HARDWARE_PROFILE",
@@ -792,6 +843,17 @@ def main() -> int:
                     "status": "PASS_SHORT_FIXTURE_CLEAN_EOF" if completed_state is not None else "PASS",
                     "state": compact_state(state),
                 })
+                if args.capture_each_case:
+                    # Capture before cleanup/next Watch tears down the Surface.
+                    # A PNG existing is not a visual PASS: independently review
+                    # the burned fixture label and real picture before closure.
+                    row["visualEvidence"] = {
+                        "status": "PENDING_VISUAL_REVIEW",
+                        "method": "ADB_COMPOSITED_SCREEN_NOT_HDMI_OR_SPEAKER",
+                        "screenshot": call_dict(client, "take_screenshot", {
+                            "label": "codec-" + args.player + "-" + Path(name).stem,
+                        }, timeout=30.0),
+                    }
                 print(f"PASS: {name}: {actual_mime} -> {state.get('health_videoDecoder')}")
             except Exception as exc:
                 row.update({"status": "FAIL", "reason": str(exc)})
@@ -813,6 +875,44 @@ def main() -> int:
             results.append(row)
             checkpoint("RUNNING")
             first_row = False
+
+        # A focused affected-row run must not execute or fail on unrelated
+        # malformed-input, missing-PTS, H.263, AV1, or DRM gates. Those belong
+        # to the full matrix and were the reason a passing one-row transition
+        # check misleadingly returned a non-zero result on AV1-capable Pro
+        # hardware. Finish and report exactly the selected scope here.
+        if args.start_at or args.max_cases is not None:
+            post_test_cleanup = restore_post_test_menu(client)
+            crash = call_dict(client, "dev_crash_probe", timeout=30.0)
+            passed = all(
+                str(row.get("status", "")).startswith("PASS")
+                or str(row.get("status", "")).startswith("SKIPPED")
+                for row in results
+            ) and not crash_changed(baseline_crash, crash)
+            report = {
+                "passed": passed,
+                "focusedRun": True,
+                "deviceRestriction": required_serial,
+                "deviceAlias": selected_device_alias,
+                "player": args.player,
+                "gsyEngine": args.gsy_engine if args.player == "gsyplayer" else "",
+                "streaming": args.streaming,
+                "decoding": "hardware",
+                "mediaSelectionMode": args.media_selection_mode,
+                "webserverInstalled": args.webserver_installed,
+                "storageWarmup": storage_warmup,
+                "capabilityDevice": capabilities.get("codecDevice"),
+                "capabilityApi": capabilities.get("codecApi"),
+                "results": results,
+                "baselineCrashProbe": baseline_crash,
+                "postTestCleanup": post_test_cleanup,
+                "finalCrashProbe": crash,
+            }
+            artifact.write_text(
+                json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            print(f"{'PASS' if passed else 'FAIL'}: focused evidence {artifact}")
+            return 0 if passed else 1
 
         # Stock SageTV does not retain H.263 on this Pull capability path; it
         # negotiates MPEG-2 output. Keep the generated source for server/
@@ -891,6 +991,8 @@ def main() -> int:
                      for row in results) and not crash_changed(baseline_crash, crash)
         report = {
             "passed": passed,
+            "safetyOnly": args.safety_only,
+            "positiveRowsRequested": len(selected_cases),
             "deviceRestriction": required_serial,
             "deviceAlias": selected_device_alias,
             "player": args.player,

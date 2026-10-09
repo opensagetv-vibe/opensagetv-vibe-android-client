@@ -32,7 +32,16 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
     private final AtomicLong readWaitNanos = new AtomicLong();
     private final AtomicLong pushCallCount = new AtomicLong();
     private final AtomicLong pushedBytes = new AtomicLong();
+    private final AtomicLong blockedPushCount = new AtomicLong();
+    private final AtomicLong maximumPushWriteNanos = new AtomicLong();
     private volatile long measurementStartNanos = System.nanoTime();
+    private volatile long lastReadCompletedNanos;
+    private volatile long currentReadWaitStartedNanos;
+    private volatile long lastPushArrivalNanos;
+    private volatile long lastPushCompletedNanos;
+    private volatile long currentPushWriteStartedNanos;
+    private volatile long lastPushWriteNanos;
+    private volatile int lastPushBytes;
 
     volatile State state = State.Idle;
 
@@ -251,6 +260,7 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
         if (read >= 0)
         {
             bytesRead += read;
+            if (read > 0) lastReadCompletedNanos = System.nanoTime();
         }
 
         return read;
@@ -306,6 +316,7 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
                 if (readsSuspended)
                 {
                     long waitStarted = System.nanoTime();
+                    currentReadWaitStartedNanos = waitStarted;
                     try
                     {
                         dataAvailableMonitor.wait();
@@ -318,6 +329,7 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
                     finally
                     {
                         readWaitNanos.addAndGet(Math.max(0, System.nanoTime() - waitStarted));
+                        currentReadWaitStartedNanos = 0L;
                     }
                     continue;
                 }
@@ -338,6 +350,7 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
                 }
 
                 long waitStarted = System.nanoTime();
+                currentReadWaitStartedNanos = waitStarted;
                 try
                 {
                     dataAvailableMonitor.wait();
@@ -350,6 +363,7 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
                 finally
                 {
                     readWaitNanos.addAndGet(Math.max(0, System.nanoTime() - waitStarted));
+                    currentReadWaitStartedNanos = 0L;
                 }
             }
         }
@@ -429,61 +443,107 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
     @Override
     public void pushBytes(byte[] bytes, int offset, int len) throws IOException
     {
+        final long pushStarted = System.nanoTime();
+        lastPushArrivalNanos = pushStarted;
+        lastPushBytes = Math.max(0, len);
         if (VerboseLogging.DATASOURCE_LOGGING && log.isDebugEnabled()) log.debug("PUSH: {}", len);
+        try
+        {
+            synchronized (dataAvailableMonitor)
+            {
+                while (circularByteBuffer == null && state != State.Closed)
+                {
+                    log.warn("PUSH: Waiting because the DataSource is not yet opened.");
+                    try
+                    {
+                        dataAvailableMonitor.wait();
+                    }
+                    catch (InterruptedException e)
+                    {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Interrupted while waiting for SageTV PUSH open", e);
+                    }
+                }
+                if (state == State.Closed) return;
+            }
+            if (len > 0)
+            {
+                TeletextPesProbe.observe("push", -1L, bytes, offset, len);
+                TeletextSubtitleEngine.observe("push", -1L, bytes, offset, len);
+                pushCallCount.incrementAndGet();
+                pushedBytes.addAndGet(len);
+                if (eos)
+                {
+                    log.warn("We are getting data, even after EOS has been set.  Resetting EOS");
+                    if (state != State.Closed && circularByteBuffer != null)
+                    {
+                        // we are not closed, so reset the eos, and then continue to receive the data
+                        // this might happen if we were close to finishing the file, but, then
+                        // we reseeked to an earlier position
+                        eos = false;
+                    }
+                    else
+                    {
+                        // we are closed so ignore the data
+                        return;
+                    }
+                }
+                if (VerboseLogging.DATASOURCE_LOGGING)
+                {
+                    if (bufferAvailable() < len)
+                    {
+                        log.warn("BLOCKING: We have more data than we can store {}, need {}", bufferAvailable(), len);
+                    }
+                }
+                currentPushWriteStartedNanos = System.nanoTime();
+                circularByteBuffer.write(bytes, offset, len);
+                signalDataAvailable();
+                if (dataCollector != null)
+                {
+                    dataCollector.write(bytes, offset, len);
+                }
+            }
+        }
+        finally
+        {
+            long completed = System.nanoTime();
+            long writeStarted = currentPushWriteStartedNanos;
+            long elapsed = writeStarted <= 0L ? 0L
+                    : Math.max(0L, completed - writeStarted);
+            lastPushWriteNanos = elapsed;
+            updateMaximum(maximumPushWriteNanos, elapsed);
+            if (elapsed >= 5_000_000L) blockedPushCount.incrementAndGet();
+            lastPushCompletedNanos = completed;
+            currentPushWriteStartedNanos = 0L;
+        }
+    }
 
-        synchronized (dataAvailableMonitor)
+    /** Immutable counters used by bounded incident diagnostics; no media bytes are retained. */
+    public TelemetrySnapshot telemetrySnapshot()
+    {
+        long now = System.nanoTime();
+        BoundedCircularByteBuffer buffer = circularByteBuffer;
+        int used = 0;
+        int free = 0;
+        if (buffer != null)
         {
-            while (circularByteBuffer == null && state != State.Closed)
+            try
             {
-                log.warn("PUSH: Waiting because the DataSource is not yet opened.");
-                try
-                {
-                    dataAvailableMonitor.wait();
-                }
-                catch (InterruptedException e)
-                {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Interrupted while waiting for SageTV PUSH open", e);
-                }
+                used = buffer.available();
+                free = buffer.getSpaceLeft();
             }
-            if (state == State.Closed) return;
+            catch (RuntimeException ignored) { }
         }
-        if (len > 0)
-        {
-            TeletextPesProbe.observe("push", -1L, bytes, offset, len);
-            TeletextSubtitleEngine.observe("push", -1L, bytes, offset, len);
-            pushCallCount.incrementAndGet();
-            pushedBytes.addAndGet(len);
-            if (eos)
-            {
-                log.warn("We are getting data, even after EOS has been set.  Resetting EOS");
-                if (state != State.Closed && circularByteBuffer != null)
-                {
-                    // we are not closed, so reset the eos, and then continue to receive the data
-                    // this might happen if we were close to finishing the file, but, then
-                    // we reseeked to an earlier position
-                    eos = false;
-                }
-                else
-                {
-                    // we are closed so ignore the data
-                    return;
-                }
-            }
-            if (VerboseLogging.DATASOURCE_LOGGING)
-            {
-                if (bufferAvailable() < len)
-                {
-                    log.warn("BLOCKING: We have more data than we can store {}, need {}", bufferAvailable(), len);
-                }
-            }
-            circularByteBuffer.write(bytes, offset, len);
-            signalDataAvailable();
-            if (dataCollector != null)
-            {
-                dataCollector.write(bytes, offset, len);
-            }
-        }
+        return new TelemetrySnapshot(readCallCount.get(), readRequestedBytes.get(),
+                readWaitNanos.get() / 1_000_000L, bytesRead, pushCallCount.get(),
+                pushedBytes.get(), blockedPushCount.get(), used, free,
+                ageMs(now, lastReadCompletedNanos), ageMs(now, lastPushArrivalNanos),
+                ageMs(now, lastPushCompletedNanos),
+                durationMs(now, currentReadWaitStartedNanos),
+                durationMs(now, currentPushWriteStartedNanos),
+                lastPushWriteNanos / 1_000_000L,
+                maximumPushWriteNanos.get() / 1_000_000L, lastPushBytes,
+                state.name(), eos, readsSuspended);
     }
 
     public boolean isServerEOS()
@@ -516,6 +576,86 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
         readWaitNanos.set(0);
         pushCallCount.set(0);
         pushedBytes.set(0);
+        blockedPushCount.set(0);
+        maximumPushWriteNanos.set(0);
+        lastReadCompletedNanos = 0L;
+        currentReadWaitStartedNanos = 0L;
+        lastPushArrivalNanos = 0L;
+        lastPushCompletedNanos = 0L;
+        currentPushWriteStartedNanos = 0L;
+        lastPushWriteNanos = 0L;
+        lastPushBytes = 0;
         measurementStartNanos = System.nanoTime();
+    }
+
+    private static long ageMs(long now, long then)
+    { return then <= 0L ? -1L : Math.max(0L, now - then) / 1_000_000L; }
+
+    private static long durationMs(long now, long started)
+    { return started <= 0L ? 0L : Math.max(0L, now - started) / 1_000_000L; }
+
+    private static void updateMaximum(AtomicLong maximum, long candidate)
+    {
+        long previous;
+        do
+        {
+            previous = maximum.get();
+            if (candidate <= previous) return;
+        }
+        while (!maximum.compareAndSet(previous, candidate));
+    }
+
+    public static final class TelemetrySnapshot
+    {
+        public final long readCalls;
+        public final long readRequestedBytes;
+        public final long readWaitMs;
+        public final long bytesRead;
+        public final long pushCalls;
+        public final long pushedBytes;
+        public final long blockedPushCalls;
+        public final int bufferUsedBytes;
+        public final int bufferFreeBytes;
+        public final long lastReadAgeMs;
+        public final long lastPushArrivalAgeMs;
+        public final long lastPushCompletionAgeMs;
+        public final long activeReadWaitMs;
+        public final long activePushWriteMs;
+        public final long lastPushWriteMs;
+        public final long maximumPushWriteMs;
+        public final int lastPushBytes;
+        public final String state;
+        public final boolean eos;
+        public final boolean readsSuspended;
+
+        TelemetrySnapshot(long readCalls, long readRequestedBytes, long readWaitMs,
+                long bytesRead, long pushCalls, long pushedBytes, long blockedPushCalls,
+                int bufferUsedBytes, int bufferFreeBytes, long lastReadAgeMs,
+                long lastPushArrivalAgeMs, long lastPushCompletionAgeMs,
+                long activeReadWaitMs, long activePushWriteMs, long lastPushWriteMs,
+                long maximumPushWriteMs, int lastPushBytes, String state, boolean eos,
+                boolean readsSuspended)
+        {
+            this.readCalls = readCalls;
+            this.readRequestedBytes = readRequestedBytes;
+            this.readWaitMs = readWaitMs;
+            this.bytesRead = bytesRead;
+            this.pushCalls = pushCalls;
+            this.pushedBytes = pushedBytes;
+            this.blockedPushCalls = blockedPushCalls;
+            this.bufferUsedBytes = bufferUsedBytes;
+            this.bufferFreeBytes = bufferFreeBytes;
+            this.lastReadAgeMs = lastReadAgeMs;
+            this.lastPushArrivalAgeMs = lastPushArrivalAgeMs;
+            this.lastPushCompletionAgeMs = lastPushCompletionAgeMs;
+            this.activeReadWaitMs = activeReadWaitMs;
+            this.activePushWriteMs = activePushWriteMs;
+            this.lastPushWriteMs = lastPushWriteMs;
+            this.maximumPushWriteMs = maximumPushWriteMs;
+            this.lastPushBytes = lastPushBytes;
+            this.state = state;
+            this.eos = eos;
+            this.readsSuspended = readsSuspended;
+        }
     }
 }

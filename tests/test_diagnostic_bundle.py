@@ -68,6 +68,55 @@ class DiagnosticBundleContracts(unittest.TestCase):
         self.assertIn("uploadPending()", spool)
         self.assertIn("MAX_PENDING_FILES = 4", spool)
 
+    def test_main_diagnostics_screen_groups_capture_logging_and_export(self):
+        main_xml = self.read("res/xml/prefs.xml")
+        xml = self.read("res/xml/diagnostics_prefs.xml")
+        fragment = self.read(
+            "java/opensagetv/vibe/miniclient/android/ui/settings/DiagnosticsSettingsFragment.java"
+        )
+        manifest = self.read("AndroidManifest.xml")
+        self.assertIn('android:key="diagnostics_settings"', main_xml)
+        self.assertNotIn('android:key="use_log_to_sdcard"', main_xml)
+        for key in (
+            "automatic_push_stall_diagnostics", "export_diagnostics",
+            "diagnostics_smb_settings", "use_log_to_sdcard", "log_level",
+            "share_log", "debug_log_unmapped_keypresses", "debug_ar",
+        ):
+            self.assertIn(f'android:key="{key}"', xml)
+        self.assertIn("DiagnosticExportController.show", fragment)
+        self.assertIn("SmbProfileSettingsActivity.class", fragment)
+        self.assertIn("DiagnosticsSettingsActivity", manifest)
+
+        receiver = (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DevTestReceiver.java").read_text(encoding="utf-8")
+        adb = (ROOT / "mcp/src/sagetv_dev_mcp/adb.py").read_text(encoding="utf-8")
+        server = (ROOT / "mcp/src/sagetv_dev_mcp/server.py").read_text(encoding="utf-8")
+        self.assertIn('"diagnostics_ui".equals(op)', receiver)
+        self.assertIn("open_diagnostics_settings", adb)
+        self.assertIn("dev_open_diagnostics_settings", server)
+
+    def test_push_stall_capture_is_bounded_redacted_and_exported(self):
+        recorder = self.read(
+            "java/opensagetv/vibe/miniclient/android/diagnostics/PushStallDiagnosticRecorder.java"
+        )
+        bundle = self.read(
+            "java/opensagetv/vibe/miniclient/android/diagnostics/DiagnosticBundleManager.java"
+        )
+        base = self.read(
+            "java/opensagetv/vibe/miniclient/android/video/BaseMediaPlayerImpl.java"
+        )
+        for contract in (
+            "MINIMUM_INCIDENT_MS = 1_500L", "MAXIMUM_INCIDENT_MS = 30_000L",
+            "MAX_SAMPLES = 140", "MAX_FILES = 4",
+        ):
+            self.assertIn(contract, recorder)
+        self.assertIn("if (!active || !enabled())", recorder)
+        self.assertIn("IO.execute", recorder)
+        self.assertNotIn("lastUri", recorder)
+        self.assertNotIn("serverAddress", recorder)
+        self.assertIn("pushStallDiagnostics.onBufferingChanged", base)
+        self.assertIn("addPushStallIncidents(app, entries)", bundle)
+        self.assertIn("automatic Push-stall incident", bundle)
+
     def test_long_press_has_dedicated_export_icon(self):
         layout = self.read("res/layout/navigation.xml")
         tv_layout = (ROOT / "source/dev/android-tv/src/main/res/layout/navigation.xml").read_text(encoding="utf-8")

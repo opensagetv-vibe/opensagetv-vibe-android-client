@@ -37,6 +37,7 @@ final class Media3MimDirectHttpDataSource implements DataSource
 
     private final DataSource delegate;
     private boolean observeTransportStream;
+    private volatile String lastRequestedUri = "";
 
     private Media3MimDirectHttpDataSource(DataSource delegate)
     {
@@ -66,9 +67,14 @@ final class Media3MimDirectHttpDataSource implements DataSource
 
     @Override public long open(DataSpec dataSpec) throws IOException
     {
+        lastRequestedUri = dataSpec == null || dataSpec.uri == null
+                ? "" : dataSpec.uri.toString();
         observeTransportStream = shouldObserve(dataSpec == null ? null : dataSpec.uri);
         return delegate.open(dataSpec);
     }
+
+    /** Consumed internally by the debug probe; never exported as a raw URL. */
+    public String getLastRequestedUriForDebug() { return lastRequestedUri; }
 
     @Override public int read(byte[] buffer, int offset, int length) throws IOException
     {

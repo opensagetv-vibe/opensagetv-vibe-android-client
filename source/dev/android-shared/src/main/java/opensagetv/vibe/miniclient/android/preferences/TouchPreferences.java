@@ -148,7 +148,12 @@ public class TouchPreferences {
     }
 
     public SageCommand getLongPress() {
-        String key = preferences.getString("long_press", SageCommand.OPTIONS.getKey());
+        // A touch hold needs the same client-side controls as a remote hold.
+        // SageTV OPTIONS is an STV action and may do nothing on its main menu;
+        // it does not open the Android navigation/audio/caption panel. Change
+        // only the absent preference fallback: explicit OPTIONS/NONE/custom
+        // mappings remain authoritative, without a migration or settings wipe.
+        String key = preferences.getString("long_press", SageCommand.NAV_OSD.getKey());
         return SageCommand.parseByKey(key);
     }
 

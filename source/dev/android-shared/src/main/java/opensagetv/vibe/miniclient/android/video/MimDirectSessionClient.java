@@ -69,10 +69,18 @@ public final class MimDirectSessionClient
     /** Debug-receiver-only, one-shot proof of the two-stage startup fallback. */
     private boolean debugForceNextDirectStartFailure;
     private boolean debugForceFallbackPullFailure;
+    private boolean pluginWatchRecoveryRequired;
+    private final MimDirectWatchRecoveryClient watchRecovery=new MimDirectWatchRecoveryClient(
+            teardownExecutor,(base,path) -> request("POST",base,path,1500,3000),System::nanoTime);
     private volatile String state = "off";
 
     /** Probe before MiniClient capability negotiation. Returns the active mode. */
     public String prepare(ServerInfo server, PrefStore preferences)
+    {
+        return prepare(server, preferences, "");
+    }
+
+    public String prepare(ServerInfo server, PrefStore preferences, String nativeVideoCodecs)
     {
         final boolean suppressForStockFixed;
         synchronized (lock)
@@ -81,7 +89,8 @@ public final class MimDirectSessionClient
             suppressNextPrepareForStockFixed = false;
             lateFallbackReconnectClaimed = false;
         }
-        stop();
+        if (suppressForStockFixed && watchRecovery.pending()) stopTransportOnly();
+        else stop();
         if (suppressForStockFixed)
         {
             state = "late_failure_stock_fixed_reconnect";
@@ -113,6 +122,8 @@ public final class MimDirectSessionClient
             state = "unsupported_player_stock_fixed";
             return MimDirectTransportPolicy.OFF;
         }
+        final boolean needsWatchRecovery=MimDirectTransportPolicy.TRANSCODE.equals(requested)
+                && !MimDirectTransportPolicy.supportsTranscodePullFallback(nativeVideoCodecs);
         String host = server.address.trim();
         if (host.indexOf(':') >= 0 && !host.startsWith("[")) host = "[" + host + "]";
         int port = boundedPort(preferences.getString(
@@ -128,10 +139,18 @@ public final class MimDirectSessionClient
                 state = "unavailable_stock_fixed";
                 return MimDirectTransportPolicy.OFF;
             }
+            if (needsWatchRecovery && (!MimDirectTransportPolicy.supportsH264Output(nativeVideoCodecs)
+                    || !MimDirectWatchRecoveryClient.supported(capabilities.body)))
+            {
+                state="unsupported_video_stock_fixed";
+                return MimDirectTransportPolicy.OFF;
+            }
+            watchRecovery.configure(candidateBase,needsWatchRecovery);
             synchronized (lock)
             {
                 baseUrl = candidateBase;
                 activeMode = requested;
+                pluginWatchRecoveryRequired=needsWatchRecovery;
             }
             state = "ready_" + requested;
             return requested;
@@ -186,6 +205,12 @@ public final class MimDirectSessionClient
         releaseInternal(null, false);
         final long requestGeneration;
         synchronized (lock) { requestGeneration = lifecycleGeneration; }
+        if (pluginWatchRecoveryRequired)
+        {
+            opensagetv.vibe.miniclient.MiniClientConnection connection=MiniclientApplication.get()
+                    .getClient().getCurrentConnection();
+            watchRecovery.source(playbackOwner,source,connection ==null ? "" : connection.getClientID());
+        }
         try
         {
             synchronized (lock)
@@ -251,6 +276,35 @@ public final class MimDirectSessionClient
      */
     public boolean requestStockFixedReconnectForUnplayablePull()
     {
+        if (pluginWatchRecoveryRequired)
+        {
+            if (watchRecovery.active()) return true;
+            if (!lateFallbackStateAllowsReconnect(state)) return false;
+            return watchRecovery.request(() -> {
+                synchronized(lock) {
+                    lateFallbackReconnectClaimed=true; suppressNextPrepareForStockFixed=true;
+                    state="plugin_watch_stock_fixed_reconnect_requested";
+                }
+                MiniclientApplication.get().getClient().eventbus().post(
+                        new opensagetv.vibe.miniclient.android.events.MimDirectFallbackReconnectEvent(
+                                "plugin_watch_recovery",true));
+            },() -> {
+                state="plugin_watch_recovery_unavailable";
+                opensagetv.vibe.miniclient.MiniClient client=MiniclientApplication.get().getClient();
+                final opensagetv.vibe.miniclient.MiniPlayerPlugin currentPlayer=client.getPlayer();
+                boolean currentSource=currentPlayer !=null && watchRecovery.sourceMatches(source ->
+                        source ==currentPlayer || (currentPlayer instanceof
+                                opensagetv.vibe.miniclient.android.video.gsy.GSYMediaPlayerImpl
+                                && ((opensagetv.vibe.miniclient.android.video.gsy.GSYMediaPlayerImpl)
+                                currentPlayer).isPlaybackOwner(source)));
+                if (client.getCurrentConnection() !=null && currentSource)
+                    opensagetv.vibe.miniclient.uibridge.EventRouter.postCommand(client,
+                            opensagetv.vibe.miniclient.SageCommand.STOP);
+                log.warn("Optional stock watch recovery unavailable; no Watch replay, current source stop={}", currentSource);
+                opensagetv.vibe.miniclient.android.AppUtil.message(
+                        "Automatic playback recovery unavailable. Select the recording again to use ordinary Fixed playback.");
+            });
+        }
         synchronized (lock)
         {
             if (!lateFallbackStateAllowsReconnect(state)
@@ -262,6 +316,47 @@ public final class MimDirectSessionClient
             state = "late_failure_stock_fixed_reconnect_requested";
             return true;
         }
+    }
+
+    public boolean requiresPluginWatchRecovery() { return pluginWatchRecoveryRequired; }
+    public boolean hasPendingPluginWatchRecovery() { return watchRecovery.pending(); }
+    public boolean commitPluginWatchRecoveryHandoff() { return watchRecovery.commitHandoff(); }
+    public interface RecoveryConnectionReady { boolean ready(); }
+
+    /** Record actual server seek intent without HTTP/decoder-state reads. */
+    public void recordRecoveryPosition(Object playbackOwner,long target,boolean playing)
+    {
+        if (pluginWatchRecoveryRequired) watchRecovery.position(playbackOwner,target,playing);
+    }
+    public void recordRecoveryPlaying(Object playbackOwner,boolean playing)
+    {
+        if (pluginWatchRecoveryRequired) watchRecovery.playing(playbackOwner,playing);
+    }
+
+    public void onFreshConnectionForWatchRecovery(Object connection,
+            RecoveryConnectionReady ready) { watchRecovery.connected(connection,ready::ready); }
+
+    public void onRecoveryVideoFrame(Object owner,Object connection) { watchRecovery.video(owner,connection); }
+
+    /** Explicit user controls cancel custody before their normal server command. */
+    public void onUserPlaybackCommand(opensagetv.vibe.miniclient.SageCommand command)
+    {
+        if (command ==null) return;
+        switch (command) {
+            case STOP: case PLAY: case PAUSE: case PLAY_PAUSE: case FF: case REW:
+            case FF_2: case REW_2: case RIGHT_FF: case LEFT_REW:
+                if (!"ready".equals(watchRecovery.state()) && !"off".equals(watchRecovery.state()))
+                    watchRecovery.cancel();
+                break;
+            default: break;
+        }
+    }
+
+    /** Only the deliberate fresh-session handoff retains its scoped ticket. */
+    public void stopForActivityReplacement(boolean replacing)
+    {
+        if (replacing && watchRecovery.pending()) stopTransportOnly();
+        else stop();
     }
 
     /** The existing MiniClient connection accepted its native reconnect path. */
@@ -288,10 +383,15 @@ public final class MimDirectSessionClient
      */
     public String setDebugLateFallbackFailure(boolean enabled)
     {
+        return setDebugLateFallbackFailure(enabled, true);
+    }
+
+    public String setDebugLateFallbackFailure(boolean enabled, boolean failPull)
+    {
         synchronized (lock)
         {
             debugForceNextDirectStartFailure = enabled;
-            debugForceFallbackPullFailure = enabled;
+            debugForceFallbackPullFailure = enabled && failPull;
             return "armed=" + enabled + ";state=" + state;
         }
     }
@@ -404,6 +504,7 @@ public final class MimDirectSessionClient
                 base = baseUrl; token = sessionToken;
                 requestGeneration = lifecycleGeneration;
             }
+            String failureTag = "";
             try
             {
                 Response response = request("POST", base,
@@ -411,7 +512,10 @@ public final class MimDirectSessionClient
                                 Math.max(0L, requestedStartMs) + "&deinterlace=" +
                                 currentDeinterlace(), 1500, 20000);
                 if (response.status != 200)
+                {
+                    failureTag = restartRejectionTag(response.status, response.body);
                     throw new IOException("direct restart rejected");
+                }
                 String replacementToken = token(response.body, "sessionToken");
                 String media = stringValue(response.body, "mediaUrl", "");
                 long effectiveStartMs = longValue(response.body, "startMs",
@@ -450,15 +554,45 @@ public final class MimDirectSessionClient
             catch (Exception failure)
             {
                 state = "restart_failed_session_retained_" +
-                        failure.getClass().getSimpleName();
+                        (failureTag.isEmpty() ? failure.getClass().getSimpleName() : failureTag);
                 log.warn("MIM Direct restart failed; retaining the active session ({})",
-                        failure.getClass().getSimpleName());
+                        failureTag.isEmpty() ? failure.getClass().getSimpleName() : failureTag);
                 return null;
             }
         }
     }
 
+    /**
+     * A bounded, closed diagnostic vocabulary. Never export a server response,
+     * request URL, token or arbitrary error string into the client log/state.
+     * This only distinguishes API rejection from an I/O failure; it does not
+     * retry a seek or relabel retained old playback as successful replacement.
+     */
+    static String restartRejectionTag(int status, String body)
+    {
+        String code = stringValue(body, "error", "");
+        switch (code)
+        {
+            case "unknown_or_finished_session":
+            case "direct_session_limit":
+            case "direct_caption_slot_unavailable":
+            case "mim_direct_disabled":
+            case "mim_direct_restart_failed":
+                break;
+            default:
+                code = "unclassified";
+        }
+        return "http_" + (status >= 100 && status <= 599 ? status : 0) + "_" + code;
+    }
+
     public void stop()
+    {
+        watchRecovery.cancel();
+        pluginWatchRecoveryRequired=false;
+        stopTransportOnly();
+    }
+
+    private void stopTransportOnly()
     {
         release(null);
         synchronized (lock)
@@ -519,7 +653,65 @@ public final class MimDirectSessionClient
         }
     }
 
+    /** On-demand debug attribution only. Never returns an endpoint or token. */
+    public String mediaUriStateForDiagnostics(String observedUri)
+    {
+        final String base;
+        final String token;
+        synchronized (lock) { base = baseUrl; token = sessionToken; }
+        return compareMediaUri(base, token, observedUri);
+    }
+
+    static String compareMediaUri(String base, String token, String observedUri)
+    {
+        if (token == null || token.isEmpty()) return "inactive";
+        if (observedUri == null || observedUri.isEmpty()) return "unavailable";
+        try
+        {
+            URI expected = URI.create(base);
+            URI actual = URI.create(observedUri);
+            if (!expected.getScheme().equalsIgnoreCase(actual.getScheme())
+                    || !expected.getRawAuthority().equalsIgnoreCase(actual.getRawAuthority()))
+                return "foreign";
+            String path = actual.getPath();
+            if (path == null || !path.startsWith("/v1/direct/media/")) return "foreign";
+            return path.startsWith("/v1/direct/media/" + token + "/")
+                    ? "current" : "retired";
+        }
+        catch (RuntimeException malformed) { return "unavailable"; }
+    }
+
+    /** Closed HTTP-media vocabulary; arbitrary response bodies remain private. */
+    public static String mediaResponseTagForDiagnostics(int status, byte[] body)
+    {
+        String prefix = status >= 100 && status <= 599 ? "http_" + status : "http_unknown";
+        if (body != null && body.length <= 4096)
+        {
+            String code = stringValue(new String(body, StandardCharsets.UTF_8), "error", "");
+            if ("media_not_ready".equals(code) || "unknown_media".equals(code))
+                return prefix + "_" + code;
+        }
+        return prefix + "_unclassified";
+    }
+
+    /** Caption tap PTS is relative to the active Direct FFmpeg invocation. */
+    public long captionClockPosition(Object playbackOwner, long sageMediaTimeMs)
+    {
+        synchronized (lock)
+        {
+            return owner == playbackOwner
+                    ? relativeCaptionClock(sageMediaTimeMs, startOffsetMs)
+                    : sageMediaTimeMs;
+        }
+    }
+
+    static long relativeCaptionClock(long sageMediaTimeMs, long directStartMs)
+    {
+        return Math.max(0L, sageMediaTimeMs - directStartMs);
+    }
+
     public String stateForDiagnostics() { return state; }
+    public String recoveryStateForDiagnostics() { return watchRecovery.state(); }
 
     static String serverPath(String url)
     {
@@ -555,8 +747,11 @@ public final class MimDirectSessionClient
 
     private static boolean supportsDirect(String body, String mode)
     {
-        String compact = body == null ? "" : body.replaceAll("\\s+", "");
-        return compact.contains("\"mimDirect\":{") &&
+        Matcher section=Pattern.compile("\"mimDirect\"\\s*:\\s*(\\{[^{}]*\\})")
+                .matcher(body==null ? "" : body);
+        if (!section.find()) return false;
+        String compact = section.group(1).replaceAll("\\s+", "");
+        return
                 compact.contains("\"contractVersion\":1") &&
                 compact.contains("\"available\":true") &&
                 compact.contains("\"modes\":[\"copy\",\"transcode\"]") &&
@@ -607,7 +802,7 @@ public final class MimDirectSessionClient
         catch (NumberFormatException invalid) { return fallback; }
     }
 
-    private static Response request(String method, String base, String path,
+    static Response request(String method, String base, String path,
                                     int connectMs, int readMs) throws IOException
     {
         HttpURLConnection connection = (HttpURLConnection) new URL(base + path).openConnection();
@@ -655,7 +850,7 @@ public final class MimDirectSessionClient
         catch (Exception ignored) { return -1; }
     }
 
-    private static final class Response
+    static final class Response
     {
         final int status;
         final String body;

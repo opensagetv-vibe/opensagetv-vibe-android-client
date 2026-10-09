@@ -77,6 +77,12 @@ public final class ActivePlayerAdjustmentsDialog
         new ActivePlayerAdjustmentsDialog(activity).showAudioMenu();
     }
 
+    /** Open the embedded common-clock A/V fixture directly for debug automation. */
+    public static void showAvSyncTest(Activity activity)
+    {
+        new ActivePlayerAdjustmentsDialog(activity).showAvSyncTestDialog();
+    }
+
     public static void testCurrentVideo(Activity activity)
     {
         ActivePlayerAdjustmentsDialog dialog = new ActivePlayerAdjustmentsDialog(activity);
@@ -686,31 +692,8 @@ public final class ActivePlayerAdjustmentsDialog
         {
             @Override public void onClick(View view)
             {
-                if (active == null || (!active.supportsAudioOffset()
-                        && !active.supportsPassthroughAudioOffset()))
-                {
-                    AppUtil.message("The active backend cannot apply a calibrated audio offset");
-                    return;
-                }
                 holder[0].dismiss();
-                Media3AvSyncTestDialog.show(activity, active,
-                        new Media3AvSyncTestDialog.Listener()
-                        {
-                            @Override public void onFinished(int offsetMs)
-                            {
-                                ActivePlayerSessionOverrides.setAudioOffsetMs(offsetMs);
-                                if (active.isAudioPassthroughEnabled()
-                                        && offsetMs != 0
-                                        && !active.isPassthroughAudioOffsetEnabled())
-                                {
-                                    ActivePlayerSessionOverrides
-                                            .setPassthroughAudioOffsetEnabled(true);
-                                    active.setPassthroughAudioOffsetEnabled(true);
-                                }
-                                active.setAudioOffsetMillis(offsetMs);
-                                showAudioMenu();
-                            }
-                        });
+                showAvSyncTestDialog();
             }
         });
         settings.addView(syncTest);
@@ -808,6 +791,35 @@ public final class ActivePlayerAdjustmentsDialog
         {
             @Override public void run() { output.requestFocus(); }
         });
+    }
+
+    private void showAvSyncTestDialog()
+    {
+        final MiniPlayerPlugin active = player(media());
+        if (active == null || (!active.supportsAudioOffset()
+                && !active.supportsPassthroughAudioOffset()))
+        {
+            AppUtil.message("The active backend cannot apply a calibrated audio offset");
+            return;
+        }
+        Media3AvSyncTestDialog.show(activity, active,
+                new Media3AvSyncTestDialog.Listener()
+                {
+                    @Override public void onFinished(int offsetMs)
+                    {
+                        ActivePlayerSessionOverrides.setAudioOffsetMs(offsetMs);
+                        if (active.isAudioPassthroughEnabled()
+                                && offsetMs != 0
+                                && !active.isPassthroughAudioOffsetEnabled())
+                        {
+                            ActivePlayerSessionOverrides
+                                    .setPassthroughAudioOffsetEnabled(true);
+                            active.setPassthroughAudioOffsetEnabled(true);
+                        }
+                        active.setAudioOffsetMillis(offsetMs);
+                        showAudioMenu();
+                    }
+                });
     }
 
     private void choosePassthroughAudioOffset(final MiniPlayerPlugin active)

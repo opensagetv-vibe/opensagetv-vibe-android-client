@@ -160,6 +160,28 @@ final class DebugPlayerCommands
                 + ";accepted=true;inputPath=android_debug_direct_player_api";
     }
 
+    static String audioTrack(Context context, Intent intent)
+    {
+        MiniClient client = requireConnectedClient(context);
+        MiniPlayerPlugin player = requirePlayer(requireMediaCmd(client));
+        String indexText = clean(intent.getStringExtra("index"));
+        if (indexText.isEmpty())
+            throw new IllegalArgumentException("index is required");
+        int index = Integer.parseInt(indexText);
+        int[] trackIds = player.getAudioTrackIds();
+        int trackCount = trackIds == null ? 0 : trackIds.length;
+        if (index < 0 || index >= trackCount)
+            throw new IllegalArgumentException("audio index must identify a present track");
+        int playerIndex = trackIds[index];
+        int before = player.getSelectedAudioTrack();
+        player.setAudioTrack(playerIndex);
+        return "op=audio_track_control;index=" + index
+                + ";beforeIndex=" + before
+                + ";trackCount=" + trackCount
+                + ";playerIndex=" + playerIndex
+                + ";accepted=true;inputPath=android_debug_direct_player_api";
+    }
+
     /** Exercise the same caption-authority path used by the long-press menu. */
     static String captionMode(Context context, Intent intent)
     {

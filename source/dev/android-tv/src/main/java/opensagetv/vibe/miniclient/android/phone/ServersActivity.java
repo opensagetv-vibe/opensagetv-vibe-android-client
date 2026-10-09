@@ -56,22 +56,7 @@ public class ServersActivity extends FragmentActivity implements OnAddServerList
         setContentView(R.layout.servers_layout);
         AppUtil.hideSystemUIOnTV(this);
 
-        if (getResources().getBoolean(R.bool.istv)) {
-            // server activity started on a TV
-            if (getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
-                Intent i = new Intent(this, MainActivity.class);
-                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                startActivity(i);
-                finish();
-                return;
-            }
-        }
-
-        if (MiniclientApplication.get().getClient().properties().getBoolean(Keys.use_tv_ui_on_tablet, false)) {
-            Intent i = new Intent(this, MainActivity.class);
-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            startActivity(i);
-            finish();
+        if (redirectToTvBrowserIfSelected()) {
             return;
         }
 
@@ -147,6 +132,9 @@ public class ServersActivity extends FragmentActivity implements OnAddServerList
     @Override
     protected void onResume() {
         super.onResume();
+        if (isFinishing()) {
+            return;
+        }
         MiniclientApplication app = MiniclientApplication.get(this);
         if (app.getClient().isConnected()
                 && app.getBackgroundSessionOwner().hasPendingPreservedSession()) {
@@ -157,9 +145,33 @@ public class ServersActivity extends FragmentActivity implements OnAddServerList
             startActivity(resume);
             return;
         }
+        // Settings can change the browser choice while this Activity is paused.
+        // Keep preserved playback's existing resume priority over browser work.
+        if (redirectToTvBrowserIfSelected()) {
+            return;
+        }
         paused = false;
         refreshServers();
         AppUtil.hideSystemUIOnTV(this);
+    }
+
+    private boolean redirectToTvBrowserIfSelected() {
+        // onCreate may already have launched the TV browser and finished us.
+        if (isFinishing()) {
+            return true;
+        }
+        boolean nativeTvBrowser = getResources().getBoolean(R.bool.istv)
+                && getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        boolean selectedTvBrowser = MiniclientApplication.get().getClient().properties()
+                .getBoolean(Keys.use_tv_ui_on_tablet, false);
+        if (!nativeTvBrowser && !selectedTvBrowser) {
+            return false;
+        }
+        Intent i = new Intent(this, MainActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(i);
+        finish();
+        return true;
     }
 
     @Override
