@@ -2,6 +2,12 @@
 
 ## 0.5.101 - 2026-10-08
 
+- Publish the Dev sideload APK and clean source at a541d0f4; independently
+  verify all four public asset hashes and the1603-file source manifest.
+  Required CI passes749 tests with one skip; all12 existing Vibe repository
+  source updates pass their exact-HEAD checks. Post-publication ledger closure
+  is documentation-only, not a new runtime or plugin catalog release.
+
 - Consolidate the qualified audio, DVD remote/cadence, caption, graphics,
   navigation, older-device and negotiated MIM recovery updates since0.5.100.
   Retain per-device evidence and explicit unsupported/not-working results;

@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client handoff
 
-## RELEASE-001 publication preparation (2026-10-08)
+## RELEASE-001 published and independently verified (2026-10-08)
 
 User approved related repository source updates and a new Android sideload
 release. v0.5.101/versionCode2101110 Debug APK builds and passes package,
@@ -12,7 +12,7 @@ Selected JVM suites: core63/shared93, zero failures; MCP161 tests pass. Required
 CI-equivalent source contracts exposed stale settings/cadence/format/cleanup
 oracles and missing host-analysis dependencies. Corrected82 focused and13
 metadata/dependency checks pass; test-only NumPy/SciPy are pinned and isolated
-from the SDK runtime. Final repository CI is the publication gate.
+from the SDK runtime. Exact release-source CI passed749 tests with one skip.
 
 Non-Pro25/stock175 exact generated Pull startup and public Seek produce real
 A/V and reviewed burned24.424s picture. First pause oracle incorrectly treated
@@ -20,15 +20,23 @@ GetPlaybackRate as pause state: stock returns myRate while paused. Corrected
 pause-only121.457s proves stopped decoder clock and resumed A/V without changing
 production code. Both groups restore113 preferences and original power; no
 server restart/transcode or HDMI/speaker claim. Compact evidence belongs under
-artifacts/results/RELEASE-001; completed raw retires after final review.
+artifacts/results/RELEASE-001/qualification.json; completed raw/staging retires
+recoverably to workspace deleteme. Final non-Pro is on Android Home with
+forceStopped=true and zero175 contexts/clients. Old Fire OS still reports a
+pending PID; do not infer active playback or restart/clear settings for it.
 
-Build-env pilot and ten other existing repositories are pushed and green at
-their exact HEADs. Android clean-source bundle, push/green CI, publication and
-independent download/hash verification are next. Prototype Client Extension
+All12 existing repositories are pushed and green at their exact HEADs.
+Android release: https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.101
+Tag/source a541d0f4d259d1ff9ec58e65288bc8240081c0c8; all four public assets
+independently downloaded and matched to GitHub digests/checksums. All1603
+source files match the clean commit manifest. The post-release closure commit
+changes documentation/manifest only; the published tag and runtime stay fixed.
+Prototype Client Extension
 source awaits the user's choice; its runtime gates remain open. Historical
 archive remains local, SageMC visibility stays private, no plugin runtime/
-catalog release is implied. Approved publication temporarily takes priority
-over the recording-blocked companion physical gate; both orders305.
+catalog release is implied. Approved publication is complete; both orders306
+remove RELEASE-001. Companion physical gates remain
+recording-aware prerequisites, not work performed by this publication task.
 
 Stock175 restart exception: user renewed four-hour permission2026-10-08
 23:52:59 UTC through2026-10-09 03:52:59 UTC (10:52:59 p.m. Central), unless revoked sooner.

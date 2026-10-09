@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **305** (2026-10-08)
+Checklist revision: **306** (2026-10-08)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **305** (2026-10-08). A completed
+Order reviewed against checklist revision **306** (2026-10-08). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -56,35 +56,18 @@ client changes are stable. If a late shared-code change invalidates evidence,
 rerun only the affected rows and final matrix portion, not every completed
 device/player combination.
 
-1. **RELEASE-001** - user-approved v0.5.101 source/APK publication and related
-   repository source synchronization. Preflight affected tests, signing/package
-   continuity, task ledgers, manifests and required CI; publish bullet-point
-   notes with the known limits. No unrelated broad physical matrix.
-2. **ONN-003** - proceed when affected-device diagnostics reproduce the
+1. **ONN-003** - proceed when affected-device diagnostics reproduce the
    persistent OSD; complete any resulting shared correction before code freeze.
-3. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
+2. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
    complete any release-bound capability correction before code freeze.
-4. **EXT-001/002/003/005/006/007** - retain as conditional future work until
+3. **EXT-001/002/003/005/006/007** - retain as conditional future work until
    each required device, legal fixture, secure asset, or reproduced defect
    exists; these do not block unrelated release work.
-5. **STORE-001 through STORE-004** - perform production signing, inspection,
+4. **STORE-001 through STORE-004** - perform production signing, inspection,
    listing, and publication only after external ownership/prerequisites are
    approved.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
-
-- [ ] **RELEASE-001 - Approved GitHub refresh and v0.5.101 sideload release.**
-  User approved related repository source updates and a new Android release.
-  Reuse completed per-device matrices and document unsupported/not-working
-  results honestly. Run affected player/MCP/build/package checks plus the
-  required repository CI contracts; stale contract failures are corrected to
-  match qualified behavior, not hidden by changing playback. Preserve Dev
-  signer/package and settings, increment versionCode, package exact clean
-  committed source and APK, push/verify the pilot then each repository, publish
-  bullet-point notes and independently verify public hashes. Do not publish
-  plugin runtime/catalog releases or the local historical archive under this
-  Android release task. Companion prototype source requires the separate user
-  choice; its open physical gates are not claimed complete.
 
 Start after the current non-Pro Fire TV build and HDMI closure. Use the V1 ONN
 Android TV 4K UHD Streaming Device (model `100026240`) and move the commissioned
@@ -319,6 +302,31 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+| 306 | 2026-10-08 | [x] RELEASE-001 published v0.5.101 at a541d0f4; all 12 existing Vibe repositories pushed with exact-HEAD green CI. Independently downloaded four public assets and verified hashes/source manifest. Both orders306 remove completed publication; remaining plugin/device limits stay open. |
+
+- [x] **RELEASE-001 - Approved GitHub refresh and v0.5.101 sideload release.**
+  User approved related repository source updates and a new Android release.
+  Original acceptance: reuse completed per-device matrices with honest limits;
+  run affected player/MCP/build/package checks and required repository CI;
+  preserve Dev signer/package/settings, increment versionCode, package exact
+  clean committed source/APK, pilot-gate each push, publish bullet-point notes
+  and independently verify public hashes. No plugin runtime/catalog release,
+  historical archive publication or unapproved companion prototype publication.
+  Closed2026-10-08: 12 existing repositories green; v0.5.101 published at
+  a541d0f4d259d1ff9ec58e65288bc8240081c0c8, versionCode2101110, unchanged
+  Dev signer. APK SHA2566777841db4782cc9728090f5bc52945a89de03d6cb30de55952efb89764012f7.
+  Four public assets match GitHub digests/checksums; source manifest1603 files
+  matches the clean release commit. CI749 tests/one skip; JVM156/MCP161 pass.
+  Non-Pro25/stock175 generated Pull startup/seek and corrected pause-only gate
+  pass; GetPlaybackRate was a faulty pause oracle, not a player defect.
+  Both groups restore113 preferences/original power. Final Android Home,
+  forceStopped=true and zero server contexts/clients; pending pid is not proof
+  of playback. No server restart/HDMI/speaker measurement or full matrix rerun.
+  Compact evidence: artifacts/results/RELEASE-001/qualification.json.
+  Completed raw/staging retires recoverably to workspace deleteme; canonical
+  release assets remain. This closure is documentation-only after the release
+  snapshot; do not move the published tag or rebuild an identical APK.
 
 | 305 | 2026-10-08 | User approved RELEASE-001: related source updates and v0.5.101 Dev sideload publication take priority over recording-blocked companion work. Preserve completed matrices and open limits; affected tests and required CI only. Both order stamps305. |
 
