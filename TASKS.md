@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **374** (2026-10-16)
+Checklist revision: **376** (2026-10-16)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **374** (2026-10-16). A completed
+Order reviewed against checklist revision **376** (2026-10-16). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -56,7 +56,19 @@ client changes are stable. If a late shared-code change invalidates evidence,
 rerun only the affected rows and final matrix portion, not every completed
 device/player combination.
 
-Current374: RELEASE-002 is authorized: push changed Vibe repositories, publish
+Current376: companion0.1.0 beta is published with verified assets and SageTV
+catalogPR130 submitted/open. Native VCE-002/005/007 complete; future owned-DVD
+provider remains separate. Remove VCE-006 from the execution order. Android
+release/tag/APK stay unchanged; ONN-003 needs affected-user stuck-state data.
+
+Prior375: RELEASE-002 is complete: publishable source repos are synchronized,
+Android0.5.102 and MCP0.1.6 are public with independently verified assets.
+MCP catalogPR129 has merged; generated regular/Beta catalogs still have no MCP
+entry, so plugin-manager availability is not claimed. Companion source is
+public/green CI; its unqualified DVD binary/catalog gates remain VCE work,
+and the archive stays private. ONN-003 still needs affected-user evidence.
+
+Prior374: RELEASE-002 is authorized: push changed Vibe repositories, publish
 Android0.5.102 and qualified plugin updates. Use pilot-first exact-HEAD CI,
 affected local contracts/build/package and focused final-APK smoke, then verify
 public downloads/catalog submission. Archive stays private; companion source
@@ -106,34 +118,16 @@ explicit unavailable/native boundaries, not false passes. Compact004..007
 records supersede raw trials. Windows is not needed; do not replay completed
 4A, diagnostics or historical device matrices. Next work begins below.
 
-1. **VCE-006 / future release boundary** - DIAG-002/VCE-011 now qualify on stock
-   Linux175 and Windows185, with receiverfalse/131prefs/Core/power restored.
-   Broader plugin release acceptance remains separate; no publication yet.
-   INTERLACE-002/003 are complete
-   with explicit System/cadence limits; do not repeat its focused gates.
-   DIAG-013 shared footer
-   highlights/default focus/real navigation now qualify; do not repeat them.
-   DIAG-012 chooser/gray
-   states/actual QR/confirmed upload/parent navigation now pass on stock175;
-   do not repeat those completed focused rows.232/non-Pro upload,
-   privacy/disabled/missing/reconnect/restoration gates now pass. Receiver is
-   installed through public API; recording-aware MCP loaded and Core unchanged.
-   User-requested175 plugin update/restart and receiver/control checks now pass,
-   strict idle/Core guards and originalOff restoration. Do not repeat deployment.
-   Fresh client upload/playback stock Linux/Windows gates are now complete;
-   no standing175 restart permission exists after this consumed one-time update.
-   Main-toggle/persistence already passes; source/package records are current.
-   Android-owned web DIAG-003 through010 and affected UK DIAG-011 now qualify;
-   do not repeat their completed browser/playback gates or unrelated matrices.
-   Keep stock175 protected and broader extension release acceptance separate.
-2. **RELEASE-002** - complete authorized source refresh,0.5.102 APK and qualified
-   MCP plugin release/catalog update; no repeated unrelated physical matrices.
-3. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
+Client/companion releases and their affected gates are complete; upstream
+catalog review/aggregation does not justify another physical matrix. Deferred
+VCE-003 belongs to its project, not an Android release blocker.
+
+1. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
    stuck-state diagnostic; published0.5.100 HDMI startup-overlap/Pull/Push
    observations clear normally and do not justify a speculative hide timer.
-4. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
+2. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
    complete any release-bound capability correction before code freeze.
-5. **STORE-001 through STORE-004** - perform production signing, inspection,
+3. **STORE-001 through STORE-004** - perform production signing, inspection,
    listing, and publication only after external ownership/prerequisites are
    approved.
 
@@ -185,15 +179,6 @@ export and all three SMB destination tests are complete.
   from the extra memory (about 6.1--6.2 seconds), so the safer 8 MiB bound is
   retained. Video/audio decoder init remained one with zero releases; the
   remaining distant-seek cost is TS timestamp/demux discovery, not codec setup.
-- [ ] **RELEASE-002 - Approved repository refresh and0.5.102 sideload release.**
-  User authorizes source pushes and qualified plugin publication. Run local
-  checks affected by the aggregate diagnostics, native decoder/GPU renderer,
-  protocol and workflow changes; retain prior targeted physical qualification
-  and use final-APK affected smoke rather than replaying unrelated matrices.
-  Pilot-first sequential exact-HEAD CI, private-config/package boundary,
-  immutable versioned assets, independent public downloads and SageTV catalog
-  submission are required. Companion source may publish; unfinished VCE DVD
-  release acceptance and private archive remain explicit exclusions.
 - [ ] **ONN-003 - Persistent long-recording OSD with AutoAspect and Comskip.**
   Reproduce the affected 2018 Fire TV Stick 4K (`AFTMM`) path with the official
   Automatic Aspect Ratio and Comskip Playback STVIs active, a completed
@@ -406,6 +391,27 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+| Revision | Date | Change |
+|---|---|---|
+| 376 | 2026-10-16 | Companion VCE-006 published/verified0.1.0 beta and SageTV PR130 submitted; native002/005/007 acceptance complete, future003 not shipped. Both suggested orders remove completed publication; ONN-003 remains first pending affected-user evidence. Tracking only, no APK/runtime/version change or unrelated matrix rerun. |
+
+- [x] **RELEASE-002 - Approved source refresh and0.5.102 sideload release.**
+  Published immutable Android0.5.102 at be30933042f630bda87334daed93ca2e739f9040
+  after greenCI38913450648/866source tests/5skips,326core/154shared JVM,
+ 173MCP, clean66-task build, strict signer/package and final stock175/non-Pro
+  GPU/controls/IJKhardware/web smoke. Four independent public downloads match
+  GitHub/canonical hashes; APK1720478b/sourceZIPe5f40207.136prefs/CC/power
+  restored; no stock restart/Core change/unrelated matrix. Build-env/Core/MCP
+  and new companion source pushed with required green CI. MCP0.1.6 public
+  assets verify and catalogPR129 is MERGED; current generated catalogs have
+  noMCP leaf yet, so no live-install availability claim. Companion binary/
+  catalog remains gated by VCE DVD acceptance; archive remains private.
+  This tracking-only follow-up changes no APK runtime/version/assets; release
+  tag remains immutable. Both orders375 remove completed publication and name
+  the next unfinished gates. Compact `artifacts/results/RELEASE-002/RESULT.md`
+  and publication.json retain exact scope; completed raw/staging retires to
+  rootdeleteme without removing canonical packages or open failure evidence.
 
 - 2026-10-16 pre-push RELEASE-002 correction: the outgoing-diff gate correctly
   stopped publication on the IJK rebuild patch's three valid single-space

@@ -4,6 +4,10 @@
 
 ## 0.5.102 - 2026-10-16
 
+- Published the immutable sideload release after exact-source green CI; four
+  independently downloaded public assets match their recorded digests.
+  Post-release tracking changes do not replace the tested APK/source assets.
+
 - Publish the qualified development sideload update with its existing package
   and signing identity. Preserve stock-server fallback and user settings.
   Known limits remain explicit: ONN-003 is not reproduced/fixed; Client GPU

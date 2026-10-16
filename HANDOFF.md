@@ -1,6 +1,33 @@
 # OpenSageTV Vibe Android Client handoff
 
-## RELEASE-002 final APK qualified / publication next (2026-10-16)
+## RELEASE-002 COMPLETE (revision376, 2026-10-16)
+
+Companion follow-up: Client Extension0.1.0 beta is now published/independently
+verified; SageTV catalogPR130 submitted/open/mergeable. Native VCE-002/005 and
+actual malformed public-navigation007 acceptance complete without Core edits
+or175 restart. Future MIM-owned DVD003 is not shipped. Both orders376 remove
+VCE-006; next ONN-003 affected-user data. This changes no Android release asset.
+
+Androidv0.5.102 is published at immutable sourcebe30933042f630bda87334daed93ca2e739f9040,
+green requiredCI38913450648 (866tests/5skips). Four independent public assets
+match GitHub/canonical digests; APK1720478b/sourceZIPe5f40207. Exact source ZIP
+manifest1681files and packaged debug signer/API23/ARM32+64 pass. Non-Pro25 has
+the tested latestAPK installed with136settings/CC/power restored; Pro untouched.
+
+MCPv0.1.6 is published at7734a58 with four verified assets; catalogPR129 is
+MERGED at3f910892. Current regular/Beta generated catalogs contain no MCP
+entry, so availability remains pending aggregation. Companion release source
+a54267fa has greenCI; GitHub0.1.0 beta public, catalogPR130 awaits review.
+Archive remains local. Other publishable repos are unchanged/current.
+
+Publication is complete; this follow-up updates tracking only, not runtime/
+versions/signing/assets. Keep release tags immutable and pinned to tested
+source; do not rebuild just because documentation is newer. Compact authority:
+`artifacts/results/RELEASE-002/RESULT.md` and publication.json. Retire reviewed
+completed raw/staging recoverably to rootdeleteme; preserve canonical packages.
+Both orders376 remove RELEASE-002/VCE-006; ONN-003 remains OPEN/not reproduced.
+
+## RELEASE-002 pre-publication snapshot (2026-10-16)
 
 User authorizes Vibe source refresh, Android0.5.102 and qualified plugin
 publication. Candidate APK1720478be78d473e1de5a0183515b1c4330959b7ea94fca7a7e94e631124f957
