@@ -74,6 +74,7 @@ public final class DiagnosticSessionSpool implements Application.ActivityLifecyc
 
     public static void checkpoint(String reason)
     {
+        ServerDiagnosticExporter.checkpoint(reason);
         DiagnosticSessionSpool spool = INSTANCE;
         if (spool != null) spool.enqueue(reason);
     }

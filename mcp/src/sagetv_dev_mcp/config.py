@@ -347,6 +347,12 @@ class TestEnvironment:
                 ):
                     if expected_name in case and not _string(case.get(expected_name)):
                         errors.append(f"{prefix}.{expected_name} must be a non-empty string")
+                expected_fps = case.get("expected_video_fps")
+                if expected_fps is not None and (
+                        isinstance(expected_fps, bool)
+                        or not isinstance(expected_fps, (int, float))
+                        or not math.isfinite(expected_fps) or not 0 < expected_fps <= 240):
+                    errors.append(f"{prefix}.expected_video_fps must be finite and within (0, 240]")
                 minimum_duration = case.get("minimum_duration_seconds")
                 if (minimum_duration is not None
                         and (not isinstance(minimum_duration, int)

@@ -32,6 +32,22 @@ class BackgroundSessionTests(unittest.TestCase):
         self.assertIn('"user-pause HOME/return"', script)
         self.assertIn('"explicit PLAY"', script)
 
+    def test_lifecycle_gate_can_require_gpu_before_and_after_surface_recreation(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('--require-client-gpu', script)
+        self.assertIn('"video_deinterlace_mode"', script)
+        self.assertIn('"video_gpu_filter"', script)
+        self.assertIn('"video_gpu_output_rate"', script)
+        self.assertIn('Client GPU was not active before HOME', script)
+        self.assertIn('Client GPU did not recover after HOME/surface recreation', script)
+
+    def test_lifecycle_gate_restores_private_settings_on_success_and_failure(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"dev_checkpoint_settings"', script)
+        self.assertIn('"dev_restore_settings"', script)
+        self.assertIn('settings_checkpoint_active = False', script)
+        self.assertIn('if settings_checkpoint_active:', script)
+
     def test_legacy_exo_tracks_surface_view_lifecycle(self):
         source = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/exoplayer2/Exo2MediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn("setVideoSurfaceView((SurfaceView) context.getVideoView())", source)

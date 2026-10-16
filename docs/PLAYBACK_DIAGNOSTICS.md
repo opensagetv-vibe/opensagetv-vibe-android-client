@@ -1,5 +1,303 @@
 # Android playback diagnostic standard
 
+## AutoAspect/Comskip OSD reproduction
+
+Use a marker-bearing long recording with both STVIs verified in the selected
+UI, and independently capture the timeline becoming visible AND clearing or
+remaining. Record the actual STV and aspect rule, renderer, public APK hash,
+transport and complete client/context identity. Input during AutoAspectDebug
+is a separate gate from an ordinary skip after startup. A Source-to-Source
+callback is not proof of a changed aspect rule.
+
+Anchor away from the final Comskip marker before replay: a real marker can
+seek to EOF and return to Recordings. Exclude that run from OSD persistence
+claims. On Fire OS use the existing Sage Info command rather than physical
+Android KEYCODE_INFO, which can open Amazon's remote-pairing activity and
+background playback. Neither harness event proves a Vibe crash. Restore the
+exact saved APK/preferences after published-build comparison and verify the
+installed APK by independent readback/hash, not the local build artifact.
+
+## Stock diagnostic-upload qualification
+
+Native Windows can run scripts/mcp_server_diagnostic_upload_test.py with
+--server windows_fixed or stock and a new explicit active/DIAG-002 output.
+It speaks real MCP stdio to the persistent SDK container; paired -w/environment,
+device/server aliases and keys remain authoritative, never host adb. It reads
+the receiver's archive through commissioned SSH for independent checksum/
+privacy evidence, not an extension browser/download route. Paths come from
+enabled fixture modes and configured generic path/share mappings, not an ID.
+Bracket Windows testing with a task-scoped awake request and restore it.
+
+Use --reconnect-only/--exit-only for an unfinished affected sub-gate, not a
+full replay after an oracle fix. Idle archives have no active backend, and
+valid bundle entries include bounded nested logs/traces/checksum text. Don't
+reapply unchanged CC to a context intentionally closed by the exit test.
+Existing GPU/native driver --server-upload adds one confirmed opted-in receipt
+during matched HDMI playback; it independently restores receiver/preferences.
+Completed DIAG-002/VCE-011 stock175/185 results are in the ledger; don't rerun
+them unless a new change affects upload, session, archive or playback behavior.
+
+## Finite decoded-field qualification
+
+Generate copyright-free per-field IDs with scripts/generate_field_id_fixture.py;
+the IDs precede tinterlace, unlike labels stamped after field weaving. Configure
+the fixture in firetv.toml/example before testing. scripts/mcp_decoded_field_probe.py
+samples64frames/8x4pixels through a DEBUG-only observer; explicit --probe-fields
+in the GPU driver arms one measurement before Watch. Production never installs
+that observer or reads video pixels on the CPU. This finite readback perturbs
+timing: geometry/selected-field proof is separate from unprobed cadence and
+independent physical scanout. Don't apply it to arbitrary user recordings.
+
+On AFTMM/API25,64input samples retain woven pairs despite half-frame codec
+timestamps.64output IDs match mapped source fields; source-PTS association,
+not callback counting, owns parity. Half-rate metadata is not evidence of a
+deinterlaced texture. The one-shot videoGpuFailureWitness retains bounded
+counts/rates after native fallback without keeping the failed GPU resources.
+See results/INTERLACE-004/decoded-field-geometry.md for the exact geometry
+proof and its final qualified boundary.
+
+Use generator --standard pal --order bottom for50Hz/BFF, or --progressive
+for independent native59.94p capture qualification. Commission generic paths
+and enabled modes before Watch. The720p60 capture path preserves input timing;
+an encoded60fps count alone proves nothing. Read both barcode bands with
+an independently verified full-video rectangle, not an adaptive crop.
+Current non-Pro rectangle135,24,1010,672 includes existing underscan.
+Native picture-ID control proves59.899 distinct images/s/zero source skips.
+The final exact API25/mantis presenter retains positively mapped original
+fields in four GPU slots and transfers ownership with standard EGL fences;
+NTSC and PAL full-field runs pass without skipped source IDs. See
+results/INTERLACE-005/nonpro-original-field-queue.md. This remains a narrowly
+qualified renderer, not a universal Android path. Report any omitted expired
+startup prefix, and never relax steady late/backpressure failures or infer
+geometry/timing from finite DEBUG readback.
+
+Use `--resolution hd --fast-stamps` for1920x1080 TFF original-field geometry.
+Fast stamps use per-field drawbox enables before interlace rather than
+per-pixel arithmetic; decode source barcode rows and verify SHA before copy/
+public scan/exact resolution. Never qualify a partial generated file. Default
+SD/geq generation is unchanged. PAL720x576's independently inspected full
+video rectangle is219,24,844,672, NOT the NTSC rectangle above; register HD
+separately. In Frame mode the PAL HDMI counter advances~25pictures/s with
+delta2IDs despite~50GPU submissions/s: that is expected omission of the other
+field for Frame mode, not full50Hz motion or a Field-mode PASS.
+
+The failed/withdrawn pair-preparation trial admitted at most one coded-picture period only
+for positive mapped woven input/actual qualified decoder/normal playing speed.
+Native/Frame/unknown/progressive/trick/finite-probe input retains its original
+one-field admission rule. Actual output deadlines, queue size, late bounds and
+audio/master/source clocks were unchanged. It did not solve the deficit;
+the one-field admission rule is restored everywhere. The later retained-field
+qualification did not relax this rule: it separated decoder acquisition from
+final display submission and required physical source-ID evidence.
+
+The qualified split presenter preserves GLES2 image input. Earlier GLES3 and
+immediate-acquisition comparisons failed, so API version was not treated as
+the cause. Decoder acquisition remains deferred and independent from display
+submission; the input tick cannot clear the display queue merely because its
+context intentionally has no final display window.
+
+`GpuEglFence` is an owned, codec-independent JNI shim for the standard
+[EGL fence](https://registry.khronos.org/EGL/extensions/KHR/EGL_KHR_fence_sync.txt)
+and [server wait](https://registry.khronos.org/EGL/extensions/KHR/EGL_KHR_wait_sync.txt)
+APIs absent from Android25's Java EGLExt. Require both EGL declarations,
+GL_OES_EGL_sync, loaded functions and the matching current display. It requests
+no CPU wait/readback and changes no audio/source timestamps. Gradle builds it
+with the pinned NDK21 for ARM32/64; both LOAD alignments are16KiB. This does NOT
+qualify the older bundled codec libraries for every16KiB device or close store
+signing/inspection tasks. Actual paired-field HDMI and lifetime gates passed
+on the exact AFTMM scope; do not infer support on another device from nominal
+GLES version or native packaging.
+
+## MPEG-2 combing: verify fields and actual decoder
+
+Revision349 corrects Shield SD submission timing with bounded one-field
+admission, replacing5ms in independent Media3/legacy. SD50.027/50.020fps
+fresh/repeat, legacy49.990 and HD59.937 qualify measured output budgets with
+zero measured drops, seek/pause0ms/resume and advancing HDMI. Compact
+results/INTERLACE-005/shield-timing.md supersedes the old budget failure below;
+field-retention/geometry/IJK/remaining lifecycle/caption/device gates stay open.
+30fps HDMI is not every-field scanout proof. MCP's coalesced-notification/
+readline-prefetch timeout is reproduced/corrected (CONTROL-003); don't attribute
+an Android shell timeout to it without proof. New runs qualify real MCP,
+not implicit SDK substitution.
+
+Revision350: unsupported AVC's50fps native counters initially concealed a
+frozen HDMI image. Matched Off advances; an AVC-layer-refresh trial fails and
+is withdrawn. Final9521F142 defers the EGL display window until first-frame
+classification, restoring native before unqualified input changes BufferQueue
+format. Media3 fresh/repeated same-Activity and independent legacy pictures/
+controls qualify; SD Motion/Field50.007/49.980 repeats remain active. Compact
+results/INTERLACE-007/unsupported-input.md records builds/cause/limits. No new
+NVIDIA AVC codec-release/workaround is retained. Unavailable is not GPU support;
+counter-only AVC remains a failed picture gate even when the driver says pass.
+
+Shield Tube/.68/sif/API30/stock175 focused007 result is recorded in
+artifacts/results/INTERLACE-007/shield-tube.md. Frame-mode coded budgets and
+native bypass/control picture gates qualify in Media3, independent legacy and
+both actual GSY delegates. Scoped Frame interval0 and GPU->native display-layer
+refresh correct observed failures without a Core/audio-clock/seek change.
+The NVIDIA codec-recreate-only experiment failed and was withdrawn. Native
+counters advanced while HDMI was frozen; compare actual burned source PTS.
+SD Field fails on repeat with BOTH Fast and Motion, while native fallback now
+visibly moves. Frame SD29.62fps is only a coded25fps pass, not perfect50 fields.
+The exact performance-drop cause/decoded-texture retention remain open; no
+new full-field or absent-football-sample claim. Preferences/CC/power restored.
+
+ONN non-Pro/.141/API34/stock175 focused007 result:896shader/OES pixels pass,
+native60.03fps, GPU Frame Media3/legacy/both actualGSY and SD Motion meet
+coded-frame budgets with moving HDMI and seek/pause/resume. Progressive native
+bypass qualifies. GPU Field fails repeatedly; two EGL pacing experiments are
+withdrawn after repeat failure. This is not proof of perfect50/59.94-field
+retention or resolution of an unavailable football bitstream. Compact
+artifacts/results/INTERLACE-007/onn-non-pro.md retains rates/builds/limits.
+Fresh harness sessions must wait for a stable STV menu before caption queries;
+public Pause must settle before paused drift is measured. A changed GPU mode
+fails its requested gate explicitly even when native fallback is playable.
+No production renderer/audio/Core change survived this focused session.
+
+INTERLACE-004..007's opt-in GPU path retains hardware decoding and never reads
+production frames back to CPU. On non-Pro25/stock175,896 synthetic/OES pixels,
+NTSC59.8459 and PAL49.9052 original-field output, independent legacy actual
+Push59.9099, controls, HOME/surface recreation and affected CEA captions pass.
+The final driver proves selected serial/client/context before Watch, uses
+device monotonic time for cadence, and restores preferences/server CC. HD
+full-field, native DVD source phase, IJK hardware and Android System remain
+explicit unavailable/native boundaries; see results/INTERLACE-006/backend-
+coverage.md and results/INTERLACE-007/nonpro-acceptance.md. Do not claim the
+absent ONN football sample fixed. No stock Core change is needed.
+
+Select **Client GPU** (`client_gpu`) explicitly in startup settings or the
+compact active Video / Deinterlace menu. **Client** retains backend software
+or device-controlled fields; it no longer implicitly selects the unreleased
+GPU experiment. **MIM** appears only with Fixed. GPU disables server/software
+filtering and reports actual active/unavailable hardware processing, not just
+the saved preference. Changes apply on next playback; live session/device
+scope and parent navigation remain. The candidate detects three sustained
+two-second output-budget deficits and requests native output with
+`gpu_presentation_budget`; the qualified native-recovery scope and remaining
+physical boundaries are listed below.
+
+The frozen native-picture fallback is now corrected on the observed API25 MTK
+boundary: display-EGL release alone was insufficient, while an opaque display-
+layer refresh restores moving HDMI in Media3/legacy and both GSY delegates.
+Positive progressive/film/separate-field evidence returns to native output,
+not a slow GPU copy. Progressive and three same-Activity handoffs qualify on
+non-Pro/stock175. The final supported Field, Home, actual Push and affected
+caption rows are in INTERLACE-005/007; authored DVD remains native because its
+source-field phase is unavailable. See the compact INTERLACE-004 native-
+fallback and progressive-and-repeat result records. Native counters can
+advance while HDMI is frozen: require burned source frame/PTS progression,
+not only the Android overlay. A30fps capture cannot prove60-field retention.
+
+The unreleased INTERLACE-002 candidate replaces the duplicated live controls
+with **Deinterlace: Auto / Off / Client**, plus **MIM** only when Fixed is
+configured. The value includes the observed processing path/implementation;
+the stats overlay and bounded MCP snapshot expose it too. IJK's native
+interlaced-only YADIF activation is an actual callback, not the saved preference.
+Its progressive input bypasses the filter. The initial HD YADIF attempt was
+visibly comb-free but not real-time: enabled decode18.18/output9.09FPS,
+versus Off output27.59FPS and normal timeline speed on AFTMM. Do not count
+that candidate as passed. The corrected HD candidate uses bounded first-field
+spatial interpolation for 8-bit planar420 above720p; SD retains YADIF.
+Its tradeoff is reduced vertical detail, not altered PTS or encoded audio.
+  Final non-Pro/stock175 qualification reaches HD Pull30.77FPS/0.9972x and
+  Push29.63FPS/1.0005x; SD25FPS/0.9992x. Independent final HDMI advances
+  180burned source frames in6seconds. Do not confuse progressive59.94p's
+  roughly20FPS legacy software capacity with a deinterlacing regression or
+  claim full field-doubled cadence from a30fps capture. See the compact
+  artifacts/results/INTERLACE-002/qualification.md for controls and limits.
+  Video filters is a separate compact child of the long-press Video menu.
+  IJK Auto retains adaptive HD/SD, Fast forces first-field interpolation on
+  supported planar420 frames, and YADIF requests temporal frame-rate processing.
+  Forcing YADIF on HD can reproduce the documented CPU bottleneck; no2x-output
+  mode or unrelated effect is enabled. The actual native algorithm is reported
+  independently of the requested default. Unsupported device/server algorithm
+  selection is read-only, not a selectable no-op. Child Back retains its parent.
+  Overlay transport labels use actual ownership/push state, not a dynamic
+  preference that may actually deliver Pull. Display Software/Hardware casing
+  is independent of the lowercase machine fields used by automation.
+Media3/legacy Exo and GSY delegates
+use device-controlled MediaCodec output; explicit Client for MPEG-2 requires
+that hardware path instead of silently accepting unfiltered software fallback.
+Auto preserves the existing codec policy; Off disables optional app/server
+filters, not vendor field processing that Android cannot switch off portably.
+Do not describe Device (Hardware) as proof of a particular deinterlace algorithm.
+Android System does not expose a reliable decoder identity; show Unknown when
+needed. MIM status retains the producer's accepted request, not a changed
+preference awaiting reload, and does not infer a GPU filter from GPU encoding.
+Changing a startup-dependent policy applies on the next playback/reload.
+
+IJK statistics now read its native MediaInfo instead of reporting Decoder
+unavailable just because it has no Exo renderer. Decode/output FPS are existing
+native counters read on demand, not continuous new instrumentation. A 1.0x
+audio/timeline clock and 50-80% total CPU do not prove video meets its frame
+budget; compare FPS, original source cadence, and independent picture output.
+The software filter currently produces one progressive frame per coded frame,
+not one per field: it preserves PTS/speed but need not match 50/59.94-field
+hardware motion. Do not mistake this limitation for a proven slow clock.
+
+INTERLACE-001 on non-Pro AFTMM/mantis/API25, stock175 native Pull, candidate
+99f5ee19: the generated 1080i motion source is genuinely temporally interlaced
+(FFmpeg idet moving ROI:61TFF/0BFF/0progressive multi-frame detections).
+IJK selected `mpeg2video` software despite the Hardware preference; the existing
+known-broken AFTMM MPEG-2 MediaCodec guard intentionally prevents that IJK path.
+Media3 selected `OMX.MTK.VIDEO.DECODER.MPEG2` hardware. Independent live HDMI
+showed pronounced horizontal comb teeth with IJK and a substantially smoother
+moving band with Media3. This is observed output, not proof of the vendor's
+internal deinterlacing algorithm or perfect motion/detail preservation.
+
+Combing means alternating horizontal teeth/displaced lines on moving edges.
+Diagonal pixel stair-steps, softness and temporal blur alone are not combing.
+Do not equate the requested Hardware preference with the actual decoder, or
+assume all software decoders comb. Inspect fields, decoder identity and output.
+That diagnostic baseline configured no explicit IJK filter; INTERLACE-002 adds
+the narrow source-reproducible software-only hook described above.
+FFmpeg documents separate deinterlacing filters such as
+[bwdif](https://ffmpeg.org/ffmpeg-filters.html#bwdif).
+
+Capture without deinterlacing/scaling filters; supply explicit output paths
+under artifacts/active/INTERLACE-001. Stable USB1920x1080/30fps captures cannot
+prove59.94Hz field cadence. idet on the scaled/re-encoded HDMI output is not a
+reliable negative-combing oracle: visual teeth remained when its classification
+was progressive. Compare burned source PTS/FRAME; the reviewed IJK20.020s/600
+and Media3 20.053s/601 images are adjacent source frames, not identical frames.
+This does not reproduce the absent user's football bitstream or ONN Pro SoC.
+
+The progressive negative control is configured by `combing_control` mode,
+not a required literal fixture ID. VibeCombingControl-720p-MPEG2-AC3.ts is a
+visibly labeled approximately60s/1280x720/60000/1001 MPEG-2/AC-3 source. Recreate
+only that file with the existing generate_hardware_codec_fixtures.py
+`source_inputs('1280x720','60000/1001',60,500,filename)` helper and FFmpeg options
+`-c:v mpeg2video -profile:v main -bf 2 -g 15 -b:v 12000k -c:a ac3 -b:a 384k
+-f mpegts`; use `-n` to refuse overwrite. Do not invoke the full matrix generator
+in an existing fixture directory, since it replaces its canonical outputs.
+Its original8s progressive matrix clip is too short for the normal live-ready
+capture budget. New media needs stock library indexing through the existing
+MCP `library.scan` action before exact-path Watch; no server restart/Core patch.
+An asynchronous scan returning does not prove indexing completed.
+
+For the clearer configured `combing_scroll` local comparison, use the public
+[FFmpeg BUROSCH sample collection](https://samples.ffmpeg.org/MPEG2/interlaced/)
+and its [field notes](https://samples.ffmpeg.org/MPEG2/interlaced/burosch.txt).
+The prepared local 576i scrolling-text fixture loops burosch1.mpg for about90s,
+adds a visible VIBE source label and silent AC-3, and encodes interlaced MPEG-2
+without deinterlacing during preparation. Keep the source brand/copyright;
+this is local evaluation media, not permission to bundle/publish it. The
+recorded BFF metadata and idet phase classification disagree, so do not use
+idet alone as a field-order oracle. Inspect actual comb teeth before/after.
+
+The non-Pro control passed actual IJK software playback8,219→22,110ms with
+no reported error; independent live HDMI showed no pronounced comb teeth.
+Resolution/rate differ from1080i, so this is a progressive negative control,
+not a frame-identical comparison or proof of every source/resize path.
+
+Preserve saved preferences, sleep policy and public server CC state. The original
+PBS recording was restored at1531936ms with CC1 after the first comparison;
+the user subsequently explicitly permitted leaving the device in test playback.
+Use media-relative coordinates for the default stock MCP seek, not UI epoch
+timestamps (see TEST_ENVIRONMENT.md). A corrected harness coordinate/startup
+error is not a production deinterlacing or seek fix.
+
 ## DVD test selectors and asynchronous cursor evidence
 
 DVD audio/subpicture expectations use physical packed wire values (for example
@@ -566,7 +864,15 @@ then set an offset only against the actual output path being watched.
 ### Export a support bundle from a TV device
 
 The client can create a bounded, redacted support bundle without requiring an
-email or file-manager app on the TV. Configure its destination under
+email or file-manager app on the TV. The bug-icon chooser offers local sharing,
+SMB, a confirmed one-report server upload and Android-owned Web download.
+Web is gray unless its main-settings switch and actual listener are enabled;
+the available Web child shows the current device IP/URL and offline QR.
+Server export is gray without a connected, enabled Client Extension receiver.
+Opening/Refresh only checks availability; it never enables services or sends.
+Server Send once requires confirmation and leaves automatic uploads unchanged.
+Back/cancel returns to the chooser. See `CLIENT_DIAGNOSTIC_WEB.md` for privacy
+and configuration. Configure the separate SMB destination under
 **Settings > Diagnostics Settings > SMB diagnostic export**. This destination and
 its anonymous-or-credential authentication are independent of both media SMB
 and configuration SMB.
@@ -590,16 +896,17 @@ During or immediately after the problem:
 
 1. Long-press the remote Select/OK key to open the playback panel.
 2. Select the bug icon beside the triangular **Video Info** icon.
-3. In **On request**, choose **Upload to SMB** and confirm. In **Always**,
-   choose **Upload now**. Use **Create and share** only when the device has a
-   useful Android share destination.
+3. Choose **Export to SMB** and confirm in **On request**, or checkpoint the
+   session in **Always**. Alternatively confirm **Export to SageTV server >
+   Send once**, use available **Download in web browser**, or choose **Create
+   and share ZIP** when Android has a useful sharing destination.
 4. In Settings, copy the displayed filename, byte count, SHA-256, last-update
    time, and result into the GitHub issue. Retrieve the matching file from the
    configured SMB directory on another computer and attach it to the issue.
 
 ![Long-press playback menu with the diagnostic bug icon beside Video Info](images/diagnostics-long-press-menu.png)
 
-![Export Diagnostics dialog](images/diagnostics-export-dialog.png)
+![Earlier SMB-only Export Diagnostics dialog; the unreleased chooser adds server and Web choices](images/diagnostics-export-dialog.png)
 
 The ZIP contains bounded app logs, recent playback traces, a player snapshot,
 redacted device/configuration metadata, and checksums. Review it before public
@@ -699,6 +1006,43 @@ from `4.0` to `1.0`. Preserve this as a non-reproduction. A fix requires an
 affected-device trace that correlates GFX commands, remote repeats, playback
 rate, and the visible HDMI result.
 
+The affected user subsequently isolated the symptom to the third-party
+Automatic Aspect Ratio STVI: disabling it clears the problem. Official
+AutoAspect 1.3.4 patches `MediaPlayer OSD`, handles file-load completion, calls
+`SetAspectRatioMode` and `Refresh`, and polls the STV's bottom-OSD/popup state.
+The official plugin and dependency were installed and observed active on Vibe
+`.232`; a Fire TV non-Pro negative control still dismissed a physical DPAD
+Right timeline normally within ten seconds on the same 5.5-hour recording.
+Correction: that run already included real `.edl` and `.txt` Comskip marker
+sidecars and both STVIs were enabled. It is therefore a useful conditional
+non-reproduction, but it did not reproduce the reporter's exact STV/per-UI
+property state and cannot close ONN-003. The reporter's same-file success on the
+old MiniClient and HD200/HD300 requires a state-matched Vibe comparison of
+server popup state, advanced-aspect acknowledgement, and GFX clear/flip frames.
+Do not add a blind forced-hide timer: Android cannot safely
+distinguish a stale plugin OSD from a legitimate SageTV dialog. Disabling
+Automatic Aspect Ratio is the current workaround while the client parity gate
+remains open.
+
+The2026-10-16 retry verifies exact UI444556303031 on232 with stock SageTV7,
+real Comskip markers and actual AutoAspect imports/calls. Media3 OpenGL/GDX
+Pull and IJK actual Push clear within the12s observation after physical
+Right/FF/REW; Media3 stop/restart clears too. A selected Media3 Push/dynamic
+test negotiated Pull, so it is recorded as Pull. The fixture's server log
+reports mask=TV; AutoAspect's "non-MPEG TV files" reason is not evidence that
+TV metadata is missing. Remaining evidence must include the affected STV
+identity, AutoAspect version/rules/debug-display settings, all UI mods,
+renderer and actual transport, plus a diagnostic export while stuck and
+screenshots before and after Info clears it.
+
+For STVI commissioning, use supported apiUI(context,...) for
+IsPluginCompatible, EnablePlugin and IsPluginEnabled. The global enabled
+query has no UIManager and returns false for STVIs; a global enable call can
+return true without setting the selected UI flag. Require true after STV
+reload. Library dependencies are passive and have no activation lifecycle.
+Keep server-rendered popup state and client pixels distinct before changing
+the OSD lifecycle.
+
 Debug/MCP server switching must not reuse the old resumed player activity. The
 debug receiver closes the prior session, finishes that activity, and applies a
 bounded 750 ms teardown delay before launching the new connection. A switch
@@ -752,6 +1096,33 @@ The server owns mux/transcode and feed timing. Distinguish a genuine
 server-originated seek/flush/rebase sequence from a debug-only local player
 seek. Do not generalize Push results to Pull-only buffer, read-size, timestamp
 search, or seek-policy settings.
+
+For legacy Push, Advanced Video exposes `Push buffer limit` as a bounded
+next-connection diagnostic control. `Auto` leaves `PUSH_BUFFER_LIMIT` unset and
+therefore retains stock Core's 32 KiB behavior; the explicit choices are 32,
+64, and 128 KiB. Values outside that set are rejected back to Auto. The HD300's
+historical 512 KiB advertisement is deliberately unavailable because stock
+Core clamps the effective pusher size to 128 KiB. This setting changes the
+maximum payload accepted by the server's Push command; it does not resize the
+client's separate 4 MiB receive ring.
+
+Measure only an actual Push session. Require `health_pushMode=true`, a nonzero
+`health_pushLastWriteBytes`, and the expected `pushBufferEffectiveBytes` before
+drawing a conclusion. Media3 commonly negotiates Pull for MPEG-TS and therefore
+cannot prove this gate; the matrix defaults to legacy Exo. Run the repeatable
+matrix with:
+
+```text
+dev.cmd mcp-push-buffer-matrix --server-path <exact-server-media-path>
+```
+
+The compact state reports the configured and effective limit, Java heap use,
+Push buffer used/free bytes, write count, blocked-write count, maximum/last
+write duration, and last payload size. The option is applied to the next media
+connection, so each row reconnects before startup, steady-state, FLUSH seek,
+pause/resume, and recording-to-Live-TV checks. EXT-005 found exact 32/64/128
+KiB payloads and lower command cadence as the limit grew, but no startup
+improvement; Auto consequently remains the recommended default.
 
 ### Optional MIM Direct Fixed
 

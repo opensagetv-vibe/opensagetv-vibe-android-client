@@ -37,6 +37,9 @@
     <string name="dialog_title_list_streaming_mode_preference">Set Stream Mode</string>
     <string name="summary_list_streaming_mode_preference">(%s) - Selects SageTV Push, Pull, Fixed, or SMB Direct media bytes while SageTV retains playback control</string>
     <string name="title_list_streaming_mode_preference">Playback Data Source</string>
+    <string name="push_buffer_limit_title">Push Buffer Write Limit</string>
+    <string name="push_buffer_limit_dialog_title">Set Push Buffer Write Limit</string>
+    <string name="push_buffer_limit_summary">(%s) - Maximum legacy SageTV Push write; applies on the next server connection</string>
     <string name="smb_direct_settings">SMB Direct</string>
     <string name="smb_mappings_title">Path mappings</string>
     <string name="smb_mappings_summary">One mapping per line: SageTV path prefix =&gt; smb://server/share/root/</string>

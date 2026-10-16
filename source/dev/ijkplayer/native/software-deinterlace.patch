@@ -1,0 +1,99 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -583,2 +583,4 @@
+     int audio_disable;
++    int vibe_software_deinterlace;
++    int vibe_deinterlace_filter;
+     int video_disable;
+--- a/ijkmedia/ijkplayer/ff_ffplay_options.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_options.h
+@@ -58,2 +58,6 @@
++    { "vibe-software-deinterlace", "interlaced-only software video processing",
++        OPTION_OFFSET(vibe_software_deinterlace), OPTION_INT(0, 0, 1) },
++    { "vibe-deinterlace-filter", "software fields: 0 adaptive, 1 fast, 2 yadif",
++        OPTION_OFFSET(vibe_deinterlace_filter), OPTION_INT(0, 0, 2) },
+     { "an",                             "disable audio",
+         OPTION_OFFSET(audio_disable),   OPTION_INT(0, 0, 1) },
+--- a/ijkmedia/ijkplayer/ff_ffplay.c
++++ b/ijkmedia/ijkplayer/ff_ffplay.c
+@@ -110,2 +110,3 @@
+ #include "ff_ffplay_options.h"
++#include "vibe_deinterlace.h"
+ 
+@@ -2188,2 +2189,4 @@
+     int convert_frame_count = 0;
++    VibeDeinterlace vibe_filter = {0};
++    int vibe_reported_filter_state = -1;
+ 
+@@ -2220,3 +2222,11 @@
+-        if (!ret)
+-            continue;
++        if (!ret) {
++            if (!ffp->vibe_software_deinterlace || !vibe_filter.graph ||
++                is->viddec.finished != is->viddec.pkt_serial)
++                continue;
++            ret = vibe_deinterlace_frame(&vibe_filter, frame, tb, frame_rate,
++                                        is->viddec.pkt_serial, 1, ffp->vibe_deinterlace_filter);
++            if (ret < 0) goto the_end;
++            if (!ret) continue;
++            goto vibe_queue_frame;
++        }
+ 
+@@ -2265,2 +2277,17 @@
++        if (ffp->vibe_software_deinterlace) {
++            ret = vibe_deinterlace_frame(&vibe_filter, frame, tb, frame_rate,
++                                        is->viddec.pkt_serial, 0, ffp->vibe_deinterlace_filter);
++            if (ret < 0) goto the_end;
++            int filter_state = vibe_filter.fast_active ? 2 : vibe_filter.graph != NULL ? 1 : 0;
++            if (filter_state != vibe_reported_filter_state) {
++                ffp_notify_msg3(ffp, 12061, filter_state, 0);
++                vibe_reported_filter_state = filter_state;
++            }
++            if (!ret) continue;
++        }
++vibe_queue_frame:
++        /* CONFIG_AVFILTER remains disabled: legacy audio, rotation and all
++         * other filter paths are untouched. Hardware never enters this
++         * ffplay software-decoder function. */
+ #if CONFIG_AVFILTER
+         if (   last_w != frame->width
+@@ -2321,2 +2343,3 @@
+  the_end:
++    vibe_deinterlace_close(&vibe_filter);
+ #if CONFIG_AVFILTER
+--- a/ijkmedia/ijkplayer/Android.mk
++++ b/ijkmedia/ijkplayer/Android.mk
+@@ -29,1 +29,1 @@
+-LOCAL_CFLAGS += -std=c99
++LOCAL_CONLYFLAGS += -std=c99
+--- a/ijkmedia/ijkplayer/android/ijkplayer_jni.c
++++ b/ijkmedia/ijkplayer/android/ijkplayer_jni.c
+@@ -936,1 +936,5 @@
++        case 12061: /* Vibe-local native filter-state transition, not a server event. */
++            post_event(env, weak_thiz, MEDIA_INFO, 12061, msg.arg1);
++            break;
++
+         case FFP_MSG_VIDEO_RENDERING_START:
+--- a/ijkmedia/ijkplayer/android/pipeline/ffpipenode_android_mediacodec_vdec.c
++++ b/ijkmedia/ijkplayer/android/pipeline/ffpipenode_android_mediacodec_vdec.c
+@@ -236,6 +236,20 @@
+             }
+             free(convert_buffer);
+ #endif
++        } else if (opaque->codecpar->codec_id == AV_CODEC_ID_H264 ||
++                   opaque->codecpar->codec_id == AV_CODEC_ID_HEVC) {
++            /* MPEG-TS commonly supplies Annex-B SPS/PPS/VPS as codec
++             * extradata. The stock IJK 0.8.8 path logs this as "naked" but
++             * omits it from MediaFormat. A decoder opened on a mid-GOP packet
++             * then sees slices before their parameter sets; older MTK OMX
++             * implementations enter a fatal state instead of waiting for an
++             * in-band repeat. Android accepts concatenated Annex-B parameter
++             * sets in csd-0, so preserve and provide the demuxer's bytes. */
++            SDL_AMediaFormat_setBuffer(opaque->input_aformat, "csd-0",
++                                       opaque->codecpar->extradata,
++                                       opaque->codecpar->extradata_size);
++            ALOGI("csd-0: Annex-B parameter sets (%d bytes)\n",
++                  opaque->codecpar->extradata_size);
+         } else if (opaque->codecpar->codec_id == AV_CODEC_ID_MPEG4) {
+             size_t esds_dec_dscr_type_length = opaque->codecpar->extradata_size + 0x18;
+             size_t esds_es_dscr_type_length = esds_dec_dscr_type_length + 0x08;

@@ -65,8 +65,8 @@ Distributed artifacts:
 | File | SHA-256 |
 | --- | --- |
 | `source/dev/libs/ijkplayer-java-0.8.8-SNAPSHOT.aar` | `a3ff7dd25911989d49704480c810ac6428e9acd4d5c5e4a9f85cc88f352416bf` |
-| `source/dev/libs/ijkplayer-armv7a-0.8.8-SNAPSHOT.aar` | `b56926d940f7ac519622e58abdfb889d629130b29263e580bb316e4cdab7f98f` |
-| `source/dev/libs/ijkplayer-arm64-0.8.8-SNAPSHOT.aar` | `34a35fbd38928d70a0947294ff423057beca0ac79da34c2b2053b3506256153e` |
+| `source/dev/libs/ijkplayer-armv7a-0.8.8-SNAPSHOT.aar` | `bc1498a45a842b82c0890074acf90cfcaa0a2c43e03e9fda496da44daedd3ab2` |
+| `source/dev/libs/ijkplayer-arm64-0.8.8-SNAPSHOT.aar` | `37cec45af055fdf0d6f30735ab1234f2f4e9683c991a117d36430b5b7d91e86a` |
 | `source/dev/libs/ijkplayer-x86-0.8.8-SNAPSHOT.aar` | `a25d604b326c40be85b047958faf87597a9989ce83a8102a9400bdf2dc1c511e` |
 
 The native binaries report IJKPlayer `k0.8.8` and FFmpeg
@@ -80,6 +80,22 @@ That IJK tag's `init-android.sh` fetches its pinned FFmpeg fork revision.
 and `source/dev/ijkplayer/build-ijk.sh` preserves the recorded NDK r13b and
 `--disable-linux-perf` build inputs from the original artifact build. The
 embedded configuration contains `--disable-gpl --disable-nonfree`.
+
+The current unreleased ARM AARs replace only libijkplayer.so with the reviewed
+interlaced-only software hook. Java, libijkffmpeg.so and libijksdl.so remain
+byte-identical to the original artifacts. `scripts/build_ijk_deinterlace.py`
+pins/hashes the k0.8.8/FFmpeg sources above and SoundTouch commit
+6bf39cd3bf6b0c156267d12446b0d6bdcfcd53c2, and applies
+source/dev/ijkplayer/native/software-deinterlace.patch plus vibe_deinterlace.h.
+Its player-only compile uses the unified NDK21.0.6113669/API23/Clang/static C++
+runtime; it never rebuilds/upgrades FFmpeg or SDL or enables GPL/nonfree.
+The native adaptation retains LGPL-2.1-or-later terms; its complete source,
+patch and reconstruction command are distributed with this repository.
+The older init/build scripts describe the baseline, not this patched glue.
+NDK21.0.6113669 supplies the statically linked LLVM libc++/libc++abi;
+its full licenses are retained in third_party/licenses/LLVM-libcxx.txt and
+LLVM-libcxxabi.txt. Preserve those compiler-runtime source/license interfaces
+with the patched player artifacts, not only the unchanged FFmpeg source offer.
 
 The checked-in AAR names contain `SNAPSHOT` because they were copied from the
 original MiniClient local Maven build. Their hashes and embedded version/config

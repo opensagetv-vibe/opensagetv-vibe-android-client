@@ -1,3 +1,39 @@
+# IJK native source and builds
+
+The current Vibe ARM artifacts use a narrowly patched k0.8.8 player library.
+Rebuild it in the existing unified container with:
+
+```text
+python3 scripts/build_ijk_deinterlace.py --build-dir /tmp/vibe-ijk-player-build --output-dir artifacts/active/INTERLACE-002/native-build
+```
+
+The command pins/hashes source archives, rejects archive links, and writes
+candidate AARs only. It preserves all existing AAR entries except libijkplayer.so;
+FFmpeg/SDL/Java are not upgraded. Review ABI symbols, strict checksums, source
+offers and affected physical gates before replacing authoritative artifacts.
+The hook uses existing LGPL YADIF for marked SD interlaced software frames,
+and bounded first-field spatial interpolation for 8-bit planar420 HD after
+physical testing proved temporal YADIF could not meet AFTMM's frame budget.
+The Video filters child selects Auto (that adaptive rule), Fast (first-field
+interpolation where supported) or YADIF (temporal, frame-rate output). Forcing
+YADIF on HD may fall behind on older CPUs; hardware/progressive bypass every
+choice. Actual filter identity is reported from the native transition callback.
+The HD tradeoff reduces vertical detail; both preserve frame PTS/rate. Seek
+history reset and EOF drain apply to the temporal path; hardware paths and
+legacy global CONFIG_AVFILTER/audio filtering remain unchanged. The shared
+Video settings Deinterlace Auto/Off/Client/Fixed-only MIM policy controls this
+hook; the older IJK Auto/Off key remains a compatibility default until the
+shared preference is set. Other players retain device-controlled field output.
+
+The same narrow player patch preserves demuxed Annex-B H.264/HEVC parameter
+sets as MediaCodec `csd-0`. This allows an older hardware decoder to initialize
+when an MPEG-TS read begins mid-GOP, before the next in-band SPS/PPS/VPS repeat.
+It does not rewrite packets or alter the existing AVC/HEVC configuration-record
+path.
+
+The historical full-build instructions below reconstruct the unpatched baseline,
+not the Vibe software-field hook. Do not overwrite patched AARs with that build.
+
 Step 1 - Initialize the Sources
 ./init-sources.sh
 

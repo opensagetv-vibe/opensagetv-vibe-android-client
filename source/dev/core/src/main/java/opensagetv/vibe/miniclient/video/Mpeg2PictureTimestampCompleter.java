@@ -72,6 +72,19 @@ public final class Mpeg2PictureTimestampCompleter
     private int softTelecineRepeatTransitions;
     private int softTelecineLastRepeat = -1;
     private boolean softTelecineConfirmed;
+    private volatile boolean outputFieldMappingEnabled;
+    private final Mpeg2OutputFieldMap outputFields=new Mpeg2OutputFieldMap();
+
+    /** Only explicit Client GPU installs this association; Auto/Off are unchanged. */
+    public void setOutputFieldMappingEnabled(boolean enabled) {
+        outputFieldMappingEnabled=enabled;
+        if (!enabled) outputFields.clear();
+    }
+    public void noteOutputSample(long timeUs) {
+        if (outputFieldMappingEnabled) outputFields.note(timeUs);
+    }
+    public int getOutputFieldPhase(long timeUs) { return outputFields.phase(timeUs,frameRateHz); }
+    public long getOutputPictureTimeUs(long timeUs) {return outputFields.pictureTime(timeUs,frameRateHz);}
 
     /** Sets a container-reported frame rate if a sequence header has not supplied one. */
     public void setFrameRate(float frameRate)
@@ -90,6 +103,7 @@ public final class Mpeg2PictureTimestampCompleter
 
     public void reset()
     {
+        outputFields.clear();
         headers.clear();
         gopTimings.clear();
         rollingStartCode = -1;
@@ -185,6 +199,10 @@ public final class Mpeg2PictureTimestampCompleter
     public long getProgressiveFrameCount() { return progressiveFrameCount; }
     public long getInterlacedFrameCount() { return interlacedFrameCount; }
     public long getFieldPictureCount() { return fieldPictureCount; }
+    /** Advisory stream field order; not proof of decoded Surface layout. */
+    public boolean getObservedTopFieldFirst() {
+        return lastPictureHeader == null || lastPictureHeader.topFieldFirst;
+    }
 
     /** Bitstream observation only; this does not imply Android deinterlacer control or quality. */
     public String getInterlaceObservation()

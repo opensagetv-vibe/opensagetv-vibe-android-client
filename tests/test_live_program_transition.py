@@ -73,7 +73,9 @@ class LiveProgramTransitionTest(unittest.TestCase):
             method = source[start:source.index("protected void releasePlayer()", start)]
             self.assertIn("player.getPlaybackState() == Player.STATE_IDLE", method)
             self.assertIn("context.setupVideoFrame();", method)
-            self.assertIn("player.setVideoSurfaceView", method)
+            self.assertIn("bindVideoOutput(player)", method)
+            self.assertIn("if (expected != player) return", source)
+            self.assertIn("expected.setVideoSurfaceView((SurfaceView) context.getVideoView())", source)
             self.assertIn('"play_prepare_from_idle"', method)
             self.assertLess(method.index("player.prepare();"), method.index("player.setPlayWhenReady(true);"))
 

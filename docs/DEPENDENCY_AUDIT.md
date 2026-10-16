@@ -8,6 +8,14 @@ the release-root `THIRD_PARTY_NOTICES.md`.
 
 ## Reproducible evidence
 
+DIAG-012 adds only pinned com.google.zxing:core:3.5.3 for offline QR encoding.
+The new release runtime report selects123 coordinates; inventory/notice updated,
+only one entry added to each Android lockfile and no existing versions changed.
+Core JAR and both ZXing POM SHA256s were independently checked against Maven
+Central bytes and published checksums, then explicitly added to verification
+metadata. Verification remains enabled. Versioned upstream Apache-2.0 license
+reviewed. This does not rerun or supersede the older full OSV audit below.
+
 The resolved debug runtime graphs for `core`, `android-shared`, and `android-tv`
 are captured in `artifacts/reports/gradle-runtime-dependencies.txt`. They select
 122 unique Maven coordinates, all reconciled in

@@ -56,19 +56,29 @@ def active_firebase_hits(root: Path):
     excluded_dirs = {".git", ".gradle", "build", "playstore"}
     include_suffixes = {".java", ".kt", ".gradle", ".xml", ".properties", ".yml", ".yaml"}
     include_names = {"Jenkinsfile", ".gitignore"}
-    for p in root.rglob("*"):
-        if (
-            not p.is_file()
-            or p.name == "verification-metadata.xml"
-            or any(part in excluded_dirs for part in p.parts)
-        ):
-            continue
-        if p.suffix.lower() not in include_suffixes and p.name not in include_names:
-            continue
-        for i, line in enumerate(p.read_text(errors="ignore").splitlines(), 1):
-            low = line.lower()
-            if "firebase" in low or "crashlytics" in low or "google-services.json" in low:
-                yield p.relative_to(root), i, line.strip()
+    # Generated container build trees are not source. Prune before traversal/
+    # stat: Windows cannot dereference some Linux FFmpeg build symlinks, and
+    # checking is_file before the old exclusion both failed and scanned them.
+    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+        subdirectories[:] = [name for name in subdirectories if name not in excluded_dirs]
+        for name in filenames:
+            p = Path(directory) / name
+            if name == "verification-metadata.xml": continue
+            if p.suffix.lower() not in include_suffixes and name not in include_names: continue
+            if not p.is_file(): continue
+            for i, line in enumerate(p.read_text(errors="ignore").splitlines(), 1):
+                low = line.lower()
+                if "firebase" in low or "crashlytics" in low or "google-services.json" in low:
+                    yield p.relative_to(root), i, line.strip()
+
+
+def native_surface_binding_present(player_source: str) -> bool:
+    """Retain the native SurfaceView contract after guarded GPU binding extraction."""
+    return ("player.setVideoSurfaceView((SurfaceView) context.getVideoView())" in player_source
+            or all(marker in player_source for marker in (
+                "private void bindVideoOutput(final ExoPlayer expected)",
+                "bindVideoOutput(player);",
+                "expected.setVideoSurfaceView((SurfaceView) context.getVideoView());")))
 
 
 def main() -> int:
@@ -520,7 +530,7 @@ def main() -> int:
             fail("Media3 FFmpeg extension is not isolated to its audited audio fallback")
 
     media3_player = (media3_dir / "Media3MediaPlayerImpl.java").read_text(errors="ignore")
-    if "player.setVideoSurfaceView((SurfaceView) context.getVideoView())" not in media3_player:
+    if not native_surface_binding_present(media3_player):
         fail("Media3 does not bind a SurfaceView video output")
 
     gdx_activity = (SRC / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/gdx/MiniClientGDXActivity.java").read_text(errors="ignore")
@@ -716,7 +726,7 @@ def main() -> int:
         fail("complete runtime dependency inventory is missing")
     with inventory_path.open(encoding="utf-8", newline="") as source:
         runtime_inventory = list(csv.DictReader(source))
-    if len(runtime_inventory) != 122:
+    if len(runtime_inventory) != 123:
         fail(f"runtime dependency inventory count changed: {len(runtime_inventory)}")
     for row in runtime_inventory:
         if not row.get("license") or "UNKNOWN" in row["license"].upper():
@@ -762,7 +772,7 @@ def main() -> int:
     print("PASS: clean deterministic Dev APK build configured")
     print("PASS: legacy Exo remains the default known-good playback backend")
     print("PASS: local SLF4J exception logging retained")
-    print("PASS: 122-coordinate runtime license inventory and native source material packaged")
+    print("PASS: 123-coordinate runtime license inventory and native source material packaged")
     return 0
 
 

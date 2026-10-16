@@ -237,6 +237,14 @@ final class DebugSessionCommands
         });
         return "op=test_current_video;confirmationShown=true";
     }
+    static String showDiagnosticExport(Context context) {
+        final Activity activity=UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        if(activity==null)throw new IllegalStateException("no resumed MiniClient playback activity");
+        final MiniClientConnection connection=requireConnectedClient(context).getCurrentConnection();
+        activity.runOnUiThread(()->opensagetv.vibe.miniclient.android.diagnostics.DiagnosticExportController.show(activity,
+                ActivePlayerAdjustmentsDialog.diagnosticsTextForExport(activity,connection.getMediaCmd())));
+        return "op=diagnostic_export_ui;shown=true;uploadRequested=false";
+    }
 
     static String showAvSyncTest(Context context)
     {

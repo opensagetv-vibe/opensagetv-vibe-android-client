@@ -163,6 +163,12 @@ final class PlaybackHealthProbe
             out.dataSourceReadRateKbps = invokeLongOptional(dataSource, "getReadRateKbps", -1);
             out.dataSourcePushCount = invokeLongOptional(dataSource, "getPushCount", -1);
             out.dataSourcePushedBytes = invokeLongOptional(dataSource, "getPushedBytes", -1);
+            out.dataSourceBlockedPushCount = invokeLongOptional(dataSource, "getBlockedPushCount", -1);
+            out.dataSourceMaximumPushWriteMs = invokeLongOptional(dataSource, "getMaximumPushWriteMs", -1);
+            out.dataSourceLastPushWriteMs = invokeLongOptional(dataSource, "getLastPushWriteMs", -1);
+            out.dataSourceLastPushBytes = invokeLongOptional(dataSource, "getLastPushBytes", -1);
+            out.dataSourceBufferUsedBytes = invokeLongOptional(dataSource, "getBufferUsedBytes", -1);
+            out.dataSourceBufferFreeBytes = invokeLongOptional(dataSource, "getBufferFreeBytes", -1);
             if (typedDataSource != null)
                 captureSmbDataSource(typedDataSource, out);
             else
@@ -248,6 +254,12 @@ final class PlaybackHealthProbe
             else if ("avcodec".equalsIgnoreCase(module) || "ffmpeg".equalsIgnoreCase(module))
                 out.videoDecoderKind = "software";
             out.audioDecoderName = readStringField(info, "mAudioDecoderImpl").trim();
+            // Existing IJK native statistics, read on demand only. CPU load
+            // and a 1.0x audio clock do not prove video meets its frame budget.
+            Object decodeFps = invokeOptional(backendPlayer, "getVideoDecodeFramesPerSecond");
+            Object outputFps = invokeOptional(backendPlayer, "getVideoOutputFramesPerSecond");
+            out.videoDecodeFps = decodeFps instanceof Number ? ((Number) decodeFps).floatValue() : -1f;
+            out.videoOutputFps = outputFps instanceof Number ? ((Number) outputFps).floatValue() : -1f;
             out.provider = "ijk_media_info_on_demand";
             // Renderer counters remain unavailable; do not promote this to
             // the stronger Exo output-health oracle or install any listener.
@@ -414,11 +426,18 @@ final class PlaybackHealthProbe
             if (type == TRACK_TYPE_VIDEO)
             {
                 out.videoRendererPresent = true;
+                out.videoReadPositionUs = readLongField(renderer, "readingPositionUs", -1);
+                if (readIntField(renderer, "outputIndex", -1) >= 0)
+                    out.videoPendingOutputPtsUs = readLongField(readField(renderer, "outputBufferInfo"), "presentationTimeUs", -1);
                 captureRenderer(renderer, true, out);
             }
             else if (type == TRACK_TYPE_AUDIO)
             {
                 out.audioRendererPresent = true;
+                out.audioReadPositionUs = readLongField(renderer, "readingPositionUs", -1);
+                out.audioPendingOutputPtsUs = readLongField(readField(renderer, "outputBuffer"), "timeUs", -1);
+                if (out.audioPendingOutputPtsUs < 0 && readIntField(renderer, "outputIndex", -1) >= 0)
+                    out.audioPendingOutputPtsUs = readLongField(readField(renderer, "outputBufferInfo"), "presentationTimeUs", -1);
                 captureRenderer(renderer, false, out);
                 captureAudioTrack(renderer, out);
             }
@@ -669,6 +688,12 @@ final class PlaybackHealthProbe
         long dataSourceReadRateKbps = -1;
         long dataSourcePushCount = -1;
         long dataSourcePushedBytes = -1;
+        long dataSourceBlockedPushCount = -1;
+        long dataSourceMaximumPushWriteMs = -1;
+        long dataSourceLastPushWriteMs = -1;
+        long dataSourceLastPushBytes = -1;
+        long dataSourceBufferUsedBytes = -1;
+        long dataSourceBufferFreeBytes = -1;
         String playbackSource = "UNKNOWN";
         String sageOriginalPath = "";
         String smbMappedPath = "";
@@ -720,7 +745,14 @@ final class PlaybackHealthProbe
         long videoRendered = -1;
         long videoSkipped = -1;
         long videoDropped = -1;
+        float videoDecodeFps = -1f;
+        float videoOutputFps = -1f;
         long videoQueuedInput = -1;
+        // Debug-only raw timestamp witnesses for no-first-frame stalls. These
+        // are renderer-stream timestamps, NOT the SageTV elapsed timeline.
+        // Reflect fields only: renderer isReady()/render() can change state.
+        long videoReadPositionUs = -1;
+        long videoPendingOutputPtsUs = -1;
         long videoDecoderInitCount = -1;
         long videoDecoderReleaseCount = -1;
         String mpeg2InterlaceObservation = "unknown";
@@ -740,6 +772,8 @@ final class PlaybackHealthProbe
         long audioSkipped = -1;
         long audioDropped = -1;
         long audioQueuedInput = -1;
+        long audioReadPositionUs = -1;
+        long audioPendingOutputPtsUs = -1;
         long audioDecoderInitCount = -1;
         long audioDecoderReleaseCount = -1;
         boolean audioTrackPresent;
@@ -816,6 +850,12 @@ final class PlaybackHealthProbe
             append(out, p + "dataSourceReadRateKbps", dataSourceReadRateKbps);
             append(out, p + "dataSourcePushCount", dataSourcePushCount);
             append(out, p + "dataSourcePushedBytes", dataSourcePushedBytes);
+            append(out, p + "dataSourceBlockedPushCount", dataSourceBlockedPushCount);
+            append(out, p + "dataSourceMaximumPushWriteMs", dataSourceMaximumPushWriteMs);
+            append(out, p + "dataSourceLastPushWriteMs", dataSourceLastPushWriteMs);
+            append(out, p + "dataSourceLastPushBytes", dataSourceLastPushBytes);
+            append(out, p + "dataSourceBufferUsedBytes", dataSourceBufferUsedBytes);
+            append(out, p + "dataSourceBufferFreeBytes", dataSourceBufferFreeBytes);
             append(out, p + "playbackSource", playbackSource);
             append(out, p + "sageOriginalPath", sageOriginalPath);
             append(out, p + "smbMappedPath", smbMappedPath);
@@ -856,12 +896,16 @@ final class PlaybackHealthProbe
             append(out, p + "videoCodecString", videoCodecString);
             append(out, p + "videoDecoder", videoDecoderName);
             append(out, p + "videoDecoderKind", videoDecoderKind);
+            append(out, p + "videoDecodeFps", videoDecodeFps);
+            append(out, p + "videoOutputFps", videoOutputFps);
             append(out, p + "videoWidth", videoWidth);
             append(out, p + "videoHeight", videoHeight);
             append(out, p + "videoRendered", videoRendered);
             append(out, p + "videoSkipped", videoSkipped);
             append(out, p + "videoDropped", videoDropped);
             append(out, p + "videoQueuedInput", videoQueuedInput);
+            append(out, p + "videoReadPositionUs", videoReadPositionUs);
+            append(out, p + "videoPendingOutputPtsUs", videoPendingOutputPtsUs);
             append(out, p + "videoDecoderInitCount", videoDecoderInitCount);
             append(out, p + "videoDecoderReleaseCount", videoDecoderReleaseCount);
             append(out, p + "mpeg2InterlaceObservation", mpeg2InterlaceObservation);
@@ -879,6 +923,8 @@ final class PlaybackHealthProbe
             append(out, p + "audioSkipped", audioSkipped);
             append(out, p + "audioDropped", audioDropped);
             append(out, p + "audioQueuedInput", audioQueuedInput);
+            append(out, p + "audioReadPositionUs", audioReadPositionUs);
+            append(out, p + "audioPendingOutputPtsUs", audioPendingOutputPtsUs);
             append(out, p + "audioDecoderInitCount", audioDecoderInitCount);
             append(out, p + "audioDecoderReleaseCount", audioDecoderReleaseCount);
             append(out, p + "audioTrackPresent", audioTrackPresent);

@@ -70,6 +70,19 @@ live_channels = ["2.1", "5.1"]
 
 
 class TestEnvironmentConfigTests(unittest.TestCase):
+    def test_optional_fixture_rate_is_finite_positive_and_bounded(self):
+        case={'id':'cadence','enabled':True,'path_type':'server_path','path':'/var/media/test.ts',
+              'modes':{'cadence':True}}
+        for value in (None,25,60000/1001):
+            candidate=dict(case)
+            if value is not None:candidate['expected_video_fps']=value
+            errors=TestEnvironment({'fixtures':{'cases':[candidate]}}).validate(require_device=False)
+            self.assertFalse(any('expected_video_fps' in error for error in errors))
+        for value in (True,0,-1,241,'60',float('nan'),float('inf')):
+            candidate=dict(case,expected_video_fps=value)
+            errors=TestEnvironment({'fixtures':{'cases':[candidate]}}).validate(require_device=False)
+            self.assertTrue(any('expected_video_fps' in error for error in errors),value)
+
     def setUp(self):
         # Synthetic fixture selections must not inherit the operator's device
         # or server. Nested patch.dict contexts can still exercise overrides.

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <!-- Debug-only, authorized public-vector commissioning surface. It is
+             deliberately absent from release manifests and normal SageTV
+             playback so DRM validation cannot become a hidden transport. -->
+        <activity
+            android:name="opensagetv.vibe.miniclient.android.tv.debug.DebugDrmValidationActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:screenOrientation="landscape" />
         <!-- Dev/debug APK only. Exposes a narrow ADB/MCP control surface for regression testing. -->
         <receiver
             android:name="opensagetv.vibe.miniclient.android.tv.debug.DevTestReceiver"

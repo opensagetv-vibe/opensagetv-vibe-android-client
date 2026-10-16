@@ -129,15 +129,17 @@ class CoreMcpApiClient:
     def resolve_context(self, client_id: str) -> str:
         contexts = self.ui_context_names()
         normalized = "".join(ch for ch in client_id.lower() if ch.isalnum())
+        if not normalized:
+            raise CoreMcpApiError("MiniClient UI context identity must not be empty")
         exact = [c for c in contexts if "".join(ch for ch in c.lower() if ch.isalnum()) == normalized]
         if len(exact) == 1:
             return exact[0]
         suffix = [c for c in contexts if "".join(ch for ch in c.lower() if ch.isalnum()).endswith(normalized)]
         if len(suffix) == 1:
             return suffix[0]
-        non_local = [c for c in contexts if c != "SAGETV_PROCESS_LOCAL_UI"]
-        if len(non_local) == 1:
-            return non_local[0]
+        # A connected Android socket can precede its UI registration. The
+        # sole other remote UI is NOT a fallback: it may be somebody's Pro.
+        # Never route Watch/Seek/captions to an unrelated context.
         raise CoreMcpApiError(
             f"Unable to uniquely resolve MiniClient UI context for {client_id}; contexts={contexts}"
         )

@@ -149,6 +149,13 @@ public interface PrefStore
         String video_buffer_size = "video_buffer_size";
         String audio_buffer_size = "audio_buffer_size";
 
+        /**
+         * Maximum legacy MiniClient Push payload advertised to SageTV Core.
+         * Values are auto, 32768, 65536, or 131072 bytes. Auto sends no
+         * PUSH_BUFFER_LIMIT property and retains stock Core's 32 KiB default.
+         */
+        String push_buffer_limit = "push_buffer_limit";
+
         // auto connect settings
         String auto_connect_to_last_server = "auto_connect_to_last_server";
         String auto_connect_delay = "auto_connect_delay";
@@ -331,6 +338,12 @@ public interface PrefStore
          * bundled FFmpeg MPEG-2 software decoder remains available as a fallback.
          */
         String ijk_mediacodec_mpeg2 = "ijk_mediacodec_mpeg2";
+        String ijk_software_deinterlace = "ijk_software_deinterlace";
+        String ijk_deinterlace_filter = "ijk_deinterlace_filter";
+        String video_deinterlace_mode = "video_deinterlace_mode";
+        String video_gpu_filter = "video_gpu_filter";
+        String video_gpu_field_order = "video_gpu_field_order";
+        String video_gpu_output_rate = "video_gpu_output_rate";
 
         /** GSYVideoPlayer only. Selects the independent GSY underlying engine. */
         String gsy_player_engine = "gsy_player_engine";

@@ -12,6 +12,29 @@ from sagetv_dev_mcp.adb import AdbClient, parse_broadcast_result, parse_telemetr
 
 class AdbSafetyTests(unittest.TestCase):
 
+    def test_authorization_only_timeout_has_one_bounded_idempotent_retry(self):
+        c=AdbClient('1.2.3.4:5555','opensagetv.vibe.miniclient.debug')
+        failure=subprocess.TimeoutExpired(['adb','shell','settings get'],15)
+        with patch.object(c,'_one_shot_shell',side_effect=[failure,'0\n','','0\n']) as shell:
+            status=c.ensure_nonexpiring_adb_authorization()
+        self.assertEqual(status['bootstrapTimeoutRetries'],1)
+        self.assertTrue(status['nonExpiring'])
+        self.assertEqual([item.args[0] for item in shell.call_args_list],[
+            'settings get global adb_allowed_connection_time',
+            'settings get global adb_allowed_connection_time',
+            'settings put global adb_allowed_connection_time 0',
+            'settings get global adb_allowed_connection_time'])
+
+    def test_authorization_second_timeout_and_unauthorized_fail_without_replay(self):
+        c=AdbClient('1.2.3.4:5555','opensagetv.vibe.miniclient.debug')
+        failure=subprocess.TimeoutExpired(['adb','shell','settings get'],15)
+        with patch.object(c,'_one_shot_shell',side_effect=[failure,'0\n','',failure]) as shell:
+            with self.assertRaises(subprocess.TimeoutExpired):c.ensure_nonexpiring_adb_authorization()
+        self.assertEqual(shell.call_count,4)
+        with patch.object(c,'_one_shot_shell',side_effect=RuntimeError('unauthorized')) as shell:
+            with self.assertRaisesRegex(RuntimeError,'unauthorized'):c.ensure_nonexpiring_adb_authorization()
+        self.assertEqual(shell.call_count,1)
+
     def test_screenrecord_uses_dedicated_device_temp_and_always_cleans_it(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with tempfile.TemporaryDirectory() as td:
@@ -62,6 +85,15 @@ class AdbSafetyTests(unittest.TestCase):
         self.assertEqual(result.stdout, "valid\ufffdvendor\n")
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
         self.assertEqual(run.call_args.kwargs["errors"], "replace")
+        self.assertEqual(run.call_args.kwargs["stdin"],subprocess.DEVNULL)
+
+    def test_one_shot_setup_never_inherits_mcp_json_input(self):
+        c=AdbClient("1.2.3.4:5555","opensagetv.vibe.miniclient.debug")
+        completed=subprocess.CompletedProcess([],0,stdout="0\n",stderr="")
+        with patch("subprocess.run",return_value=completed) as run:
+            self.assertEqual(c._one_shot_shell("settings get global adb_allowed_connection_time"),"0\n")
+        self.assertEqual(run.call_args.args[0][:3],["adb","-s","1.2.3.4:5555"])
+        self.assertEqual(run.call_args.kwargs["stdin"],subprocess.DEVNULL)
 
     def test_persistent_shell_reuses_one_adb_shell_process(self):
         with tempfile.TemporaryDirectory() as td:
@@ -714,6 +746,16 @@ finally:
         self.assertIn("--es unified_graphics_surfaces true", command)
         self.assertTrue(result["unifiedGraphicsSurfaces"])
         self.assertTrue(result["unifiedGraphicsAppliesNextConnection"])
+
+    def test_push_buffer_limit_is_forwarded_for_next_connection_measurement(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        output = ('Broadcast completed: result=1, data="ok=true;op=config;'
+                  'pushBufferLimit=65536;pushBufferEffectiveBytes=65536"\n')
+        with patch.object(c, "shell", return_value=output) as shell:
+            result = c.set_player_config(push_buffer_limit="65536")
+        self.assertIn("--es push_buffer_limit 65536", shell.call_args.args[0])
+        self.assertEqual(result["pushBufferLimit"], 65536)
+        self.assertEqual(result["pushBufferEffectiveBytes"], 65536)
 
     def test_mim_direct_late_fallback_fault_is_explicit_and_one_shot(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")

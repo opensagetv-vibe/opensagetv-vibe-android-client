@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -24,7 +25,15 @@ def safe_text(fn):
 
 
 def main() -> int:
-    label = sys.argv[1] if len(sys.argv) > 1 else "player"
+    parser = argparse.ArgumentParser(description="Collect bounded Android player diagnostics")
+    parser.add_argument("label", nargs="?", default="player")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="explicit artifact directory (for example artifacts/active/CODEC-001)",
+    )
+    args = parser.parse_args()
+    label = args.label
     adb, cfg = make_client()
     print(adb.connect())
 
@@ -41,7 +50,9 @@ def main() -> int:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_") or "player"
-    base = cfg.artifact_dir / f"{stamp}_{safe_label}"
+    output_dir = (args.output_dir or cfg.artifact_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = output_dir / f"{stamp}_{safe_label}"
 
     outputs = {
         "logcat": Path(str(base) + "_logcat.txt"),

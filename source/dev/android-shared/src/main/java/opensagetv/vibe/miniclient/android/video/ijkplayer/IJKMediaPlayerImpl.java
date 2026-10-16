@@ -45,6 +45,12 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     private boolean serverMediaMetadataExplicit;
     private boolean stoppedForResume;
     private volatile boolean firstVideoFrameRendered;
+    private volatile boolean softwareDeinterlaceActive;
+    private volatile String activeDeinterlaceFilter = "";
+    public boolean isSoftwareDeinterlaceActive()
+    { return player != null && softwareDeinterlaceActive; }
+    public String getActiveDeinterlaceFilter()
+    { return isSoftwareDeinterlaceActive() ? activeDeinterlaceFilter : ""; }
     private long growingPullSeekOffsetMs = -1L;
     private long growingPullSeekLastRawMs = -1L;
     private boolean growingPullSeekClockRelative;
@@ -377,6 +383,8 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         logTime = -1;
         stoppedForResume = false;
         firstVideoFrameRendered = false;
+        softwareDeinterlaceActive = false;
+        activeDeinterlaceFilter = "";
         growingPullSeekOffsetMs = -1L;
         growingPullSeekLastRawMs = -1L;
         growingPullSeekClockRelative = false;
@@ -426,6 +434,13 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                         firstVideoFrameRendered = true;
                         notifyPostSeekPushFirstFrame();
                         PlaybackDebugTrap.record("first_video_frame", IJKMediaPlayerImpl.this);
+                    }
+                    else if (what == 12061)
+                    {
+                        // A local native pipeline-transition notification; no
+                        // polling, frame callback replacement or Core protocol.
+                        activeDeinterlaceFilter = extra == 2 ? "Fast" : extra == 1 ? "YADIF" : "";
+                        softwareDeinterlaceActive = extra == 1 || extra == 2;
                     }
                     else if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START)
                     {

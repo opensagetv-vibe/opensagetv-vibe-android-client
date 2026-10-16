@@ -8,6 +8,7 @@ import static opensagetv.vibe.miniclient.android.tv.debug.DebugValueParser.text;
 import android.content.Context;
 
 import opensagetv.vibe.miniclient.MediaCmd;
+import opensagetv.vibe.miniclient.LegacyPushBufferLimitPolicy;
 import opensagetv.vibe.miniclient.ConnectionLifecycleDiagnostics;
 import opensagetv.vibe.miniclient.GFXCMD2;
 import opensagetv.vibe.miniclient.MenuHint;
@@ -16,6 +17,7 @@ import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.ServerInfo;
 import opensagetv.vibe.miniclient.dvd.DvdDiagnostics;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
+import opensagetv.vibe.miniclient.android.PredictiveBackController;
 import opensagetv.vibe.miniclient.android.UIActivityLifeCycleHandler;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
@@ -88,6 +90,17 @@ final class DebugStateProvider
             out.append(";serverAddress=").append(safe(connectedServer.address));
             out.append(";serverPort=").append(connectedServer.port);
         }
+        Runtime runtime = Runtime.getRuntime();
+        out.append(";clientHeapUsedBytes=")
+                .append(runtime.totalMemory() - runtime.freeMemory());
+        out.append(";clientHeapCommittedBytes=").append(runtime.totalMemory());
+        out.append(";clientHeapMaxBytes=").append(runtime.maxMemory());
+        out.append(";systemBackInvocationCount=")
+                .append(PredictiveBackController.invocationCount());
+        out.append(";systemBackLastActivity=")
+                .append(safe(PredictiveBackController.lastActivity()));
+        out.append(";systemBackLastHandled=")
+                .append(PredictiveBackController.lastHandled());
 
         String menuName = "";
         String popupName = "";
@@ -189,6 +202,39 @@ final class DebugStateProvider
                 prefs.getString(PrefStore.Keys.mim_direct_mode, "off")));
         out.append(";mimDirectDeinterlace=").append(safe(
                 prefs.getString(PrefStore.Keys.mim_direct_deinterlace, "auto")));
+        out.append(";ijkSoftwareDeinterlace=").append(safe(
+                prefs.getString(PrefStore.Keys.ijk_software_deinterlace, "auto")));
+        out.append(";videoDeinterlaceMode=").append(safe(
+                prefs.getString(PrefStore.Keys.video_deinterlace_mode, "auto")));
+        out.append(";ijkDeinterlaceFilter=").append(safe(
+                opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides.resolveIjkDeinterlaceFilter(
+                        prefs.getString(PrefStore.Keys.ijk_deinterlace_filter, "auto"))));
+        out.append(";videoDeinterlaceFilter=").append(safe(
+                opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.filter(player)));
+        out.append(";videoDeinterlaceState=").append(safe(
+                opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.current(player,
+                        MiniclientApplication.get().getMimDirectSession())));
+        out.append(";videoDeinterlaceImplementation=").append(safe(
+                opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.implementation(player,
+                        MiniclientApplication.get().getMimDirectSession())));
+        out.append(";videoGpuReason=").append(safe(opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuReason(player)));
+        opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner gpuOwner =
+                opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuOwner(player);
+        opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput gpu = gpuOwner == null ? null : gpuOwner.gpuVideoOutput();
+        out.append(";videoGpuFailureWitness=").append(gpuOwner==null ? "" : safe(gpuOwner.gpuFailureWitness()));
+        out.append(";videoGpuInputFrames=").append(gpu == null ? 0 : gpu.inputFrames());
+        out.append(";videoGpuOutputFrames=").append(gpu == null ? 0 : gpu.outputFrames());
+        out.append(";videoGpuFilteredFrames=").append(gpu == null ? 0 : gpu.filteredFrames());
+        out.append(";videoGpuSecondFields=").append(gpu == null ? 0 : gpu.secondFields());
+        out.append(";videoGpuMetadataFrames=").append(gpu == null ? 0 : gpu.metadataFrames());
+        out.append(";videoGpuMetadataStepUs=").append(gpu == null ? 0 : gpu.metadataStepUs());
+        out.append(";videoGpuSurfaceStepNs=").append(gpu == null ? 0 : gpu.surfaceStepNs());
+        out.append(";videoGpuCodedFps=").append(gpu == null ? 0 : gpu.codedFps());
+        out.append(";videoGpuRenderer=").append(gpu == null ? "" : safe(gpu.renderer()));
+        out.append(";videoGpuSwapInterval=").append(gpu == null ? -1 : gpu.swapInterval());
+        out.append(";videoGpuProfile=").append(gpu == null ? "" : safe(gpu.profileSummary()));
+        out.append(";mimAcceptedDeinterlace=").append(safe(
+                MiniclientApplication.get().getMimDirectSession().acceptedDeinterlaceForDiagnostics()));
         out.append(";mimDirectNegotiatedMode=").append(safe(
                 client == null ? "" : client.getMimDirectTransportMode()));
         out.append(";mimDirectSessionState=").append(safe(
@@ -292,6 +338,9 @@ final class DebugStateProvider
         out.append(";audioPassthroughEnabled=")
                 .append(player.isAudioPassthroughEnabled());
         out.append(";audioOutputSummary=").append(safe(player.getAudioOutputSummary()));
+        out.append(";ijkSoftwareDeinterlaceActive=").append(
+                player instanceof opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl
+                && ((opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl)player).isSoftwareDeinterlaceActive());
         out.append(";audioOffsetSupported=").append(player.supportsAudioOffset());
         out.append(";audioOffsetMs=").append(player.getAudioOffsetMillis());
         out.append(";passthroughAudioOffsetSupported=")
@@ -787,6 +836,13 @@ final class DebugStateProvider
             audioChannels = "source";
         return "player=" + safe(prefs.getString(PrefStore.Keys.default_player, PlayerBackend.DEFAULT_PREFERENCE))
                 + ";streaming=" + safe(prefs.getStreamingMode())
+                + ";pushBufferLimit=" + safe(LegacyPushBufferLimitPolicy.normalize(
+                        prefs.getString(PrefStore.Keys.push_buffer_limit,
+                                LegacyPushBufferLimitPolicy.AUTO)))
+                + ";pushBufferEffectiveBytes="
+                + LegacyPushBufferLimitPolicy.effectiveBytes(prefs.getString(
+                        PrefStore.Keys.push_buffer_limit,
+                        LegacyPushBufferLimitPolicy.AUTO))
                 + ";decoding=" + safe(prefs.getString(PrefStore.Keys.decoding_method, DecodingMethod.DEFAULT_PREFERENCE))
                 + ";gsyEngine=" + safe(prefs.getString(PrefStore.Keys.gsy_player_engine, GSYPlayerEngine.DEFAULT_PREFERENCE))
                 + ";gsySystemProbe="

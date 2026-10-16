@@ -8,11 +8,15 @@ discover tools, and call safe Fire TV tools without requiring Codex or Node.
 from __future__ import annotations
 
 import json
+import codecs
+import io
 import os
-import select
+import queue
 import subprocess
 import sys
 import time
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +25,15 @@ DEFAULT_TIMEOUT = 20.0
 
 
 class MCPProcess:
-    def __init__(self) -> None:
+    def __init__(self, python_executable: str | None = None,
+                 command: list[str] | None = None) -> None:
+        # Native Windows acceptance can speak the SAME real MCP protocol to
+        # the commissioned container. Never look up a host adb or switch to
+        # direct tool calls when a child/ordered request fails.
         env = os.environ.copy()
         self.proc = subprocess.Popen(
-            [sys.executable, "-m", "sagetv_dev_mcp.server"],
+            command if command is not None else
+                [python_executable or sys.executable, "-m", "sagetv_dev_mcp.server"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -36,6 +45,60 @@ class MCPProcess:
         assert self.proc.stdout is not None
         assert self.proc.stderr is not None
         self._next_id = 1
+        self._stdout_messages: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=64)
+        self._stdout_eof = threading.Event()
+        self._stdout_error = ''
+        self._stdout_reader = threading.Thread(target=self._drain_stdout,
+                                               name='VibeMcpStdout',daemon=True)
+        self._stdout_reader.start()
+        self._stderr_chunks: deque[str] = deque(maxlen=64)
+        self._stderr_lock = threading.Lock()
+        self._stderr_reader = threading.Thread(target=self._drain_stderr,
+                                               name='VibeMcpStderr',daemon=True)
+        self._stderr_reader.start()
+
+    def _drain_stdout(self) -> None:
+        # select(fd) cannot see a response already prefetched into readline's
+        # TextIO buffer by an earlier notification. A sole framed reader owns
+        # that stream; requests wait on its queue, not the raw descriptor.
+        # A partial line cannot block the request's deadline. Bound both a
+        # protocol frame and queued messages, and fail visibly on overflow.
+        stream = self.proc.stdout
+        if not isinstance(stream, io.TextIOBase): return
+        try:
+            while True:
+                line = stream.readline(1_048_577)
+                if not line: return
+                if len(line) > 1_048_576 or not line.endswith('\n'):
+                    self._stdout_error = 'MCP stdout frame exceeds limit or ends incomplete'
+                    return
+                try: message = json.loads(line)
+                except json.JSONDecodeError: continue
+                if isinstance(message, dict):
+                    try: self._stdout_messages.put_nowait(message)
+                    except queue.Full:
+                        self._stdout_error = 'MCP stdout message queue exceeded limit'
+                        return
+        except (OSError, ValueError) as exc:
+            if self.proc.poll() is None: self._stdout_error = str(exc)
+        finally:
+            self._stdout_eof.set()
+
+    def _drain_stderr(self) -> None:
+        # Diagnostics must not fill a PIPE and block the server before its
+        # JSON-RPC reply. A bounded chunk tail also handles a long/partial line;
+        # no readline/read-to-EOF occurs on the request/deadline thread.
+        stream = self.proc.stderr
+        if not isinstance(stream, io.TextIOBase): return
+        decoder=codecs.getincrementaldecoder('utf-8')(errors='replace')
+        try:
+            while True:
+                chunk=os.read(stream.fileno(),4096)
+                text=decoder.decode(chunk,final=not chunk)
+                if text:
+                    with self._stderr_lock: self._stderr_chunks.append(text)
+                if not chunk: return
+        except (OSError,ValueError): return
 
     def send(self, message: dict[str, Any]) -> None:
         assert self.proc.stdin is not None
@@ -61,54 +124,30 @@ class MCPProcess:
         assert self.proc.stdout is not None
         deadline = time.monotonic() + timeout
         while True:
-            if self.proc.poll() is not None:
-                raise RuntimeError(self._failure_text("MCP server exited unexpectedly"))
+            if self._stdout_error:
+                raise RuntimeError(self._failure_text(self._stdout_error))
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError(self._failure_text(f"Timed out waiting for MCP response id={request_id}"))
-            ready, _, _ = select.select([self.proc.stdout], [], [], min(0.5, remaining))
-            if not ready:
-                continue
-            line = self.proc.stdout.readline()
-            if not line:
-                continue
             try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                # stdout must normally be protocol-only. Keep looking, but include the
-                # unexpected line in an error if the request ultimately fails.
+                msg = self._stdout_messages.get(timeout=min(0.5, remaining))
+            except queue.Empty:
+                if self._stdout_error:
+                    raise RuntimeError(self._failure_text(self._stdout_error))
+                if self._stdout_eof.is_set():
+                    raise RuntimeError(self._failure_text('MCP server stdout closed unexpectedly'))
                 continue
             if msg.get("id") == request_id:
                 return msg
 
     def _failure_text(self, prefix: str) -> str:
-        stderr = ""
-        if self.proc.stderr is not None:
-            try:
-                ready, _, _ = select.select([self.proc.stderr], [], [], 0)
-                if ready:
-                    stderr = self.proc.stderr.read() or ""
-            except Exception:
-                pass
+        stderr = self.stderr_snapshot()
         return prefix + (f"\nMCP server stderr:\n{stderr.strip()}" if stderr.strip() else "")
 
     def stderr_snapshot(self, max_lines: int = 160) -> str:
-        """Drain currently available MCP stderr without waiting for process exit."""
-        if self.proc.stderr is None:
-            return ""
-        lines: list[str] = []
-        try:
-            while len(lines) < max(1, int(max_lines)):
-                ready, _, _ = select.select([self.proc.stderr], [], [], 0)
-                if not ready:
-                    break
-                line = self.proc.stderr.readline()
-                if not line:
-                    break
-                lines.append(line.rstrip())
-        except Exception:
-            pass
-        return "\n".join(lines).strip()
+        """Nonblocking bounded diagnostic tail; collector owns all PIPE reads."""
+        with self._stderr_lock: text=''.join(self._stderr_chunks)
+        return '\n'.join(text.splitlines()[-max(1,int(max_lines)):]).strip()
 
     def close(self) -> None:
         try:
@@ -125,6 +164,10 @@ class MCPProcess:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait(timeout=2)
+        self._stderr_reader.join(timeout=.5)
+        self._stdout_reader.join(timeout=.5)
+        for stream in (self.proc.stdin,self.proc.stdout,self.proc.stderr):
+            if stream is not None and not stream.closed: stream.close()
 
 
 def require_result(response: dict[str, Any], label: str) -> dict[str, Any]:
@@ -228,6 +271,9 @@ def main() -> int:
             "dev_run_seek_check",
             "dev_run_comskip_check",
             "dev_test_checkpoint",
+            "dev_server_control_identity",
+            "dev_gpu_filter_self_test",
+            "dev_gpu_output_profile",
         }
         missing = sorted(required.difference(names))
         if missing:

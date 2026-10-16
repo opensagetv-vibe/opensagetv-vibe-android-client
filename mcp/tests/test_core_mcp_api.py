@@ -130,6 +130,21 @@ class CoreMcpApiClientTest(unittest.TestCase):
         client.ui_context_names = MagicMock(return_value=["SAGETV_PROCESS_LOCAL_UI", "444556303031"])
         self.assertEqual(client.resolve_context("44:45:56:30:30:31"), "444556303031")
 
+    def test_missing_non_pro_never_falls_back_to_the_only_pro_context(self):
+        client = CoreMcpApiClient("http://server:8270", "secret")
+        client.ui_context_names = MagicMock(return_value=["SAGETV_PROCESS_LOCAL_UI", "444556303032"])
+        for identity in ("44:45:56:30:30:31", "", ":--"):
+            with self.subTest(identity=identity), self.assertRaises(CoreMcpApiError):
+                client.resolve_context(identity)
+
+    def test_two_devices_resolve_only_their_own_context_and_ambiguity_fails(self):
+        client = CoreMcpApiClient("http://server:8270", "secret")
+        client.ui_context_names = MagicMock(return_value=["444556303032", "444556303031"])
+        self.assertEqual(client.resolve_context("44:45:56:30:30:31"), "444556303031")
+        self.assertEqual(client.resolve_context("44:45:56:30:30:32"), "444556303032")
+        client.ui_context_names.return_value = ["444556303031", "444556303031"]
+        with self.assertRaises(CoreMcpApiError): client.resolve_context("44:45:56:30:30:31")
+
     def test_missing_explicit_token_fails_closed(self):
         environment = MagicMock()
         environment.server_for_address.return_value = {

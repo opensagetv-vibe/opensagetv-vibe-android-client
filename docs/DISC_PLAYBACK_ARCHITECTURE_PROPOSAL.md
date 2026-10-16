@@ -2,10 +2,12 @@
 
 Status: active. Native Media3/hardware DVD and explicit transformed main-feature
 playback are physically commissioned. Old-component fallback and non-Media3
-Native commissioning are complete; physical Blu-ray remains incomplete.
-Blu-ray main-title support remains the existing SageTV path;
-physical BDMV commissioning is SKIPPED because the supplied private share has
-no lawful BDMV/ISO fixture. BD-J and full HDMV menu execution remain deferred.
+Native commissioning are complete. A legal generated H.264/AC-3 BDMV now
+qualifies main-title Media3 Push on corrected Vibe Core: Core retains the
+existing `BluRayStreamer`, and the client deframes its 192-byte M2TS packets.
+Unmodified stock Core still selects unusable directory Pull, so this is not
+claimed as stock-Core Blu-ray support. BD-J and full HDMV menu execution remain
+deferred.
 
 ## DVD implementation
 

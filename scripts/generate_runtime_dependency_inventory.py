@@ -66,6 +66,9 @@ def license_for(group: str, artifact: str) -> LicenseRule | None:
         return APACHE
     if coordinate == "com.github.tony19:apktool-lib":
         return APACHE
+    if coordinate == "com.google.zxing:core":
+        return LicenseRule("Apache-2.0", "LICENSE",
+            "https://github.com/zxing/zxing/blob/zxing-3.5.3/LICENSE")
     if coordinate == "com.github.bumptech.glide:glide":
         return LicenseRule(
             "BSD-3-Clause AND bundled third-party terms",

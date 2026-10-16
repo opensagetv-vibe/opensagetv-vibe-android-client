@@ -23,6 +23,8 @@ import opensagetv.vibe.miniclient.MiniClient;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
+import opensagetv.vibe.miniclient.android.diagnostics.ServerDiagnosticExporter;
+import opensagetv.vibe.miniclient.android.diagnostics.ClientDiagnosticWebService;
 import opensagetv.vibe.miniclient.android.video.FixedCaptionSideChannelClient;
 import opensagetv.vibe.miniclient.android.video.MimDirectSessionClient;
 
@@ -80,6 +82,8 @@ public class MiniclientApplication extends Application
         MiniclientApplication.INSTANCE = this;
         registerActivityLifecycleCallbacks(backgroundSessionOwner);
         DiagnosticSessionSpool.start(this);
+        ServerDiagnosticExporter.start(this);
+        ClientDiagnosticWebService.start(this);
         AndroidMiniClientOptions options = new AndroidMiniClientOptions(this);
 
 
@@ -133,6 +137,8 @@ public class MiniclientApplication extends Application
         fixedCaptionSideChannel.stop();
         mimDirectSession.stop();
         DiagnosticSessionSpool.shutdown();
+        ServerDiagnosticExporter.shutdown();
+        ClientDiagnosticWebService.shutdown();
         if (client != null)
         {
             client.shutdown();

@@ -1,5 +1,71 @@
 # Local test environment
 
+Server controls must resolve the selected device's actual complete client ID.
+Never fall back to the sole other remote UI: during fresh connection registration,
+that UI can belong to another device. INTERLACE-004's second run proved the old
+fallback incorrectly sent Watch to Pro32 while ADB observed non-Pro31; that run
+is a harness-scope failure, not a GPU/player verdict. Core MCP/Sagex/Web now
+reject missing/empty/ambiguous identities. Poll only exact read-only UI discovery
+within a bounded deadline before mutation; never replay Watch/Seek or change
+another device. Save clientId/uiContext/serial/model in each new gate report.
+Wait for an update install to report Success and complete before invoking the
+playback driver. Record the exact installed candidate hash; don't overlap
+installation with runtime gates or substitute a later rebuilt APK's hash.
+
+Changing backend/transport preferences does not renegotiate an existing
+MiniClient connection. Do not call a `dynamic` preference a Push result.
+For a Push gate, checkpoint settings, select the backend/mode, establish a
+fresh development process/connection and require actual health_pushMode plus
+nonzero Push payload. Restore settings and renegotiate the original connection
+afterward. Earlier INTERLACE-002 nominal Push evidence was actually Pull and
+was corrected during003; only that affected row needed repeating.
+Connected sockets do not prove the server UI context has registered yet: poll
+the exact read-only context query with a bounded deadline before Watch. Never
+replay ordered playback controls. automationReady is menu-specific and can be
+false during valid playback; do not use it as a universal connection oracle.
+For a fresh test connection, require a stable real menu/automationReady before
+caption checkpoint and Watch; GetCurrentSTVFile can otherwise race a null STV.
+Same-Activity playback handoffs must not require Main Menu. Public Pause only
+acknowledges enqueueing: observe playWhenReady/isPlaying becoming false and
+the queued audio clock remaining within10ms of one anchor for at least500ms
+within a bounded deadline before measuring paused-clock drift. Adjacent small
+deltas can otherwise accept a slowly draining clock. The1.2s/100ms measured
+drift gate stays unchanged. Never resend Pause to
+hide a readiness failure or change production playback to satisfy the oracle.
+
+For diagnostic-web qualification, keep independent playback picture evidence:
+caption inventory/decoder frame counters are not proof of a visible picture.
+Synchronize HDMI recording to an explicit live-stage ready marker and hold the
+child gate there until capture ends. A screenshot of setup/Home after the child
+exits is a capture-timing miss, not playback evidence. Use FFmpeg only.
+If a user reboots the device, record fresh uptime, identical decoder/fixture/
+settings/build comparisons and the result; recovery alone does not prove a codec
+crash or justify a decoder flag. Preserve published-APK hashes when comparing.
+
+Core MCP companion config_get/set returns canonical Boolean strings "true" /
+"false", not JSON Boolean objects. Debug status strings escape semicolons to
+commas; match the meaningful status prefix rather than its wire punctuation.
+Keep oracle failures distinct from product failures and rerun only the remaining
+affected gates. Observe uploaded ZIPs through authorized server storage access;
+the extension intentionally has no browser listing/download routes.
+
+For recording restoration, Core MCP `media.seek` defaults to **media-relative**
+milliseconds and adds the public seeking-start anchor internally (DVD uses its
+relative clock). `ui.state.mediaTimeMs` can instead be a SageTV recording epoch.
+Never pass that epoch into the default relative seek: it clamps to the recording
+end. Capture both clocks, restore with the client-relative mediaTimeMs, and
+verify the observed relative position, original source, play/pause and server CC.
+Inspect the actual bridge reply's coordinate instead of assuming UI timestamps
+share the client timeline. Use absolute=true only for a deliberately absolute
+public-API request. This is harness discipline, not a Core/player correction.
+
+Mixed browser/MCP gates use the existing web-Python environment for Playwright,
+but start MCPProcess(python_executable="/opt/opensagetv-vibe/android-python/bin/python3")
+for the control child. Web-Python deliberately does not own the Android MCP
+dependencies. Do not install duplicate SDK/ADB/MCP packages to resolve a child
+initialize/broken-pipe error; keep commissioned aliases, workspace/env pair and
+persistent authorization keys. Default MCPProcess behavior remains unchanged.
+
 For an already-running unified container, owned in-container Python test
 drivers use both Docker working directory /workspace/android-client and
 SAGETV_WORKSPACE=/workspace/android-client, with explicit device/server aliases
@@ -8,6 +74,24 @@ host; do not nest dev.sh inside docker exec or substitute a host adb.
 Bracket such a driver with the settings checkpoint/restore and automated
 keep-awake begin/end helpers, including failure cleanup. Capture pictures at
 the live stage before the child harness exits, not after its final STOP.
+
+GPU-to-native checks must compare burned video frame numbers/PTS across the
+independent capture. A native renderer can report~60fps while displaying the
+last GPU frame; an advancing Android overlay or caption is not picture proof.
+`mcp_gpu_deinterlace_test.py --same-activity` proves unchanged process IDs and
+the exact foreground ActivityRecord, rather than merely omitting a reboot.
+It requires the existing matching backend/server/Pull connection and does not
+restart or renegotiate it. For a short resumed fixture, explicit
+`--rewind-before-observation` performs one verified public seek0; this is test
+preparation, never an automatic runtime replay/recovery. Positive progressive
+bypass measures native counters, not a closed GPU stage's zero counters.
+For a known progressive source, preserve its optional expected_video_fps in
+the fixture registry. The GPU driver resolves the EXACT enabled fixture path,
+not an assumed ID; a closed stage's zero coded FPS must not hide native drops.
+Unknown source rate is explicitly unqualified rather than cadence PASS.
+The canonical progressive control is60000/1001; the known-rate gate retains
+its90% source-rate threshold. Network/rebuffer clock loss is not automatically
+a renderer defect: retain the measured clock ratio and connection trace too.
 
 Prefer nonblocking public library.scan followed by verified exact-path
 resolution. Explicit wait_until_done=True commissioning gets a120s HTTP

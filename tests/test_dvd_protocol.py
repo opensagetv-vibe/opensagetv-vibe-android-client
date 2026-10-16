@@ -1148,7 +1148,13 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("playa.refreshVideoOutput()", request)
         self.assertNotIn("postVibeSeekEvent", request)
         self.assertIn("expectedPlayer.clearVideoSurface()", refresh)
-        self.assertIn("expectedPlayer.setVideoSurfaceView(surface)", refresh)
+        # Refresh now shares the opt-in GPU/native binding boundary. It must
+        # retain the exact player/session and never seek/restart transport.
+        self.assertIn("bindVideoOutput(expectedPlayer)", refresh)
+        binding = media3.split("private void bindVideoOutput(final ExoPlayer expected)", 1)[1].split(
+            "static final Logger", 1)[0]
+        self.assertIn("if (expected != player) return", binding)
+        self.assertIn("expected.setVideoSurfaceView((SurfaceView) context.getVideoView())", binding)
         self.assertIn("transportUnchanged=true", refresh)
         self.assertNotIn("seekTo(", refresh)
         self.assertNotIn(".release()", refresh)

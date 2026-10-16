@@ -1147,6 +1147,18 @@ public class MiniClientConnection implements SageTVInputCallback
                         propVal = "TRUE";
                         detailedBufferStats = true;
                     }
+                    else if ("PUSH_BUFFER_LIMIT".equals(propName))
+                    {
+                        String configured = client.properties().getString(
+                                PrefStore.Keys.push_buffer_limit,
+                                LegacyPushBufferLimitPolicy.AUTO);
+                        propVal = LegacyPushBufferLimitPolicy.propertyValue(configured);
+                        log.logDebug("GetProperty: PUSH_BUFFER_LIMIT='" + propVal
+                                + "' (configured="
+                                + LegacyPushBufferLimitPolicy.normalize(configured)
+                                + ", effectiveBytes="
+                                + LegacyPushBufferLimitPolicy.effectiveBytes(configured) + ")");
+                    }
                     else if ("PUSH_BUFFER_SEEKING".equals(propName))
                     {
                         propVal = "TRUE";

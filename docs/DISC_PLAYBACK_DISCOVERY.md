@@ -92,9 +92,11 @@ to five IFO/fifteen VOB files and cover menu-less, simple authored-menu, and
 multi-title layouts. Automated commissioning must perform a bounded startup/
 STOP/crash pass over all indexed structures, then run the full navigation,
 stream, subtitle, chapter, and teardown matrix on representative distinct
-layouts. Blu-ray physical commissioning is therefore SKIPPED until a lawful
-private BDMV/ISO fixture is supplied or generated; host parser and ordinary
-MPEG-TS regressions are still required.
+layouts. That private-media inventory contained no Blu-ray. EXT-002 later
+commissioned a separate legal generated H.264/AC-3 BDMV against corrected
+Vibe Core, including host packet tests and an ordinary MPEG-TS regression.
+Unmodified stock Core's directory-Pull limitation and BD-J/HDMV menus remain
+explicitly outside that pass.
 
 The read-only inventory groups are: four under `Aidens_Movies`, three under
 `KID_CARTOON_PL`, one empty structure under `KID_MOVIES_M`, 29 under `NewDVD`,

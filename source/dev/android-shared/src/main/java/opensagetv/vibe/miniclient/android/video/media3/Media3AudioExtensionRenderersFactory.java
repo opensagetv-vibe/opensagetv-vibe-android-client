@@ -34,6 +34,10 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
     private final Media3PcmAudioProcessor pcmAudioProcessor;
     private final boolean nativeDvd;
     private final boolean dvdDecoderRecovery;
+    private opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput.Provider gpuOutputProvider;
+    void setGpuOutputProvider(opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput.Provider provider) {
+        gpuOutputProvider=provider;
+    }
 
     Media3AudioExtensionRenderersFactory(Context context,
                                          boolean allowEncodedAudioPassthrough,
@@ -113,8 +117,10 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
     {
         if (nativeDvd && dvdDecoderRecovery)
         {
-            out.add(new NativeDvdVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
-                    allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
+            NativeDvdVideoRenderer renderer=new NativeDvdVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
+                    allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener);
+            renderer.setGpuOutputProvider(gpuOutputProvider);
+            out.add(renderer);
             return;
         }
         super.buildVideoRenderers(context, EXTENSION_RENDERER_MODE_OFF, mediaCodecSelector,
@@ -125,8 +131,10 @@ final class Media3AudioExtensionRenderersFactory extends DefaultRenderersFactory
         {
             if (out.get(i).getClass() == MediaCodecVideoRenderer.class)
             {
-                out.set(i, new SurfaceVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
-                        allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
+                SurfaceVideoRenderer renderer=new SurfaceVideoRenderer(context, getCodecAdapterFactory(), mediaCodecSelector,
+                        allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener);
+                renderer.setGpuOutputProvider(gpuOutputProvider);
+                out.set(i,renderer);
                 break;
             }
         }

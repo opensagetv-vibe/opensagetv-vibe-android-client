@@ -12,6 +12,9 @@ LIBS = ROOT / "source/dev/libs"
 
 
 class DependencyNoticeTest(unittest.TestCase):
+    def test_build_preflight_matches_reviewed_runtime_inventory_count(self):
+        text = (ROOT / "scripts/validate_project.py").read_text(encoding="utf-8")
+        self.assertIn("if len(runtime_inventory) != 123:", text)
     def test_direct_runtime_families_are_in_the_release_notice(self):
         text = NOTICE.read_text(encoding="utf-8")
         for required in (
@@ -39,7 +42,7 @@ class DependencyNoticeTest(unittest.TestCase):
         inventory = ROOT / "third_party/RUNTIME_DEPENDENCIES.csv"
         with inventory.open(encoding="utf-8", newline="") as source:
             rows = list(csv.DictReader(source))
-        self.assertEqual(122, len(rows))
+        self.assertEqual(123, len(rows))
         self.assertEqual(len(rows), len({row["coordinate"] for row in rows}))
         for row in rows:
             self.assertTrue(row["license"])

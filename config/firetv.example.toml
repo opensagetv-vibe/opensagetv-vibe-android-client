@@ -114,12 +114,13 @@ smb_mappings = [
 # the example values that refer to locally owned media.
 
 # Generated 1080i MPEG-2/AC-3: seek/skip, timeline, audio, and CEA-608 CC.
+# INTERLACE-004..007 hardware/GPU woven-field positive control and caption gate.
 [[fixtures.cases]]
 id = "seek_caption"
 enabled = true
 path_type = "server_path"
 path = "/var/media/OpenSageTV_Vibe_Tests/VibeSeekTest-1080i-MPEG2-AC3-CC.ts"
-modes = { startup = true, seek = true, skip = true, timeline = true, audio = true, cea608 = true, comskip = true }
+modes = { startup = true, seek = true, skip = true, timeline = true, audio = true, cea608 = true, comskip = true, hardware_gpu = true }
 expected_container = "mpegts"
 expected_video_mime = "video/mpeg2"
 expected_audio_mime = "audio/ac3"
@@ -151,6 +152,21 @@ path_type = "server_path"
 path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV_Vibe_Test_DVD"
 modes = { disc = true, startup = true, dvd_menu = true, chapter = true, audio = true, subtitle = true, seek = true }
 expected_container = "dvd_video"
+
+# EXT-002 self-generated H.264/AC-3 BDMV: main-title Push, 192-byte M2TS
+# deframing, startup, seek and pause/resume. Enable only against a server Core
+# that retains Blu-ray on its existing BluRayStreamer Push path; unmodified
+# stock Core attempts directory Pull and is an explicitly documented limit.
+[[fixtures.cases]]
+id = "authored_bluray"
+enabled = false
+path_type = "server_path"
+path = "/var/media/videos/USER_TEST/OpenSageTV_Vibe_Test_BDMV/BDMV"
+modes = { bluray = true, disc = true, startup = true, seek = true, pause_resume = true, m2ts_192 = true }
+expected_container = "bluray_bdmv"
+expected_video_mime = "video/avc"
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 25
 
 # Real locally owned menu DVD: physical menus/highlights, menu audio, title,
 # language selection, chapters, and teardown. Keep disabled until commissioned.
@@ -214,6 +230,95 @@ path_type = "server_root"
 path = "/var/media/OpenSageTV_Vibe_Tests/OpenSageTV-Vibe-Hardware-Codec-Test"
 modes = { hardware_codec_matrix = true, startup = true, cadence = true, discontinuity = true, malformed_input = true }
 expected_container = "fixture_manifest"
+
+# INTERLACE-001: visibly labeled 60s progressive MPEG-2/AC-3 motion control.
+# Unlike the 8s codec-matrix clip, this remains playing through live HDMI capture.
+[[fixtures.cases]]
+id = "combing_progressive_control"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeCombingControl-720p-MPEG2-AC3.ts"
+modes = { combing_control = true, startup = true, hardware_gpu_bypass = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 59.94005994 # 60000/1001; native bypass must retain this source budget.
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 55
+
+# INTERLACE-002 local-only BUROSCH scrolling-text comparison; source/copyright
+# noted in playback diagnostics. Do not bundle this downloaded media in releases.
+[[fixtures.cases]]
+id = "combing_scrolling_text"
+enabled = false
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeCombing-ScrollingText-576i-BFF-MPEG2-AC3.ts"
+modes = { combing_scroll = true, startup = true, hardware_gpu = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 25.0 # PAL coded frames; interlaced motion contains 50 fields/s.
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 80
+
+# INTERLACE-004/005: copyright-free per-field IDs stamped BEFORE tinterlace.
+# Regenerate with scripts/generate_field_id_fixture.py. DEBUG input-geometry
+# probe distinguishes retained woven fields from native-deinterlaced output;
+# counters or this finite readback do NOT qualify physical display scanout.
+[[fixtures.cases]]
+id = "decoded_field_ids"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeFields-480i-TFF-MPEG2-AC3.ts"
+modes = { startup = true, hardware_gpu = true, field_geometry = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 29.97002997
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 85
+
+# INTERLACE-005: native59.94p binary picture IDs qualify the USB720p60 capture
+# separately from filtered field scanout. Same generator with --progressive;
+# NO weaving, every source picture has a new modulo256 ID.
+[[fixtures.cases]]
+id = "capture_picture_ids"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibePictures-480p-MPEG2-AC3.ts"
+modes = { startup = true, hardware_gpu_bypass = true, capture_cadence = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 59.94005994
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 85
+
+# INTERLACE-004/005: generated PAL50 original field IDs, Bottom Field First.
+# Same generator --standard pal --order bottom; format/parity/50Hz and exact
+# decoder geometry qualification, not a downloaded copyrighted sample.
+[[fixtures.cases]]
+id = "decoded_field_ids_pal"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeFields-576i-BFF-MPEG2-AC3.ts"
+modes = { startup = true, hardware_gpu = true, field_geometry = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 25.0
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 85
+
+# INTERLACE-004/005: generated1920x1080 NTSC TFF original field IDs.
+# --standard ntsc --resolution hd --order top; qualifies actual HD decoder
+# geometry separately from SD. Finite readback is not a scanout/timing PASS.
+[[fixtures.cases]]
+id = "decoded_field_ids_hd"
+enabled = true
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/VibeFields-1080i-TFF-MPEG2-AC3.ts"
+modes = { startup = true, hardware_gpu = true, field_geometry = true }
+expected_container = "mpegts"
+expected_video_mime = "video/mpeg2"
+expected_video_fps = 29.97002997
+expected_audio_mime = "audio/ac3"
+minimum_duration_seconds = 85
 
 # UK filtered 1080i50 H.264: primary audio plus one broadcast subtitle stream.
 [[fixtures.cases]]

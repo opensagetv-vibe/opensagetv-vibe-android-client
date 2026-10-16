@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="entries_video_deinterlace_mode">
+        <item>Auto</item>
+        <item>Off</item>
+        <item>Client</item>
+        <item>Client GPU</item>
+    </string-array>
+    <string-array name="entryvalues_video_deinterlace_mode">
+        <item>auto</item>
+        <item>off</item>
+        <item>client</item>
+        <item>client_gpu</item>
+    </string-array>
+    <string-array name="entries_ijk_software_deinterlace">
+        <item>Auto (interlaced frames only)</item>
+        <item>Off</item>
+    </string-array>
+    <string-array name="entryvalues_ijk_software_deinterlace">
+        <item>auto</item>
+        <item>off</item>
+    </string-array>
     <string-array name="entries_diagnostics_smb_mode">
         <item>Off</item>
         <item>On request</item>
@@ -46,6 +66,20 @@
         <item>fixed</item>
         <item>smb_direct</item>
         <item>smb_auto</item>
+    </string-array>
+
+    <string-array name="entries_push_buffer_limit">
+        <item>Auto (stock 32 KiB)</item>
+        <item>32 KiB</item>
+        <item>64 KiB</item>
+        <item>128 KiB</item>
+    </string-array>
+
+    <string-array name="entryvalues_push_buffer_limit">
+        <item>auto</item>
+        <item>32768</item>
+        <item>65536</item>
+        <item>131072</item>
     </string-array>
 
     <string-array name="entries_list_auto_connect_delay_preference">

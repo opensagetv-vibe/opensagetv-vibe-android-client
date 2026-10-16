@@ -3,6 +3,8 @@ package opensagetv.vibe.miniclient.android.video.ijkplayer;
 import android.util.Log;
 
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
+import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
+import opensagetv.vibe.miniclient.video.DeinterlacePolicy;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
@@ -34,6 +36,23 @@ public final class IjkDecoderOptions
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer");
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 0);
+        // This option is supplied by the reviewed k0.8.8 native glue patch.
+        // Only software frames marked interlaced enter its YADIF graph;
+        // progressive frames and the Android MediaCodec pipeline are untouched.
+        String deinterlace = ActivePlayerSessionOverrides.resolveIjkSoftwareDeinterlace(
+                prefs.getString(PrefStore.Keys.ijk_software_deinterlace, "auto"));
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vibe-deinterlace-filter",
+                DeinterlacePolicy.nativeFilter(ActivePlayerSessionOverrides.resolveIjkDeinterlaceFilter(
+                        prefs.getString(PrefStore.Keys.ijk_deinterlace_filter, "auto"))));
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vibe-software-deinterlace",
+                DeinterlacePolicy.clientSoftwareEnabled(
+                        DeinterlacePolicy.effectiveMode(
+                                ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                                        prefs.getString(PrefStore.Keys.video_deinterlace_mode, "")),
+                                "fixed".equals(prefs.getStreamingMode()) &&
+                                !opensagetv.vibe.miniclient.android.MiniclientApplication.get()
+                                        .getMimDirectSession().acceptedDeinterlaceForDiagnostics().isEmpty()),
+                        deinterlace) ? 1 : 0);
         return method;
     }
 }

@@ -164,6 +164,7 @@ final class LegacyCaptionExtractorsFactory implements ExtractorsFactory
         @Override public void sampleMetadata(long timeUs, int flags, int size, int offset,
                 @Nullable CryptoData cryptoData)
         {
+            if (mpeg2) observer.noteOutputSample(timeUs);
             delegate.sampleMetadata(timeUs, flags, size, offset, cryptoData);
         }
     }

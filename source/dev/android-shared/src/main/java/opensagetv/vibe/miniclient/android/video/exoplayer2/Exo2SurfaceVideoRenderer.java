@@ -10,7 +10,7 @@ import com.google.android.exoplayer2.video.VideoRendererEventListener;
 import opensagetv.vibe.miniclient.android.video.VideoSurfaceCodecPolicy;
 
 /** Keep legacy Exo's own renderer lifecycle, adding only proven vendor exceptions. */
-final class Exo2SurfaceVideoRenderer extends MediaCodecVideoRenderer {
+class Exo2SurfaceVideoRenderer extends MediaCodecVideoRenderer {
     Exo2SurfaceVideoRenderer(Context context, MediaCodecAdapter.Factory factory,
             MediaCodecSelector selector, long joiningMs, boolean fallback,
             Handler handler, VideoRendererEventListener listener) {

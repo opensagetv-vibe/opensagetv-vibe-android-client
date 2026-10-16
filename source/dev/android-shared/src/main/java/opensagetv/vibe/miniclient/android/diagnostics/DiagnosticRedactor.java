@@ -7,6 +7,10 @@ public final class DiagnosticRedactor
 {
     private static final Pattern SMB_CREDENTIALS = Pattern.compile(
             "(?i)(smb://)[^/@\\s]+@");
+    private static final Pattern URL_CREDENTIALS = Pattern.compile(
+            "(?i)((?:https?|ftp)://)[^/@\\s]+@");
+    private static final Pattern AUTH_HEADER = Pattern.compile(
+            "(?i)(authorization\\s*[:=]\\s*)(?:Bearer|Basic)\\s+[^\\r\\n,;]+");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?i)(password|passwd|token|secret|api[_ -]?key|authorization)(\\s*[:=]\\s*)([^\\s,;]+)");
     private static final Pattern CLIENT_ID = Pattern.compile(
@@ -26,6 +30,8 @@ public final class DiagnosticRedactor
     {
         if (text == null || text.isEmpty()) return "";
         String value = SMB_CREDENTIALS.matcher(text).replaceAll("$1[REDACTED]@");
+        value = URL_CREDENTIALS.matcher(value).replaceAll("$1[REDACTED]@");
+        value = AUTH_HEADER.matcher(value).replaceAll("$1[REDACTED]");
         value = SECRET_ASSIGNMENT.matcher(value).replaceAll("$1$2[REDACTED]");
         value = CLIENT_CONTEXT.matcher(value).replaceAll("$1$2[CLIENT_ID_REDACTED]");
         value = CLIENT_ID.matcher(value).replaceAll("[CLIENT_ID_REDACTED]");

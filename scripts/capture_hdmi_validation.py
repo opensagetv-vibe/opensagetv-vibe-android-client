@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -63,7 +64,31 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_FFMPEG,
         help="path to ffmpeg.real.exe (or set VIBE_FFMPEG_PATH)",
     )
+    parser.add_argument('--ready-file',type=Path,
+                        help='Optional live-stage identity/expiry marker from the affected test driver')
+    parser.add_argument('--ready-timeout',type=int,default=60,
+                        help='Bounded background wait for that marker (seconds, 1..180)')
+    parser.add_argument('--capture-mode',choices=('1080p30','720p60'),default='1080p30',
+                        help='720p60 is an explicit capture-rate qualification mode; frame count alone is not scanout proof')
     return parser.parse_args()
+
+
+def wait_for_live_stage(path: Path, duration: int, timeout: int) -> dict:
+    """Do not turn a late Home/menu recording into playback evidence."""
+    if not 1 <= timeout <= 180: raise ValueError('ready-timeout must be 1..180')
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if path.exists():
+            try: marker=json.loads(path.read_text(encoding='utf-8'))
+            except json.JSONDecodeError: time.sleep(.2); continue
+            if marker.get('scopeVerified') is not True:
+                raise ValueError('capture scope is unverified')
+            # Include graph-open allowance; never start near the hold's end.
+            if int(marker.get('expiresAtMs',0))-int(time.time()*1000)<(duration+5)*1000:
+                raise ValueError('capture marker is stale or its live stage is too short')
+            return marker
+        time.sleep(.2)
+    raise TimeoutError('verified live capture stage was not reached')
 
 
 def main() -> int:
@@ -74,6 +99,12 @@ def main() -> int:
     ffmpeg = args.ffmpeg.expanduser().resolve()
     if not ffmpeg.is_file():
         raise SystemExit(f"Vibe FFmpeg was not found at {ffmpeg}")
+    marker=None
+    if args.ready_file:
+        ready=args.ready_file.resolve()
+        if not ready.is_relative_to((PROJECT_ROOT/'artifacts/active').resolve()):
+            raise SystemExit('ready-file must be inside project artifacts/active')
+        marker=wait_for_live_stage(ready,args.duration,args.ready_timeout)
 
     output = args.output.expanduser()
     if not output.is_absolute():
@@ -139,6 +170,14 @@ def main() -> int:
         "+faststart",
         str(output),
     ]
+    if args.capture_mode=='720p60':
+        # The bridge's unstable1080p60 claim does not establish720p60 either.
+        # Keep the default untouched and qualify distinct source picture IDs
+        # independently in this explicit mode. No CFR duplicates are inserted.
+        command[command.index('-video_size')+1]='1280x720'
+        command[command.index('-framerate')+1]='60'
+        at=command.index('-r');del command[at:at+2]
+        command[command.index('-fps_mode')+1]='passthrough'
 
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     with log_path.open("wb") as log_file:
@@ -169,10 +208,13 @@ def main() -> int:
                 "output": str(output),
                 "bytes": size,
                 "durationSeconds": args.duration,
+                "captureMode":args.capture_mode,
+                "cadenceQualification":"requires distinct source-frame/field evidence, not encoded frame count",
                 "videoDevice": args.video_device,
                 "audioDevice": args.audio_device,
                 "ffmpeg": str(ffmpeg),
                 "log": str(log_path),
+                "verifiedLiveStage": marker,
             },
             indent=2,
         )

@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 import androidx.preference.ListPreference;
+import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.Preference.OnPreferenceChangeListener;
 import androidx.preference.PreferenceFragmentCompat;
@@ -27,6 +28,7 @@ import opensagetv.vibe.miniclient.android.AppUtil;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.R;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
+import opensagetv.vibe.miniclient.android.diagnostics.ServerDiagnosticExporter;
 import opensagetv.vibe.miniclient.android.util.NetUtil;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.prefs.PrefStore.Keys;
@@ -41,6 +43,13 @@ import opensagetv.vibe.miniclient.util.Utils;
 public class SettingsFragment extends PreferenceFragmentCompat
 {
     PrefStore prefs;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener serverDiagnosticListener =
+            (shared, key) -> {
+                if (AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED.equals(key)
+                        || AndroidPrefStore.SERVER_DIAGNOSTICS_STATUS.equals(key)
+                        || AndroidPrefStore.CLIENT_WEB_ENABLED.equals(key)
+                        || AndroidPrefStore.CLIENT_WEB_STATUS.equals(key)) refreshServerDiagnosticPreferences();
+            };
 
 
     @Override
@@ -93,6 +102,26 @@ public class SettingsFragment extends PreferenceFragmentCompat
             }
 
             Preference diagnosticsSettings = findPreference("diagnostics_settings");
+            Preference serverUpload = findPreference("server_diagnostics/upload_now");
+            if (serverUpload != null) serverUpload.setOnPreferenceClickListener(preference -> {
+                ServerDiagnosticExporter.uploadNow();
+                Toast.makeText(requireContext(), "Diagnostic upload requested; see status on this page", Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            Preference serverPort = findPreference(AndroidPrefStore.SERVER_DIAGNOSTICS_PORT);
+            if (serverPort != null) serverPort.setOnPreferenceChangeListener((preference, value) -> {
+                try {
+                    int port = Integer.parseInt(String.valueOf(value));
+                    return port >= 1024 && port <= 65535;
+                } catch (NumberFormatException error) { return false; }
+            });
+            Preference clientWebPort = findPreference(AndroidPrefStore.CLIENT_WEB_PORT);
+            if (clientWebPort != null) clientWebPort.setOnPreferenceChangeListener((preference, value) -> {
+                try {
+                    int port = Integer.parseInt(String.valueOf(value));
+                    return port >= 1024 && port <= 65535;
+                } catch (NumberFormatException error) { return false; }
+            });
             if (diagnosticsSettings != null)
             {
                 diagnosticsSettings.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
@@ -224,7 +253,9 @@ public class SettingsFragment extends PreferenceFragmentCompat
             final Preference fixedTranscoding = this.findPreference("fixed_transcoding");
             final Preference fixedRemuxing = this.findPreference("fixed_remuxing");
             final ListPreference streammode = (ListPreference) findPreference(AndroidPrefStore.STREAMING_MODE);
+            final ListPreference pushBufferLimit = (ListPreference) findPreference(Keys.push_buffer_limit);
             fixedTranscoding.setEnabled(prefs.getStreamingMode().equals("fixed"));
+            configureDeinterlacePreference(prefs.getStreamingMode());
             
             streammode.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
             {
@@ -232,6 +263,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 public boolean onPreferenceChange(Preference preference, Object newValue)
                 {
                     updateListSummary(streammode, R.string.summary_list_streaming_mode_preference, newValue);
+                    configureDeinterlacePreference(String.valueOf(newValue));
 
                     fixedTranscoding.setEnabled(newValue.equals("fixed"));
                     fixedRemuxing.setEnabled(newValue.equals("fixed"));
@@ -239,6 +271,16 @@ public class SettingsFragment extends PreferenceFragmentCompat
                     return true;
                 }
             });
+
+            if (pushBufferLimit != null)
+            {
+                pushBufferLimit.setOnPreferenceChangeListener((preference, newValue) ->
+                {
+                    updateListSummary(pushBufferLimit,
+                            R.string.push_buffer_limit_summary, newValue);
+                    return true;
+                });
+            }
     
             
     
@@ -455,6 +497,9 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 prefs.getString(Keys.decoding_method, "hardware"));
         updateListSummary((ListPreference) findPreference(AndroidPrefStore.STREAMING_MODE),
                 R.string.summary_list_streaming_mode_preference, prefs.getStreamingMode());
+        updateListSummary((ListPreference) findPreference(Keys.push_buffer_limit),
+                R.string.push_buffer_limit_summary,
+                prefs.getString(Keys.push_buffer_limit, "auto"));
     }
 
     @Override
@@ -462,6 +507,34 @@ public class SettingsFragment extends PreferenceFragmentCompat
     {
         super.onResume();
         refreshPlayerPreferenceSummaries();
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .registerOnSharedPreferenceChangeListener(serverDiagnosticListener);
+        refreshServerDiagnosticPreferences();
+    }
+
+    @Override public void onPause() {
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .unregisterOnSharedPreferenceChangeListener(serverDiagnosticListener);
+        super.onPause();
+    }
+
+    private void refreshServerDiagnosticPreferences() {
+        if (!isAdded()) return;
+        android.content.SharedPreferences current = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        CheckBoxPreference webToggle = findPreference(AndroidPrefStore.CLIENT_WEB_ENABLED);
+        if (webToggle != null) webToggle.setChecked(current.getBoolean(AndroidPrefStore.CLIENT_WEB_ENABLED, false));
+        CheckBoxPreference serverToggle = findPreference(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED);
+        if (serverToggle != null) serverToggle.setChecked(current.getBoolean(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED, false));
+        Preference webStatus = findPreference(AndroidPrefStore.CLIENT_WEB_STATUS);
+        if (webStatus != null) webStatus.setSummary(PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getString(AndroidPrefStore.CLIENT_WEB_STATUS, "Off"));
+        Preference upload = findPreference("server_diagnostics/upload_now");
+        if (upload != null) {
+            android.content.SharedPreferences shared = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            upload.setEnabled(shared.getBoolean(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED, false));
+            upload.setSummary(shared.getString(AndroidPrefStore.SERVER_DIAGNOSTICS_STATUS,
+                    "No upload yet. Enable server receiver and client uploads first."));
+        }
     }
     
     public Dimension getMaxScreenSize()
@@ -527,6 +600,28 @@ public class SettingsFragment extends PreferenceFragmentCompat
         }
     }
     
+    private void configureDeinterlacePreference(String streaming)
+    {
+        final ListPreference preference=findPreference(Keys.video_deinterlace_mode);
+        if(preference==null)return;
+        CharSequence[] labels=getResources().getTextArray(R.array.entries_video_deinterlace_mode);
+        CharSequence[] values=getResources().getTextArray(R.array.entryvalues_video_deinterlace_mode);
+        final boolean fixed="fixed".equals(streaming);
+        if(fixed) {
+            labels=java.util.Arrays.copyOf(labels,labels.length+1);
+            values=java.util.Arrays.copyOf(values,values.length+1);
+            labels[labels.length-1]="MIM";values[values.length-1]="mim";
+        }
+        preference.setEntries(labels);preference.setEntryValues(values);
+        preference.setSummaryProvider(item -> {
+            ListPreference choice=(ListPreference)item;
+            String saved=choice.getValue();
+            CharSequence entry=choice.getEntry();
+            return ("mim".equals(saved) && !fixed ? "Auto (MIM requires Fixed)"
+                    : entry==null ? "Auto" : entry)+" · applies on next playback";
+        });
+    }
+
     void clearAllPreferences()
     {
         PreferenceManager.getDefaultSharedPreferences(getActivity()).edit().clear().apply();

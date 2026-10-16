@@ -23,6 +23,14 @@
             android:title="@string/title_list_decoding_method"/>
 
         <ListPreference
+            android:defaultValue="auto"
+            android:key="video_deinterlace_mode"
+            android:title="Deinterlace"
+            android:dialogTitle="Deinterlace"
+            android:entries="@array/entries_video_deinterlace_mode"
+            android:entryValues="@array/entryvalues_video_deinterlace_mode" />
+
+        <ListPreference
             android:defaultValue="dynamic"
             android:dialogTitle="@string/dialog_title_list_streaming_mode_preference"
             android:entries="@array/entries_list_streaming_mode_preference"
@@ -30,6 +38,15 @@
             android:key="streaming_mode"
             android:summary="@string/summary_list_streaming_mode_preference"
             android:title="@string/title_list_streaming_mode_preference"/>
+
+        <ListPreference
+            android:defaultValue="auto"
+            android:dialogTitle="@string/push_buffer_limit_dialog_title"
+            android:entries="@array/entries_push_buffer_limit"
+            android:entryValues="@array/entryvalues_push_buffer_limit"
+            android:key="push_buffer_limit"
+            android:summary="@string/push_buffer_limit_summary"
+            android:title="@string/push_buffer_limit_title" />
 
         <CheckBoxPreference
             android:defaultValue="false"
@@ -145,6 +162,41 @@
             android:key="diagnostics_settings"
             android:summary="Automatic Push-stall capture, logging, diagnostic export, and SMB destination"
             android:title="Diagnostics Settings" />
+
+        <CheckBoxPreference
+            android:key="client_diagnostics_web/enabled"
+            android:defaultValue="false"
+            android:title="Diagnostic web server"
+            android:summary="View this Android device's redacted logs and statistics, or download a ZIP in a browser. Default off; foreground only. Trusted LAN only, no login/encryption." />
+
+        <EditTextPreference
+            android:key="client_diagnostics_web/port"
+            android:defaultValue="8272"
+            android:title="Client diagnostic web port"
+            android:summary="Port on this Android device, not the SageTV server (default 8272)" />
+
+        <Preference
+            android:key="client_diagnostics_web/status"
+            android:title="Diagnostic web address"
+            android:selectable="false"
+            android:summary="Off" />
+
+        <CheckBoxPreference
+            android:key="server_diagnostics/enabled"
+            android:defaultValue="false"
+            android:title="Send diagnostic logs to server"
+            android:summary="Separate from the client web server. Off by default; requires Client Extension's upload-only receiver. If unavailable, local logs and playback are unchanged." />
+
+        <EditTextPreference
+            android:key="server_diagnostics/port"
+            android:defaultValue="8272"
+            android:title="Server diagnostic upload port"
+            android:summary="Port of the separate server upload receiver, not the Android web server (default 8272)" />
+
+        <Preference
+            android:key="server_diagnostics/upload_now"
+            android:title="Upload diagnostic report now"
+            android:summary="Enable server uploads first. Local logs are retained if the plugin is unavailable." />
 
         <CheckBoxPreference
             android:defaultValue="true"

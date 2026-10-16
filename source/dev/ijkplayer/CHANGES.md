@@ -1,4 +1,10 @@
 
+Vibe native maintenance additions:
+
+- Preserve Annex-B H.264/HEVC SPS/PPS/VPS demuxer extradata as MediaCodec
+  `csd-0`, allowing hardware startup when an MPEG-TS read begins mid-GOP.
+- Keep the bounded software-only deinterlace hook documented in README.md.
+
 in ffplay we return the "real" position, so that sagetv PUSH will work
 need to make it a player option
 

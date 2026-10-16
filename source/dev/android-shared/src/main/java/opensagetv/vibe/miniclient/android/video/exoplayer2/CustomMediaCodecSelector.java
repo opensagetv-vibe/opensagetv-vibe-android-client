@@ -19,6 +19,8 @@ import opensagetv.vibe.miniclient.android.video.DeviceCodecCapabilityProfile;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.video.DecoderAttemptTelemetry;
+import opensagetv.vibe.miniclient.video.DeinterlacePolicy;
+import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
 
 /** Applies the shared video-decoding policy to legacy ExoPlayer MediaCodec selection. */
 public class CustomMediaCodecSelector implements MediaCodecSelector
@@ -86,7 +88,12 @@ public class CustomMediaCodecSelector implements MediaCodecSelector
         }
 
         ArrayList<MediaCodecInfo> selected = new ArrayList<MediaCodecInfo>();
-        switch (decodingMethod)
+        boolean clientFields = DeinterlacePolicy.requiresDeviceMpeg2(
+                ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                        prefs.getString(PrefStore.Keys.video_deinterlace_mode, "")), mimeType);
+        if (clientFields)
+            log.info("Client MPEG-2 field processing: require device decoder, hardwareCandidates={}", hardware.size());
+        switch (clientFields ? DecodingMethod.HARDWARE : decodingMethod)
         {
             case SOFTWARE:
                 selected.addAll(software);

@@ -89,6 +89,20 @@ Linux/WSL:
 These commands must resolve to `/workspace/android-client` in
 `opensagetv-vibe-dev`.
 
+After the canonical build's strict preflight has passed, a focused local
+implementation retry may reuse its same checkout, SDK, JDK and persistent
+Dev signing inputs without repeating unrelated gates:
+
+```powershell
+docker exec -w /workspace/android-client/source/dev -e SAGETV_WORKSPACE=/workspace/android-client -e JAVA_HOME=/opt/java/jdk17 opensagetv-vibe-dev ./gradlew --no-daemon :android-tv:assembleDebug
+```
+
+Keep both `-w` and SAGETV_WORKSPACE; do not inject unquoted `-Pkeystore` paths
+from PowerShell (dots can split into unintended Gradle task arguments).
+Copy the single verified debug output to the established artifacts/firetv APK
+interface, record its hash/package/signer and use device-scoped `dev.cmd install`.
+This retry is not a substitute for release preflight or affected physical gates.
+
 The same final gate also passed from the unified build-environment root with
 `opensagetv-vibe-dev.ps1 android-all`. Dependency resolution is guarded by the
 Gradle distribution SHA-256, per-project lockfiles,

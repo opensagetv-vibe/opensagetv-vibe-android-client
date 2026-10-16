@@ -17,6 +17,13 @@ and the Android build. Codex is optional; any compatible MCP client can use it.
 - After fresh install/Clear Data, complete first-time setup manually before
   running playback automation.
 - Scripted tests default to `DEV001`; normal app use keeps its persisted ID.
+- `dev_server_control_identity` verifies the selected serial's complete client
+  ID resolves to its own server UI context before Watch. An absent identity
+  fails closed; the sole other remote UI is never a fallback.
+- `dev_gpu_filter_self_test` runs finite debug-only offscreen shader pixels.
+  `dev_gpu_output_profile` explicitly samples only the next240 processed GPU
+  frames, separating context-bind/texture-update/draw-swap time. Neither reads
+  playback pixels, changes clocks, nor enables recurring production telemetry.
 
 ## Run
 

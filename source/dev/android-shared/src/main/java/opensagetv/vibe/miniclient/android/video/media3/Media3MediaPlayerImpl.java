@@ -58,6 +58,10 @@ import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput;
+import opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner;
+import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
+import opensagetv.vibe.miniclient.video.GpuDeinterlacePolicy;
 import opensagetv.vibe.miniclient.android.video.GrowingPlaybackPositionGuard;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
 import opensagetv.vibe.miniclient.android.video.EncodedPassthroughOffsetController;
@@ -113,8 +117,67 @@ import android.support.v4.media.session.MediaSessionCompat;
  */
 
 public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSource>
-        implements PlaybackHealthSource, TransientPushSegmentPlayer
+        implements PlaybackHealthSource, TransientPushSegmentPlayer, GpuVideoOutputOwner
 {
+    private volatile GpuDeinterlaceOutput gpuVideoOutput;
+    private volatile java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> gpuOutputSlot;
+    private volatile String gpuVideoUnavailableReason = "";
+    private String lastGpuFailureWitness="";
+    @Override public String gpuFailureWitness() { return lastGpuFailureWitness; }
+    @Override public GpuDeinterlaceOutput gpuVideoOutput() { return gpuVideoOutput; }
+    @Override public String gpuVideoUnavailableReason() { return gpuVideoUnavailableReason; }
+
+    /** Only explicit Client GPU constructs this surface; Client/Auto/Off are unchanged. */
+    private void bindVideoOutput(final ExoPlayer expected) {
+        if (expected != player) return;
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> outputSlot = gpuOutputSlot;
+        if (gpuVideoOutput != null) {
+            if (outputSlot != null) outputSlot.set(gpuVideoOutput);
+            expected.setVideoSurface(gpuVideoOutput.inputSurface());
+            return;
+        }
+        PrefStore prefs = MiniclientApplication.get().getClient().properties();
+        String mode = ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                prefs.getString(PrefStore.Keys.video_deinterlace_mode, "auto"));
+        String mim = mimDirectController().acceptedDeinterlaceForDiagnostics();
+        if (gpuVideoUnavailableReason.isEmpty() && GpuDeinterlacePolicy.requested(mode,
+                !mim.isEmpty() && !"off".equals(mim))) {
+            try {
+                mpeg2InterlaceObserver.setOutputFieldMappingEnabled(true);
+                gpuVideoOutput = new GpuDeinterlaceOutput((SurfaceView) context.getVideoView(),
+                        ActivePlayerSessionOverrides.resolveGpuFilter(prefs.getString(PrefStore.Keys.video_gpu_filter,"fast")),
+                        ActivePlayerSessionOverrides.resolveGpuFieldOrder(prefs.getString(PrefStore.Keys.video_gpu_field_order,"auto")),
+                        "field".equals(ActivePlayerSessionOverrides.resolveGpuOutputRate(prefs.getString(PrefStore.Keys.video_gpu_output_rate,"field"))),
+                        reason -> {
+                            if (player != expected) return;
+                            gpuVideoUnavailableReason = reason;
+                            GpuDeinterlaceOutput failed = gpuVideoOutput;
+                            lastGpuFailureWitness=failed==null ? "" : failed.failureWitness();
+                            mpeg2InterlaceObserver.setOutputFieldMappingEnabled(false);
+                            if (failed != null && GpuDeinterlacePolicy.refreshOnGpuReplacement(
+                                    android.os.Build.VERSION.SDK_INT,android.os.Build.DEVICE,
+                                    "video/mpeg2",getSelectedVideoDecoderForDebug()))
+                                failed.refreshNativeDisplayLayer();
+                            expected.setVideoSurfaceView((SurfaceView) context.getVideoView());
+                            gpuVideoOutput = null;
+                            if (outputSlot != null) outputSlot.set(null);
+                            if (failed != null) failed.close();
+                            PlaybackDebugTrap.recordDetailed("gpu_filter_unavailable",this,reason);
+                        });
+                gpuVideoOutput.setSourcePictureLookup(mpeg2InterlaceObserver::getOutputPictureTimeUs);
+                gpuVideoOutput.setWovenEvidence(() -> GpuDeinterlacePolicy.wovenMpeg2("video/mpeg2",
+                        getMpeg2InterlaceObservationForDebug(),getMpeg2ProgressiveFrameCountForDebug()));
+                if (outputSlot != null) outputSlot.set(gpuVideoOutput);
+                expected.setVideoSurface(gpuVideoOutput.inputSurface());
+                return;
+            } catch (RuntimeException failure) {
+                gpuVideoUnavailableReason = "gpu_initialization_unavailable";
+                log.logError("Client GPU output unavailable; retain device output",failure);
+            }
+        }
+        mpeg2InterlaceObserver.setOutputFieldMappingEnabled(false);
+        expected.setVideoSurfaceView((SurfaceView) context.getVideoView());
+    }
     static final Logger log = Logger.getLogger(Media3MediaPlayerImpl.class);
     static final long FAST_SWITCH_FIRST_FRAME_TIMEOUT_MS = 8_000L;
     private final DecoderAttemptTelemetry decoderAttemptTelemetry =
@@ -153,6 +216,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void onPlaybackLoadStarted()
     {
+        lastGpuFailureWitness="";
         mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
         decoderAttemptTelemetry.reset();
@@ -808,7 +872,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     long beforeMs = Math.max(0L, expectedPlayer.getCurrentPosition());
                     boolean resume = expectedPlayer.getPlayWhenReady();
                     expectedPlayer.clearVideoSurface();
-                    expectedPlayer.setVideoSurfaceView(surface);
+                    bindVideoOutput(expectedPlayer);
                     // Surface rebinding must not change playback intent. This
                     // assignment is intentionally idempotent and does not seek.
                     expectedPlayer.setPlayWhenReady(resume);
@@ -1176,7 +1240,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             // removed by BaseMediaPlayerImpl.stop() and prepare at the seek
             // position already selected by SageTV.
             context.setupVideoFrame();
-            player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+            bindVideoOutput(player);
             PlaybackDebugTrap.record("play_prepare_from_idle", this);
             player.prepare();
         }
@@ -1200,6 +1264,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             pendingPassthroughOffsetReanchor = null;
         }
         final ExoPlayer playerToRelease = player;
+        final GpuDeinterlaceOutput gpuToRelease = gpuVideoOutput;
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> slotToRelease = gpuOutputSlot;
+        gpuOutputSlot = null;
+        gpuVideoOutput = null;
+        gpuVideoUnavailableReason = "";
         final MediaSessionCompat sessionToRelease = mediaSession;
         // MediaSessionCompat is owned by Android's main thread. In particular,
         // do not release it synchronously from SageTV's media-command thread:
@@ -1229,6 +1298,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 }
                 if (playerToRelease != null)
                 {
+                    if (gpuToRelease != null) gpuToRelease.beginDecoderTransition();
                     try
                     {
                         playerToRelease.setPlayWhenReady(false);
@@ -1247,6 +1317,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         log.logError("Error calling release on player", ex);
                     }
                 }
+                if (gpuToRelease != null) gpuToRelease.close();
+                if (slotToRelease != null) slotToRelease.set(null);
             }
         });
 
@@ -2351,6 +2423,12 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         dvdPushMode && !dvdTransformedTransport,
                         prefs.getBoolean(PrefStore.Keys.disc_decoder_compatibility_recovery, true));
         pcmAudioProcessor = audioRenderersFactory.getPcmAudioProcessor();
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> outputSlot =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        gpuOutputSlot = outputSlot;
+        // This immutable per-builder slot survives the owner's field reset
+        // until decoder release completes, but can never refer to a new player.
+        audioRenderersFactory.setGpuOutputProvider(outputSlot::get);
         DefaultRenderersFactory renderersFactory = audioRenderersFactory;
         // Keep MediaCodec priority. The exact-version Media3 FFmpeg extension
         // is selected only when Android cannot decode the active audio format.
@@ -2567,6 +2645,22 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onVideoFrameAboutToBeRendered(long presentationTimeUs,
                     long releaseTimeNs, Format format, MediaFormat mediaFormat)
             {
+                GpuDeinterlaceOutput gpu = gpuVideoOutput;
+                if (gpu != null) {
+                    String decoder = getSelectedVideoDecoderForDebug();
+                    gpu.frame(presentationTimeUs, releaseTimeNs, format.width,format.height,
+                            format.frameRate > 0 ? format.frameRate : (float) (dvdExtractorsFactory == null
+                                    ? mpeg2InterlaceObserver.getSequenceFrameRateHz() : getDvdMpeg2SequenceFrameRateHzForDebug()),
+                            playbackRateController.getRate(),
+                            format.sampleMimeType, getMpeg2InterlaceObservationForDebug(),
+                            getMpeg2ProgressiveFrameCountForDebug(),
+                            mpeg2InterlaceObserver.getObservedTopFieldFirst(),
+                            !decoder.isEmpty() && !AndroidCodecPolicy.isSoftwareCodecName(decoder),
+                            GpuDeinterlacePolicy.duplicatedWovenOutput(android.os.Build.VERSION.SDK_INT,
+                                    format.sampleMimeType,decoder),
+                            mpeg2InterlaceObserver.getOutputFieldPhase(presentationTimeUs),
+                            mpeg2InterlaceObserver.getOutputPictureTimeUs(presentationTimeUs));
+                }
                 if (!dvdPushMode)
                     return;
                 ResilientDvdPsExtractorsFactory scanFactory = dvdExtractorsFactory;
@@ -3013,6 +3107,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record("position_discontinuity_" + reason, Media3MediaPlayerImpl.this);
+                if (gpuVideoOutput != null) gpuVideoOutput.flush();
                 switch (reason)
                 {
                     case Player.DISCONTINUITY_REASON_SEEK:
@@ -3029,6 +3124,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record(isPlaying ? "is_playing_true" : "is_playing_false", Media3MediaPlayerImpl.this);
+                if (gpuVideoOutput != null) gpuVideoOutput.setPlaying(isPlaying);
             }
 
             @Override
@@ -3292,7 +3388,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         //player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
 
         // start playing
-        player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+        bindVideoOutput(player);
         player.setPlayWhenReady(playRequested);
 
         //Create Media Session
@@ -3551,6 +3647,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         double dvdRate = getDvdMpeg2SequenceFrameRateHzForDebug();
         if (dvdRate > 0.0)
             return (float) dvdRate;
+        double sourceRate = mpeg2InterlaceObserver.getSequenceFrameRateHz();
+        if (sourceRate > 0.0) return (float) sourceRate;
         ExoPlayer activePlayer = player;
         Format format = activePlayer == null ? null : activePlayer.getVideoFormat();
         return format == null ? -1f : format.frameRate;

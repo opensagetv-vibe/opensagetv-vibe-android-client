@@ -438,6 +438,12 @@ case "${1:-help}" in
     # Require server bandwidth/mux and client datasource metrics during real Push playback.
     run_automated_mcp_test mcp_push_telemetry_test.py "$@"
     ;;
+  mcp-push-buffer-matrix)
+    shift
+    # Compare stock-default and bounded legacy Push write limits with startup,
+    # cadence, seek/FLUSH, pause/resume, heap and Live TV transition evidence.
+    run_automated_mcp_test mcp_push_buffer_matrix.py "$@"
+    ;;
   mcp-live-test)
     shift
     # Server-driven live-TV gate: tune, require real A/V, optionally change channels, and tear down.
@@ -673,6 +679,7 @@ Android/JDK/Python/ADB/MCP live in the unified opensagetv-vibe-dev container.
   mcp-hardware-codec-matrix [options] Run generated codecs with strict hardware evidence on non-Pro .25
   mcp-stop-key-test [options] Verify Android MEDIA_STOP mapping and playback teardown
   mcp-push-telemetry-test --server-path PATH      Verify detailed Push bandwidth/buffer/datasource telemetry
+  mcp-push-buffer-matrix --server-path PATH       Measure Auto/32/64/128 KiB legacy Push negotiation
   mcp-live-test [options]       Verify server-driven live TV and optional channel changes
   mcp-eof-test [options]        Verify exact completed-file EOF without process death
   mcp-disc-test [options]       Verify remote DVD startup/STOP/crash; use --start-ms 480000 for Aladdin motion tests

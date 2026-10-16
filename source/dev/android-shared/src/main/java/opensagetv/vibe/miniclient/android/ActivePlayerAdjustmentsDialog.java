@@ -38,6 +38,9 @@ import opensagetv.vibe.miniclient.android.video.DisplayRefreshController;
 import opensagetv.vibe.miniclient.android.video.PlayerBackend;
 import opensagetv.vibe.miniclient.android.video.TextSubtitlePresentation;
 import opensagetv.vibe.miniclient.android.video.gsy.GSYPlayerEngine;
+import opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl;
+import opensagetv.vibe.miniclient.video.DeinterlacePolicy;
+import opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus;
 import opensagetv.vibe.miniclient.android.video.media3.Media3AvSyncTestDialog;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.media.SubtitleTrack;
@@ -115,6 +118,8 @@ public final class ActivePlayerAdjustmentsDialog
                 { @Override public void run() { chooseCodecQueueing(); } });
         addVideoRow(panel, holder, "Deinterlace", deinterlaceValue(), new Runnable()
                 { @Override public void run() { chooseDeinterlace(); } });
+        addVideoRow(panel, holder, "Video filters", videoFilterValue(), new Runnable()
+                { @Override public void run() { showVideoFilters(); } });
         addVideoRow(panel, holder, "Source buffering", bufferPresetValue(), new Runnable()
                 { @Override public void run() { chooseBufferPreset(media); } });
         addVideoRow(panel, holder, "Display", refreshValue(active), new Runnable()
@@ -155,6 +160,7 @@ public final class ActivePlayerAdjustmentsDialog
                 "Decoding  " + DecodingMethod.fromPreference(decoding).displayName(),
                 "Codec Queueing  " + codecQueueingValue(),
                 "Deinterlace  " + deinterlaceValue(),
+                "Video filters  " + videoFilterValue(),
                 "Source buffering  " + bufferPresetValue(),
                 "Display  " + refreshValue(active),
                 "DVD playback  " + dvdRepairValue() + " / settle " + refreshSettleValue(),
@@ -180,6 +186,125 @@ public final class ActivePlayerAdjustmentsDialog
         });
         holder[0].setOnCancelListener(new DialogInterface.OnCancelListener()
         { @Override public void onCancel(DialogInterface dialog) { showMain(); } });
+    }
+
+    private boolean hasClientFilterChoice()
+    {
+        return ClientDeinterlaceStatus.supportsSoftwareSelection(player(media()))
+                && MiniclientApplication.get().getMimDirectSession()
+                        .acceptedDeinterlaceForDiagnostics().isEmpty();
+    }
+
+    private boolean hasGpuFilterChoice() {
+        String server = MiniclientApplication.get().getMimDirectSession().acceptedDeinterlaceForDiagnostics();
+        return ClientDeinterlaceStatus.gpuOwner(player(media())) != null
+                && (server.isEmpty() || "off".equals(server));
+    }
+
+    private String gpuChoice(String key, String fallback) {
+        String value=client.properties().getString(key,fallback);
+        return PrefStore.Keys.video_gpu_filter.equals(key) ? ActivePlayerSessionOverrides.resolveGpuFilter(value)
+                : PrefStore.Keys.video_gpu_field_order.equals(key) ? ActivePlayerSessionOverrides.resolveGpuFieldOrder(value)
+                : ActivePlayerSessionOverrides.resolveGpuOutputRate(value);
+    }
+
+    private String videoFilterValue()
+    {
+        if (hasGpuFilterChoice()) {
+            String actual=ClientDeinterlaceStatus.filter(player(media()));
+            String state=ClientDeinterlaceStatus.current(player(media()),MiniclientApplication.get().getMimDirectSession());
+            return ("motion".equals(gpuChoice(PrefStore.Keys.video_gpu_filter,"fast")) ? "Motion-adaptive" : "Fast")
+                    + " ("+(actual.isEmpty()?state:actual)+")";
+        }
+        if (!hasClientFilterChoice())
+            return MiniclientApplication.get().getMimDirectSession()
+                    .acceptedDeinterlaceForDiagnostics().isEmpty() ? "Device controlled" : "Server controlled";
+        String requested = DeinterlacePolicy.normalizeFilter(
+                ActivePlayerSessionOverrides.resolveIjkDeinterlaceFilter(
+                        client.properties().getString(PrefStore.Keys.ijk_deinterlace_filter, "auto")));
+        String actual = ClientDeinterlaceStatus.filter(player(media()));
+        return ("yadif".equals(requested) ? "YADIF" : "fast".equals(requested) ? "Fast" : "Auto")
+                + " (" + (actual.isEmpty() ? "Inactive / device" : actual) + ")";
+    }
+
+    /** Algorithms are a compact child of Video, separate from filter location. */
+    private void showVideoFilters()
+    {
+        final Dialog[] holder = new Dialog[1];
+        LinearLayout panel = captionPanel();
+        if (hasGpuFilterChoice()) {
+            addVideoRow(panel,holder,"GPU filter",videoFilterValue(),() -> chooseGpuOption(
+                    "GPU filter",PrefStore.Keys.video_gpu_filter,new String[]{"fast","motion"},
+                    new String[]{"Fast (field interpolation)","Motion-adaptive (preserve static detail)"}));
+            addVideoRow(panel,holder,"Field order",gpuChoice(PrefStore.Keys.video_gpu_field_order,"auto"),() -> chooseGpuOption(
+                    "Field order",PrefStore.Keys.video_gpu_field_order,new String[]{"auto","top","bottom"},
+                    new String[]{"Auto (source metadata)","Top field first","Bottom field first"}));
+            addVideoRow(panel,holder,"Output rate",gpuChoice(PrefStore.Keys.video_gpu_output_rate,"field"),() -> chooseGpuOption(
+                    "Output rate",PrefStore.Keys.video_gpu_output_rate,new String[]{"frame","field"},
+                    new String[]{"Frame rate (25/29.97)","Field rate (50/59.94; supported output only)"}));
+            panel.addView(captionRow("Used with Client GPU; hardware decoding stays active.",false));
+        }
+        else if (hasClientFilterChoice())
+        {
+            addVideoRow(panel, holder, "Deinterlace filter", videoFilterValue(), new Runnable()
+                    { @Override public void run() { chooseClientFilter(); } });
+            panel.addView(captionRow("Auto: fast HD, YADIF SD. Software interlaced frames only.", false));
+        }
+        else
+            panel.addView(captionRow(videoFilterValue() + "; this backend does not expose algorithm selection.", false));
+        addVideoBack(panel, holder);
+        holder[0] = showSettingsPanel("Video filters", panel, new String[] {
+                "Deinterlace filter  " + videoFilterValue(), "Software interlaced frames only"
+        });
+        holder[0].setOnCancelListener(new DialogInterface.OnCancelListener()
+        { @Override public void onCancel(DialogInterface dialog) { showMain(); } });
+    }
+
+    private void chooseGpuOption(final String title, final String key, final String[] values, String[] labels) {
+        chooseAudioChoice(title,labels,index -> {
+            final String value=values[Integer.parseInt(index)];
+            chooseAudioChoice(title,new String[]{"This playback session","Save as this device's default"},scope -> {
+                if(PrefStore.Keys.video_gpu_filter.equals(key)) ActivePlayerSessionOverrides.setGpuFilter(value);
+                else if(PrefStore.Keys.video_gpu_field_order.equals(key)) ActivePlayerSessionOverrides.setGpuFieldOrder(value);
+                else ActivePlayerSessionOverrides.setGpuOutputRate(value);
+                if(Integer.parseInt(scope)==1) client.properties().setString(key,value);
+                reload(media());
+                activity.getWindow().getDecorView().postDelayed(() -> showVideoFilters(),75);
+            },() -> showVideoFilters());
+        },() -> showVideoFilters());
+    }
+
+    private void chooseClientFilter()
+    {
+        final String[] values = { "auto", "fast", "yadif" };
+        chooseAudioChoice("Deinterlace filter", new String[] {
+                "Auto (fast HD / YADIF SD)", "Fast (lower vertical detail)",
+                "YADIF (temporal; HD may be slow)"
+        }, new ValueSetter()
+        {
+            @Override public void set(String index)
+            {
+                final String value = values[Integer.parseInt(index)];
+                chooseAudioChoice("Filter: " + ("yadif".equals(value) ? "YADIF" : "fast".equals(value) ? "Fast" : "Auto"),
+                        new String[] { "This playback session", "Save as this device's default" },
+                        new ValueSetter()
+                        {
+                            @Override public void set(String scope)
+                            {
+                                ActivePlayerSessionOverrides.setIjkDeinterlaceFilter(value);
+                                if (Integer.parseInt(scope) == 1)
+                                    client.properties().setString(PrefStore.Keys.ijk_deinterlace_filter, value);
+                                if ("yadif".equals(value))
+                                    AppUtil.message("Temporal YADIF can slow HD playback; choose Auto if video falls behind");
+                                reload(media());
+                                activity.getWindow().getDecorView().postDelayed(new Runnable()
+                                { @Override public void run() { showVideoFilters(); } }, 75L);
+                            }
+                        }, new Runnable()
+                        { @Override public void run() { showVideoFilters(); } });
+            }
+        }, new Runnable()
+        { @Override public void run() { showVideoFilters(); } });
     }
 
     private void showVideoDvdMenu()
@@ -335,6 +460,12 @@ public final class ActivePlayerAdjustmentsDialog
     private String playerValue()
     {
         PlayerBackend backend = PlayerBackend.fromPreference(resolvedBackend());
+        MiniPlayerPlugin active = player(media());
+        // A saved preference can change while a different decoder is still
+        // running. Show the proven current IJK identity instead of claiming
+        // the pending Media3 preference has already changed its output.
+        if (active instanceof IJKMediaPlayerImpl && backend != PlayerBackend.IJKPLAYER)
+            return "IJKPlayer (next: " + backend.displayName() + ")";
         if (backend != PlayerBackend.GSYPLAYER) return backend.displayName();
         String configured = ActivePlayerSessionOverrides.resolveGsyEngine(
                 client.properties().getString(PrefStore.Keys.gsy_player_engine,
@@ -360,12 +491,21 @@ public final class ActivePlayerAdjustmentsDialog
 
     private String deinterlaceValue()
     {
-        String value = ActivePlayerSessionOverrides.resolveMimDirectDeinterlace(
-                client.properties().getString(
-                        PrefStore.Keys.mim_direct_deinterlace, "auto"));
-        if ("on".equals(value)) return "On";
-        if ("off".equals(value)) return "Off";
-        return "Auto";
+        String value = DeinterlacePolicy.normalize(DeinterlacePolicy.effectiveMode(
+                ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                        client.properties().getString(PrefStore.Keys.video_deinterlace_mode, "")),
+                fixedDeinterlaceChoices()));
+        String label = "mim".equals(value) ? "MIM" : "off".equals(value) ? "Off"
+                : "client_gpu".equals(value) ? "Client GPU" : "client".equals(value) ? "Client" : "Auto";
+        String state = ClientDeinterlaceStatus.current(player(media()),
+                MiniclientApplication.get().getMimDirectSession());
+        String implementation = ClientDeinterlaceStatus.implementation(player(media()),
+                MiniclientApplication.get().getMimDirectSession());
+        return label + " (" + (label.equals(state) ? "" : state + " / ") + implementation + ")";
+    }
+    private boolean fixedDeinterlaceChoices()
+    {
+        return "fixed".equals(client.properties().getStreamingMode());
     }
 
     private String bufferPresetValue()
@@ -1331,18 +1471,44 @@ public final class ActivePlayerAdjustmentsDialog
 
     private void chooseDeinterlace()
     {
-        final String[] labels = { "Auto", "On", "Off" };
-        final String[] values = { "auto", "on", "off" };
-        chooseVideoChoice("MIM-owned Transcode deinterlace", labels, new ValueSetter()
+        final boolean fixed = fixedDeinterlaceChoices();
+        final String[] labels = fixed ? new String[] { "Auto", "Off", "Client", "Client GPU", "MIM" }
+                : new String[] { "Auto", "Off", "Client", "Client GPU" };
+        final String[] values = fixed ? new String[] { "auto", "off", "client", "client_gpu", "mim" }
+                : new String[] { "auto", "off", "client", "client_gpu" };
+        chooseVideoChoice("Deinterlace", labels, new ValueSetter()
         {
             @Override public void set(String index)
             {
                 final String value = values[Integer.parseInt(index)];
-                chooseScope("Deinterlace", PrefStore.Keys.mim_direct_deinterlace,
+                if ("mim".equals(value))
+                {
+                    String server = MiniclientApplication.get().getMimDirectSession().stateForDiagnostics();
+                      // An owned producer may carry a diagnostic suffix after
+                      // a harmless redundant startup seek. Its accepted request
+                      // proves availability; a literal state label does not.
+                      String accepted = MiniclientApplication.get().getMimDirectSession()
+                              .acceptedDeinterlaceForDiagnostics();
+                      if (!("ready_transcode".equals(server) || !accepted.isEmpty()))
+                    {
+                        AppUtil.message("MIM deinterlacing requires an available Fixed Direct Transcode session; current setting unchanged");
+                        reopenVideoMenu();
+                        return;
+                    }
+                }
+                chooseScope("Deinterlace", PrefStore.Keys.video_deinterlace_mode,
                         value, new ValueSetter()
                         {
                             @Override public void set(String selectedValue)
-                            { ActivePlayerSessionOverrides.setMimDirectDeinterlace(selectedValue); }
+                            {
+                                ActivePlayerSessionOverrides.setVideoDeinterlaceMode(selectedValue);
+                                if ("off".equals(selectedValue))
+                                    AppUtil.message("Optional filters off; Android codec field processing remains device-controlled");
+                                else if ("client".equals(selectedValue))
+                                    AppUtil.message("Client: backend software filter or device-controlled fields; applies on next playback");
+                                else if ("client_gpu".equals(selectedValue))
+                                    AppUtil.message("Client GPU: hardware decode and GPU filtering on supported backends; applies on next playback");
+                            }
                         }, true);
             }
         });

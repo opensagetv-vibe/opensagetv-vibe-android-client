@@ -121,6 +121,48 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugCodecCapabilityCommands.snapshot(context));
             }
+            else if ("gpu_filter_self_test".equals(op))
+            {
+                // Finite offscreen pixel checks only; no video readback,
+                // player mutation or new background listener.
+                ok(opensagetv.vibe.miniclient.android.video.GpuDeinterlaceSelfTest.run());
+            }
+            else if ("gpu_profile_arm".equals(op))
+            {
+                opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput.armDebugProfile();
+                ok("op=gpu_profile_arm;accepted=true;maxFrames=240;playbackReadback=false;nextOutput=true");
+            }
+            else if ("gpu_profile".equals(op))
+            {
+                opensagetv.vibe.miniclient.MiniClient client=MiniclientApplication.get().getClient();
+                opensagetv.vibe.miniclient.MiniPlayerPlugin player=client==null || client.getCurrentConnection()==null
+                        || client.getCurrentConnection().getMediaCmd()==null ? null
+                        : client.getCurrentConnection().getMediaCmd().getPlaya();
+                opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner owner=
+                        opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuOwner(player);
+                boolean accepted=owner!=null && owner.gpuVideoOutput()!=null
+                        && owner.gpuVideoOutput().profileNextFrames(240);
+                ok("op=gpu_profile;accepted="+accepted+";maxFrames=240;playbackReadback=false");
+            }
+            else if ("gpu_field_probe".equals(op))
+            {
+                opensagetv.vibe.miniclient.MiniClient client=MiniclientApplication.get().getClient();
+                opensagetv.vibe.miniclient.MiniPlayerPlugin player=client==null || client.getCurrentConnection()==null
+                        || client.getCurrentConnection().getMediaCmd()==null ? null
+                        : client.getCurrentConnection().getMediaCmd().getPlaya();
+                opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner owner=
+                        opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuOwner(player);
+                boolean accepted=owner!=null && opensagetv.vibe.miniclient.android.video.GpuDecodedFieldProbe.start(owner.gpuVideoOutput());
+                ok("op=gpu_field_probe;accepted="+accepted+";maxFrames=64;debugFixturePixels=true");
+            }
+            else if ("gpu_field_probe_arm".equals(op))
+            {
+                ok(opensagetv.vibe.miniclient.android.video.GpuDecodedFieldProbe.arm());
+            }
+            else if ("gpu_field_probe_status".equals(op))
+            {
+                ok(opensagetv.vibe.miniclient.android.video.GpuDecodedFieldProbe.status());
+            }
             else if ("client_id_get".equals(op))
             {
                 ok(DebugClientIdCommands.status(context));
@@ -161,6 +203,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 DebugDiagnosticCommands.execute(context, intent, goAsync());
                 return;
+            }
+            else if ("diagnostic_export_ui".equals(op))
+            {
+                ok(DebugSessionCommands.showDiagnosticExport(context));
             }
             else if ("refresh_video_output".equals(op))
             {
@@ -250,6 +296,14 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("profile_ui".equals(op))
             {
                 ok(DebugProfileCommands.openUi(context));
+            }
+            else if ("main_settings_ui".equals(op))
+            {
+                Intent activity = new Intent(context,
+                        opensagetv.vibe.miniclient.android.ui.settings.SettingsActivity.class);
+                activity.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(activity);
+                ok("op=main_settings_ui;launched=true");
             }
             else if ("diagnostics_ui".equals(op))
             {

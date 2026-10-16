@@ -6,6 +6,9 @@ android {
     buildToolsVersion androidBuildToolsVersion
     compileSdkVersion androidCompileSdkVersion
     ndkVersion = "21.0.6113669"
+    externalNativeBuild {
+        ndkBuild { path file('src/main/cpp/Android.mk') }
+    }
 
     compileOptions {
         //sourceCompatibility defJavaVesionConst
@@ -43,6 +46,7 @@ android {
     defaultConfig {
         minSdkVersion androidMinSdkVersion
         targetSdkVersion androidTargetSdkVersion
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' }
     }
 
     buildTypes {
@@ -103,6 +107,9 @@ def retainedNonCastVersions = [
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    // Offline QR for the current diagnostic web URL only; no camera, network
+    // service or account dependency. Pin independently of all player modules.
+    implementation 'com.google.zxing:core:3.5.3'
 
     constraints {
         retainedNonCastVersions.each { coordinate, version ->

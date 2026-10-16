@@ -38,6 +38,13 @@ public class AndroidPrefStore implements PrefStore
     public static final String SMB_PROFILE_PASSWORD = "smb_profiles/auth/password";
     public static final String SMB_PROFILE_DOMAIN = "smb_profiles/auth/domain";
     public static final String SMB_DIAGNOSTICS_DIRECTORY = "smb_diagnostics/directory";
+    public static final String SERVER_DIAGNOSTICS_ENABLED = "server_diagnostics/enabled";
+    public static final String SERVER_DIAGNOSTICS_PORT = "server_diagnostics/port";
+    public static final String SERVER_DIAGNOSTICS_STATUS = "server_diagnostics/status";
+    public static final String SERVER_DIAGNOSTICS_LAST_TIME = "server_diagnostics/last_time";
+    public static final String CLIENT_WEB_ENABLED = "client_diagnostics_web/enabled";
+    public static final String CLIENT_WEB_PORT = "client_diagnostics_web/port";
+    public static final String CLIENT_WEB_STATUS = "client_diagnostics_web/status";
     public static final String SMB_DIAGNOSTICS_SERVER_ID = "smb_diagnostics/server_id";
     public static final String SMB_DIAGNOSTICS_FOLDER = "smb_diagnostics/folder";
     public static final String SMB_DIAGNOSTICS_MODE = "smb_diagnostics/mode";

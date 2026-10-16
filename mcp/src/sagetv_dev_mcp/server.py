@@ -48,7 +48,17 @@ def _sage_control_session(server_address: str, client_id: str) -> tuple[object, 
             return cached
         _sage_control_sessions.pop(key, None)
     sagex = discover_sage_control(key[0])
-    context = sagex.resolve_context(key[1])
+    # Socket readiness is not server UI registration. Poll only this exact
+    # read-only query; never retry an ordered Watch/Seek or choose another UI.
+    deadline = time.monotonic() + 12.0
+    while True:
+        try:
+            context = sagex.resolve_context(key[1])
+            break
+        except SagexApiError as exc:
+            if "Unable to uniquely resolve MiniClient UI context" not in str(exc) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.3)
     resolved = (sagex, context)
     _sage_control_sessions[key] = resolved
     return resolved
@@ -163,6 +173,9 @@ def _compact_state(state: dict) -> dict:
         "gsyResolvedEngine", "gsySystemFallbackCount", "gsySystemFallbackReason",
         "preferredAudioLanguage", "preferredSubtitleLanguage",
         "preferredCaptionStandard", "preferredCaptionService",
+        "pushBufferLimit", "pushBufferEffectiveBytes",
+        "systemBackInvocationCount", "systemBackLastActivity", "systemBackLastHandled",
+        "clientHeapUsedBytes", "clientHeapCommittedBytes", "clientHeapMaxBytes",
         "legacyServerCaptionMode", "captionCc1Type", "captionCc1Language",
         "captionCc2Type", "captionCc2Language",
         "keepSessionInBackground", "resumeBackgroundPlayback",
@@ -202,6 +215,16 @@ def _compact_state(state: dict) -> dict:
         "fixedCaptionSideChannelState", "fixedCaptionReceivedPackets",
         "fixedCaptionLastPacketPtsMs", "fixedCaptionLastPollClockMs",
         "mimDirectRequestedMode",
+        "mimDirectDeinterlace", "mimAcceptedDeinterlace",
+        "ijkSoftwareDeinterlace", "ijkSoftwareDeinterlaceActive",
+        "videoDeinterlaceMode", "videoDeinterlaceState",
+        "videoDeinterlaceImplementation",
+        "ijkDeinterlaceFilter", "videoDeinterlaceFilter",
+        "videoGpuReason", "videoGpuInputFrames", "videoGpuOutputFrames",
+        "videoGpuFilteredFrames", "videoGpuSecondFields",
+        "videoGpuMetadataFrames", "videoGpuMetadataStepUs", "videoGpuSurfaceStepNs",
+        "videoGpuCodedFps", "videoGpuRenderer", "videoGpuProfile",
+        "videoGpuSwapInterval", "videoGpuFailureWitness",
         "mimDirectNegotiatedMode", "mimDirectSessionState", "mimDirectWatchRecoveryState",
         "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "playbackRate", "timelineSource", "serverAnchorMs",
         "serverRequestedSeekMs", "serverSeekSequence", "serverSeekMonotonicMs", "serverSeekWallMs", "serverSeekAgeMs",
@@ -288,6 +311,9 @@ def _compact_state(state: dict) -> dict:
         "health_dataSourceReadCount", "health_dataSourceReadRequestedBytes", "health_dataSourceReadBytes",
         "health_dataSourceReadWaitMs", "health_dataSourceReadRateKbps",
         "health_dataSourcePushCount", "health_dataSourcePushedBytes",
+        "health_dataSourceBlockedPushCount", "health_dataSourceMaximumPushWriteMs",
+        "health_dataSourceLastPushWriteMs", "health_dataSourceLastPushBytes",
+        "health_dataSourceBufferUsedBytes", "health_dataSourceBufferFreeBytes",
         "playbackSource", "sageOriginalPath", "smbMappedPath", "smbConnected",
         "shadowMediaServerConnected", "shadowOpenSent", "shadowSizeSent", "shadowReadBytes",
         "smbBytesRead", "smbReadCount", "smbSeekCount", "smbLastReadLatencyMs",
@@ -304,6 +330,7 @@ def _compact_state(state: dict) -> dict:
         "health_playerPositionMs", "health_bufferedPositionMs", "health_durationMs", "health_playerError",
         "health_videoMime", "health_videoCodecString", "health_videoDecoder", "health_videoDecoderKind",
         "health_videoWidth", "health_videoHeight", "health_videoRendered", "health_videoSkipped", "health_videoDropped",
+        "health_videoDecodeFps", "health_videoOutputFps",
         "health_videoQueuedInput", "health_videoDecoderInitCount", "health_videoDecoderReleaseCount",
         "health_mpeg2InterlaceObservation", "health_mpeg2SequenceExtensionSeen",
         "health_mpeg2ProgressiveFrameCount", "health_mpeg2InterlacedFrameCount",
@@ -1444,6 +1471,25 @@ def dev_open_diagnostics_settings() -> dict:
     """Open the production diagnostics settings screen in the debug APK."""
     return adb.open_diagnostics_settings()
 
+
+@mcp.tool()
+def dev_open_diagnostic_export() -> dict:
+    """Open the shared bug-icon export chooser; no upload or setting change."""
+    return adb.open_diagnostic_export()
+
+@mcp.tool()
+def dev_server_diagnostics(action: str = "status") -> dict:
+    """Read local export status or request one bounded opted-in server upload.
+
+    Existing stock Core MCP owns the server configuration; this DEBUG-only
+    client bridge neither enables uploads nor adds server filesystem routes.
+    An explicit upload uses the production redactor/current-session receiver.
+    Never retry an ordered upload implicitly after an RPC timeout.
+    """
+    if action not in ("status", "server_upload"):
+        raise ValueError("action must be status or server_upload")
+    return adb.dev_control("diagnostics", diagnostics_action=action)
+
 @mcp.tool()
 def dev_player_events() -> dict:
     """Read the debug APK exact-event playback trap ring, including event-time A/V counters."""
@@ -1541,6 +1587,12 @@ def dev_set_player_config(
     fixed_caption_side_channel_port: int = 0,
     mim_direct_mode: str = "",
     mim_direct_deinterlace: str = "",
+    ijk_software_deinterlace: str = "",
+    ijk_deinterlace_filter: str = "",
+    video_deinterlace_mode: str = "",
+    video_gpu_filter: str = "",
+    video_gpu_field_order: str = "",
+    video_gpu_output_rate: str = "",
     smb_mappings: str = "",
     smb_username: str = "",
     smb_password: str = "",
@@ -1553,6 +1605,10 @@ def dev_set_player_config(
     smb_profile_clear_auth: bool = False,
     smb_diagnostics_directory: str = "",
     smb_diagnostics_mode: str = "",
+    server_diagnostics_enabled: bool | None = None,
+    server_diagnostics_port: int = 0,
+    client_web_enabled: bool | None = None,
+    client_web_port: int = 0,
     smb_diagnostics_auth_mode: str = "",
     smb_diagnostics_username: str = "",
     smb_diagnostics_password: str = "",
@@ -1568,6 +1624,7 @@ def dev_set_player_config(
     disc_mpeg2_timestamp_repair: str = "",
     wait_for_playback_before_first_osd: bool | None = None,
     unified_graphics_surfaces: bool | None = None,
+    push_buffer_limit: str = "",
 ) -> dict:
     """Set all debug APK playback preferences for the next playback.
 
@@ -1577,8 +1634,9 @@ def dev_set_player_config(
     SageTV STV caption Off/On authority. SMB credentials are accepted only by the Dev
     control path and are never returned by this tool.
     Disc/DVD policy, menu/preview skipping, compatibility fallback, and the
-    opt-in stock HD200/HD300 unified graphics capability are configurable and
-    are reported in every snapshot. The latter applies on the next connection;
+    opt-in stock HD200/HD300 unified graphics capability and bounded legacy
+    Push write limit (auto/32768/65536/131072) are configurable and reported
+    in every snapshot. Both capability values apply on the next connection;
     the optional first-OSD
     switch waits for playback to advance before presenting the initial player OSD.
     Fixed encoding parameters may
@@ -1614,6 +1672,12 @@ def dev_set_player_config(
         fixed_caption_side_channel_port=fixed_caption_side_channel_port or "",
         mim_direct_mode=mim_direct_mode,
         mim_direct_deinterlace=mim_direct_deinterlace,
+        ijk_software_deinterlace=ijk_software_deinterlace,
+        ijk_deinterlace_filter=ijk_deinterlace_filter,
+        video_deinterlace_mode=video_deinterlace_mode,
+        video_gpu_filter=video_gpu_filter,
+        video_gpu_field_order=video_gpu_field_order,
+        video_gpu_output_rate=video_gpu_output_rate,
         smb_mappings=smb_mappings,
         smb_username=smb_username,
         smb_password=smb_password,
@@ -1626,6 +1690,10 @@ def dev_set_player_config(
         smb_profile_clear_auth=smb_profile_clear_auth,
         smb_diagnostics_directory=smb_diagnostics_directory,
         smb_diagnostics_mode=smb_diagnostics_mode,
+        server_diagnostics_enabled=server_diagnostics_enabled,
+        server_diagnostics_port=server_diagnostics_port,
+        client_web_enabled=client_web_enabled,
+        client_web_port=client_web_port,
         smb_diagnostics_auth_mode=smb_diagnostics_auth_mode,
         smb_diagnostics_username=smb_diagnostics_username,
         smb_diagnostics_password=smb_diagnostics_password,
@@ -1641,6 +1709,7 @@ def dev_set_player_config(
         disc_mpeg2_timestamp_repair=disc_mpeg2_timestamp_repair,
         wait_for_playback_before_first_osd=wait_for_playback_before_first_osd,
         unified_graphics_surfaces=unified_graphics_surfaces,
+        push_buffer_limit=push_buffer_limit,
     )
 
 @mcp.tool()
@@ -1659,6 +1728,48 @@ def dev_set_client_id(client_id: str = "", generate: bool = False) -> dict:
     if not generate and not str(client_id or "").strip():
         raise ValueError("client_id is required unless generate=true")
     return adb.set_client_id(value=client_id, generate=generate)
+
+@mcp.tool()
+def dev_gpu_filter_self_test() -> dict:
+    """Run finite debug-only offscreen GPU pixel checks; no playback readback."""
+    return adb.dev_control("gpu_filter_self_test")
+
+@mcp.tool()
+def dev_gpu_output_profile(next_output: bool = False) -> dict:
+    """Explicit finite 240-frame debug timing probe; no readback or clock mutation."""
+    return adb.dev_control("gpu_profile_arm" if next_output else "gpu_profile")
+
+@mcp.tool()
+def dev_gpu_field_probe() -> dict:
+    """Finite DEBUG-only 64-frame 8x4 field-ID fixture probe, not a scanout proof."""
+    return adb.dev_control("gpu_field_probe")
+
+@mcp.tool()
+def dev_gpu_field_probe_arm() -> dict:
+    """Explicitly arm one finite DEBUG fixture probe before the next GPU output."""
+    return adb.dev_control("gpu_field_probe_arm")
+
+@mcp.tool()
+def dev_gpu_field_probe_status() -> dict:
+    """Read bounded fixture-pixel observations; does not start/replay the probe."""
+    return adb.dev_control("gpu_field_probe_status")
+
+
+@mcp.tool()
+def dev_server_control_identity() -> dict:
+    """Read-only exact UI registration guard for the selected Android device."""
+    state = adb.player_state_snapshot()
+    if not state.get("connected"):
+        raise RuntimeError("Selected Android device is not connected")
+    host = str(state.get("serverAddress", "")).strip()
+    identity = str(state.get("clientId", "")).strip()
+    if not host or not identity:
+        raise RuntimeError("Selected Android device identity is missing")
+    control, context = _sage_control_session(host, identity)
+    return {"scopeVerified": True, "deviceSerial": cfg.device,
+            "clientId": identity, "uiContext": context, "serverAddress": host,
+            "transport": control.transport}
+
 
 @mcp.tool()
 def dev_player_tuning() -> dict:

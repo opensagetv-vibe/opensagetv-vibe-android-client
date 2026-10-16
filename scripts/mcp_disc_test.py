@@ -329,6 +329,12 @@ def main() -> int:
                               "instead of plugin ownership (failure-injection gate)"))
     parser.add_argument("--decoding", choices=("hardware", "hardware_preferred"),
                         default="hardware")
+    parser.add_argument("--video-deinterlace-mode",
+                        choices=("auto", "off", "client", "client_gpu"), default="")
+    parser.add_argument("--video-gpu-filter", choices=("fast", "motion", "inspect"), default="fast")
+    parser.add_argument("--video-gpu-output-rate", choices=("frame", "field"), default="frame")
+    parser.add_argument("--require-client-gpu", action="store_true",
+                        help="Require actual Client GPU output during the native DVD title")
     parser.add_argument("--codec-mode", choices=("auto", "async", "sync"),
                         help="Dev-only Media3 codec adapter override for this run")
     parser.add_argument("--disc-policy",
@@ -479,6 +485,7 @@ def main() -> int:
                 "DVD media-time minimum cannot exceed maximum")
 
     client = MCPProcess()
+    settings_checkpoint_active = False
     results: list[dict] = []
     warm_cache_path = Path(
         os.environ.get("SAGETV_ARTIFACT_DIR", "artifacts/firetv")
@@ -487,6 +494,10 @@ def main() -> int:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
         call_dict(client, "adb_connect", timeout=30.0)
+        settings_checkpoint = call_dict(client, "dev_checkpoint_settings", timeout=30.0)
+        require(bool(settings_checkpoint.get("captured")),
+                f"Settings checkpoint failed: {settings_checkpoint}")
+        settings_checkpoint_active = True
         clean = call_dict(client, "dev_prepare_clean_start", {
             "wake": True, "graceful_timeout_s": 2.0,
         }, timeout=30.0)
@@ -507,6 +518,9 @@ def main() -> int:
             "disc_skip_previews": args.skip_previews,
             "disc_compatibility_fallback": not args.no_native_fallback,
             "disc_mpeg2_timestamp_repair": args.mpeg2_timestamp_repair,
+            "video_deinterlace_mode": args.video_deinterlace_mode,
+            "video_gpu_filter": args.video_gpu_filter,
+            "video_gpu_output_rate": args.video_gpu_output_rate,
         })
         call_dict(client, "dev_connect_server", {
             "address": args.server_address,
@@ -860,6 +874,10 @@ def main() -> int:
                         command_state = call_dict(client, "dev_player_state", timeout=30.0)
                         command_record["stateAfterRecovery"] = compact_state(command_state)
                 state = call_dict(client, "dev_player_state", timeout=30.0)
+                if args.require_client_gpu:
+                    require(state.get("videoDeinterlaceState") == "Client GPU"
+                            and int(state.get("videoGpuFilteredFrames", 0)) > 0,
+                            f"Native DVD did not activate Client GPU output: {state}")
                 require(bool(state.get("playerActive")), f"DVD player became inactive: {state}")
                 require(int(state.get("dvdInitCount", 0)) > 0,
                         f"No MiniDVDPlayer INIT was observed: {state}")
@@ -1082,6 +1100,10 @@ def main() -> int:
                 continue
             results.append(result)
 
+        settings_restore = call_dict(client, "dev_restore_settings", timeout=100.0)
+        require(bool(settings_restore.get("restored")),
+                f"Settings restoration failed: {settings_restore}")
+        settings_checkpoint_active = False
         evidence = {
             "passed": len(results) == len(targets) and all(item["passed"] for item in results),
             "serverAddress": args.server_address,
@@ -1114,6 +1136,8 @@ def main() -> int:
             "requested": len(targets),
             "completed": len(results),
             "results": results,
+            "settingsCheckpoint": settings_checkpoint,
+            "settingsRestore": settings_restore,
         }
         if args.output:
             output = Path(args.output)
@@ -1134,6 +1158,11 @@ def main() -> int:
                 call_dict(client, "dev_exit_session", {"stop_app": True}, timeout=30.0)
             except Exception:
                 pass
+        if settings_checkpoint_active:
+            try:
+                call_dict(client, "dev_restore_settings", timeout=100.0)
+            except Exception as restore_exc:
+                print(f"WARN: settings restoration failed: {restore_exc}", file=sys.stderr)
         client.close()
 
 

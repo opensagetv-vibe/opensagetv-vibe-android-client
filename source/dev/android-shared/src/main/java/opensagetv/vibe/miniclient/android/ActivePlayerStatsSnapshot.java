@@ -10,6 +10,7 @@ import android.os.SystemClock;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Locale;
+import opensagetv.vibe.miniclient.video.PlaybackDisplayLabels;
 
 import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniClient;
@@ -36,6 +37,7 @@ final class ActivePlayerStatsSnapshot
     String state = "Idle";
     boolean active;
     boolean loading;
+    int backendPlaybackState = -1;
     boolean ready;
     boolean seekPending;
     boolean error;
@@ -62,6 +64,13 @@ final class ActivePlayerStatsSnapshot
     String videoCodec = "";
     String videoDecoder = "";
     String videoDecoderKind = "";
+    String deinterlace = "Inactive";
+    String deinterlaceImplementation = "Unknown";
+    String deinterlaceFilter = "";
+    String gpuReason = "";
+    long gpuInputFrames, gpuOutputFrames, gpuSecondFields;
+    float videoDecodeFps = -1f;
+    float videoOutputFps = -1f;
     int videoWidth = -1;
     int videoHeight = -1;
     float contentFps = -1f;
@@ -154,6 +163,18 @@ final class ActivePlayerStatsSnapshot
         }
 
         out.active = true;
+        out.deinterlaceFilter = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.filter(top);
+        out.gpuReason = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuReason(top);
+        opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner gpuOwner =
+                opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuOwner(top);
+        opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput gpu = gpuOwner == null ? null : gpuOwner.gpuVideoOutput();
+        if (gpu != null) {
+            out.gpuInputFrames=gpu.inputFrames(); out.gpuOutputFrames=gpu.outputFrames(); out.gpuSecondFields=gpu.secondFields();
+        }
+        out.deinterlace = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.current(
+                top, MiniclientApplication.get().getMimDirectSession());
+        out.deinterlaceImplementation = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.implementation(
+                top, MiniclientApplication.get().getMimDirectSession());
         out.backend = friendlyBackend(top.getClass().getSimpleName());
         out.state = miniState(top.getState());
         out.positionMs = top.getMediaTimeMillis(media.getLastServerStartPosition());
@@ -184,6 +205,13 @@ final class ActivePlayerStatsSnapshot
             out.error = health.isErrorState();
             out.retryCount = health.getRetryCount();
         }
+        else
+        {
+            // Same bounded legacy fallback as MCP, not inference from a saved
+            // dynamic preference. No new polling/callbacks or media mutation.
+            out.push = Boolean.TRUE.equals(readField(effective, "pushMode"));
+            dataSource = readField(effective, "dataSource");
+        }
 
         capturePlayer(backendPlayer, out);
         captureDecoderTelemetry(effective, out);
@@ -199,14 +227,13 @@ final class ActivePlayerStatsSnapshot
         String configured = client == null ? "unknown" : clean(client.properties().getStreamingMode());
         if (out.dvd)
             out.transport = media.isDvdTransformRuntimeFallback()
-                    ? "DVD Native (transform fallback)"
-                    : dvdTransformedTransport ? "DVD Transformed Push" : "DVD Native Push";
+                    ? "Push (DVD native fallback)"
+                    : dvdTransformedTransport ? "Push (DVD transformed)" : "Push (DVD native)";
         else if (out.smb)
-            out.transport = "SMB Direct";
-        else if (out.push)
-            out.transport = "fixed".equalsIgnoreCase(configured) ? "Fixed / MIM" : "SageTV Push";
+            out.transport = "Direct (SMB)";
         else
-            out.transport = configured.length() == 0 ? "SageTV Pull" : displayToken(configured);
+            out.transport = PlaybackDisplayLabels.transport(MiniclientApplication.get()
+                    .getMimDirectSession().owns(effective), out.push, configured);
 
         out.serverChannelKbps = media.getServerChannelBandwidthKbps();
         out.serverStreamKbps = media.getServerStreamBandwidthKbps();
@@ -262,7 +289,14 @@ final class ActivePlayerStatsSnapshot
         line(text, backend + "  |  " + transport + "  |  " + stateLabel());
         line(text, "Video  " + videoSummary());
         line(text, "Decoder  " + value(videoDecoder, "unavailable")
-                + (videoDecoderKind.length() == 0 ? "" : " (" + videoDecoderKind + ")"));
+                + (videoDecoderKind.length() == 0 ? "" : " (" + PlaybackDisplayLabels.decoderKind(videoDecoderKind) + ")"));
+        line(text, "Deinterlace  " + deinterlace + " (" + deinterlaceImplementation + ")"
+                + (deinterlaceFilter.isEmpty() ? "" : " / " + deinterlaceFilter));
+        if (!gpuReason.isEmpty()) line(text,"GPU output  " + gpuReason + " / input " + gpuInputFrames
+                + " / presented " + gpuOutputFrames + " / second fields " + gpuSecondFields);
+        if (videoOutputFps >= 0f)
+            line(text, String.format(Locale.US, "Video FPS  decode %.2f / output %.2f",
+                    videoDecodeFps, videoOutputFps));
         line(text, "Display  " + displaySummary());
         line(text, "Timeline  " + time(positionMs) + durationSuffix()
                 + "  |  " + String.format(Locale.US, "%.2fx", playbackRate));
@@ -515,6 +549,7 @@ final class ActivePlayerStatsSnapshot
     {
         if (player == null) return;
         int playbackState = invokeIntOptional(player, "getPlaybackState", -1);
+        out.backendPlaybackState = playbackState;
         out.loading = invokeBooleanOptional(player, "isLoading", false) || playbackState == 2;
         out.positionMs = invokeLongOptional(player, "getCurrentPosition", out.positionMs);
         long buffered = invokeLongOptional(player, "getBufferedPosition", -1L);
@@ -529,6 +564,22 @@ final class ActivePlayerStatsSnapshot
         }
         captureFormat(invokeOptional(player, "getVideoFormat"), true, out);
         captureFormat(invokeOptional(player, "getAudioFormat"), false, out);
+        if ("tv.danmaku.ijk.media.player.IjkMediaPlayer".equals(player.getClass().getName()))
+        {
+            // Reuse the actual decoder identity already available to MCP.
+            // A saved Hardware selection must not hide an avcodec fallback.
+            Object info = invokeOptional(player, "getMediaInfo");
+            out.videoDecoder = readStringField(info, "mVideoDecoderImpl");
+            String module = readStringField(info, "mVideoDecoder");
+            out.videoDecoderKind = "mediacodec".equalsIgnoreCase(module)
+                    ? (AndroidCodecPolicy.isSoftwareCodecName(out.videoDecoder) ? "software" : "hardware")
+                    : "avcodec".equalsIgnoreCase(module) ? "software" : "unknown";
+            out.audioDecoder = readStringField(info, "mAudioDecoderImpl");
+            Object decodeFps = invokeOptional(player, "getVideoDecodeFramesPerSecond");
+            Object outputFps = invokeOptional(player, "getVideoOutputFramesPerSecond");
+            out.videoDecodeFps = decodeFps instanceof Number ? ((Number) decodeFps).floatValue() : -1f;
+            out.videoOutputFps = outputFps instanceof Number ? ((Number) outputFps).floatValue() : -1f;
+        }
         int count = invokeIntOptional(player, "getRendererCount", 0);
         for (int i = 0; i < count; i++)
         {

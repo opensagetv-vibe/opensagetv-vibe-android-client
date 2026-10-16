@@ -13,16 +13,59 @@ class Api36TargetTests(unittest.TestCase):
         self.assertIn('androidBuildToolsVersion = "36.0.0"', build)
         self.assertIn('androidTargetSdkVersion = 36', build)
 
-    def test_tv_launchers_are_explicitly_exported_and_api36_compat_is_scoped(self):
+    def test_tv_launchers_are_exported_and_temporary_api36_bridges_are_removed(self):
         manifest = (
             DEV / "android-tv" / "src" / "main" / "AndroidManifest.xml"
         ).read_text()
         self.assertGreaterEqual(manifest.count('android:exported="true"'), 2)
-        self.assertIn('android:enableOnBackInvokedCallback="false"', manifest)
-        self.assertIn(
+        self.assertIn('android:enableOnBackInvokedCallback="true"', manifest)
+        self.assertNotIn('android:enableOnBackInvokedCallback="false"', manifest)
+        self.assertNotIn(
             'android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY',
             manifest,
         )
+
+    def test_plain_playback_activities_register_api33_back_callbacks(self):
+        shared = DEV / "android-shared" / "src" / "main" / "java"
+        package = shared / "opensagetv" / "vibe" / "miniclient" / "android"
+        controller = (package / "PredictiveBackController.java").read_text()
+        lifecycle = (package / "UIActivityLifeCycleHandler.java").read_text()
+        opengl = (package / "opengl" / "MiniClientOpenGLActivity.java").read_text()
+        gdx = (package / "gdx" / "MiniClientGDXActivity.java").read_text()
+        debug_state = (
+            DEV
+            / "android-tv"
+            / "src"
+            / "debug"
+            / "java"
+            / "opensagetv"
+            / "vibe"
+            / "miniclient"
+            / "android"
+            / "tv"
+            / "debug"
+            / "DebugStateProvider.java"
+        ).read_text()
+        mcp_server = (ROOT / "mcp" / "src" / "sagetv_dev_mcp" / "server.py").read_text()
+
+        self.assertIn("Build.VERSION.SDK_INT >= 33", controller)
+        self.assertIn("registerOnBackInvokedCallback", controller)
+        self.assertIn("unregisterOnBackInvokedCallback", controller)
+        self.assertIn("activity.finishAfterTransition()", controller)
+        self.assertIn("boolean dispatchSystemBack()", lifecycle)
+        self.assertIn("KeyEvent.KEYCODE_BACK", lifecycle)
+        for activity in (opengl, gdx):
+            self.assertIn("PredictiveBackController", activity)
+            self.assertIn("predictiveBackController.register()", activity)
+            self.assertIn("predictiveBackController.unregister()", activity)
+            self.assertIn("predictiveBackController.dispatchLegacy()", activity)
+        for key in (
+            "systemBackInvocationCount",
+            "systemBackLastActivity",
+            "systemBackLastHandled",
+        ):
+            self.assertIn(key, debug_state)
+            self.assertIn(f'"{key}"', mcp_server)
 
     def test_obsolete_permissions_are_removed_and_logs_use_fileprovider(self):
         tv_manifest = (

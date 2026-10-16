@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticBundleManager;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticRedactor;
 import opensagetv.vibe.miniclient.android.diagnostics.DiagnosticSessionSpool;
+import opensagetv.vibe.miniclient.android.diagnostics.ServerDiagnosticExporter;
 import opensagetv.vibe.miniclient.android.diagnostics.SmbDiagnosticsRepository;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 
@@ -35,6 +36,10 @@ final class DebugDiagnosticCommands
                 {
                     String result;
                     if ("status".equals(action)) result = status(app);
+                    else if ("server_upload".equals(action)) {
+                        ServerDiagnosticExporter.uploadNow();
+                        result = "action=server_upload;requested=true;" + status(app);
+                    }
                     else if ("test_smb".equals(action)) result = testSmb(app);
                     else if ("always_flush".equals(action))
                     {
@@ -43,7 +48,7 @@ final class DebugDiagnosticCommands
                     }
                     else if ("create".equals(action) || "upload".equals(action))
                         result = create(app, "upload".equals(action));
-                    else throw new IllegalArgumentException("diagnostics_action must be status, create, upload, test_smb, or always_flush");
+                    else throw new IllegalArgumentException("diagnostics_action must be status, create, upload, test_smb, always_flush or server_upload");
                     pending.setResultCode(1);
                     pending.setResultData("ok=true;op=diagnostics;" + result);
                 }
@@ -106,7 +111,12 @@ final class DebugDiagnosticCommands
                 + ";lastSha256=" + DebugValueParser.safe(prefs.getString(
                 AndroidPrefStore.SMB_DIAGNOSTICS_LAST_SHA256, ""))
                 + ";lastBytes=" + prefs.getLong(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_BYTES, 0)
-                + ";lastTimeEpochMs=" + prefs.getLong(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_TIME, 0);
+                + ";lastTimeEpochMs=" + prefs.getLong(AndroidPrefStore.SMB_DIAGNOSTICS_LAST_TIME, 0)
+                + ";serverDiagnosticsEnabled=" + prefs.getBoolean(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED, false)
+                + ";serverDiagnosticsStatus=" + DebugValueParser.safe(prefs.getString(AndroidPrefStore.SERVER_DIAGNOSTICS_STATUS, "none"))
+                + ";serverDiagnosticsLastTime=" + prefs.getLong(AndroidPrefStore.SERVER_DIAGNOSTICS_LAST_TIME, 0)
+                + ";clientWebEnabled=" + prefs.getBoolean(AndroidPrefStore.CLIENT_WEB_ENABLED, false)
+                + ";clientWebStatus=" + DebugValueParser.safe(prefs.getString(AndroidPrefStore.CLIENT_WEB_STATUS, "Off"));
     }
 
     private static SmbDiagnosticsRepository repository(Context context)

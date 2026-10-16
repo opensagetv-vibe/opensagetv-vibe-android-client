@@ -1,5 +1,1048 @@
 # OpenSageTV Vibe Android Client handoff
 
+## RELEASE-002 final APK qualified / publication next (2026-10-16)
+
+User authorizes Vibe source refresh, Android0.5.102 and qualified plugin
+publication. Candidate APK1720478be78d473e1de5a0183515b1c4330959b7ea94fca7a7e94e631124f957
+is versionCode2101111, same debug package/signer; clean66-task build/strictAPK
+inspection pass. Core326/shared154 JVM cases and173MCP tests pass. Local866
+source-contract run exposed four stale assertions plus an incomplete scheduling
+inventory; targeted159 affected cases pass after fixing those tests/docs.
+No playback runtime change was made to hide a failure. Require exact-HEAD
+GitHub source contracts before publication, then independently verify downloads.
+
+Final-APK stock175/non-Pro25: real MCP exact-context GPU Motion/Field hardware
+MPEG2/Pull generatedSD smoke passes59.952 outputs/s, controls and136prefs/CC
+restoration; independent HDMI shows advancing picture. This is final-build smoke,
+not new every-field scanout proof; prior004/005 physical barcode gates remain
+the qualification. Original-IJK hardware AVC Taskmaster/Pull renders advancing
+HDMI (13.020->44.557s), client diagnostic page/API both HTTP200,136prefs and
+scoped power restored; Dev disconnected/stopped. Stock server unchanged/no
+restart. Windows/Pro/unrelated device matrices were not repeated.
+
+Build-env pilot e9be1e1, Core44d1bc2a, MCP7734a58 and new companion source
+f8436462 have green exact-HEAD CI. MCP0.1.6 four public assets verify; matching
+SageTV catalog PR129 is open/mergeable with no registered checks, not merged/
+live availability. Companion source is public but unfinished VCE-002/005/007
+gates block its binary/catalog; archive remains local. No stock Core swap.
+
+## ONN-003 published-build HDMI result (revision373, 2026-10-16)
+
+Independent85s HDMI recordings of publishedv0.5.10004276b8d on non-Pro25/232
+show normal timeline dismissal on Media3/Pull and IJK/Push, with physical
+Right DURING AutoAspectDebug, FF/REW and pause/play. IJK's selected final-marker
+EOF trial is excluded; the corrected early-anchor trial preserves1415 and
+advancing video. Use Sage Info, not Amazon-reserved Android KEYCODE_INFO.
+No stuck OSD/client runtime fix is proven; exact affected STV/plugin/rule state
+and diagnostic while stuck remain missing. Attempted aspect-rule navigation
+did not establish a changed rule; Source remained visible. Do not count an
+unproven non-Source transition as a passed gate.
+
+Original installed0.5.101-DEV-DEBUG/code2101110 was reinstalled preserving data;
+independently pulled APK matches saved SHA256
+`8faa188097179b43c153f2f9ae98c4f5e445b29835b755d83382669071a5242b`.
+All136preferences restored to GSY/System/dynamic/hardware, session disconnected,
+scoped awake ended with original7/2147483647 read back.232 has zero recordings,
+UI contexts and clients; protected Sage.jar/rootFFmpeg and bridge8a866bb7
+hashes unchanged.175/Pro untouched. Exact savedAPK remains for open A/B identity.
+Two traces/compact HDMI contact sheets remain in active/ONN-003; redundant raw
+videos, invalid trials and staging retire to rootdeleteme with written results.
+Authority: `artifacts/results/ONN-003/RESULT.md`. Both orders373 name the next
+missing evidence; no Android runtime edit, commit, release or closure.
+
+## ONN-003 retry (revision371, 2026-10-16)
+
+Non-Pro25/AFTMM/API25 ADB works; installed client0.5.101-DEV-DEBUG/code2101110
+last updated2026-10-13. Existing app/build unchanged during this retry. Exact
+client444556303031 on232 used `/opt/sagetv/server/STVs/SageTV7/SageTV7.xml`.
+Both Comskip and AutoAspect imports and aspect-setting calls are in server
+logs. The5.5h MPEG2TS/AC3 fixture already has real edl/txt markers and server
+mask=TV; no missing-marker or missing-TV-metadata explanation is supported.
+
+MCP-PLUGIN-COMMISSION-002 fixes test-control scope: use apiUI for STVI
+compatibility/enable/readback and require true after reload; Library plugins
+are passive. Final232 bridge8a866bb7 passes stock-JAR Java8/six Java/tenPython
+and actual selected-UI enabled=true. Core/rootFFmpeg unchanged. This fixes
+commissioning evidence, not the reported OSD defect.
+
+Physical screenshots show normal timeline dismissal within12s on Media3
+OpenGL/GDX Pull and IJK actual Push after Right and FF/REW; Media3 stop/restart
+also clears. Selected Media3 Push/dynamic negotiated Pull, so do not count it
+as Push.136app preferences restored to GSY/System/dynamic/hardware; scoped
+awake ended and app disconnected. The defect remains open pending the affected
+STV identity/AutoAspect rules and a diagnostic report captured while stuck.
+Compact authority: `artifacts/results/ONN-003/RESULT.md`; minimum comparisons
+remain in active/ONN-003. No client runtime fix, commit or release.
+
+## ONN-003 reopened after incomplete negative control (revision370)
+
+Revision369's closure is superseded. The reporter's same-file success on the
+old MiniClient and HD200/HD300 makes a Vibe client parity defect plausible.
+The `.232` test already had AutoAspect and Comskip Playback enabled, used the
+same Amazon AFTMM/2018 Fire TV Stick4K class, and the 5.5-hour fixture already
+carried real `.edl` and `.txt` marker sidecars. Revision369 therefore remains a
+useful conditional non-reproduction, but it did not reproduce the reporter's
+exact STV/per-UI property state and cannot close the defect. The next gate
+compares STV popup state, advanced-aspect acknowledgement and GFX clear/flip
+behavior. Do not add a blind forced-hide timer.
+
+## ONN-003 conditional non-reproduction (revision369; superseded closure)
+
+The affected user isolated a dependency on the third-party STVI. The
+affected user proved that disabling Automatic Aspect Ratio clears the persistent
+timeline. Official AutoAspect1.3.4 and nielm_autoaspect1.3.1 were then installed
+through bounded stock plugin APIs on `.232`. The server log proves the exact
+STVI import and two active aspect-setting calls. Source inspection proves the
+STVI patches `MediaPlayer OSD`, calls `SetAspectRatioMode`/`Refresh` on file
+load, and polls `OSDBottomIsOn`/`AARMSPopupOpen`.
+
+Fire TV non-Pro `.25` is a conditional negative control: Media3/Pull/hardware
+MPEG-2 played the completed 5.5-hour fixture with AutoAspect, Comskip Playback,
+and its real marker sidecars active; a real DPAD Right event showed its normal
+timeline and it fully dismissed within10 seconds with AutoAspect active. No
+client forced-hide timer was added because that could suppress valid STV UI.
+Disabling AutoAspect remains a workaround, not the final client diagnosis.
+`.232` ended idle and its Sage.jar/root FFmpeg hashes remained unchanged.
+Compact evidence and exact hashes are in `artifacts/results/ONN-003/RESULT.md`.
+
+## EXT-001/002/003 completion (revision366)
+
+EXT-001 is complete. Android 13+ predictive Back is registered and unregistered
+with each playback Activity and enters the same SageTV Back-command path as the
+legacy callback. The manifest opts in and the temporary restricted-resizability
+bridge is gone. API33 Tab S6 Lite physical Back and lifecycle gates pass.
+
+EXT-002 is complete for the commissioned Vibe Core path. A self-generated legal
+H.264/AC-3 BDMV proved that stock Core incorrectly tries to Pull its directory;
+stock `.175` was not modified. The narrow `.232` correction retains Blu-ray's
+existing server Push streamer, while Media3 now safely turns Sage's 192-byte
+M2TS Push into ordinary 188-byte TS. Shield hardware playback, seek/pause and
+ordinary-TS regression pass. This Core dependency must remain explicit rather
+than claiming stock-Core BDMV support.
+
+EXT-003 is complete for secure-decoder selection. The isolated debug-only gate
+uses Axinom's current published DASH/Widevine vector and entitlement. Shield
+reports Widevine L1, obtains the license and selects
+`OMX.Nvidia.h264.decode.secure`. Android then correctly rejects protected output
+through the non-HDCP HDMI capture sink; that is expected protection enforcement,
+not a license or codec-selection failure. The activity is absent from release
+manifests. Compact results are under `artifacts/results/EXT-001..003`.
+
+## EXT-005 completion (revision365)
+
+EXT-005 is complete on Shield Tube `.68` against unmodified stock SageTV
+`.175`. Advanced Video exposes only Auto, 32 KiB, 64 KiB and 128 KiB for the
+legacy `PUSH_BUFFER_LIMIT` capability. Auto sends an empty property so old and
+stock servers retain their historical 32 KiB fallback. Invalid or oversized
+values normalize to Auto; 512 KiB is deliberately absent because stock Core
+clamps the effective pusher size to 128 KiB. This controls the server's maximum
+Push write payload, not the client's unchanged 4 MiB ring capacity.
+
+The installed candidate SHA256 is
+`fdc848e22460cabb72e1ad11c2e655ca0061f11eb5d47a098dc5fe0354f85f2a`.
+Actual legacy Exo MPEG-TS Push measured exact 32768/65536/131072-byte payloads,
+lower write-command cadence as the selected size increased, observed maximum
+write times of 1..6 ms, no sampled audio/video drops, stable heap, successful
+server FLUSH/output recovery, pause/resume and recording-to-Live-TV transitions
+for every choice. First-frame wall time ranged from 7.882 to 8.372 seconds and
+did not improve with larger writes, so Auto remains the recommended default;
+64/128 KiB are troubleshooting options rather than claimed optimizations.
+
+The MCP state now includes configured/effective limit, heap and datasource
+write/block/free-space counters. `mcp-push-buffer-matrix` defaults to legacy Exo
+because Media3 correctly advertises MPEG-TS Pull and therefore cannot prove this
+Push property with the same fixture. The harness enters Live TV once and uses a
+direction-aware seek so a retained resume point cannot create a second-tune or
+EOF false failure. Focused source contracts pass and the Android changes are in
+the prior clean 66-task build. All 45 preferences and Shield power values were
+restored; `.175` was not modified or restarted. Compact evidence is in
+`artifacts/results/EXT-005/RESULT.md`.
+
+## CODEC-001 completion (revision364)
+
+CODEC-001 is complete on stock `.175` and non-Pro `.25`/API25/mantis. The exact
+IJK Pull/hardware Taskmaster failure was not a bad SurfaceView or a universal
+MTK decoder limit: its MPEG-TS read began mid-GOP, FFmpeg supplied 106 bytes of
+valid Annex-B SPS/PPS extradata, and IJK k0.8.8 discarded it while configuring
+MediaCodec. The MTK decoder consequently saw slices before parameter sets and
+entered fatal state `0x80001005`.
+
+The narrow native correction supplies existing H.264/HEVC Annex-B extradata as
+MediaCodec `csd-0`; it does not rewrite packets, change configuration-record
+handling, blacklist hardware, or alter transport, Core, FFmpeg, SDL, clocks, or
+surface ownership. Exact reproduction now logs the 106-byte CSD, selects the
+same `OMX.MTK.VIDEO.DECODER.AVC`, emits `first_video_frame`, advances playback
+with nonzero decode/output and displays the expected physical picture. Focused
+13 tests and the clean 66-task build pass. Installed debug APK SHA-256 is
+`8faa188097179b43c153f2f9ae98c4f5e445b29835b755d83382669071a5242b`.
+The 136-setting transaction and stay-awake values restored; stock `.175` was
+not changed or restarted. Compact proof is in `artifacts/results/CODEC-001`.
+The optional short generated-fixture repeat finished after the requested pause:
+hardware first frame, normal completion near 7.9 seconds, and full settings/
+power restoration are supporting evidence, although its nonzero short-fixture
+harness result is not promoted to a strict PASS. A later Fire OS ADB-offline
+transport is not counted as codec evidence.
+
+## Current4A completion (revision363)
+
+INTERLACE-004..007 are complete for their affected supported scope on debug
+APK SHA256 f521ef1a0af3d28fd7a9148c3a382c3074c23ddfb1f344d474919819076cf97a.
+Stock175/non-Pro25/API25/mantis qualifies original-field Client GPU MPEG-2:
+Media3 Pull NTSC59.8459fields/s and PAL49.9052, independent legacy actual
+Push59.9099/60026520bytes, seek/pause/resume, Home/surface recreation and
+generated CEA display. Existing Teletext/DVB AVC bypass evidence remains valid.
+Media3, legacy and both actual GSY delegates retain their qualified identities.
+
+Boundaries are deliberate: IJK hardware on AFTMM and Android System have no
+usable GPU ownership path; IJK software Auto/Fast/YADIF remains. HD full-field
+falls back while HD Frame stays supported. Native authored DVD A/V works, but
+its program-stream callbacks report gpu_source_field_phase_unavailable, so the
+client does not invent pairs. No CPU readback, A/V/caption/source clock, seek,
+stock Core, plugin, FFmpeg or server restart change. Compact results are under
+artifacts/results/INTERLACE-004..007. The known non-Pro GSY/System, Dynamic,
+hardware, Auto-deinterlace, native-DVD profile and server CC are restored.
+Lifecycle/DVD runners now own private checkpoint/restore paths. Windows is not
+needed; do not rerun completed4A or historical matrices without an affected
+shared change.
+
+## Historical4A investigation through revision362
+
+CURRENT installedB4C51BDAD37879D8DAA12FB642BCF052CD8449D2FF4BFFC8E11A550BBD9C50F8:
+experimental separate GLES2/standard EGL-fence prepared-field presenter, commissioned
+API25/mantis explicit unprobed Field only; actual positive original woven pair
+required before worker/display creation. Four retained slots, ready/read GPU
+fences, epoch-safe reuse, one output per independent display tick. Input OES
+acquisition cannot block that display looper. Deadline/late/backpressure/audio
+unchanged; no CPU readback/new master clock/native/Auto/Off change.
+87D1/5D431/30BA/64EF all FAIL0outputs/~607..620ms image acquisition, including
+single GLES3 context. Shared display is NOT necessary for that regression;
+GLES3 input withdrawn. GLES2 input restored; Java EGLExt lacks KHR functions,
+so small owned JNI bridge uses standard EGL fence/wait/destroy with current
+display and EGL_KHR_fence_sync/EGL_KHR_wait_sync/GL_OES_EGL_sync guards.
+No driver/codec code, client GPU wait/readback, audio/master/source-time change.
+NDK21 Gradle packages both ARM ABIs; ELF/four JNI exports/16KiB LOAD align pass,
+debug strip warning retained, not a playback or missing-library inference.
+Initial no-prior-read barrier omission retained only as harmless ordering
+optimization, NOT cause/fix proof. Four slots/epochs/strict real-read fences.
+Retrieve current real-MCP GLES2 fence gate and matched HDMI before another
+Watch/install/capture.58focused source/probe/capture/fixture tests/build/install
+prove static boundaries only. No full-field or lifetime PASS/publication yet.
+Before another install, graceful selected-device prepare and actual Success.
+Nominal ro.opengles.version196610 did NOT qualify actual GLES3 video input;
+helper resource/context creation and EGL2-fence availability must still
+physically qualify, never guessed from platform/version capability.
+Widened preparation admission DC09 FAIL83ms late and is WITHDRAWN; old
+one-field rule restored. A917 profile AND unprofiled FAIL81ms,131prefs/CC restore.
+PAL BFF spatial/coded-budget COMPLETE:64woven/64correct filtered selections,
+independent25distinctpictures/s Frame mode despite50GPU submissions.
+HD canonical1cb57d5d90s1920x1080 verifies source IDs/SHA/exact65944762;
+isolated F30 inspect64woven/33.33GPU/57.42decoder/clock.97926 and moving HDMI
+qualify the post-probe inspection correction, not full-field timing.131prefs/
+CC restore; no repeated completed geometry/Windows gates. Both orders362
+current;004..007/IJK remain open. Fast stamps preserve SD defaults; partial
+geq176947200bytes retired before commissioning. Stock Core/plugin/AAR untouched.
+Windows-dependent work complete/restored,185 may power off; no further need
+for current4A. No175 restart authority, stock Core/plugin/AAR untouched.
+Five completed preparation snapshots19214bytes retired recoverably; report
+at workspace artifacts/CLEANUP_REPORT.md. Canonical/PULL003/open raw preserved.
+Non-Pro awake guard active; end/verify only at pause/session closure.
+
+HISTORICAL (completed, no longer running):62056AF5 mapped-duplicate protected skip still fails backpressure,
+input9/output1/metadata14/queued3/oldest84357us,6expired startup fields. No
+GPU PASS. Current installed92E73F0DBE432AA5DC6B8E3E2C4AB19378BCD406E794104B3E6B58996E47723C
+adds source-resolution one-pass prepared Fast and explicit finite DEBUG
+next-stage profile (no production readback/automatic recurring probe).
+Real-MCP profile gate38674 failed and HDMI marker wait15816 timed out;
+these are NOT running or picture evidence. Compact005/nonpro-original-field-queue.md
+records the trials; no Core/plugin/AAR/Windows change.36GPU/probe/capture-ID
+and31MCP health tests pass; build/install actual Success. Native/Auto/Off
+and independent engines remain intact; opt-in queued path still unqualified.
+
+Windows185-dependent checks COMPLETE; user may power it off. Stock175/25/
+SageMC/exactcontext444556303031 remains current. No175 restart authority.
+Sync-only3A7D completed:717valid IDs/327skips/~32.43 advancing fields/s,
+despite59.95fps submission counts. NOT retained-field PASS. GPU FIFO D83
+with interval1 fails bounded startup backpressure; A216DA89 interval0 also
+fails queue_late (input5/output2/queued3). Both gates restore131prefs/CC;
+capture marker never reached, timeout is not picture evidence. Current code
+also waits for actual source-sized holder dimensions before creating EGL;
+candidate build/install/physical qualification follows. No queue bounds or
+original timestamp/audio/master clocks relaxed. Further actual video latency
+and retained-field verification remain required. Do not replay completed
+diagnostics/ADB/native matrices; next queued-output repeat/PAL/HD/IJK/lifetime.
+Canonical PAL BFF90s720x576/25coded/50fields/AC3 source SHA
+2fe98a64b3bea96cb8c0a4e18dcd0cf84d06eda7c36669d76dd169f0fdffe24b
+verifies decoded rows[1,0,1,0],[3,2,3,2]; public scan/exact MediaFile65944751
+at /var/media/OpenSageTV_Vibe_Tests/VibeFields-576i-BFF-MPEG2-AC3.ts.
+Both TOMLs register generic path/modes; generator --standard pal --order bottom.
+Keep canonical fixtures. Minimum unique current failure JSON is still active;
+compact proven result precedes retirement. Non-Pro awake guard remains active.
+
+User requests finish without stopping.25/AFTMM/API25/stock175/SageMC/client31/
+context444556303031/HDMI on25, real MCP. Generated source56791bf3 validates
+per-field IDs before interleave.86144B9F probe proves64woven despite half-
+frame metadata, not separated fields. A7F1E9C7 source-PTS mapping selects64/64
+correct output IDs (33/31); field-retention/performance still fail. Unprobed
+9AF9(two-pass)/1DCB(one-pass) budget failures retained. One-pass WITHDRAWN.
+432D immediate-codec-release first-frame metadata failure also WITHDRAWN;
+original codec release/deadlines restored. A7F1 fallback59.938fps/seek25s/
+pause0ms/resume/131prefs/CC1 restore pass; one-shot failure snapshot survives
+GPU disposal. Compact004/decoded-field-geometry.md owns exact scope/limits.
+
+Installed488349a49e6403aba044eb2aa158a87feea42001d78cb20051cc70e691d1c8cd
+processes each mapped, pixel-qualified woven picture once and its two ORIGINAL
+fields. First uninstrumented15s run58.47fps/59.92decoder/clock0.995/control
+and actual moving HDMI pass, but SAME-Activity repeat fails51.76fps sustained
+budget and safely returns native.131prefs/CC restored. Do NOT close field
+retention, performance or lifetime from that first pass. Next correct repeat
+scheduling/retention.720p60 capture capability gives360 encoded frames/6s;
+distinct-field qualification remains separate, not inferred from that count.
+Independent legacy shares policy but still needs its affected physical gate.
+DIAG-002/VCE-011 and ADB-003 operational qualification now CLOSED,
+INTERLACE004..007/IJK remain open; both orders355 current. Windows-dependent
+work was prioritized and completed,
+185 may power off. Upload-only receiver5a623266 replaces
+the superseded combined3e235c68 on185 after authoritative0recording/UI/client
+guards, one SageTV64 restart, five options preserved and protected stock Core
+d76ded98 unchanged. No MCP/FFmpeg change. Android488349a4 real-MCP uploads:
+Off/no-write, enabled/manual receipts independently SSH-read with exact SHA,
+12text entries/privacy, disable/no-write, unreachable/disabled receiver and
+continued native A/V pass. Idle reconnect fresh receipt also passes; valid
+archives required nested log/trace/checksum entries and no active-backend
+field while idle. Oracles corrected, only remaining reconnect/exit rerun.
+Final enabled exit/no recurring writes,131prefs/receiverfalse/Core protection
+and independent disconnected-state restoration pass. Windows awake97477
+released with RESTORED acknowledgement; original Power saver unchanged.
+Stock175 full affected upload gates and independent HDMI continuity also pass,
+native59.934fps/clock1.00338/non-silent audio, original131prefs/CC/receiverfalse.
+Compact results/DIAG-002/windows-upload-only.md and linux-upload-only.md own
+scope/receipt hashes/retired raw. Do not repeat passed upload matrices.
+Initial900s fixture startup failure is newPULL-003, separate from uploads;
+keep its exact startup witness and classify on175 before client changes.
+No175 restart authority. Remaining4A GPU repeat/scheduling/geometry/IJK/
+lifecycle/caption gates continue on25; Windows is not required for these.
+
+Latest355:82716 source-sized GPU buffer repeat59.890fps/zero measured native
+drops/controls passes, but actual720p60 field IDs expose256skips despite
+59.951fps GPU submissions. Native progressive picture-ID control595valid,
+593successive/oneexpectedduplicate/zeroskips qualifies the capture rate.
+Use registered physical rectangle135,24,1010,672 (observed full video area
+including existing underscan), not logical1920 UI coordinates. No settings
+change or adaptive crop. Fixed hidden-overlay harness: explicit detailed mode
+overrode visiblefalse; historical rates remain valid but not hidden-overlay
+proof. Current3A7D5B079d8e1be9d180314961b61d9c5601790478f1c6aafe864ca80cd18b47
+historical installed: synchronous queue only for proven original-field pairs, bounded
+EGL min/max, source buffers scoped to that proven layout. Physical gate70637
+and720p60 capture92058 are complete; see revision356 failure above.
+Synchronous queue is still an experiment, not a field-retention PASS.
+No original codec release/audio/source timestamp changes. Native/Auto/Off
+and previously qualified other-device single-output EGL policies untouched.
+
+Five fresh real-MCP25 gates4.731..4.869s/expiry0/owned-shell reuse and actual
+runtime controls qualify ADB-003 operation;79SDK ADB/7framing/4connection tests
+pass. Old device-side15s cause explicitly unproven; no ordered replay/SDK
+substitution. Compact results/ADB-003/operational-qualification.md.
+IJK native glue/AARs untouched, pinned player source in /tmp/vibe-ijk-field-source
+for independent inspection. No Core/FFmpeg/AAR/commit/release change.
+Automated awake25 remains active with original7/2147483647; end/verify on
+pause/session closure. Each finished gate restores131prefs/CC1.
+
+## Current device readiness (revision351)
+
+2026-10-12 by21:32UTC: non-Pro25 is connected again. dev.cmd verifies
+AFTMM/mantis/API25; three fresh real-MCP stdio connection/session/info gates
+pass4.658/4.602/4.754s, authorization previous0/current0/nonExpiring and owned
+persistent-shell reuse. Keys/app preferences/sleep policy/other devices remain
+untouched. Initial device-offline failures are not the older MCP-only timeout;
+recovery cause (targeted reconnect versus requested manual debugging toggle)
+is unproven. ADB-003 parent remains open; readiness no longer blocks25 work.
+User confirms USB HDMI capture is now on25, not Shield; reverify actual route
+before any new physical playback mutation. No playback/install occurred here.
+
+Windows185 SSH and configured Core MCP8270 are available, plugin0.1.5,
+SageTV64 Running; stock Sage.jar matches protected d76ded981b9bc51e25b9cec821b6abeb771b46c2996dc45e453349b5e703fcb0.
+8080 is closed but is not the MCP readiness endpoint. Zero UI contexts was
+observed, not recording-idle proof; no restart/power/configuration change.
+Windows is only needed for DIAG-002 final upload acceptance, NOT GPU/IJK work.
+Both orders351 retain unmet4A work, remove stale hardware-unreachable wording
+and preserve independent acceptance. Compact results/ADB-003/readiness-recovery.md
+supersedes completed readiness raw retired to rootdeleteme; open failure
+evidence elsewhere is preserved. No source/build/commit/release change.
+
+## Section4A completion work (revision350)
+
+User requests all4A tasks, not completed matrix replay. Shared GPU timing is
+corrected in independent Media3/legacy: bounded one-field admission replaces
+5ms. Shield/stock175 SD fresh/repeat50.027/50.020fps, legacy49.990, zero decoder
+drops during measured windows; native49.970. HD59.937fps/zero measured drops,
+HDMI FRAME247->427/6s, seek/pause0ms/resume and45prefs/CC1 restore qualify.
+results/INTERLACE-005/shield-timing.md owns exact builds/limits/retired raw.
+Every-field/woven-output/IJK/lifecycle/caption acceptance remains open.
+
+CONTROL-003 complete: real coalesced notification/reply fails before correction;
+sole bounded stdout reader/queue fixes it. Seven real-child/four connection
+tests/79ADB tests pass; five real-MCP Shield repeats before/five after plus
+scoped runtime controls qualify. Original device-side shell timeout cause
+stays separate, no replay/key reset. results/CONTROL-003/qualification.md.
+Current physical tooling is real MCP, unlike prior explicit SDK sessions.
+
+Required non-Pro25 responds to ping/TCP5555 but is ADB-offline via BOTH
+wrapper/MCP. Windows185 TCP22/8080 is unreachable. Readiness question sent;
+don't substitute Shield for mandatory CODEC-001/upload/ADB/device rows.
+No175 restart permission/Core/plugin/server/release change selected.
+
+Unsupported AVC/HEVC now restores native with truthful Unavailable instead
+of unqualified GPU-copy overhead. First Tube AVC has50fps counters but frozen
+HDMI; matched native-Off advances normally. AVC-refresh-only trial also fails
+and is WITHDRAWN; no new NVIDIA AVC workaround remains. Final9521F142 defers
+the EGL display window until frame-format classification, preserving native
+BufferQueue/format on unsupported/progressive input. Fresh/repeated same-
+Activity Media3 AVC49.993/50.027fps and independent legacy49.968 have moving
+HDMI/zero measured drops/seek/pause0ms/resume. SD Motion/Field50.007/49.980
+same-Activity repeats qualify. See results/INTERLACE-007/unsupported-input.md.
+All45prefs/CC1 restored; final owned Dev stopped/disconnected/no player,
+launcher foreground. Automated awake ends, original0+300000 power verifies
+inactive checkpoint. All owned test/capture children completed. Actual installed
+APK9521f1421ec4470aa49c46755fe6e5d61f4f654550956388b378fa75bd298fee.
+13policy/25GPU/7framing/4connection/6fixture/79ADB/10config tests/build pass.
+Three validator regression tests also pass: generated build directories prune
+before Windows/Linux file stat, and the native SurfaceView guard recognizes
+the extracted binding helper with its callsite/native fallback, not only the
+old variable spelling. Full host validation now passes; no source guard is
+removed and no generated Linux symlink is changed to satisfy validation.
+Next actual decoded-field geometry/retention and independent IJK boundary,
+then remaining affected lifecycle/CC/Push/DVD/other-device gates. Required
+non-Pro25 is offline and Windows185 unreachable; no known WOL MAC is saved
+or available in the neighbour cache. Never manufacture a hardware PASS.
+
+## Prior Shield Tube focused GPU result (revision348)
+
+The user-requested Shield Tube/.68/sif/NVIDIA/API30 HDMI session is complete
+against stock175/SageTV7.xml, exact client34/context444556303034. Native,
+896shader/OES pixels, coded-frame GPU processing in independent Media3/legacy/
+both actual GSY, progressive native bypass and seek/pause/resume qualify their
+SELECTED gates. Compact artifacts/results/INTERLACE-007/shield-tube.md records
+scope, exact builds, rates, picture progression, investigated failures and limits.
+
+Final installed test APK SHA256
+126ac475972701296bd9de8ad678a17ec61f4c7355e096a12411ca4f4a0d68cc
+preserves all settings. Scope Frame interval0 to API30/sif/NVIDIA Tegra and
+EGL minimum0. Scope native-layer refresh to the observed Tube/NVIDIA MPEG-2
+GPU->native boundary plus proven MTK scope. Codec-recreate-only failed and the
+NVIDIA codec exception is withdrawn; ordinary native/seek/audio/source paths
+remain unchanged. Advancing HDMI—not counters—proves the frozen-picture fix.
+Same-Activity repeats and independent backends pass; strict GSYMedia3 native
+fresh/repeat59.887/59.899fps retain the configured60000/1001 source budget.
+
+Full-field acceptance remains OPEN. SD Motion Field's first50.04fps does not
+survive repeat/fresh; Fast Field fails too, with moving native fallback.
+Frame SD29.62fps meets ONLY coded25fps budget, not full50-field retention or
+perfect motion. The finite GPU timing probe does not prove the exact drop
+cause. Preserve minimum SD failure/control comparisons and unproven connection
+states; do not equate reconnect/explicit exit with a codec crash or GPU cause.
+
+The harness observes500ms of quiet paused clock before the unchanged drift
+gate, and resolves optional expected_video_fps by exact configured fixture
+path after a stage closes. Unknown cadence is unqualified, not PASS. The
+affected policy/harness/config/fixture/DVD/capture checks and APK build pass.
+
+All45prefs/original serverCC1 restored; final read-only state verifies original
+GSY/legacy_exo/Fixed/hardware/Auto, disconnected/no player, launcher foreground.
+Manual keep-awake ENDED, original stay_on0/screen_off300000 verified inactive.
+All owned test/capture children have completed. No Core/FFmpeg/plugin/server
+restart/other-device mutation/clear-data/reboot/commit/publication.
+
+User pause/resume honored; final bookkeeping is reconciled at348 in both task
+orders. Completed/corrected raw retires recoverably to rootdeleteme under the
+workspace cleanup report; compact evidence supersedes old raw references.
+Minimum unique SD/connection comparisons and existing ONN12 remain active.
+Next is reproducible field timing/decoded-texture/field-retention proof and
+remaining Home/format/film/DVD/Push/caption boundaries, not another replay of
+these passing native/Frame rows. Parent004..007 and ADB-003 remain OPEN;
+explicit direct SDK functions/public stock APIs did not qualify MCP stdio.
+
+## Current ONN non-Pro focused GPU result (revision346)
+
+User-requested onn-v1/.141/sti6140d360/API34 HDMI session is complete against
+stock175/SageMC, exact client35/context444556303035. Native60.03fps,896pixels,
+GPU Frame in Media3/independentlegacy/both actualGSY, SD Motion, progressive
+bypass and seek/pause/resume pass their SELECTED gates. These are not proof
+of full50/59.94-field retention or the absent user's football recording.
+
+Full GPU Field repeatedly fails gpu_presentation_budget and safely returns to
+moving native HDMI. One pacing experiment reaches58.54fps but its repeat
+fails; both experimental pacing source changes are WITHDRAWN. Do not revive
+them or call one nominal observation a correction. Final installed debug APK
+2f6efbb5ee77d9c36909d2b740a7fbba5c3e76c9b2bc9dc94aaad621905b8f30 returns
+to initial A333 production GPU policy, no publication/version bump/commit.
+Only harness STV-ready/async paused-clock observation/explicit mode-change
+verdict/actualGSY-witness improvements remain from this session.
+
+All59prefs and original serverCC1 restored. Fresh final connection verifies
+original GSY/System/dynamic/hardware/Auto, Main Menu, no player. Manual awake
+session ENDED: original stay_on0/screen_off900000 restored and status inactive.
+All owned test/capture children completed; no Pro/Core/FFmpeg/plugin changes or
+server restart. Direct SDK functions/public stock plugin APIs are explicit,
+not MCP stdio qualification; ADB-003 remains open.
+
+Compact artifacts/results/INTERLACE-007/onn-non-pro.md records exact builds,
+rates, picture progression, controls/oracle correction/withdrawn experiments
+and minimum retained open comparisons. Completed/redundant raw retires to
+rootdeleteme recoverably.9policy/23GPU-harness/3capture/11native-DVD contracts
+and final build pass. Both orders346 next reliable full-field/decoded-texture
+proof, then remaining Home/format/DVD/Push/caption boundaries. Do not repeat
+these passing rows or close INTERLACE-004..007 from this partial result.
+
+## Current Client GPU option and native safety gates (revision344)
+
+INSTALLED/testable non-Pro25 APK A333a07a59dae4ec1f3a76cc717e2ea0bcdcc82baf10178125a4b47a98efe196.
+Client GPU is explicit in startup/live Video; Client/Auto/Off retain their
+existing semantics, MIM Fixed-only, saved settings preserved.008 UI complete.
+Native frozen-picture correction passes independent HDMI in Media3/legacy/
+both GSY delegates. Current candidate also passes progressive native bypass
+and three Media3 handoffs in the SAME PID22943/ActivityRecord8f5acec, plus
+independent legacy progressive:~60fps native counters, moving HDMI, seek25s/
+pause0ms/resume, all131prefs/originalCC1 restored. No reboot/server/Pro action.
+Compact results/INTERLACE-004/native-fallback.md and progressive-and-repeat.md
+replace completed/corrected raw retired recoverably to rootdeleteme.
+
+Native recovery/bypass is NOT full-rate GPU deinterlacing: non-Pro GPU Field
+still misses its~60fps motion budget, and unknown decoded texture/field
+retention must be proven independently. Physical film/field-picture/DVD-GPU/
+Home/format/Push/caption boundaries remain open004..007. Do not replay the
+completed native/progressive rows or unrelated matrices. Next action is the
+decoded-texture/field/performance gate, then those remaining boundaries.
+
+17pure policy/19GPU/3capture/8native-DVD contracts/build pass; existing IJK's
+documented skip stays SKIPPED, not PASS. No commit/version bump/push/release.
+ADB-003 MCP-only bootstrap timeout remains open; current physical runs use
+explicit direct SDK functions and bounded stock plugin APIs, never protocol
+PASS substitution. Both task orders344 current. Manual non-Pro test-awake
+session ENDED and restoration verified: stay_on_while_plugged_in7 and original
+screen_off_timeout2147483647. All physical children/captures have completed.
+The test APK remains installed, settings preserved; completed raw has retired
+recoverably, while unique open GPU comparisons remain active.
+
+## Current native handoff qualified; progressive/repeat gates (revision343)
+
+User's Client GPU startup/live choice is installed/qualified separately (008).
+08c3d555 corrects the real frozen native picture, not merely its counters:
+Media3/legacy/GSY(Media3)/GSY(legacy_exo) HDMI advances727->906,752->932,
+608->788,640->820 over6s. All~60fps native counters/seek/pause0ms/resume,
+131prefs/originalCC1 restores pass without device reboot. Display-EGL detach
+alone2edff8ff fails; API25 MTK display-layer refresh supplies the correction.
+Compact results/INTERLACE-004/native-fallback.md supersedes corrected raw.
+GPU full-field output remains below its motion budget, not qualified.
+
+Current installedA333a07a59dae4ec1f3a76cc717e2ea0bcdcc82baf10178125a4b47a98efe196
+on non-Pro25/AFTMM only, actual guardedSuccess. Adds positive MPEG2 progressive/
+film/separate-field native bypass (not a slow GPU copy) and per-PlayerSurfaceView
+alternating opaque refresh so a second handoff in the SAME Activity is not a
+no-op.17pure policy/19GPU contracts/build pass. Media3 progressive native-bypass
+driver/capture are RUNNING. Wait final report and inspect HDMI; then same-Activity
+interlaced and progressive repeats via --same-activity, which must prove both PID
+and exact foreground ActivityRecord unchanged. Legacy progressive gate follows.
+No auto runtime command replay, hidden MCP transport fallback or source changes.
+
+Manual non-Pro keep-awake remains active; end after session. Stock175, Pro and
+Core/FFmpeg untouched, no server restart/publication. ADB-003 remains MCP-only
+setup qualification; current physical runs explicitly use direct SDK functions
+and bounded public stock plugin APIs, not MCP stdio PASS. Both task orders343
+prioritize bypass/repeated lifetime before remaining field/caption acceptance.
+
+## Current GPU fallback picture failure (revision342)
+
+Client GPU is physically qualified as an explicit startup/live choice (008),
+but runtime fallback is NOT qualified. HDMI at3s AND7s stays on FRAME181/6.039s
+for Media3 and legacy despite native counters advancing~60fps and controls
+passing; GSY/Media3 similarly stays on FRAME188/6.273s. The revision341 recovery
+claim below is counter-only and superseded. Native Off's burned frame advances
+with its timeline, so this is a real GPU->native display handoff defect.
+
+Candidate separates display-EGL producer lifetime from decoder-input lifetime:
+destroy the display window on the owned GL thread BEFORE requesting native
+output, while retaining/draining input until actual renderer detach. Compile,
+source contracts and non-Pro25/stock175 HDMI advancing-picture retest are next.
+No Core/server/Pro changes; prefs/CC/power remain protected. Current installed
+APK is still89462806 until guarded candidate install finishes. Manual awake
+session remains active. Full GPU field-rate/performance004..007 and ADB-003
+remain open; no commit/publish. Both task orders342 prioritize picture recovery
+before any further backend acceptance.
+
+## Previous GPU choice / counter-only fallback (revision341; superseded)
+
+INTERLACE-008 COMPLETE: actual startup Pull four choices including Client GPU,
+no MIM; selection persistsclient_gpu and returnsparent; Fixed addsMIM. Actual
+live compact Video choice/Back-parent pass. Both131prefs restored,16policy/
+15source/11IJK/build pass. Compact results/INTERLACE-008 replaces retired raw.
+
+Native fallback root: API25 MTK MPEG2 texture->display calls native_setSurface
+and throws IllegalArgumentException, not merely slow decoding. Exact actual
+GPU output replacement now recreates video codec only; source/sample queues/
+audio clock remain. Real renderer ack owns lifetime and failure starts draining
+before retarget.76cef22b actual media3-texture-retarget-recreate-hd PASS:
+59.984fps/1.0018clock, errorfalse, decoderinit2/release1, initial82 GPU drops
+do not increase in native observation, seek/pause/resume and independent ready-
+scoped HDMI CPU44.4%. Native-reference C4b3db08 passes59.967fps/0drops/1.0019.
+These are NATIVE recovery, not full-field GPU processing qualification.
+
+Latest INSTALLED894628067a4a26ca340e3f0039a8c00fda44660d5524d7edee6c891aaa67d191
+on non-Pro25/AFTMM ONLY, actualSuccess. Same runtime fix; unset GPU output rate
+now defaultsField so motion deficits fall back safely, savedFrame/Auto/Client
+unchanged. Diagnostics keep native Hardware identity after GPU unavailable.
+Current legacy-texture-retarget-recreate-hd driver/capture are running; wait
+their actual final JSON and inspect picture. Next GSY/bypass/lifetime/caption
+affected rows, not unrelated matrices. Core/FFmpeg175/pro untouched; no reboot
+since boot676c8156. Manual keep-awake still active; end after session.
+
+ADB-003 open: MCP stdio occasionally times out on settings-get while wrapper/
+direct SDK/server-import read0.79 ADB tests pass, one finite retry only for
+idempotent authbootstrap, no ordered replay. CONTROL-002 stderr drain remains
+qualified. --direct-tools explicitly invokes same bounded tool functions/public
+stock plugin APIs and scopes; it DOES NOT qualify MCP stdio. Current physical
+gates use that transparent external route to keep progressing. Both orders341
+current;004..007/ADB-003 open, no commit/push/release.
+
+## Current explicit GPU choice / safe fallback (revision340)
+
+New request adds Client GPU in startup and compact live Video/Deinterlace.
+client_gpu owns GPU adapters; Client retains IJK software/device field policy,
+Auto/Off remain native. MIM is Fixed-only in both menus; GPU requests server
+Off and cannot enable IJK software filtering. Unsupported engines accurately
+report Unavailable. INTERLACE-008 added and remains open for real UI proof.
+
+346d6a17 per-frame buffer return WITHDRAWN: unfiltered38.38fps/47.46decoder,
+Fast27.25fps/45.53decoder, normal clock; controls recover but motion fails.
+Their live HDMI stages were missed: no picture proof. Keep JSONs for current
+comparisons. Optional background capture wait now permits180s, still requiring
+scope/live expiry before graph open and regular progress polling.
+
+B2f15870's three sustained two-second deficit guard triggers actual
+gpu_presentation_budget fallback, but retarget loses healthy playback. NOT
+qualified. New correction holds Surface/context until playback-thread renderer
+disable or retarget returns; application-thread release/retarget deadlines
+aren't that ack. Failure drains producer buffers BEFORE main retarget; Media3
+and legacy surface owners remain independent. Eight GPU/eight location-policy
+JUnit and15GPU source tests pass. Full UI/ownership build is compiling after a
+preference-summary type correction; wait actual build Success. Existing
+prepare-detach-ack-build passed, selected non-Pro25 only; install after success,
+then fallback/picture/controls and UI persistence. Never count callbacks/30fps
+capture as retained50/60fields. No restart/reset assumed necessary yet.
+
+CONTROL-002 complete: bounded stderr collector prevents MCP PIPE backpressure
+and removes blocking read-to-EOF on timeout. Four tests include300k partial
+line/reply and live-server timeout; actual selected-device preparation passes.
+No replay/key/shared-server reset. Keep manual non-Pro25 awake session; end
+at completion. Both orders340 current;004..008 open, no Pro/server/Core/release.
+
+## Current GPU presentation/lifetime investigation (revision339)
+
+Use non-Pro25/AFTMM/API25/client31/context444556303031 and stock175 ONLY.
+No further Pro action; exact pre-Watch witness remains mandatory.
+121a4461 buffer-return/scoped-release/immutable-slot build passes HD32.97,
+SD Motion32.65 and independent legacy32.90fps, normal clock and seek/pause/
+resume, without reboot between those runs. Full50/59.94-field output remains
+unproven.14651bca opt-in Field swap0 improves38.06fps but decoder59.87 and
+53.95fps minimum expose remaining drops; profile update14.34/drawSwap10.31ms.
+Its seek/pause/resume keeps GPU active, not full-motion acceptance.
+
+The following unfiltered comparison fails during clean-start, not playback;
+outer RPC40s could interrupt bounded90s graceful cleanup. Restored131prefs;
+driver now allows cleanup's own deadline and restores prefs independently of
+CC errors. Explicit restore-only mode recovers interrupted private checkpoints.
+The fresh retry then fails at native allocation before any GPU frame. Scoped
+SIGQUIT PID26318 confirms MediaCodec.native_setup; preserve
+artifacts/active/INTERLACE-004/unfiltered-native-allocation-26318.txt. Thus the
+three earlier lifetime passes are insufficient closure, not a universal fix.
+
+Current346d6a17 candidate returns each producer buffer after all GPU sampling
+commands, using Android's release fence rather than CPU glFinish/readback.
+Empty post-return callbacks do not count as pictures or metadata failure.
+Compile/13GPU source contracts pass. Third non-Pro reboot verified
+d4851418->676c8156; original7/2147483647 restored first, prefs preserved,
+no server/Pro reboot. Installed346d6a17 with actualSuccess; manual keep-awake
+begun again. Current media3-return-every-frame-bypass run/capture compare the
+unfiltered GPU route first, then Fast/field/strict cadence/controls and repeated
+startup WITHOUT another reboot. Never call native callbacks or30fps HDMI
+proof of retained50/60fields. Keep004..007 open and both orders339 current.
+End manual keep-awake after the session. No commit/push/release authority.
+
+## GPU lifetime correction resume point (revision338)
+
+85302f3d stable-context run now passes minimum coded-frame32.40fps, decoder
+59.93fps,0.994clock, seek/pause0ms/resume and restored131prefs/CC; independent
+ready-scoped HDMI CPU51.6% versus old99%. Keep full50/59.94-field acceptance
+separate. Next SD Motion/field run fails at native codec allocation before
+GPU callbacks; new PID28574 thread witness is MediaCodec.native_setup waiting.
+Do not call that an SD filter or caption result. Snapshot/capture guard correctly
+rejects missing live stage. Second non-Pro reset changed boot9a62b8a5->d4851418,
+original7/2147483647 restored before reset; no server/Pro action.
+
+New candidate returns latched SurfaceTexture content before synchronous codec
+flush/disable/release, drains callbacks until transition ends, and keeps Surface/
+context alive until decoder teardown. Nested transitions use API23-safe CAS;
+old renderer providers hold an immutable per-builder output slot until decoder
+release completes, never the replacement player's slot. Exact API25
+OMX.MTK MPEG2 with actual GPU output releases before flush; Auto/Off/other
+codecs/APIs remain untouched.11GPU source/eight native-DVD contracts/six policy
+tests pass. Immutable-slot ownership build has compiled and is being installed.
+Wait actual guarded install success,
+guarded install success, begin non-Pro keep-awake, then HD GPU controls followed
+by SD Motion/new Watch WITHOUT reboot; require repeated lifetime recovery before
+claiming correction.004..007 stay open, both orders338 current. No publication.
+
+## Stable-window candidate under measurement (revision337)
+
+85302f3d installed ONLY non-Pro25/AFTMM/stock175 after guarded clean-start;
+current media3-stable-context-performance and scoped ready-file HDMI jobs are
+running. It keeps the display EGL surface current instead of switching to
+pbuffer every frame, splits finite240-frame bind/update/draw timing, and adds
+stable decoder-cadence classification to avoid inventing missing native fields.
+Compile/five GPU policy tests pass. Preceding4a1f7595 passes896exact synthetic/
+OES/field-interpolation pixels, but active GPU25.54fps fails30fps real time;
+overlay-hidden25.60fps is no correction. Its coarse handoff/bind31ms versus
+draw5ms motivates this candidate, not proven attribution before the next probe.
+Native reference59.93fps/0drops remains valid. Keep shader state/clock/control
+PASS distinct from presentation acceptance. GPU004..007 still open.
+
+ADB-002 is complete: two pre-checkpoint MCP setup queries timed out while
+wrapper query0 worked; after one-shot DEVNULL isolation actual setup reads0,
+nonExpiring/persistent shell/clean-start pass.77 focused ADB tests pass; no
+ordered replay, key/shared-server reset, or Pro disconnect. Compact ADB-002
+result supersedes retired raw. Both task orders337 reviewed. Retain minimum
+active GPU comparison evidence; no commit/publication/server change/restart.
+
+## GPU real-time failure correction (2026-10-11 / revision336)
+
+Use ONLY non-Pro25/AFTMM/client31/stock175; exact pre-Watch scope witness is
+required and qualified. Never control Pro32 or guess its previous source.
+Current EBD32284 passes768actual GPU pixels/OES transform and GPU seek/pause,
+but user observes jerking/high CPU and the counters confirm ~20fps presentation,
+normal clock, up to99%total CPU. That aggregate state/control PASS is NOT
+real-time acceptance. Native Off reference presents59.93fps/zero drops with
+independent live HDMI, CPU snapshot52.5%,131prefs/CC restored. A separate
+MediaCodec native-setup/allocation wedge affects Off too, before GPU frames;
+verified reboot62135e75->9a62b8a5 and native recovery do not prove its cause.
+
+New Fast implementation extracts a half-height same-field GPU texture then
+interpolates those rows for native-size output, without lowering display
+resolution or changing audio clocks. Expanded exact OES pixel checks and finite
+240-frame DEBUG timing probe compiled successfully; clean-stop helper is
+running before guarded non-Pro update. Wait for actual install Success before
+gates. Next: pixel test then scoped HD Fast/profile/cadence/HDMI with seek/pause;
+benchmark bypass/SD/other delegates only after this path is real time. Harness
+now rejects sub-coded-rate output and stale/live-stage capture markers; do not
+reuse earlier aggregate PASS as cadence proof. INTERLACE-004..007 stay open,
+both orders336 reviewed. Keep minimal unique failure/A-B evidence; no commit,
+publication, server change/restart. Scoped keep-awake is active; end it when
+the test session completes (original7/2147483647).
+
+## GPU output qualification continues (2026-10-11 / revision335)
+
+CONTROL-001 exact identity isolation is complete: real scoped repeat verifies
+serial25/AFTMM/client31/context31 before Watch, never Pro32 fallback.17Core/
+16Sagex-Web/30health tests pass;131prefs/CC1 restored. Compact results/CONTROL-001
+records the acknowledged wrong-context impact; no previous Pro source was
+captured and no restoration guessed. Older field-first aggregate is invalid.
+Installed6edd5985 passes512actual offscreen GPU pixel checks and Media3 GPU
+Fast startup/picture. The later seek clears fresh metadata and triggers GPU
+fallback after an Exo timeout; old aggregate PASS is not GPU controls proof.
+New harness verifies filter remains active after controls. Source correction
+retains exact release metadata across temporal-history reset, uses observed
+MPEG-2 sequence FPS when Format hasnone, and Fast now samples decoder OES
+directly to avoid the extra full-HD FBO copy. New build is running; install
+only non-Pro25 with wrapper alias/model verification, then affected retry.
+INTERLACE-004..007 remain open. Both orders335 reviewed. Keep raw minimum GPU
+failure evidence until corrected, then retire it. No publication/server change.
+
+## Exact server-context isolation dependency (2026-10-11 / revision334)
+
+User correctly reports Pro switched to test video. ADB/install targeted only
+non-Pro25/AFTMM, but field-first report proves old Core MCP only-remote-UI
+fallback chose444556303032 while selected Android ID31 registered. That run
+is INVALID_CONTROL_SCOPE, not a GPU failure. First media3-fast-first report
+uses31 and shows actual GPU Fast/Hardware, real picture,936filtered frames
+and saved131prefs/CC1 restored. CONTROL-001 removes unsafe Core/Sagex fallback,
+rejects empty/ambiguous identities including Web, polls only exact read-only
+registration and records a pre-Watch scope witness.17Core/16Sagex/28health
+tests pass; repeat fresh31 Watch with concurrent32 before closure. Do not
+guess previous Pro playback or send it further controls. No server/plugin
+changes/restarts required. Installed first GPU candidate has frame-rate output;
+new metadata counters and debug-only pixel shader self-test built but not yet
+installed at this checkpoint. Keep non-Pro scoped awake until session end.
+
+## Hardware GPU deinterlacing implementation active (2026-10-11 / revision333)
+
+User authorizes INTERLACE-004..007 implementation: retain hardware decoding,
+prove decoded field/output behavior and add actual GPU processing, correct
+field timing, independently integrate the backends and run affected physical
+gates on non-Pro25/stock175. Both orders333 put it first. Existing003 candidate
+52d47d6b remains qualified with its explicit hardware-control limits; Client
+currently requires MediaCodec but is not a vendor deinterlace toggle. Preserve
+Auto/Off/user settings/CC/power and stock Core. No restart or publication
+authorized by this task. Read/verify pinned Media3 APIs before choosing the
+renderer boundary; setVideoEffects does not support timestamp-changing effects.
+
+## Filter selector qualified (2026-10-11 / revision332)
+
+INTERLACE-003 complete with explicit limits on installed52d47d6b/non-Pro25/
+stock175/SageMC. Long-press Video→Video filters has Auto/Fast/YADIF, Session/
+Device scope and proper compact parent return. Real Save Default Fast applies
+on the next SD playback; TV has no safe live rebuild, and toast explains it.
+Media3 hardware algorithm controls remain read-only. Actual filter identity,
+Pull/Push/Fixed/Direct labels and Software/Hardware display casing qualify.
+Auto HD30.77FPS/1.0000x; SD25FPS/0.9999x; bypass/seek/pause0ms/resume qualify.
+Fresh true Push proves32712byte payload/~30–32FPS/0.9982x, seek36.562s and
+normal pause/resume. Earlier nominal002/003 Push was actually Pull; compact
+records corrected, only affected row repeated. Fresh context registration is
+read-only polled; menu-only automationReady is not a universal playback oracle.
+
+125prefs/CC/exact power and original connection restored; owned session filter
+override reset/default without Audio/CC changes. Final copyright-safe IJK HD
+Auto demo is playing, saved next backend Media3 preserved. Two-ABI native
+hashes07334c02/6f041160 and strict source offers verified; FFmpeg/SDL/Java
+unchanged.11native-source/7policy/3labels/28MCP/76ADB/build/package/source pass.
+Final manifest/order updates and recoverable raw/staging retirement belong to
+same closure; compact results/INTERLACE-003/qualification.md replaces raw.
+Both orders332 remove003; original release-target acceptance and CODEC-001
+remain separate. No publication/server changes/restarts/unrelated matrix.
+YADIF HD cost, Fast vertical-detail tradeoff, progressive20FPS, native System
+fallback and original AVC no-frame limit are not falsely called passes.
+
+## Deinterlacing correction qualified (2026-10-11 / revision328)
+
+INTERLACE-002 is complete with explicit limits. Final e8bff547 is installed on
+non-Pro25/AFTMM/API25 without clearing data; same development signer. Stock175
+native Pull and optional232 MIM were tested without server changes/restarts.
+Initial temporal HD filter output9.09FPS was a real regression. Bounded
+first-field HD420 processing now gives30.77FPS/0.9972x Pull; SD retains
+YADIF25FPS/0.9992x. Earlier nominal Push29.63FPS/1.0005x was actually Pull;
+003 supplies the corrected fresh real-Push proof above. Final HDMI advances burned
+PTS59.593→65.599/frame1786→1956 in6seconds. Seek/pause/resume/repeated starts
+pass. HD trades vertical detail for throughput; progressive59.94p20FPS remains
+an existing software limit, not a full-cadence pass or lip-sync qualification.
+
+Single Auto/Off/Client/Fixed-only MIM row, compact child/parent navigation and
+actual decoder/deinterlace Software/Hardware/Unknown/native FPS qualify.
+Native filter activation is a callback, not inferred from preferences. Exo/
+GSY actual hardware paths show cleaner fields; requested System fell back to
+Media3 and is not System proof. Device means vendor-controlled, no portable
+driver filter toggle. MIM232 accepted on and real HDMI/seek25.559s/pause0ms/
+resume pass. Healthy startup-seek diagnostic suffix no longer blocks selection:
+accepted live producer, not one exact status string, establishes availability.
+Server filter implementation remains Unknown rather than inferred from GPU
+encoding.17531910 was unavailable; no stock installation change was made.
+
+125preferences/CC/exact prior power restored. Final demo stays playing IJK HD
+Client; saved next-playback backend remains user's Media3. Native source/recipe,
+strict AAR hashes, unchanged FFmpeg/SDL/Java and LLVM/native notices preserved.
+10native-source/16runtime/28MCP/6core/14MIM focused tests, strict build/source/
+package pass; final manifest/order update belongs to this same change.
+Compact results/INTERLACE-002/qualification.md supersedes completed raw files,
+retired recoverably to root deleteme per rootCLEANUP_REPORT. No publication,
+unrelated matrix or absent ONN-football closure is claimed.
+
+CODEC-001 retains separate original-native Taskmaster AVC startup failure:
+baseline866b8351 with original Java also has MTK AVC/no first frame/0outputFPS.
+Speculative zero-start-seek was unsuccessful and reverted. Keep minimum AVC
+evidence active until that follow-up completes; do not count it as H264 pass
+or attribute it to the deinterlacing hook. Both orders328 remove INTERLACE-002
+and keep original release-target work separate. No new AVC fix is selected.
+
+## Non-Pro combing diagnosis complete (2026-10-11 / revision323)
+
+INTERLACE-001 closes only its requested reproduction, not an IJK fix or ONN Pro
+user issue.99f5ee19/non-Pro25/AFTMM/API25/stock175/SageMC native Pull: genuine
+1080i motion61TFF reproduces pronounced comb teeth with actual IJK software
+mpeg2video despite requested Hardware (existing MTK exclusion). Actual Media3
+OMX.MTK.VIDEO.DECODER.MPEG2 hardware produces a substantially smoother band;
+video876→1956/audio476→1040/zero drops/errors. Configured new60s720p59.94
+progressive IJK control lacks pronounced teeth. Stable30fps live HDMI has no
+deinterlace/scaling; adjacent source20.020/frame600 and20.053/frame601 are not
+exact matches or proof of59.94Hz cadence/perfect vendor deinterlacing.
+
+125preferences/power/CC1 preserved. Original PBS restored1531936ms after the
+comparison; user subsequently permits test playback state, final IJK1080i demo
+paused20638ms. Saved player settings restored for subsequent playback. Alias,
+epoch-vs-relative/startup restoration and pending new-file indexing errors were
+corrected in owned tooling, not playback code. Durable coordinate guidance is
+in TEST_ENVIRONMENT; source/decoder/fixture recipe in PLAYBACK_DIAGNOSTICS.
+Compact results/INTERLACE-001/qualification.md supersedes retired raw. Three
+comparison stills remain under active solely for the unfixed IJK field-rendering
+issue. No new APK/runtime patch/server restart/release; no full matrix repeated.
+Both orders323 remove completed diagnostic and retain original release acceptance.
+
+## Export dialog focus qualified (2026-10-10 / revision321)
+
+DIAG-013 closes on99f5ee1939cb8b93d0065676de587aa66ef48528668fa28ec794a9fe27eeb7cf,
+installed on non-Pro25/AFTMM/API25 against stock175. All export footers,
+including existing SMB confirmation, now use explicit untinted focus/pressed
+blue fill/light border/white text. Initial focus is requested immediately,
+including after touch input: chooser Refresh, server confirmation Back, Web
+Copy URL, receipt Back and SMB Cancel. Opening a confirmation never sends.
+Real D-pad navigation and11image checks across9distinct states/five dialogs
+pass; focused face1407..2267blue pixels, other buttons0. Back/Cancel retain
+parent, confirmed Send once returns receipt, renderer counters advance with
+no player error.125prefs/power/original receivertrue restored; no server
+restart/binary changes.17source tests/build/same-signer/permissions package
+inspection pass. No dependency, media-clock or playback changes/full matrix.
+Early accessibility-bounds pixel oracle included the neighboring button edge;
+center-face measurement and visual review corrected it, not production code.
+Compact results/DIAG-013/qualification.json replaces recoverably retired raw.
+Both orders321 remove completed focus work; original release-target acceptance
+remains separate. No commit/release/Pro install; user can test non-Pro build.
+
+## Export chooser qualified (2026-10-10 / revision319)
+
+DIAG-012 closes on c4e33859aca8f3ca5c621e5d9928e9d7ea27138312fe579010e9adac86322639,
+installed on non-Pro25/AFTMM/API25 against stock175. The previous bug-icon
+controller exposed only SMB/local sharing; the new shared chooser includes
+server/Web without changing playback. Web stays gray unless its switch and
+live listener are enabled; available Web shows IP/URL/offline QR. Server stays
+gray without a connected, confirmed enabled receiver. Read-only bounded async
+discovery never enables services; confirmed Send once is a one-report consent,
+not a saved automatic-upload opt-in. Existing Off uploadNow/debug semantics
+remain unchanged. Child Back/cancel/result keeps the parent menu open.
+
+Actual screenshot QR decoding, unavailable states after discovery resolves,
+parent flow, one-report receipt/server readback/hash/privacy and continuing
+video/audio counters pass.19978byte/12entry ZIP includes active-player; all
+entry hashes match, configured secrets/addresses absent.124preferences/power
+and receiver's current originaltrue restored; do not assume its previousOff
+state still belongs to the user. Stock Core/rootFFmpeg/transcoder unchanged,
+no restart.24JVM/33focused Python passes plus5explicit skips/strict build/package
+pass. ZXing core3.5.3 is the only runtime dependency addition, pinned/locked,
+independently checksum-verified and Apache-2.0-noticed; no new permissions or
+player-version changes. Initial missing verification metadata was corrected
+without disabling verification. Tap-focus and legitimate.log/.jsonl oracle
+errors corrected in test tooling, not player code. No new complete OSV scan
+or broader matrix is claimed. Compact results/DIAG-012/qualification.json
+replaces completed raw, retired recoverably per rootCLEANUP_REPORT.
+
+Both orders319 remove this completed task. Original DIAG-002/VCE-011 fresh
+release-target acceptance remains separate; no new commit/release/Pro install.
+
+## Stock175 requested plugin update (2026-10-10 / revision317)
+
+One explicit stop-clients/update/restart request completed with Pro29 ordinary
+Stop/Dev disconnect and authoritative0recordings/contexts/clients before sole
+restart. Extension5a623266/MCP71befa1d now load on unmodified stock175;
+Core/rootFFmpeg/transcoder unchanged, existing options preserved, receiver
+briefly verified then restoredOff. Final activity0recordings/contexts/clients;
+temporary post-startup UI disappeared without another interruption. No standing
+175 restart permission remains. This is deployment/control qualification, not
+a new Android build/release or fresh full stock client-upload/DVD matrix.
+Both orders317 remove completed deployment; Windows/client release scope remains.
+
+## Current diagnostic qualification (2026-10-10 / revision316)
+Latest revision316:232/non-Pro upload-only off/on/manual/disable/privacy/
+missing/reconnect/continued-A/V gates complete; all124prefs/power/receiverfalse
+restored. Compact DIAG-002/upload-qualification.json. Original fresh stock
+Linux/Windows release-target acceptance remains outside current232-only scope,
+not a pending175 restart request. Completed232 tests are removed from next work.
+
+DIAG-003 through010 and affected DIAG-011 qualification complete on final
+efbd6adf.18focusedJVM/6websource/11diagnostic/2probe/2MCPchild/4actualChromium
+tests and APK inspection pass. Native Media3 generated CEA/dashboard/seek/log
+filters/history/download/manual issue helper/mobile and advancing A/V pass.
+Legacy UK hardware Pull/browser/seek/Home-close/foreground-reopen passes;
+all124prefs/power restored. Generated picture/CEA visibly reviewed and earlier
+synchronized UK HDMI confirms changing video/readable Teletext. User reboot
+restores UK startup on stock175 and232; published0.5.101 also failed beforehand.
+No codec crash/root cause proven and failed non-IDR experiment reverted. No
+production decoder fix. Early listener close precedes existing slow player
+teardown; loading distinct from BUFFERING and synthetic CEA PIDs are null.
+Compact results/DIAG-003/qualification.json and startup-investigation.md;
+completed raw retires recoverably per CLEANUP_REPORT. Public0.5.101 unchanged.
+
+Completed: DIAG-002/VCE-011 upload-only232 gates. One explicitly authorized unknown-
+activity MCP bootstrap consumed, current71befa1d/health0.1.5/post-activityidle,
+protected Core/FFmpeg unchanged. Extension5a623266 installed using public API,
+receiver defaultfalse; no second restart or server browser viewer. Actual
+upload/privacy/fallback/restoration passes.175 restart forbidden. Both
+suggested orders316 retain only fresh stock release-target acceptance outside
+current232-only scope. Older pending
+paragraphs below are historical checkpoints, superseded by this status.
+
+## Current UK diagnostic-gate startup investigation (2026-10-10 / revision314)
+
+User reports no picture during the UK caption gate; actual screenshot is black
+and Media3 native Pull on232/non-Pro25 records zero video frames at saved
+135808ms and at zero, despite20seconds buffered and no player exception.
+Legacy Exo also fails; Media3 software outputs only2frames, not healthy play.
+All124prefs/power restore on every run. Earlier stock175 caption passes are
+separate evidence; no matching old-build A/B proves a web regression yet.
+FFmpeg inspection of unchanged Breakfast finds AUDs/non-IDR slices and no IDR
+in10..30seconds. The official non-IDR flag experiment does NOT resolve this
+failure on c6caad9a and is reverted in source, not shipped as a fix. Current
+232 Push with web disabled also fails. User requested175 comparison: same
+c6caad9a on stock175 Pull/web-off fails, and independently downloaded published
+v0.5.101 (verified6777841d) also fails on175 with zero video frames/36queued,
+16audio buffers, position0 and no player error. All12native libraries are
+byte-identical between release and candidate. This rules out the new web
+diagnostics as the sole cause, not every older client regression or device/
+fixture/configuration cause. Next use debug-only pending/reading raw renderer
+timestamps (not Sage elapsed time) and a controlled device-state comparison.
+Latest debug capture on175 shows video reading at1000001140000us with no
+pending codec output; audio has pending1000000520000us. Exo's renderer-stream
+offset is not a wall-clock or a SageTV timeline value. Synthetic CEA PID fields
+are now null; actual DVB5504/Teletext5503 remain visible. User proposes a
+non-Pro reboot after the completed/restored test; recheck the identical175
+case afterward before attributing the failure to a code or device cause.
+Retain minimum raw failure evidence
+under artifacts/active/DIAG-003 until DIAG-011 finishes. No Core/plugin changes.
+
+Seven browser enhancements are implemented, with cached main-thread snapshots,
+sampled timeline, browser log filters, bounded opaque history/downloads, truthful
+CEA inventory, safe settings/storage/upload summary and manual issue helper.
+Actual Chromium/generated CEA playback gate passes on7f94fb60; latest caption
+and playback qualification remains open. Corrected synthetic CEA PID labels
+and mobile table layout; BUFFERING is explicit even if MiniClient state says
+Playing. Timeline identity is captured from the actual player, not retained
+MediaCmd. No embedded video, caption selections or remote playback controls
+are added by the diagnostic page. No GitHub release/commit this turn.
+
+## Android-owned web server (2026-10-10 UTC / revision312)
+
+User corrected the architecture: web pages must run in the Android client,
+not Client Extension. DIAG-003 adds a persistent default-off main Settings
+Diagnostic web server / Client diagnostic web port / read-only web address.
+Routes on the device: /, /stats, /logs, /stats.txt, /logs.txt, /bundle.zip.
+Existing redaction/bundle generation are reused; stats are current lightweight
+client snapshots, not invented GPU telemetry. Foreground-only lifecycle closes
+on Home/exit/disable, bounded low-priority workers/headers/deadlines/responses,
+no playback control or arbitrary file serving. Four real-socket JVM tests and
+APK build pass. Non-Pro f74b09ce actual HTTP/log/stat/ZIP/checksum, Home/off/
+port-change/app-restart gates pass. Final9ac729db is installed and actual UI
+Select/checkmark/persistence/disable gates pass after fixing stale checkbox
+display during debug-config changes. All119prefs/power restored; compact
+results/DIAG-003 retain distinct APK provenance. Actual browser rendering and
+active-playback smoke remain open; host browser launch was policy-blocked,
+not a pass. No server
+restart needed for this feature. Send diagnostic logs to server remains a
+separate default-off setting; extension retains upload-only receiver/storage,
+not browser pages. Server-upload gates remain DIAG-002/VCE-011.
+
+## Current diagnostic feature / user target change (2026-10-10 UTC)
+
+DIAG-002 with companion VCE-011/012 is implemented but not closed/released.
+The actual main-settings checkbox and app-restart persistence sub-gate now
+passes;118prefs restored, Home/Dev-only stop and shell closure complete.
+Compact results/DIAG-002/main-settings.json;22completed raw UI probes retire
+recoverably to rootdeleteme, never a claim that232 receiver gates passed.
+Non-Pro candidate APKd0c433e3 installs as an update without clearing data.
+Four real-loopback transport JVM tests, three source contracts and APK compile
+pass. Windows185 partial actual off/no-writes, stored ZIP/hash, web text and
+advancing A/V pass; user switches target during main-settings test.118prefs,
+receiverfalse, device power and Windows awake request restored. Initial2s
+blank Settings transition is not a visual result: standalone idle Settings
+renders correctly after settling with no current-app exception. Remaining
+toggle/disabled/unavailable/browser/reconnect gates run on232/non-Pro only.
+User explicitly forbids175 restart.232 oldMCP0.1.4 lacks server.activity;
+existing Sagex404/Web401 preflight fails, so a one-time bootstrap restart
+exception is requested while independent client checks continue. Never claim
+unknown activity is zero. No new release/tag/publication or Core patch yet.
+
 ## RELEASE-001 published and independently verified (2026-10-08)
 
 User approved related repository source updates and a new Android sideload
@@ -80,7 +1123,8 @@ evidence and persistent warm cache remain active; no settings/key reset.
 
 Both suggested orders304 remove the completed device. Continue only the next
 unblocked authorized prerequisite, not an unrelated full matrix. Conditional
-ONN-003/DEVICE-001 need actual affected evidence; VCE prerequisites live in their
+DEVICE-001 needs actual affected evidence; ONN-003 is now closed by revision369,
+and VCE prerequisites live in their
 own plugin backlog. Approved release packaging/publication remain separate.
 Final task-order/source validator/manifests are the closure checks.
 
@@ -1826,8 +2870,9 @@ read Dev base.apk through qualified container SDK and hash in memory, no
 temporary device APK or host ADB). Retirement helper also retired, yielding
 195 raw/helper files/164572567bytes plus old canonical APK. Unique original
 server/automation failure evidence remains; no continuous observer/replay.
-Next Android work is conditional ONN-003/DEVICE-001 when reproduction/hardware
-exists, or explicitly approved GitHub source/APK refresh. DVD-003 remains
+Next Android work is conditional DEVICE-001 when reproduction/hardware exists,
+or explicitly approved GitHub source/APK refresh. ONN-003 is now closed by
+revision369. DVD-003 remains
 deferred; store/EXT external prerequisites unchanged. No commit/release.
 
 ### Prior repeat-scan checkpoint (revision188)
@@ -6070,7 +7115,8 @@ belong in `CHANGELOG.md`; open work belongs in `TASKS.md`.
   closed. Native remains the stable default; Hybrid/MIM remains opt-in and
   experimental, but its authored-fixture title/control matrix and explicit MIM
   main-feature policy physically pass on the commissioned Fire TV. Blu-ray/
-  BDMV remains separately `SKIPPED` until a valid physical fixture exists.
+  BDMV was separately `SKIPPED` at that revision; EXT-002 later completed the
+  generated-fixture Vibe-Core main-title path in revision366.
   Updated Core selects `MiniDVDPlayer` when this client advertises
   `DVD_REMOTE_NAV`; Android implements commands 32-37 and a DVD-only Media3
   MPEG-PS/AC-3 path. DISC policy/menu/preview/fallback preferences are queried
@@ -6173,7 +7219,8 @@ belong in `CHANGELOG.md`; open work belongs in `TASKS.md`.
   `artifacts/firetv/dvd-late-ac3-three-disc-regression.json`.
 - The corrected extractor then passed the final bounded inventory sweep on all
   51 populated Unraid DVD structures. The empty ROGUE_ONE directory is an
-  expected safe failure; no BDMV exists, so Blu-ray remains SKIPPED. See
+  expected safe failure; no BDMV existed in that inventory, so Blu-ray was
+  SKIPPED in that run (later generated-fixture commissioning is revision366). See
   `artifacts/firetv/dvd-presentation-v21-all-unraid-dvds-final.json` and
   `artifacts/firetv/dvd-empty-structure-safe-failure.json`.
 - The exact final installed APK/current-Core rerun also passes all 51 populated

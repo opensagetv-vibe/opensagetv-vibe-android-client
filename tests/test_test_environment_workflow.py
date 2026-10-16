@@ -74,6 +74,16 @@ class TestEnvironmentWorkflowTests(unittest.TestCase):
         self.assertIn("default JDK is **11 for SageTV Core**", workflow)
         self.assertIn("bash ./gradlew <tasks>", workflow)
 
+    def test_physical_gates_require_server_scope_and_completed_install(self):
+        for name in ('AGENTS.md','WORKFLOW.md','docs/TEST_ENVIRONMENT.md'):
+            text=(ROOT/name).read_text(encoding='utf-8')
+            self.assertIn('complete client ID',text)
+            self.assertIn('sole other remote UI',text)
+            self.assertIn('Success',text)
+        driver=(ROOT/'scripts/mcp_gpu_deinterlace_test.py').read_text(encoding='utf-8')
+        self.assertIn('--prepare-only',driver)
+        self.assertIn('dev_prepare_clean_start',driver)
+
     def test_explicit_adb_serial_survives_native_and_linux_container_boundaries(self):
         windows = (ROOT / "dev.ps1").read_text(encoding="utf-8")
         linux = (ROOT / "dev.sh").read_text(encoding="utf-8")

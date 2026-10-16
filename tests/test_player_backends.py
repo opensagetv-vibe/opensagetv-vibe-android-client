@@ -485,7 +485,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.101")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.102")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -1013,8 +1013,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # Both Exo generations must bind the SurfaceView owner rather than a
         # one-time raw Surface. Fire OS replaces the holder Surface across HOME
         # and embedded/fullscreen transitions.
-        self.assertIn("player.setVideoSurfaceView((SurfaceView) context.getVideoView())", exo)
-        self.assertIn("player.setVideoSurfaceView((SurfaceView) context.getVideoView())", media3)
+        for source in (exo, media3):
+            self.assertIn("bindVideoOutput(player)", source)
+            self.assertIn("if (expected != player) return", source)
+            self.assertIn("expected.setVideoSurfaceView((SurfaceView) context.getVideoView())", source)
         self.assertIn("glView.setZOrderMediaOverlay(true)", gdx)
         self.assertIn("PixelFormat.RGBA_8888", gdx)
         self.assertNotIn("glView.setZOrderOnTop(true)", gdx)
@@ -1057,6 +1059,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         script = (ROOT / "scripts/player_diagnostics.py").read_text(encoding="utf-8")
         dev_sh = (ROOT / "dev.sh").read_text(encoding="utf-8")
         self.assertIn("player-diag", dev_sh)
+        self.assertIn('"--output-dir"', script)
+        self.assertIn("output_dir.mkdir(parents=True, exist_ok=True)", script)
         self.assertIn("dumpsys SurfaceFlinger", script)
         self.assertIn("adb.logcat_tail(10000)", script)
 

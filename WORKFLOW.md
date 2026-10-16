@@ -96,6 +96,12 @@ The Linux/WSL equivalents are `./dev.sh connect` and
 network device; the raw `adb` wrapper is intentionally scoped to that device so
 commands cannot land on another attached Android target.
 
+Server controls are a separate scope boundary: resolve the selected device's
+complete client ID to its own public UI context before Watch or another
+playback mutation. Record serial/client-ID/context in the gate. Never select
+the sole other remote UI while registration is pending; bounded exact
+read-only discovery may retry, ordered Watch/Seek commands may not.
+
 The native-Windows fast path must pass
 `SAGETV_WORKSPACE=/workspace/android-client` into the reusable container. Its
 working directory alone is not sufficient: `docker/entrypoint.sh` validates
@@ -204,6 +210,34 @@ Every independently invoked CLI command owns its AdbClient and closes it in
 only that client's diagnostic shell; never restart the shared ADB server or
 remove persistent keys to clean up an orphan. The MCP server retains its
 existing process-exit cleanup registration.
+One-shot SDK subprocesses must use stdin=DEVNULL, never inherit the MCP
+JSON-RPC input pipe. The interactive shell alone owns its explicit stdin=PIPE.
+MCP drivers must drain child stderr into a bounded background buffer. Never
+leave stderr PIPE unread until failure or read-to-EOF from a request timeout:
+long diagnostics can block the server's reply, and a live server has no EOF.
+Keep partial-line/backpressure and live-timeout regression tests.
+MCP stdout also needs one framed reader, not select(fd) followed by a buffered
+readline: a notification can prefetch the following response into TextIO while
+the descriptor appears empty. The bounded reader/queue in MCPProcess preserves
+notifications/replies, applies request deadlines even for a partial line and
+fails visibly on oversized frames/queue overflow. Keep its real-child burst,
+partial-line and overflow tests; never resolve this by replaying a runtime call.
+The finite scripts/mcp_adb_connection_test.py gate initializes a REAL MCP child
+per iteration, verifies expiry0/selected serial/reused shell, closes each child
+and never launches playback. Use explicit aliases and active/ADB-003 outputs.
+Device offline/unauthorized state remains a real readiness failure; do not
+label a different device's success as affected-device timeout closure.
+Source validation prunes generated build/.gradle trees before file stat; never
+change a generated Linux build symlink to make native Windows validation pass.
+The native SurfaceView check accepts the guarded binding helper only with its
+callsite/native fallback. Keep both positive and negative binding tests.
+
+Align the outer clean-start deadline with the bounded cleanup it invokes; do
+not terminate it early or implicitly replay an ordered exit/playback command.
+Preference restoration is independent of server-caption restoration. Recover
+an interrupted private preference checkpoint before taking another checkpoint.
+Keep that isolation test with setup/authorization and ordered-runtime tests;
+never resolve a setup timeout by replaying a playback command.
 For explicit MCP Dev shutdown, send HOME once and preserve bounded read-only
 background observation before the single force-stop. Browser-settle-only
 trial failed actual post-playback on Android6: its previous phone task starts
@@ -228,6 +262,13 @@ Allow the outer MCP install caller the configured budget plus at least30s
 (MiniMX630s), otherwise it can abandon a still-running install. After a timeout, inspect the still-
 running owned installer and installed APK hash before any explicit retry;
 never start overlapping installs or clear app data to work around a slow update.
+Before installing over active playback, use the bounded Dev clean-start/
+graceful teardown path and preserve settings. Wait for actual install Success
+and process completion before invoking a physical gate; a session ID is not
+success. Record the installed candidate hash before another build overwrites
+the local APK. If hardware initialization wedges, capture a bounded thread
+witness and compare filter Off before attributing it to the GPU stage; recovery
+after a test-device reboot does not prove the original cause.
 
 Move unused intermediate captures, superseded packages and raw evidence from
 completed/corrected cases to workspace-root `deleteme/`, preserving their
@@ -252,6 +293,13 @@ minimum useful open-failure evidence on failed runs; do not accumulate unrelated
 temporary data merely because the overall test failed.
 
 ## Task ordering and matrix workflow
+
+When incrementing the Android versionCode, update both
+`source/dev/build.gradle` and `config/dev-root-build.gradle.canonical` together.
+The startup repair validates their exact bytes; changing only the active copy
+will deliberately restore the previous canonical value. Retire any owned
+`.gradle.bad` repair backup after confirming it contains no unique work, and
+regenerate the project manifest before validation or publication.
 
 Repository CI and physical A/V-analysis unit tests use the pinned host-only
 NumPy/SciPy versions in tests/requirements.txt. They are not APK dependencies

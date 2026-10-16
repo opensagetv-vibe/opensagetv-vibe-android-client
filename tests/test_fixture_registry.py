@@ -12,6 +12,37 @@ from mcp_fixture_matrix import selected_checks  # noqa: E402
 
 
 class FixtureRegistryTests(unittest.TestCase):
+    def test_original_field_geometry_modes_include_both_orders_and_sd_hd(self):
+        environment=load_test_environment(ROOT/'config/firetv.example.toml')
+        cases=environment.fixture_cases(mode='field_geometry',enabled_only=True)
+        by_name={Path(case['path']).name:case for case in cases}
+        for filename,rate in (('VibeFields-480i-TFF-MPEG2-AC3.ts',30000/1001),
+                              ('VibeFields-576i-BFF-MPEG2-AC3.ts',25),
+                              ('VibeFields-1080i-TFF-MPEG2-AC3.ts',30000/1001)):
+            case=by_name[filename]
+            self.assertAlmostEqual(rate,case['expected_video_fps'],places=7)
+            self.assertTrue(case['modes']['hardware_gpu'])
+            self.assertEqual('video/mpeg2',case['expected_video_mime'])
+            self.assertEqual('audio/ac3',case['expected_audio_mime'])
+            self.assertGreaterEqual(case['minimum_duration_seconds'],85)
+    def test_interlaced_sd_control_preserves_its_coded_rate_after_native_handoff(self):
+        environment = load_test_environment(ROOT / "config" / "firetv.example.toml")
+        cases = environment.fixture_cases(mode="combing_scroll", enabled_only=False)
+        self.assertEqual(1, len(cases))
+        self.assertEqual(25.0, cases[0]['expected_video_fps'])
+
+    def test_combing_control_is_enabled_and_has_a_useful_capture_budget(self):
+        environment = load_test_environment(ROOT / "config" / "firetv.example.toml")
+        cases = environment.fixture_cases(mode="combing_control", enabled_only=True)
+        self.assertEqual(len(cases), 1)
+        case = cases[0]
+        self.assertTrue(case["modes"]["startup"])
+        self.assertEqual(case["expected_video_mime"], "video/mpeg2")
+        self.assertEqual(case["expected_audio_mime"], "audio/ac3")
+        self.assertAlmostEqual(case["expected_video_fps"],60000/1001,places=7)
+        self.assertGreaterEqual(case["minimum_duration_seconds"], 55)
+        self.assertTrue(case["path"].endswith("VibeCombingControl-720p-MPEG2-AC3.ts"))
+
     def test_new_enabled_fixture_is_discovered_by_mode_not_id(self):
         environment = load_test_environment(ROOT / "config" / "firetv.example.toml")
         cases = environment.fixture_cases(mode="uk_broadcast", enabled_only=False)

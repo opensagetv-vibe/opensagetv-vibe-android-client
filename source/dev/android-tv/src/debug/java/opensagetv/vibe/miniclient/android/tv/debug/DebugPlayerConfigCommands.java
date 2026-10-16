@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 
 import opensagetv.vibe.miniclient.MiniClient;
+import opensagetv.vibe.miniclient.LegacyPushBufferLimitPolicy;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
@@ -65,6 +66,12 @@ final class DebugPlayerConfigCommands
         String mimDirectMode = clean(intent.getStringExtra("mim_direct_mode"));
         String mimDirectDeinterlace = clean(
                 intent.getStringExtra("mim_direct_deinterlace"));
+        String ijkSoftwareDeinterlace = clean(intent.getStringExtra("ijk_software_deinterlace"));
+        String ijkDeinterlaceFilter = clean(intent.getStringExtra("ijk_deinterlace_filter"));
+        String videoDeinterlaceMode = clean(intent.getStringExtra("video_deinterlace_mode"));
+        String gpuFilter = clean(intent.getStringExtra("video_gpu_filter"));
+        String gpuFieldOrder = clean(intent.getStringExtra("video_gpu_field_order"));
+        String gpuOutputRate = clean(intent.getStringExtra("video_gpu_output_rate"));
         // SMB mappings and profile URLs can contain case-sensitive Linux/share
         // path components. Only command/enumeration tokens use clean().
         String smbMappings = text(intent.getStringExtra("smb_mappings"));
@@ -78,6 +85,10 @@ final class DebugPlayerConfigCommands
         String smbProfileDomain = clean(intent.getStringExtra("smb_profile_domain"));
         String smbDiagnosticsDirectory = text(intent.getStringExtra("smb_diagnostics_directory"));
         String smbDiagnosticsMode = clean(intent.getStringExtra("smb_diagnostics_mode"));
+        String serverDiagnosticsEnabled = clean(intent.getStringExtra("server_diagnostics_enabled"));
+        String serverDiagnosticsPort = clean(intent.getStringExtra("server_diagnostics_port"));
+        String clientWebEnabled = clean(intent.getStringExtra("client_web_enabled"));
+        String clientWebPort = clean(intent.getStringExtra("client_web_port"));
         String smbDiagnosticsAuthMode = clean(intent.getStringExtra("smb_diagnostics_auth_mode"));
         String smbDiagnosticsUsername = clean(intent.getStringExtra("smb_diagnostics_username"));
         String smbDiagnosticsPassword = intent.getStringExtra("smb_diagnostics_password");
@@ -95,6 +106,7 @@ final class DebugPlayerConfigCommands
                 intent.getStringExtra("disc_mpeg2_timestamp_repair"));
         String unifiedGraphicsSurfaces = clean(
                 intent.getStringExtra("unified_graphics_surfaces"));
+        String pushBufferLimit = clean(intent.getStringExtra("push_buffer_limit"));
         String waitForPlaybackBeforeFirstOsd = clean(
                 intent.getStringExtra("wait_for_playback_before_first_osd"));
         boolean clearSmbProfileAuth = parseBoolean(
@@ -144,6 +156,14 @@ final class DebugPlayerConfigCommands
         if (!unifiedGraphicsSurfaces.isEmpty())
             prefs.setBoolean(PrefStore.Keys.unified_graphics_surfaces,
                     parseBoolean(unifiedGraphicsSurfaces, false));
+        if (!pushBufferLimit.isEmpty())
+        {
+            if (!LegacyPushBufferLimitPolicy.isValidPreference(pushBufferLimit))
+                throw new IllegalArgumentException("invalid Push buffer limit: "
+                        + pushBufferLimit);
+            prefs.setString(PrefStore.Keys.push_buffer_limit,
+                    LegacyPushBufferLimitPolicy.normalize(pushBufferLimit));
+        }
 
         if (!player.isEmpty())
         {
@@ -335,6 +355,38 @@ final class DebugPlayerConfigCommands
                         + mimDirectDeinterlace);
             prefs.setString(PrefStore.Keys.mim_direct_deinterlace, value);
         }
+        if (!ijkSoftwareDeinterlace.isEmpty())
+        {
+            if (!("auto".equals(ijkSoftwareDeinterlace) || "off".equals(ijkSoftwareDeinterlace)))
+                throw new IllegalArgumentException("invalid IJK software deinterlace mode");
+            prefs.setString(PrefStore.Keys.ijk_software_deinterlace, ijkSoftwareDeinterlace);
+        }
+        if (!ijkDeinterlaceFilter.isEmpty())
+        {
+            if (!("auto".equals(ijkDeinterlaceFilter) || "fast".equals(ijkDeinterlaceFilter) || "yadif".equals(ijkDeinterlaceFilter)))
+                throw new IllegalArgumentException("invalid IJK deinterlace filter");
+            prefs.setString(PrefStore.Keys.ijk_deinterlace_filter, ijkDeinterlaceFilter);
+        }
+        if (!videoDeinterlaceMode.isEmpty())
+        {
+            if (!("auto".equals(videoDeinterlaceMode) || "off".equals(videoDeinterlaceMode)
+                    || "client".equals(videoDeinterlaceMode) || "client_gpu".equals(videoDeinterlaceMode)
+                    || "mim".equals(videoDeinterlaceMode)))
+                throw new IllegalArgumentException("invalid video deinterlace mode");
+            prefs.setString(PrefStore.Keys.video_deinterlace_mode, videoDeinterlaceMode);
+        }
+        if (!gpuFilter.isEmpty()) {
+            if (!("fast".equals(gpuFilter) || "motion".equals(gpuFilter) || "inspect".equals(gpuFilter))) throw new IllegalArgumentException("invalid GPU filter");
+            prefs.setString(PrefStore.Keys.video_gpu_filter,gpuFilter);
+        }
+        if (!gpuFieldOrder.isEmpty()) {
+            if (!("auto".equals(gpuFieldOrder) || "top".equals(gpuFieldOrder) || "bottom".equals(gpuFieldOrder))) throw new IllegalArgumentException("invalid GPU field order");
+            prefs.setString(PrefStore.Keys.video_gpu_field_order,gpuFieldOrder);
+        }
+        if (!gpuOutputRate.isEmpty()) {
+            if (!("frame".equals(gpuOutputRate) || "field".equals(gpuOutputRate))) throw new IllegalArgumentException("invalid GPU output rate");
+            prefs.setString(PrefStore.Keys.video_gpu_output_rate,gpuOutputRate);
+        }
 
         if (!smbMappings.isEmpty())
         {
@@ -376,6 +428,26 @@ final class DebugPlayerConfigCommands
                 prefs.setString(AndroidPrefStore.SMB_PROFILE_DOMAIN, smbProfileDomain);
         }
 
+        if (!clientWebPort.isEmpty()) {
+            int port = Integer.parseInt(clientWebPort);
+            if (port < 1024 || port > 65535) throw new IllegalArgumentException("Invalid client web port");
+            prefs.setString(AndroidPrefStore.CLIENT_WEB_PORT, Integer.toString(port));
+        }
+        if (!clientWebEnabled.isEmpty()) {
+            if (!"true".equals(clientWebEnabled) && !"false".equals(clientWebEnabled))
+                throw new IllegalArgumentException("Invalid client web enable value");
+            prefs.setBoolean(AndroidPrefStore.CLIENT_WEB_ENABLED, Boolean.parseBoolean(clientWebEnabled));
+        }
+        if (!serverDiagnosticsPort.isEmpty()) {
+            int port = Integer.parseInt(serverDiagnosticsPort);
+            if (port < 1024 || port > 65535) throw new IllegalArgumentException("invalid server diagnostic port");
+            prefs.setString(AndroidPrefStore.SERVER_DIAGNOSTICS_PORT, Integer.toString(port));
+        }
+        if (!serverDiagnosticsEnabled.isEmpty()) {
+            if (!"true".equals(serverDiagnosticsEnabled) && !"false".equals(serverDiagnosticsEnabled))
+                throw new IllegalArgumentException("server diagnostic enable must be Boolean");
+            prefs.setBoolean(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED, Boolean.parseBoolean(serverDiagnosticsEnabled));
+        }
         if (!smbDiagnosticsDirectory.isEmpty())
         {
             SmbPathMapper.parse("/ => " + smbDiagnosticsDirectory).map("/");

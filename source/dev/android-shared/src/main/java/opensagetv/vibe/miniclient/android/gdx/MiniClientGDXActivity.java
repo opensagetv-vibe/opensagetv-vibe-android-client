@@ -11,6 +11,7 @@ import com.badlogic.gdx.backends.android.AndroidApplication;
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
 
 import opensagetv.vibe.miniclient.android.R;
+import opensagetv.vibe.miniclient.android.PredictiveBackController;
 import opensagetv.vibe.miniclient.android.UIActivityLifeCycleHandler;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 
@@ -19,6 +20,7 @@ import opensagetv.vibe.miniclient.prefs.PrefStore;
  */
 public class MiniClientGDXActivity extends AndroidApplication implements UIActivityLifeCycleHandler.IActivityCallback<MiniClientGDXRenderer> {
     UIActivityLifeCycleHandler<MiniClientGDXRenderer> uiActivityLifeCycleHandler;
+    private PredictiveBackController predictiveBackController;
     public MiniClientGDXActivity() {
         uiActivityLifeCycleHandler = new UIActivityLifeCycleHandler<>(this);
     }
@@ -27,6 +29,9 @@ public class MiniClientGDXActivity extends AndroidApplication implements UIActiv
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         uiActivityLifeCycleHandler.onCreate(this);
+        predictiveBackController = new PredictiveBackController(this,
+                uiActivityLifeCycleHandler::dispatchSystemBack);
+        predictiveBackController.register();
 
         if( this.uiActivityLifeCycleHandler.getClient().properties().getBoolean(PrefStore.Keys.disable_sleep, true))
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -46,8 +51,20 @@ public class MiniClientGDXActivity extends AndroidApplication implements UIActiv
 
     @Override
     protected void onDestroy() {
+        if (predictiveBackController != null)
+            predictiveBackController.unregister();
         uiActivityLifeCycleHandler.onDestroy();
         super.onDestroy();
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed()
+    {
+        if (predictiveBackController != null)
+            predictiveBackController.dispatchLegacy();
+        else
+            super.onBackPressed();
     }
 
     @Override

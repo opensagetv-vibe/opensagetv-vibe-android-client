@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import opensagetv.vibe.miniclient.video.DeinterlacePolicy;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,8 @@ public final class MimDirectSessionClient
     private String baseUrl = "";
     private String activeMode = MimDirectTransportPolicy.OFF;
     private String sessionToken = "";
+    /** Accepted producer request, not a newly changed preference or a per-frame filter claim. */
+    private String acceptedDeinterlace = "";
     private Object owner;
     private long startOffsetMs;
     private boolean lastRestartClamped;
@@ -240,6 +243,7 @@ public final class MimDirectSessionClient
                 {
                     owner = playbackOwner;
                     sessionToken = token;
+                    acceptedDeinterlace = deinterlace;
                     startOffsetMs = 0L;
                     openedAtNanos = System.nanoTime();
                 }
@@ -434,10 +438,13 @@ public final class MimDirectSessionClient
 
     private static String currentDeinterlace()
     {
-        return normalizedDeinterlace(
+        return DeinterlacePolicy.serverFilter(
+                ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                        MiniclientApplication.get().getClient().properties().getString(
+                                PrefStore.Keys.video_deinterlace_mode, "")), normalizedDeinterlace(
                 ActivePlayerSessionOverrides.resolveMimDirectDeinterlace(
                         MiniclientApplication.get().getClient().properties().getString(
-                                PrefStore.Keys.mim_direct_deinterlace, "auto")));
+                                PrefStore.Keys.mim_direct_deinterlace, "auto"))));
     }
 
     public void release(Object playbackOwner)
@@ -463,6 +470,7 @@ public final class MimDirectSessionClient
             if (!canRelease(owner, playbackOwner)) return;
             base = baseUrl; token = sessionToken;
             owner = null; sessionToken = ""; startOffsetMs = 0L;
+            acceptedDeinterlace = "";
             lastRestartClamped = false;
             openedAtNanos = 0L;
             lifecycleGeneration++;
@@ -507,10 +515,11 @@ public final class MimDirectSessionClient
             String failureTag = "";
             try
             {
+                String deinterlace = currentDeinterlace();
                 Response response = request("POST", base,
                         "/v1/direct/restart?token=" + token + "&startMs=" +
                                 Math.max(0L, requestedStartMs) + "&deinterlace=" +
-                                currentDeinterlace(), 1500, 20000);
+                                deinterlace, 1500, 20000);
                 if (response.status != 200)
                 {
                     failureTag = restartRejectionTag(response.status, response.body);
@@ -532,6 +541,7 @@ public final class MimDirectSessionClient
                     if (accepted)
                     {
                         sessionToken = replacementToken;
+                        acceptedDeinterlace = deinterlace;
                         startOffsetMs = Math.max(0L, effectiveStartMs);
                         lastRestartClamped = startOffsetMs != Math.max(0L, requestedStartMs);
                         openedAtNanos = System.nanoTime();
@@ -711,6 +721,14 @@ public final class MimDirectSessionClient
     }
 
     public String stateForDiagnostics() { return state; }
+    public String acceptedDeinterlaceForDiagnostics()
+    {
+        synchronized (lock)
+        {
+            return !sessionToken.isEmpty() && MimDirectTransportPolicy.TRANSCODE.equals(activeMode)
+                    ? acceptedDeinterlace : "";
+        }
+    }
     public String recoveryStateForDiagnostics() { return watchRecovery.state(); }
 
     static String serverPath(String url)

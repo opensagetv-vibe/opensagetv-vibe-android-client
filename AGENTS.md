@@ -185,6 +185,13 @@ working directory `/workspace/android-client` and
 marker files from that environment variable, not from `-w`; omitting it causes
 a false missing-workspace failure even when the ADB key and device are valid.
 Keep the `dev.ps1` source-contract assertion for this paired invariant.
+ADB selection alone is not server-control isolation. Before Watch or another
+server playback mutation, resolve the selected device's complete client ID to
+its own public UI context and record the serial/client-ID/context witness.
+Missing registration permits bounded read-only discovery, never selection of
+the sole other remote UI, truncated-ID matching, or replay of Watch/Seek.
+Wait for the guarded install's actual Success and completion before starting a
+physical gate; a returned terminal/session ID is not installation success.
 The MCP ADB client must verify `adb_allowed_connection_time=0` with one-shot,
 idempotent shell commands before opening its reusable interactive shell. Fire OS
 may close a persistent shell created immediately after `adb connect`; do not

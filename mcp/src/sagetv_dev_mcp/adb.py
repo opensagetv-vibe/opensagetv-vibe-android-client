@@ -161,6 +161,11 @@ class AdbClient:
         # Python's text wrapper to abort the entire evidence bundle.
         cp = subprocess.run(
             cmd,
+            # One-shot SDK commands have no interactive input. Inheriting the
+            # MCP JSON-RPC pipe lets adb's stdin worker consume control bytes
+            # or remain waiting after a remote command has already exited.
+            # Only the explicitly owned persistent shell uses stdin=PIPE.
+            stdin=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -349,24 +354,34 @@ class AdbClient:
         mandatory so vendor builds that reject or ignore it fail visibly.
         """
         setting = "adb_allowed_connection_time"
-        previous = self._one_shot_shell(
-            f"settings get global {setting}", timeout=15
-        ).strip()
-        self._one_shot_shell(f"settings put global {setting} 0", timeout=15)
-        current = self._one_shot_shell(
-            f"settings get global {setting}", timeout=15
-        ).strip()
+        timeout_retries = 0
+        def authorization_command(command: str) -> str:
+            nonlocal timeout_retries
+            try:
+                return self._one_shot_shell(command, timeout=15)
+            except subprocess.TimeoutExpired:
+                # One retry across THIS idempotent get/put-0/get bootstrap only.
+                # subprocess.run has reaped its timed-out local child. No key,
+                # shared-server reset or ordered runtime command is retried.
+                if timeout_retries: raise
+                timeout_retries += 1
+                return self._one_shot_shell(command, timeout=15)
+        previous = authorization_command(f"settings get global {setting}").strip()
+        authorization_command(f"settings put global {setting} 0")
+        current = authorization_command(f"settings get global {setting}").strip()
         if current != "0":
             raise RuntimeError(
                 f"Android did not retain global {setting}=0; read back {current!r}"
             )
-        return {
+        result = {
             "setting": setting,
             "previousValue": previous,
             "currentValue": current,
             "nonExpiring": True,
             "scope": "device_global",
         }
+        if timeout_retries: result["bootstrapTimeoutRetries"] = timeout_retries
+        return result
 
     def _one_shot_shell(self, command: str, *, timeout: float = 30) -> str:
         """Run an idempotent setup command outside the reusable shell.
@@ -797,6 +812,10 @@ class AdbClient:
     def open_diagnostics_settings(self) -> dict[str, Any]:
         return self.dev_control("diagnostics_ui", foreground=False)
 
+    def open_diagnostic_export(self) -> dict[str, Any]:
+        """Show the actual export chooser; never requests an upload."""
+        return self.dev_control("diagnostic_export_ui")
+
     def player_event_traps(self) -> dict[str, Any]:
         return self.dev_control("events")
 
@@ -891,6 +910,12 @@ class AdbClient:
         fixed_caption_side_channel_port: int | str = "",
         mim_direct_mode: str = "",
         mim_direct_deinterlace: str = "",
+        ijk_software_deinterlace: str = "",
+        ijk_deinterlace_filter: str = "",
+        video_deinterlace_mode: str = "",
+        video_gpu_filter: str = "",
+        video_gpu_field_order: str = "",
+        video_gpu_output_rate: str = "",
         smb_mappings: str = "",
         smb_username: str = "",
         smb_password: str = "",
@@ -903,6 +928,10 @@ class AdbClient:
         smb_profile_clear_auth: bool = False,
         smb_diagnostics_directory: str = "",
         smb_diagnostics_mode: str = "",
+        server_diagnostics_enabled: bool | None = None,
+        server_diagnostics_port: int = 0,
+        client_web_enabled: bool | None = None,
+        client_web_port: int = 0,
         smb_diagnostics_auth_mode: str = "",
         smb_diagnostics_username: str = "",
         smb_diagnostics_password: str = "",
@@ -918,6 +947,7 @@ class AdbClient:
         disc_mpeg2_timestamp_repair: str = "",
         wait_for_playback_before_first_osd: bool | None = None,
         unified_graphics_surfaces: bool | None = None,
+        push_buffer_limit: str = "",
     ) -> dict[str, Any]:
         requested_streaming = str(streaming or "").strip().lower()
         requested_decoding = str(decoding or "").strip().lower()
@@ -958,6 +988,12 @@ class AdbClient:
             "fixed_caption_side_channel_port": fixed_caption_side_channel_port,
             "mim_direct_mode": mim_direct_mode,
             "mim_direct_deinterlace": mim_direct_deinterlace,
+            "ijk_software_deinterlace": ijk_software_deinterlace,
+            "ijk_deinterlace_filter": ijk_deinterlace_filter,
+            "video_deinterlace_mode": video_deinterlace_mode,
+            "video_gpu_filter": video_gpu_filter,
+            "video_gpu_field_order": video_gpu_field_order,
+            "video_gpu_output_rate": video_gpu_output_rate,
             "smb_mappings": smb_mappings,
             "smb_username": smb_username,
             "smb_password": smb_password,
@@ -970,6 +1006,14 @@ class AdbClient:
             "smb_profile_clear_auth": "true" if smb_profile_clear_auth else "",
             "smb_diagnostics_directory": smb_diagnostics_directory,
             "smb_diagnostics_mode": smb_diagnostics_mode,
+            "server_diagnostics_enabled": (
+                "true" if server_diagnostics_enabled else "false"
+            ) if isinstance(server_diagnostics_enabled, bool) else "",
+            "server_diagnostics_port": server_diagnostics_port or "",
+            "client_web_enabled": (
+                "true" if client_web_enabled else "false"
+            ) if isinstance(client_web_enabled, bool) else "",
+            "client_web_port": client_web_port or "",
             "smb_diagnostics_auth_mode": smb_diagnostics_auth_mode,
             "smb_diagnostics_username": smb_diagnostics_username,
             "smb_diagnostics_password": smb_diagnostics_password,
@@ -1002,6 +1046,7 @@ class AdbClient:
             "unified_graphics_surfaces": (
                 "true" if unified_graphics_surfaces else "false"
             ) if isinstance(unified_graphics_surfaces, bool) else "",
+            "push_buffer_limit": push_buffer_limit,
         }
         result = self.dev_control("config", **extras)
         if requested_streaming:

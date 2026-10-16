@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Android Vibe diagnostics</title><link rel="stylesheet" href="/diagnostics.css"><script defer src="/diagnostics.js"></script></head>
+<body><header><h1>Android Vibe diagnostics</h1><p>Read-only support dashboard from this Android device. Trusted LAN only: no login or encryption.</p>
+<div class="controls"><button id="refresh">Refresh now</button><button id="pause">Pause updates</button>
+<label>Refresh <select id="interval"><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="30000">30 seconds</option></select></label>
+<a href="/bundle.zip" download>Download diagnostic ZIP</a><span id="status" role="status">Loading…</span></div></header>
+<nav aria-label="Sections"><a href="#dashboard">Playback</a><a href="#timeline">Seek timeline</a><a href="#logs">Logs</a><a href="#incidents">Incidents</a><a href="#captions">Captions</a><a href="#settings">Settings</a><a href="#issue">Issue report</a></nav>
+<main><section id="dashboard"><h2>Live playback dashboard</h2><p id="sampling">Unavailable values are not measured. Refresh runs only while this page is visible.</p>
+<div id="metrics" class="metrics"></div><p>Audio offset is a configured setting, not measured lip-sync. No physical A/V sync or GPU utilization is inferred.</p>
+<details><summary>Detailed playback statistics</summary><pre id="details">Unavailable</pre></details><details><summary>Connection lifecycle</summary><pre id="lifecycle">Unavailable</pre></details></section>
+<section id="timeline"><h2>Seek / Comskip timeline</h2><p id="timeline-note">Requested target and observed position are separate; samples do not prove exact landing.</p>
+<div class="table-scroll"><table><thead><tr><th>Time</th><th>Event</th><th>Requested</th><th>Observed</th><th>Detail</th></tr></thead><tbody id="timeline-rows"></tbody></table></div></section>
+<section id="logs"><h2>Searchable logs</h2><div class="controls"><button id="load-logs">Load / refresh logs</button><button id="pause-logs">Resume log updates</button><button id="copy-selection">Copy selection</button><button id="copy-logs">Copy filtered logs</button><a href="/logs.txt" download>Download log text</a></div>
+<div class="controls"><label>Severity <select id="severity"><option value="all">All</option><option>ERROR</option><option>WARN</option><option>INFO</option><option>DEBUG</option><option>TRACE</option><option value="UNCLASSIFIED">Unclassified</option></select></label>
+<label>Component/text <input id="component" type="search" placeholder="e.g. Media3"></label><label>Search <input id="search" type="search"></label>
+<label>Time from <input id="time-from" placeholder="HH:mm:ss"></label><label>Time to <input id="time-to" placeholder="HH:mm:ss"></label></div>
+<p id="log-status" role="status">Logs load on request. Classification/time are best-effort; no timestamp means unclassified. Last2MiB maximum; use ZIP for the collected bundle.</p>
+<pre id="log-text" tabindex="0">No logs loaded.</pre><textarea id="copy-fallback" hidden readonly aria-label="Copy fallback"></textarea></section>
+<section id="incidents"><h2>Incident history</h2><p>Existing captured stalls, traces, current-video tests and app logs. A crash/reconnect/decoder failure appears only if actually captured.</p>
+<div class="table-scroll"><table><thead><tr><th>Time</th><th>Source</th><th>Bytes</th><th>Summary</th><th>Report</th></tr></thead><tbody id="incident-rows"></tbody></table></div></section>
+<section id="captions"><h2>Caption information</h2><p id="caption-summary">Unavailable</p><p>Broadcast CC (CEA / Teletext / DVB) is separate from file/DVD subtitles. Extractor-declared CEA is not proof of broadcast CEA packets.</p>
+<div class="table-scroll"><table><thead><tr><th>Category</th><th>Type / language</th><th>Service / PID</th><th>Selected / mapped</th><th>Evidence / support</th></tr></thead><tbody id="caption-rows"></tbody></table></div></section>
+<section id="settings"><h2>Diagnostic settings / storage / upload</h2><p>Explicit safe allowlist only. No passwords, tokens, raw configuration or media paths.</p><dl id="settings-values"></dl></section>
+<section id="issue"><h2>GitHub issue-report helper</h2><p>Describe the problem, generate a report, download the ZIP, review both for privacy, and manually attach the ZIP on GitHub. Nothing is posted automatically.</p>
+<label>Problem summary <input id="issue-summary" maxlength="200"></label><label>Reproduction steps <textarea id="issue-steps" maxlength="4000"></textarea></label>
+<label>Expected result <textarea id="issue-expected" maxlength="2000"></textarea></label><label>Actual result <textarea id="issue-actual" maxlength="2000"></textarea></label>
+<div class="controls"><button id="generate-issue">Generate report</button><button id="copy-issue">Copy report</button><a href="/bundle.zip" download>Download ZIP</a>
+<a href="https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/issues/new/choose" target="_blank" rel="noopener noreferrer">Open GitHub issues</a></div>
+<textarea id="issue-output" readonly aria-label="Generated issue report"></textarea><p id="copy-status" role="status"></p></section></main>
+<footer>Home/exit/disable on the Android device stops this service. No remote playback or setting changes are offered.</footer></body></html>

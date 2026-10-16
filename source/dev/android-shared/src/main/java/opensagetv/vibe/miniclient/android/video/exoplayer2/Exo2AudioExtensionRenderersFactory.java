@@ -30,6 +30,10 @@ final class Exo2AudioExtensionRenderersFactory extends DefaultRenderersFactory
 {
     private final boolean allowEncodedAudioPassthrough;
     private final Exo2PcmAudioProcessor pcmAudioProcessor;
+    private opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput.Provider gpuOutputProvider;
+    void setGpuOutputProvider(opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput.Provider provider) {
+        gpuOutputProvider=provider;
+    }
 
     Exo2AudioExtensionRenderersFactory(Context context,
                                        boolean allowEncodedAudioPassthrough,
@@ -61,8 +65,15 @@ final class Exo2AudioExtensionRenderersFactory extends DefaultRenderersFactory
         {
             if (out.get(i).getClass() == MediaCodecVideoRenderer.class)
             {
-                out.set(i, new Exo2SurfaceVideoRenderer(context, getCodecAdapterFactory(),
-                        selector, joiningMs, fallback, handler, listener));
+                // Explicit Client filtering adds a tighter handoff deadline to
+                // the same legacy renderer. Auto/Off retain its existing
+                // surface-replacement workarounds and extension ordering.
+                out.set(i, gpuOutputProvider == null
+                        ? new Exo2SurfaceVideoRenderer(context, getCodecAdapterFactory(),
+                                selector, joiningMs, fallback, handler, listener)
+                        : new GpuSurfaceVideoRenderer(context, getCodecAdapterFactory(),
+                                selector, joiningMs, fallback, handler, listener,
+                                gpuOutputProvider));
                 break;
             }
         }

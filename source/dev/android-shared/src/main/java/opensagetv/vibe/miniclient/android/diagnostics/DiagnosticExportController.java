@@ -25,42 +25,36 @@ public final class DiagnosticExportController
 
     public static void show(final Activity activity, final String activePlayerText)
     {
+        DiagnosticExportMenu.show(activity,activePlayerText);
+    }
+
+    static void share(final Activity activity,final String details) {
+        create(activity,details,false);
+    }
+
+    static void uploadSmb(final Activity activity,final String details) {
         final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
         final String mode = prefs.getString(AndroidPrefStore.SMB_DIAGNOSTICS_MODE,
                 AndroidPrefStore.DIAGNOSTICS_MODE_OFF);
-        String message = AndroidPrefStore.DIAGNOSTICS_MODE_OFF.equals(mode)
-                ? "SMB export is Off. You can still create and share a redacted bundle locally."
-                : AndroidPrefStore.DIAGNOSTICS_MODE_ALWAYS.equals(mode)
-                ? "Always mode is active. Upload now refreshes the remote diagnostic artifact."
-                : "Create one redacted bundle and choose local sharing or the independent diagnostics SMB destination.";
-        AlertDialog.Builder dialog = new AlertDialog.Builder(activity)
-                .setTitle("Export Diagnostics")
-                .setMessage(message)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton("Create and share", (d, which) -> create(activity, activePlayerText, false));
-        if (!AndroidPrefStore.DIAGNOSTICS_MODE_OFF.equals(mode))
-            dialog.setNeutralButton(AndroidPrefStore.DIAGNOSTICS_MODE_ALWAYS.equals(mode)
-                    ? "Upload now" : "Upload to SMB",
-                    (d, which) ->
-                    {
-                        if (AndroidPrefStore.DIAGNOSTICS_MODE_ALWAYS.equals(mode))
-                        {
-                            DiagnosticSessionSpool.checkpoint("manual-upload-now");
-                            Toast.makeText(activity, "Refreshing the Always-mode diagnostic session log...", Toast.LENGTH_LONG).show();
-                        }
-                        else confirmUpload(activity, activePlayerText);
-                    });
-        dialog.show();
+        if(AndroidPrefStore.DIAGNOSTICS_MODE_OFF.equals(mode))return;
+        if(AndroidPrefStore.DIAGNOSTICS_MODE_ALWAYS.equals(mode)) {
+            DiagnosticSessionSpool.checkpoint("manual-upload-now");
+            Toast.makeText(activity,"Refreshing the Always-mode diagnostic session log...",Toast.LENGTH_LONG).show();
+        } else confirmUpload(activity,details);
     }
 
     private static void confirmUpload(final Activity activity, final String details)
     {
-        new AlertDialog.Builder(activity)
+        AlertDialog confirmation=new AlertDialog.Builder(activity)
                 .setTitle("Upload diagnostic bundle?")
                 .setMessage("A bounded redacted ZIP will be written to the configured diagnostics SMB directory. Media and configuration credentials are not used.")
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton("Upload", (dialog, which) -> create(activity, details, true))
                 .show();
+        DiagnosticDialogFocus.style(activity,confirmation.getButton(AlertDialog.BUTTON_POSITIVE));
+        DiagnosticDialogFocus.style(activity,confirmation.getButton(AlertDialog.BUTTON_NEGATIVE));
+        // Consistent visible safe default; opening the SMB child never uploads.
+        confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();
     }
 
     private static void create(final Activity activity, final String details, final boolean upload)

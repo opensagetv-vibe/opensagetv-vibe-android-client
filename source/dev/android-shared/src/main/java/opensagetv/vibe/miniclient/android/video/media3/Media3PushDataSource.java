@@ -25,6 +25,8 @@ import opensagetv.vibe.miniclient.net.PushBufferDataSource;
 public class Media3PushDataSource extends PushBufferDataSource implements DataSource, HasPushBuffer, HasClose {
     private static final Logger log = LoggerFactory.getLogger(Media3PushDataSource.class);
     private Uri uri;
+    private boolean m2tsPackets;
+    private M2tsPacketDeframer m2tsDeframer;
 
     public Media3PushDataSource() {
         log.debug("ExoNative datasource being created.");
@@ -57,6 +59,11 @@ public class Media3PushDataSource extends PushBufferDataSource implements DataSo
     @Override
     public long open(DataSpec dataSpec) throws IOException {
         this.uri=dataSpec.uri;
+        String source = dataSpec.uri.toString();
+        m2tsPackets = source.contains(";ps=192;");
+        m2tsDeframer = m2tsPackets ? new M2tsPacketDeframer() : null;
+        if (m2tsPackets)
+            log.info("Deframing SageTV Blu-ray Push packets from 192-byte M2TS to 188-byte TS");
         open(dataSpec.uri.toString());
         return C.LENGTH_UNSET;
     }
@@ -64,6 +71,19 @@ public class Media3PushDataSource extends PushBufferDataSource implements DataSo
     @Override
     public int read(byte[] buffer, int offset, int readLength) throws IOException
     {
+        if (m2tsPackets && m2tsDeframer != null)
+        {
+            return m2tsDeframer.read(new M2tsPacketDeframer.Input()
+            {
+                @Override
+                public int read(byte[] source, int sourceOffset, int sourceLength)
+                        throws IOException
+                {
+                    return Media3PushDataSource.super.readBlocking(0, source,
+                            sourceOffset, sourceLength);
+                }
+            }, buffer, offset, readLength);
+        }
         return readBlocking(0, buffer, offset, readLength);
     }
 
@@ -83,6 +103,8 @@ public class Media3PushDataSource extends PushBufferDataSource implements DataSo
     {
         private final Media3PushDataSource owner;
         private final long generation;
+        private boolean m2tsPackets;
+        private M2tsPacketDeframer m2tsDeframer;
 
         ReaderLease(Media3PushDataSource owner, long generation)
         {
@@ -98,12 +120,30 @@ public class Media3PushDataSource extends PushBufferDataSource implements DataSo
         @Override
         public long open(DataSpec dataSpec) throws IOException
         {
+            String source = dataSpec.uri.toString();
+            m2tsPackets = source.contains(";ps=192;");
+            m2tsDeframer = m2tsPackets ? new M2tsPacketDeframer() : null;
+            if (m2tsPackets)
+                log.info("Deframing SageTV Blu-ray Push packets from 192-byte M2TS to 188-byte TS");
             return owner.open(dataSpec);
         }
 
         @Override
         public int read(byte[] buffer, int offset, int readLength) throws IOException
         {
+            if (m2tsPackets && m2tsDeframer != null)
+            {
+                return m2tsDeframer.read(new M2tsPacketDeframer.Input()
+                {
+                    @Override
+                    public int read(byte[] source, int sourceOffset, int sourceLength)
+                            throws IOException
+                    {
+                        return owner.readBlockingForGeneration(generation, 0,
+                                source, sourceOffset, sourceLength);
+                    }
+                }, buffer, offset, readLength);
+            }
             return owner.readBlockingForGeneration(generation, 0, buffer, offset, readLength);
         }
 

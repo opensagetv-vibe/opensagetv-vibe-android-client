@@ -157,6 +157,12 @@ def main() -> int:
     parser.add_argument("--gsy-engine", choices=("auto", "media3", "system", "legacy_exo"), default="auto")
     parser.add_argument("--streaming", choices=("dynamic", "pull", "fixed"), default="dynamic")
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
+    parser.add_argument("--video-deinterlace-mode",
+                        choices=("auto", "off", "client", "client_gpu"), default="")
+    parser.add_argument("--video-gpu-filter", choices=("fast", "motion", "inspect"), default="fast")
+    parser.add_argument("--video-gpu-output-rate", choices=("frame", "field"), default="frame")
+    parser.add_argument("--require-client-gpu", action="store_true",
+                        help="Require real Client GPU processing before and after HOME/surface recreation")
     parser.add_argument("--background-seconds", type=float, default=3.0)
     parser.add_argument("--session-timeout-seconds", type=int, default=300)
     parser.add_argument("--expect-session-timeout", action="store_true")
@@ -204,6 +210,7 @@ def main() -> int:
         require(args.player != "ijkplayer", "IJK cannot apply encoded clock offsets")
 
     client = MCPProcess()
+    settings_checkpoint_active = False
     evidence = {
         "status": "STARTING",
         "player": args.player,
@@ -225,6 +232,11 @@ def main() -> int:
         negotiated, _ = initialize(client)
         print(f"PASS: MCP initialize handshake ({negotiated})")
         call_dict(client, "adb_connect", timeout=30.0)
+        evidence["settingsCheckpoint"] = call_dict(
+            client, "dev_checkpoint_settings", timeout=30.0)
+        require(bool(evidence["settingsCheckpoint"].get("captured")),
+                f"Settings checkpoint failed: {evidence['settingsCheckpoint']}")
+        settings_checkpoint_active = True
         # Fire OS retains crash-buffer entries across process restarts and APK
         # upgrades. Scope this physical gate to failures produced by this run,
         # matching the session and player-matrix runners.
@@ -258,6 +270,10 @@ def main() -> int:
         }
         if args.player == "gsyplayer":
             player_config["gsy_engine"] = args.gsy_engine
+        if args.video_deinterlace_mode:
+            player_config["video_deinterlace_mode"] = args.video_deinterlace_mode
+            player_config["video_gpu_filter"] = args.video_gpu_filter
+            player_config["video_gpu_output_rate"] = args.video_gpu_output_rate
         call_dict(client, "dev_set_player_config", player_config)
         call_dict(client, "dev_connect_server", {
             "address": args.server_address,
@@ -323,6 +339,10 @@ def main() -> int:
             require(bool(settled.get("passed")),
                     f"Encoded output did not settle after adjustment: {settled}")
         surface_before = call_dict(client, "dev_player_state", timeout=30.0)
+        if args.require_client_gpu:
+            require(surface_before.get("videoDeinterlaceState") == "Client GPU"
+                    and int(surface_before.get("videoGpuFilteredFrames", 0)) > 0,
+                    f"Client GPU was not active before HOME: {surface_before}")
         if args.encoded_offset_ms is not None:
             require_encoded_offset(surface_before, args.encoded_offset_ms, "initial playback")
         evidence["initialPlayback"] = surface_before
@@ -448,6 +468,10 @@ def main() -> int:
                     f"A/V recovery used a replacement connection: {resumed_state}")
 
         surface_after = call_dict(client, "dev_player_state", timeout=30.0)
+        if args.require_client_gpu:
+            require(surface_after.get("videoDeinterlaceState") == "Client GPU"
+                    and int(surface_after.get("videoGpuFilteredFrames", 0)) > 0,
+                    f"Client GPU did not recover after HOME/surface recreation: {surface_after}")
         if args.capture_phase_images:
             evidence["homeReturnImage"] = capture_phase_images(client,"lifecycle-"+args.player+"-home-return")
         if args.encoded_offset_ms is not None:
@@ -581,6 +605,11 @@ def main() -> int:
         print("PASS: disconnect/force-stop teardown committed; Fire OS may briefly retain a terminating PID")
         evidence["status"] = "PASS"
         evidence["teardown"] = {"exit": exited, "appStatus": status}
+        evidence["settingsRestore"] = call_dict(
+            client, "dev_restore_settings", timeout=100.0)
+        require(bool(evidence["settingsRestore"].get("restored")),
+                f"Settings restoration failed: {evidence['settingsRestore']}")
+        settings_checkpoint_active = False
         write_evidence()
         print("ANDROID LIFECYCLE PLAYBACK: PASS")
         return 0
@@ -600,6 +629,14 @@ def main() -> int:
             call_dict(client, "dev_exit_session", {"stop_app": True}, timeout=30.0)
         except Exception:
             pass
+        if settings_checkpoint_active:
+            try:
+                evidence["settingsRestore"] = call_dict(
+                    client, "dev_restore_settings", timeout=100.0)
+                settings_checkpoint_active = False
+            except Exception as restore_exc:
+                evidence["settingsRestoreError"] = str(restore_exc)
+            write_evidence()
         client.close()
 
 

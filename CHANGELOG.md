@@ -1,5 +1,233 @@
 # Changelog
 
+## Unreleased
+
+## 0.5.102 - 2026-10-16
+
+- Publish the qualified development sideload update with its existing package
+  and signing identity. Preserve stock-server fallback and user settings.
+  Known limits remain explicit: ONN-003 is not reproduced/fixed; Client GPU
+  and Blu-ray support are qualified only for the documented device/Core paths.
+
+- Reopen ONN-003 after reviewing the successful old-MiniClient/extender
+  comparison. Repeat the AutoAspect/Comskip long-recording OSD checks on the
+  non-Pro and record the remaining reproduction gap; no Android OSD runtime
+  fix is claimed. Correct the companion test helper's UI-scoped STVI activation
+  so a global false enable readback cannot be mistaken for a stock limitation.
+  Published v0.5.100 independent HDMI comparison also clears normally on
+  Media3/Pull and IJK/Push, including input during AutoAspectDebug; preserve
+  the open reproduction gap and verified exact APK/settings restoration.
+
+- Complete Android 13+ predictive-Back migration for both renderers, route it
+  through the existing SageTV Back key path, and remove the temporary API-36
+  restricted-resizability compatibility property after physical API33 gates.
+- Add safe 192-byte M2TS deframing for Media3 Push so a server-owned Blu-ray
+  streamer can feed the normal TS extractor. Qualify a self-generated BDMV on
+  the optional corrected Vibe Core path, while documenting that unmodified
+  stock Core still chooses unusable directory Pull for BDMV.
+- Add a debug-only authorized Widevine commissioning activity. It reports
+  Widevine security level and actual secure decoder selection, is absent from
+  production manifests, and does not bypass protected-output enforcement.
+
+- Add an Advanced Video control for stock SageTV's legacy Push write limit:
+  Auto (the historical 32 KiB fallback), 32 KiB, 64 KiB, or 128 KiB. Keep Auto
+  as the default, reject oversized/invalid values, and do not expose the HD300's
+  ineffective 512 KiB value because stock Core clamps it to 128 KiB. Add bounded
+  Push/heap telemetry and a repeatable stock-server comparison gate. Physical
+  Exo Push testing found exact requested payloads and lower command cadence at
+  larger values, but no startup improvement; all choices passed FLUSH,
+  pause/resume and Live TV recovery with zero sampled A/V drops.
+
+- Fix original IJK hardware AVC startup when an MPEG-TS read begins mid-GOP.
+  Preserve valid demuxed Annex-B H.264/HEVC parameter sets as MediaCodec
+  `csd-0` instead of dropping them as a naked stream. This keeps the same
+  hardware decoder and packet stream, with no decoder blacklist, server/Core,
+  FFmpeg, SDL, timing, or surface-ownership change. The exact Taskmaster failure
+  now renders on the non-Pro MTK decoder against stock SageTV.
+
+- Complete the affected Client GPU deinterlacing phase on the exact qualified
+  API25/mantis MPEG-2 path. Retain original NTSC/PAL fields in a bounded GPU
+  queue with standard EGL fence ownership; prove Media3 Pull, independent
+  legacy actual Push, controls, HOME/surface recreation and affected CEA.
+  Preserve native/progressive fallback, stock Core and A/V/caption clocks.
+  Record IJK hardware, Android System, HD full-field and authored-DVD source
+  phase as explicit unavailable/native boundaries instead of false support.
+  Make lifecycle and DVD physical runners restore private settings on every
+  pass/failure path.
+
+- Qualify PAL BFF and HD TFF decoded field geometry separately from display
+  cadence; add fast per-field-ID stamping for reproducible HD fixtures.
+  Correct finite inspection entering the retained-field scheduler after its
+  probe, and preserve new input when an old display queue is invalidated.
+  Full-field output remains unqualified; failed early-admission trial withdrawn.
+
+- Complete stock Linux/Windows diagnostic-upload acceptance and operational
+  MCP startup qualification; Windows awake/power and original settings restored.
+  Retain explicit limits: generated field IDs disprove GPU counters as full
+  scanout evidence. Add PAL BFF and progressive capture controls. The bounded
+  original-field queue is still experimental and its startup timing remains
+  under correction; no full-field or independent IJK qualification claimed.
+
+- Add a generated per-field-ID MPEG-2 fixture and explicit finite DEBUG input/
+  output probe. Non-Pro MTK retains woven pairs despite half-frame timestamp
+  cadence; bounded source-PTS mapping selects64/64 correct fields. Preserve
+  one-shot failure data after native fallback. Sustained field-rate/retention
+  and remaining4A gates stay open; unqualified shader/deadline trials withdrawn.
+
+- Correct GPU admission timing in independent Media3/legacy adapters: replace
+  the five-millisecond window with one bounded field period, retaining the
+  existing audio/master clock and native Auto/Off paths. Shield SD repeats
+  reach50fps and HD59.94fps without measured decoder drops; field-retention,
+  IJK and remaining affected-device/lifecycle gates are still open.
+- Restore native picture safely for unsupported GPU inputs. Defer the EGL
+  display window until first-frame format classification instead of changing
+  SurfaceView format before an AVC/HEVC fallback. Shield Media3 fresh/repeat
+  and independent legacy picture/control gates pass; withdraw the failed
+  AVC-refresh-only workaround. Final SD Motion field-rate repeats retain50fps.
+  Unsupported reports Unavailable, not successful GPU AVC deinterlacing.
+- Correct a reproduced MCP harness false timeout when a notification hides a
+  prefetched response. Bound stdout framing/queue and retain real request
+  deadlines; add finite real-MCP connection qualification without playback,
+  key resets or runtime replay. The affected Fire TV's original device-side
+  shell timeout still needs qualification; offline is not protocol PASS.
+
+- Qualify focused Shield Tube GPU coded-frame/native gates with independent
+  HDMI. Scope Frame interval0 to API30/sif/NVIDIA Tegra where EGL permits it;
+  correct frozen GPU-to-native output with a scoped display-layer refresh,
+  without NVIDIA codec reinitialization or source/audio-clock changes. Media3,
+  independent legacy and both GSY delegates pass selected Frame/bypass/control
+  gates. SD full-field performance remains unreliable and is not qualified.
+  Tighten pause observation and preserve configured source FPS after native
+  bypass; retain unknown cadence as unqualified. Restore settings/CC/power,
+  retain minimum open comparisons and retire completed/corrected raw.
+
+- Record focused ONN non-Pro GPU tests: native, shader pixels, Frame processing
+  across independent Media3/legacy and actual GSY delegates, SD Motion,
+  progressive bypass and seek/pause/resume pass their selected gates. Full
+  Field remains unreliable; withdraw two unqualified EGL pacing experiments.
+  Correct test-harness STV readiness, asynchronous paused-clock observation and
+  actual-delegate/mode-change witnesses without a Core or audio-clock change.
+  Preserve settings/serverCC/power; no full-field or football-sample claim.
+
+- Correct the API25 MTK GPU-to-native frozen-picture handoff by releasing the
+  EGL display producer before retarget and refreshing the native display layer,
+  while retaining decoder input until renderer detach. Non-Pro/stock175 HDMI
+  and controls pass in Media3, legacy Exo and both GSY delegates. Add positive
+  progressive/film native bypass and repeat-refresh ownership; non-Pro Media3/
+  legacy progressive and SAME-Activity repeat picture/control gates pass.
+  Physical film/DVD/Home and full GPU field-rate gates remain open. No Core,
+  source replay or audio-clock reset.
+
+- Add a distinct Client GPU deinterlace choice in startup settings and the
+  compact live Video menu, with session/device scope and actual status. Keep
+  Client backend processing separate; MIM appears only with Fixed. GPU requests
+  cannot enable server or IJK software filtering. Physical qualification remains
+  open, including sustained-output-deficit fallback and real surface ownership.
+- Add opt-in hardware-decoder GPU output adapters for Media3 and independent
+  legacy Exo (including actual GSY delegates), compact GPU filter/parity/rate
+  controls and actual output diagnostics. Preserve Auto/Off/native audio and
+  stock Core. Same-field texture/stable-context work improves non-Pro1080i
+  output from~20fps/99%CPU to~33fps/~52%CPU; opt-in Field swap0 reaches~38fps,
+  still below the native~60fps motion reference. Full-field/lifetime acceptance
+  remains open, including a recurring native decoder-allocation stall. Do not
+  mistake a moving clock/state/control pass for complete motion qualification.
+- Fail closed on wrong/empty/ambiguous server UI identity. Never select another
+  device's sole remote context while the intended client registers; bounded
+  exact discovery and pre-Watch serial/client-ID/context witnesses qualify on
+  stock175/non-Pro. The acknowledged initial Pro Watch is invalid test scope,
+  not a non-Pro playback result. Preserve preferences and do not guess restore.
+
+- Add an IJK Video filters child with Auto/Fast/YADIF selection and Session/
+  Device scope. Auto retains adaptive HD/SD behavior; forcing temporal YADIF on
+  HD warns about CPU cost. Other engines show controlled processing read-only.
+- Normalize stats to actual Pull/Push/Fixed/Direct and Software/Hardware display
+  casing; do not label a dynamic preference as the active transport. Machine
+  protocol/preference values and playback scheduling are unchanged.
+- Qualify real filter-menu/default selection, HD Auto/SD filters/bypass and
+  fresh true Push on non-Pro/stock175 with independent HDMI, seek/pause/resume
+  and125settings/power/CC restoration. Correct the earlier nominal-Push oracle
+  without repeating unrelated matrices. This development build is unreleased.
+- Add one cross-player Deinterlace Auto/Off/Client control, with MIM available
+  only in Fixed and current processing path/Software/Hardware/Unknown status.
+  IJK filters marked interlaced software frames with LGPL YADIF for SD and a
+  bounded first-field spatial HD path to avoid older-TV CPU bottlenecks;
+  Media3/legacy Exo and GSY delegates use device hardware output for explicit
+  MPEG-2 Client mode. Preserve progressive paths, seek history, PTS, settings,
+  old default compatibility, audio bytes and stock-server fallback.
+- Correct IJK Decoder unavailable in the stats panel; expose actual decoder,
+  deinterlacing path and on-demand native decode/output FPS. Do not imply a
+  portable vendor deinterlace switch or verified GPU filter from GPU encoding.
+- Pin/rebuild only IJK ARM player glue; retain FFmpeg/SDL/Java byte-for-byte,
+  strict AAR checksums, complete native patch/source offers and LLVM runtime
+  notices. Non-Pro/stock175 HD Pull/Push and SD picture/seek/pause gates qualify
+  at normal playback speed, with final menu/stats and232 MIM owned-stream gates.
+  HD spatial processing trades vertical detail for throughput; no universal
+  field-doubled claim or System/progressive full-cadence pass.
+- Keep healthy MIM selection available after redundant startup seeks by checking
+  the accepted owned producer, not one literal diagnostic-state label. Report
+  unavailable MIM without changing the selection or disabling native fallback.
+  Restore125preferences/CC/power; no server restart/change or full matrix.
+
+- Document non-Pro/stock175 MPEG-2 combing reproduction: actual IJK software
+  path shows1080i comb teeth, Media3 MTK hardware looks substantially cleaner,
+  and progressive IJK control lacks pronounced combing. Preserve saved settings,
+  power and CC; this is diagnostic evidence, not a deinterlacing runtime fix or
+  closure of the ONN Pro user's absent football sample. No unrelated matrix.
+
+- Give all export-dialog footer buttons an explicit blue focus/pressed fill,
+  light border and white text, independent of Fire OS theme tint. Include the
+  existing SMB confirmation. Request a visible default on open: Refresh,
+  server Back, Web Copy URL, receipt Back and SMB Cancel; opening a confirmation
+  does not send. Preserve actions, parent navigation and saved settings.
+- Qualify all five export-dialog defaults and remote highlight movement on
+  non-Pro/stock175:17source tests/build/package and11image checks pass; parent
+  cancel/result and continued rendering pass. Restore125preferences/power/
+  receiver; no unrelated matrix or server restart. This remains unreleased.
+
+- Replace the SMB-only bug-icon dialog with a compact shared export chooser:
+  local ZIP sharing, SMB, a confirmed one-report server upload and Web download.
+  Keep unavailable methods visible but gray; Web needs its enabled live listener,
+  server export needs the connected server's enabled Client Extension receiver.
+  Do not silently enable services or change saved automatic-upload settings.
+- Show the live device IP/URL and a locally generated QR code in the Web child;
+  Back/cancel/result preserves the parent chooser. Pin ZXing core3.5.3 with
+  independently verified Maven artifacts, dependency locks and Apache-2.0 notice;
+  no existing player dependency changes or camera/microphone permissions.
+- Qualify chooser gray states after discovery, actual rendered QR decoding,
+  Back/cancel/result and confirmed upload/receipt/readback/privacy on stock175
+  and non-Pro. Restore124preferences/power/original receiver;24JVM and33focused
+  Python passes with5explicit skips/build/package pass. No repeated unrelated
+  matrix, Core replacement, server restart or published release.
+
+- Extend the Android diagnostic page with live cached playback metrics, sampled
+  seek timeline, searchable logs, bounded incident downloads, caption inventory,
+  safe settings/storage/upload summary and a manual GitHub issue-report helper.
+- Distinguish buffering from background loading and declared CEA tracks from
+  observed packets; never display synthetic CEA track IDs as transport PIDs.
+- Close diagnostic sockets before slow playback-activity shutdown on Home;
+  preserve existing player/decoder policy. Focused browser, playback, caption,
+  lifecycle, JVM and package gates pass; this is not a published release.
+
+- Add an Android-owned diagnostic web server with default-off main-settings
+  toggle, configurable port and read-only device URL. Browser statistics,
+  redacted logs and ZIP download require no server plugin. Foreground-only
+  lifecycle stops on Home/exit/disable; bounded network work never controls
+  playback or power. Client Extension retains upload-only report storage,
+  not web pages. Four socket tests and focused source/build checks pass;
+  non-Pro actual HTTP/log/ZIP/checksum/lifecycle and main-settings toggle/
+  persistence/address pass with all settings/power restored. Actual browser
+  rendering and active-playback smoke now pass under DIAG-003's scoped gates.
+
+- Add a persistent default-off main-settings opt-in for server diagnostic
+  uploads, independent of SMB and media transport. Bounded redacted reports
+  use a versioned Client Extension receiver, with local-log retention and
+  safe missing-service/session-change fallback. Lightweight statistics reuse
+  existing observations; no new decoder/clock polling or playback controls.
+- Add diagnostic port, manual upload/status and debug/MCP acceptance controls.
+  Focused transport JVM/source/build tests and232/non-Pro upload/privacy/
+  fallback/restoration gates pass. Fresh stock release-target acceptance stays
+  separate;175 requested plugin deployment completed with stock binaries intact.
+
 ## 0.5.101 - 2026-10-08
 
 - Publish the Dev sideload APK and clean source at a541d0f4; independently

@@ -1,7 +1,7 @@
 # Third-party notices
 
 This document identifies the runtime component families distributed with the
-OpenSageTV Vibe Android Client. All 122 selected Maven coordinates are listed
+OpenSageTV Vibe Android Client. All 123 selected Maven coordinates are listed
 in `third_party/RUNTIME_DEPENDENCIES.csv`; graph and security-scan evidence is
 described in `docs/DEPENDENCY_AUDIT.md`. License names below come
 from the versioned upstream source, published Maven metadata, or—where noted—
@@ -20,6 +20,7 @@ by each project.
 | libGDX core, Android backend, and native platform artifacts | 1.9.14 | Apache License 2.0; libGDX release source |
 | Guava Android/JRE | Resolved 33.3.1-android | Apache License 2.0; Guava published artifact |
 | SMBJ | 0.13.0 | Apache License 2.0; published POM and upstream source |
+| ZXing Core (diagnostic URL QR generation only) | 3.5.3 | Apache License 2.0; [versioned upstream license](https://github.com/zxing/zxing/blob/zxing-3.5.3/LICENSE) |
 | Glide | 3.8.0 | BSD-3-Clause for Glide, with Apache-2.0, MIT, and retained third-party terms itemized in Glide's versioned `LICENSE` |
 | SLF4J API | 1.7.6 | MIT License; versioned upstream `LICENSE.txt` |
 | Logback Android Core and Classic | 1.1.1-6 | Eclipse Public License 1.0 or GNU LGPL 2.1; published POM |
@@ -67,6 +68,31 @@ No libdvdnav, FFmpeg, or GStreamer source was copied into the Java decoder.
 The older `extension-ffmpeg-2.14.0` through `2.17.1` files and the unused
 `ijkplayer-exo` AAR remain checked-in migration material but are not declared
 by the active runtime build and are not packaged in the APK.
+
+Current unreleased IJK ARM artifacts rebuild only the LGPL player glue with
+the distributed Vibe interlaced-only software-field hook with optional
+Auto/Fast/YADIF algorithms. No field-doubled output or new filter library is
+enabled. They retain the exact
+original FFmpeg/SDL libraries and Java bindings. Pinned source archives, native
+patch/helper, NDK version and reconstruction instructions are supplied in
+scripts/build_ijk_deinterlace.py, source/dev/ijkplayer/native and the source offer.
+No GPL/nonfree feature or new decoder library is enabled.
+The rebuilt player glue statically links NDK21's LLVM libc++/libc++abi rather
+than the historical STL runtime. Preserve its complete Apache-2.0 with LLVM
+exceptions and legacy dual-license notices in third_party/licenses/LLVM-libcxx.txt
+and LLVM-libcxxabi.txt; exact NDK distribution source remains available from
+the Android NDK21.0.6113669 archive. FFmpeg and SDL are not relinked.
+
+## External commissioning services and media
+
+The debug-only secure-decoder gate references Axinom's public DRM test vectors,
+public test entitlement, and Widevine license endpoint. It streams the remote
+H.264 DASH vector only when explicitly launched through the development
+control surface. No Axinom media segment, production credential, DRM key,
+license response, or protected pixel is included in source or release bundles.
+The activity is absent from release manifests. Axinom identifies the underlying
+test program as Blender Foundation's *Tears of Steel*; its upstream attribution
+and terms remain with the hosted vector.
 
 ## Redistribution notes
 

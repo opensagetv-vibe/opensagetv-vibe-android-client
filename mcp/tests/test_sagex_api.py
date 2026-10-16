@@ -22,6 +22,14 @@ class SagexApiTests(unittest.TestCase):
         with patch.object(c, "ui_context_names", return_value=["444556303031", "SAGETV_PROCESS_LOCAL_UI"]):
             self.assertEqual(c.resolve_context("44:45:56:30:30:31"), "444556303031")
 
+    def test_missing_non_pro_cannot_target_the_only_other_device(self):
+        for c in (SagexApiClient("http://server:8080/sagex/api"),
+                  SageWebApiClient("http://server:8080/sage")):
+            with patch.object(c,"ui_context_names",return_value=["SAGETV_PROCESS_LOCAL_UI","444556303032"]):
+                for identity in ("44:45:56:30:30:31", "", ":--"):
+                    with self.subTest(adapter=type(c).__name__,identity=identity), self.assertRaises(SagexApiError):
+                        c.resolve_context(identity)
+
     def test_find_media_prefers_exact_match(self):
         c = SagexApiClient("http://server:8080/sagex/api")
         payload = {"Result": [

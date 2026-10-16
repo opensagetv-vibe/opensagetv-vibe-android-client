@@ -244,6 +244,19 @@ def main() -> int:
     )
     parser.add_argument("--decoding", choices=("hardware", "software", "hardware_preferred"), default="hardware")
     parser.add_argument(
+        "--video-deinterlace-mode",
+        choices=("auto", "off", "client", "client_gpu"),
+        default="",
+        help="Optional shared deinterlace mode for an affected caption/rendering gate",
+    )
+    parser.add_argument(
+        "--require-client-gpu",
+        action="store_true",
+        help="Require the hardware Client GPU path to be active during caption playback",
+    )
+    parser.add_argument("--video-gpu-filter", choices=("fast", "motion"), default="")
+    parser.add_argument("--video-gpu-output-rate", choices=("frame", "field"), default="")
+    parser.add_argument(
         "--mim-direct-mode",
         choices=("off", "copy", "transcode"),
         default="off",
@@ -451,6 +464,9 @@ def main() -> int:
             "gsy_engine": args.gsy_engine,
             "streaming": args.streaming,
             "decoding": args.decoding,
+            "video_deinterlace_mode": args.video_deinterlace_mode,
+            "video_gpu_filter": args.video_gpu_filter,
+            "video_gpu_output_rate": args.video_gpu_output_rate,
             "mim_direct_mode": args.mim_direct_mode,
             "mim_direct_deinterlace": args.mim_direct_deinterlace,
             "fixed_caption_side_channel_enabled": (
@@ -521,6 +537,17 @@ def main() -> int:
                 "restart_from_beginning": not args.preserve_resume,
             }, timeout=args.playback_timeout_s + 35.0)
         require(bool(started.get("passed")), f"Initial playback failed: {started}")
+        if args.require_client_gpu:
+            gpu_state = wait_snapshot(
+                client,
+                lambda state: str(state.get("videoDeinterlaceState", "")) == "Client GPU",
+                "active Client GPU caption renderer",
+                args.playback_timeout_s,
+            )
+            require(
+                str(gpu_state.get("videoDeinterlaceState", "")) == "Client GPU",
+                f"Client GPU was not active for caption gate: {gpu_state}",
+            )
         if args.require_mim_direct_owned:
             require_mim_direct_ownership(client, args.mim_direct_mode, "startup")
 

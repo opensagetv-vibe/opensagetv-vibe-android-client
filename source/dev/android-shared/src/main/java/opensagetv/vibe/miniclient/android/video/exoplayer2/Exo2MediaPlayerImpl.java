@@ -60,6 +60,10 @@ import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput;
+import opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner;
+import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
+import opensagetv.vibe.miniclient.video.GpuDeinterlacePolicy;
 import opensagetv.vibe.miniclient.android.video.ActivePlayerSessionOverrides;
 import opensagetv.vibe.miniclient.android.video.TextSubtitlePresentation;
 import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
@@ -105,8 +109,65 @@ import android.support.v4.media.session.MediaSessionCompat;
  */
 
 public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSource>
-        implements PlaybackHealthSource
+        implements PlaybackHealthSource, GpuVideoOutputOwner
 {
+    private volatile GpuDeinterlaceOutput gpuVideoOutput;
+    private volatile java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> gpuOutputSlot;
+    private volatile String gpuVideoUnavailableReason = "";
+    private String lastGpuFailureWitness="";
+    @Override public String gpuFailureWitness() { return lastGpuFailureWitness; }
+    @Override public GpuDeinterlaceOutput gpuVideoOutput() { return gpuVideoOutput; }
+    @Override public String gpuVideoUnavailableReason() { return gpuVideoUnavailableReason; }
+
+    /** Legacy owns its decoder; the common GPU stage never substitutes Media3. */
+    private void bindVideoOutput(final ExoPlayer expected) {
+        if (expected != player) return;
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> outputSlot = gpuOutputSlot;
+        if (gpuVideoOutput != null) {
+            if (outputSlot != null) outputSlot.set(gpuVideoOutput);
+            expected.setVideoSurface(gpuVideoOutput.inputSurface()); return;
+        }
+        PrefStore prefs = MiniclientApplication.get().getClient().properties();
+        String mode = ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                prefs.getString(PrefStore.Keys.video_deinterlace_mode,"auto"));
+        String mim = mimDirectController().acceptedDeinterlaceForDiagnostics();
+        if (gpuVideoUnavailableReason.isEmpty() && GpuDeinterlacePolicy.requested(mode,
+                !mim.isEmpty() && !"off".equals(mim))) {
+            try {
+                mpeg2InterlaceObserver.setOutputFieldMappingEnabled(true);
+                gpuVideoOutput = new GpuDeinterlaceOutput((SurfaceView) context.getVideoView(),
+                        ActivePlayerSessionOverrides.resolveGpuFilter(prefs.getString(PrefStore.Keys.video_gpu_filter,"fast")),
+                        ActivePlayerSessionOverrides.resolveGpuFieldOrder(prefs.getString(PrefStore.Keys.video_gpu_field_order,"auto")),
+                        "field".equals(ActivePlayerSessionOverrides.resolveGpuOutputRate(prefs.getString(PrefStore.Keys.video_gpu_output_rate,"field"))),
+                        reason -> {
+                            if (player != expected) return;
+                            gpuVideoUnavailableReason = reason;
+                            GpuDeinterlaceOutput failed = gpuVideoOutput;
+                            lastGpuFailureWitness=failed==null ? "" : failed.failureWitness();
+                            mpeg2InterlaceObserver.setOutputFieldMappingEnabled(false);
+                            if (failed != null && GpuDeinterlacePolicy.refreshOnGpuReplacement(
+                                    android.os.Build.VERSION.SDK_INT,android.os.Build.DEVICE,
+                                    "video/mpeg2",getSelectedVideoDecoderForDebug()))
+                                failed.refreshNativeDisplayLayer();
+                            expected.setVideoSurfaceView((SurfaceView) context.getVideoView());
+                            gpuVideoOutput = null;
+                            if (outputSlot != null) outputSlot.set(null);
+                            if (failed != null) failed.close();
+                            PlaybackDebugTrap.recordDetailed("gpu_filter_unavailable",this,reason);
+                        });
+                gpuVideoOutput.setSourcePictureLookup(mpeg2InterlaceObserver::getOutputPictureTimeUs);
+                gpuVideoOutput.setWovenEvidence(() -> GpuDeinterlacePolicy.wovenMpeg2("video/mpeg2",
+                        mpeg2InterlaceObserver.getInterlaceObservation(),mpeg2InterlaceObserver.getProgressiveFrameCount()));
+                if (outputSlot != null) outputSlot.set(gpuVideoOutput);
+                expected.setVideoSurface(gpuVideoOutput.inputSurface()); return;
+            } catch(RuntimeException failure) {
+                gpuVideoUnavailableReason = "gpu_initialization_unavailable";
+                log.logError("Legacy Client GPU unavailable; retain device output",failure);
+            }
+        }
+        mpeg2InterlaceObserver.setOutputFieldMappingEnabled(false);
+        expected.setVideoSurfaceView((SurfaceView) context.getVideoView());
+    }
     static final Logger log = Logger.getLogger(Exo2MediaPlayerImpl.class);
     private final DecoderAttemptTelemetry decoderAttemptTelemetry =
             new DecoderAttemptTelemetry();
@@ -133,6 +194,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     protected void onPlaybackLoadStarted()
     {
+        lastGpuFailureWitness="";
         mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
         decoderAttemptTelemetry.reset();
@@ -605,7 +667,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             // Media3: setPlayWhenReady alone is a no-op after stop(). Rebind
             // the SurfaceView and prepare at SageTV's already-applied seek.
             context.setupVideoFrame();
-            player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+            bindVideoOutput(player);
             PlaybackDebugTrap.record("play_prepare_from_idle", this);
             player.prepare();
         }
@@ -626,6 +688,11 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         cancelPullSeekRecovery();
         cancelGrowingPullSeek();
         final ExoPlayer playerToRelease = player;
+        final GpuDeinterlaceOutput gpuToRelease = gpuVideoOutput;
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> slotToRelease = gpuOutputSlot;
+        gpuOutputSlot = null;
+        gpuVideoOutput = null;
+        gpuVideoUnavailableReason = "";
         final MediaSessionCompat sessionToRelease = mediaSession;
         // Keep MediaSession teardown on Android's main thread. Calling into
         // MediaSessionCompat synchronously from SageTV's media-command thread
@@ -657,6 +724,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 }
                 if (playerToRelease != null)
                 {
+                    if (gpuToRelease != null) gpuToRelease.beginDecoderTransition();
                     try
                     {
                         playerToRelease.setPlayWhenReady(false);
@@ -675,6 +743,8 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         log.logError("Error calling release on player", ex);
                     }
                 }
+                if (gpuToRelease != null) gpuToRelease.close();
+                if (slotToRelease != null) slotToRelease.set(null);
             }
         });
 
@@ -1818,6 +1888,12 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 new Exo2AudioExtensionRenderersFactory(
                         context.getContext(), audioPassthroughEnabled, audioOffsetMs);
         pcmAudioProcessor = audioRenderersFactory.getPcmAudioProcessor();
+        final java.util.concurrent.atomic.AtomicReference<GpuDeinterlaceOutput> outputSlot =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        gpuOutputSlot = outputSlot;
+        if (GpuDeinterlacePolicy.requested(ActivePlayerSessionOverrides.resolveVideoDeinterlaceMode(
+                prefs.getString(PrefStore.Keys.video_deinterlace_mode,"auto")),false))
+            audioRenderersFactory.setGpuOutputProvider(outputSlot::get);
         DefaultRenderersFactory renderersFactory = audioRenderersFactory;
         String codecMode = runtimeConfig.getCodecMode();
         if ("async".equals(codecMode)) renderersFactory.forceEnableMediaCodecAsynchronousQueueing();
@@ -1939,6 +2015,22 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
         builder.setTrackSelector(trackSelector);
         player = builder.build();
+        player.setVideoFrameMetadataListener((presentationTimeUs, releaseTimeNs, format, mediaFormat) -> {
+            GpuDeinterlaceOutput gpu = gpuVideoOutput;
+            if (gpu == null) return;
+            String decoder = getSelectedVideoDecoderForDebug();
+            gpu.frame(presentationTimeUs,releaseTimeNs,format.width,format.height,
+                    format.frameRate > 0 ? format.frameRate : (float)mpeg2InterlaceObserver.getSequenceFrameRateHz(),
+                    playbackRateController.getRate(),format.sampleMimeType,
+                    mpeg2InterlaceObserver.getInterlaceObservation(),
+                    mpeg2InterlaceObserver.getProgressiveFrameCount(),
+                    mpeg2InterlaceObserver.getObservedTopFieldFirst(),
+                    !decoder.isEmpty() && !AndroidCodecPolicy.isSoftwareCodecName(decoder),
+                    GpuDeinterlacePolicy.duplicatedWovenOutput(android.os.Build.VERSION.SDK_INT,
+                            format.sampleMimeType,decoder),
+                    mpeg2InterlaceObserver.getOutputFieldPhase(presentationTimeUs),
+                    mpeg2InterlaceObserver.getOutputPictureTimeUs(presentationTimeUs));
+        });
         player.setVolume(serverMuted ? 0.0f : 1.0f);
         final PlaybackSessionController.Token listenerSession = currentPlaybackSession();
         final ExoPlayer listenerPlayer = player;
@@ -2255,6 +2347,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record("position_discontinuity_" + reason, Exo2MediaPlayerImpl.this);
+                if (gpuVideoOutput != null) gpuVideoOutput.flush();
                 switch (reason)
                 {
                     case Player.DISCONTINUITY_REASON_SEEK:
@@ -2271,6 +2364,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                 PlaybackDebugTrap.record(isPlaying ? "is_playing_true" : "is_playing_false", Exo2MediaPlayerImpl.this);
+                if (gpuVideoOutput != null) gpuVideoOutput.setPlaying(isPlaying);
             }
 
             @Override
@@ -2466,7 +2560,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         // visibility, and activity Surface recreation. Holding the raw Surface
         // made Fire OS retry OMX.MTK.VIDEO.DECODER.MPEG2 against an object that
         // had already been released.
-        player.setVideoSurfaceView((SurfaceView) context.getVideoView());
+        bindVideoOutput(player);
         player.setPlayWhenReady(playRequested);
 
         //Create Media Session

@@ -1,7 +1,7 @@
 # OpenSageTV Vibe Android Client
 
-Current GitHub sideload release: **v0.5.101**. Use the APK on the
-[release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.101).
+Current GitHub sideload release line: **v0.5.102**. Use the APK on the
+[release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.102).
 It keeps the existing Dev sideload package/signing identity; an update install
 preserves settings. This is not a production Appstore/Play release. Stock
 SageTV remains supported, optional MIM enhancements are capability-negotiated,
@@ -30,6 +30,48 @@ resources.
   a media-playback failure.
 - Release history: `CHANGELOG.md`.
 - Active work: `TASKS.md` (the only task backlog in this repository).
+
+For MPEG-2 combing, inspect the actual decoder rather than the Hardware
+preference alone. The non-Pro IJK/Media3 interlaced/progressive comparison and
+its limitations are documented in [playback diagnostics](docs/PLAYBACK_DIAGNOSTICS.md).
+Version0.5.102 has one Video settings Deinterlace row: Auto, Off,
+Client, Client GPU and Fixed-only MIM, with actual path/implementation in parentheses.
+Client GPU is explicit and opt-in; its non-Pro performance/fallback qualification
+is still open. Client retains the existing software/device-controlled behavior.
+The stats panel reports the same path and IJK's actual software/hardware
+decoder plus native FPS; device-controlled output is not a universal Android
+deinterlace on/off switch. Independent picture checks remain required.
+The long-press Video icon also has a compact Video filters child. IJK offers
+Auto (fast HD/YADIF SD), Fast (lower vertical detail), and YADIF (temporal;
+HD may be slow), with Session/Device scope. Other backends' algorithms remain
+device/server-controlled read-only; no unsupported effect is silently enabled.
+Stats name the actual filter, transport (Pull/Push/Fixed/Direct) and processing
+type (Software/Hardware, Unknown where not provable).
+
+Version0.5.102 adds **Send diagnostic logs to server** to
+main startup Settings. It is persistent and default off; requires the optional
+Client Extension receiver, not SMB or Core MCP for normal uploads. Its separate
+upload port defaults8272, and Upload now shows a receipt/error. Reports are bounded
+and redacted, with existing logs/traces/tests and a lightweight client snapshot.
+This trusted-LAN HTTP option has no login/encryption and must not be exposed
+publicly. Local logging settings are unchanged; enable file logging separately
+if logs are needed. Periodic/checkpoint/background sends are best effort, not
+guaranteed after force-stop/power loss. Missing service never changes playback.
+The receiver is not yet released or fully physically qualified.
+
+The browser web server runs **inside Android Vibe**, not Client Extension.
+Main Settings > **Diagnostic web server** is persistent and default off.
+The read-only **Diagnostic web address** shows the device URL (default port
+8272). Open it from a LAN browser for client statistics, redacted logs and ZIP
+download. No SageTV/SMB/mail plugin is needed. It stops on Home/exit/disable;
+trusted LAN only, without login/encryption. This is separate from server
+uploads. See `docs/CLIENT_DIAGNOSTIC_WEB.md`; non-Pro HTTP/lifecycle and actual
+main-settings toggle/persistence/address pass. The seven dashboard/timeline/log/
+history/caption/settings/manual-issue enhancements now pass actual Chromium,
+non-Pro232 Media3 generated CEA playback/seek and legacy UK captions/Home/return.
+Unsupported metrics remain unavailable; extractor declarations are not observed
+CEA evidence. This is separate from server-upload qualification and needs no
+server plugin.
 
 Configured SageTV/MIM HTTP endpoints are supported on current Android versions
 through an explicit shared-manifest cleartext opt-in. Use plain HTTP only on
@@ -382,6 +424,13 @@ retries protected pending data after a restart. Settings reports the exact
 filename, byte count, SHA-256, time, and SMB stage result so the file can be
 retrieved from another computer without email on the TV. See
 `docs/PLAYBACK_DIAGNOSTICS.md` and the GitHub playback issue form.
+
+The unreleased bug-icon chooser now offers local sharing, SMB, one confirmed
+server upload, and Web download. Web is gray unless enabled and actually
+listening; its subdialog shows the current device IP/URL and locally generated
+QR code. Server export is gray without a connected, enabled Client Extension
+receiver. Neither choice silently enables a service or automatic uploads.
+Back/cancel returns to the chooser. See `docs/CLIENT_DIAGNOSTIC_WEB.md`.
 
 SMB setup is server-first. Open **Settings > SMB Direct Settings > Manage SMB
 servers**, add a friendly server/share connection, and optionally enable

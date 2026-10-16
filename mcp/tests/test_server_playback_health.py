@@ -5,6 +5,45 @@ from sagetv_dev_mcp import server
 
 
 class PlaybackHealthTest(unittest.TestCase):
+    def test_gpu_profile_is_explicit_current_or_one_next_stage_arm(self):
+        with mock.patch.object(server.adb,'dev_control',return_value={'accepted':True}) as control:
+            self.assertEqual(server.dev_gpu_output_profile(),{'accepted':True})
+            control.assert_called_once_with('gpu_profile')
+        with mock.patch.object(server.adb,'dev_control',return_value={'accepted':True}) as control:
+            self.assertEqual(server.dev_gpu_output_profile(next_output=True),{'accepted':True})
+            control.assert_called_once_with('gpu_profile_arm')
+    def test_context_registration_poll_never_chooses_another_ui_or_replays_watch(self):
+        control=mock.Mock()
+        control.resolve_context.side_effect=[
+            server.SagexApiError('Unable to uniquely resolve MiniClient UI context'), '444556303031']
+        with mock.patch.object(server,'_sage_control_sessions',{}), \
+                mock.patch.object(server,'discover_sage_control',return_value=control), \
+                mock.patch.object(server.time,'sleep') as sleep:
+            self.assertEqual(server._sage_control_session('server','44:45:56:30:30:31'),
+                             (control,'444556303031'))
+        self.assertEqual(control.resolve_context.call_count,2)
+        control.watch.assert_not_called()
+        sleep.assert_called_once_with(.3)
+
+    def test_context_guard_does_not_retry_authentication_or_missing_identity(self):
+        for message in ('HTTP 401: Unauthorized','MiniClient UI context identity must not be empty'):
+            control=mock.Mock()
+            control.resolve_context.side_effect=server.SagexApiError(message)
+            with mock.patch.object(server,'_sage_control_sessions',{}), \
+                    mock.patch.object(server,'discover_sage_control',return_value=control), \
+                    mock.patch.object(server.time,'sleep') as sleep:
+                with self.assertRaises(server.SagexApiError):
+                    server._sage_control_session('server','44:45:56:30:30:31')
+            control.resolve_context.assert_called_once()
+            sleep.assert_not_called()
+            control.watch.assert_not_called()
+
+    def test_compact_state_retains_safe_actual_deinterlace_not_private_tokens(self):
+        fields = {"videoDeinterlaceMode": "client", "videoDeinterlaceState": "Client",
+                  "ijkSoftwareDeinterlaceActive": True, "mimAcceptedDeinterlace": "",
+                  "ijkDeinterlaceFilter": "auto", "videoDeinterlaceFilter": "Fast"}
+        self.assertEqual(fields, server._compact_state({**fields, "sessionToken": "private"}))
+
     def test_compact_state_retains_safe_direct_session_attribution_not_raw_uri(self):
         fields = {"health_directSourceSession": "unavailable", "health_directMediaItemSession": "current",
                   "health_directErrorSession": "retired", "health_directErrorAsset": "playlist",

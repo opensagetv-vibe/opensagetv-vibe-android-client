@@ -562,6 +562,20 @@ public class PushBufferDataSource implements ISageTVDataSource, HasPushBuffer
     public long getReadWaitMs() { return readWaitNanos.get() / 1000000L; }
     public long getPushCount() { return pushCallCount.get(); }
     public long getPushedBytes() { return pushedBytes.get(); }
+    public long getBlockedPushCount() { return blockedPushCount.get(); }
+    public long getMaximumPushWriteMs() { return maximumPushWriteNanos.get() / 1000000L; }
+    public long getLastPushWriteMs() { return lastPushWriteNanos / 1000000L; }
+    public int getLastPushBytes() { return lastPushBytes; }
+    public int getBufferUsedBytes()
+    {
+        BoundedCircularByteBuffer buffer = circularByteBuffer;
+        return buffer == null ? 0 : buffer.available();
+    }
+    public int getBufferFreeBytes()
+    {
+        BoundedCircularByteBuffer buffer = circularByteBuffer;
+        return buffer == null ? 0 : buffer.getSpaceLeft();
+    }
     public long getReadRateKbps()
     {
         long elapsedMs = Math.max(1, (System.nanoTime() - measurementStartNanos) / 1000000L);

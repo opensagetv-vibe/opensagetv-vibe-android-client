@@ -21,6 +21,10 @@ public final class ActivePlayerSessionOverrides
     private static volatile String codecMode;
     private static volatile String dvdTimestampRepair;
     private static volatile String mimDirectDeinterlace;
+    private static volatile String ijkSoftwareDeinterlace;
+    private static volatile String ijkDeinterlaceFilter;
+    private static volatile String videoDeinterlaceMode;
+    private static volatile String gpuFilter, gpuFieldOrder, gpuOutputRate;
     private static volatile String bufferPreset;
     private static volatile Integer subtitleOffsetMs;
     private static volatile Integer subtitleSafeAreaPercent;
@@ -42,6 +46,10 @@ public final class ActivePlayerSessionOverrides
         codecMode = null;
         dvdTimestampRepair = null;
         mimDirectDeinterlace = null;
+        ijkSoftwareDeinterlace = null;
+        ijkDeinterlaceFilter = null;
+        videoDeinterlaceMode = null;
+        gpuFilter = null; gpuFieldOrder = null; gpuOutputRate = null;
         bufferPreset = null;
         subtitleOffsetMs = null;
         subtitleSafeAreaPercent = null;
@@ -64,6 +72,10 @@ public final class ActivePlayerSessionOverrides
         codecMode = null;
         dvdTimestampRepair = null;
         mimDirectDeinterlace = null;
+        ijkSoftwareDeinterlace = null;
+        ijkDeinterlaceFilter = null;
+        videoDeinterlaceMode = null;
+        gpuFilter = null; gpuFieldOrder = null; gpuOutputRate = null;
         bufferPreset = null;
         refreshRatePolicy = null;
         refreshSettleMs = null;
@@ -88,6 +100,23 @@ public final class ActivePlayerSessionOverrides
     public static String resolveMimDirectDeinterlace(String persisted)
     { return mimDirectDeinterlace == null ? persisted : mimDirectDeinterlace; }
     public static String getBufferPreset() { return bufferPreset; }
+    public static void setIjkSoftwareDeinterlace(String value)
+    { ijkSoftwareDeinterlace = normalize(value); }
+    public static String resolveIjkSoftwareDeinterlace(String persisted)
+    { return ijkSoftwareDeinterlace == null ? persisted : ijkSoftwareDeinterlace; }
+    public static void setIjkDeinterlaceFilter(String value)
+    { ijkDeinterlaceFilter = opensagetv.vibe.miniclient.video.DeinterlacePolicy.normalizeFilter(value); }
+    public static String resolveIjkDeinterlaceFilter(String persisted)
+    { return ijkDeinterlaceFilter == null ? persisted : ijkDeinterlaceFilter; }
+    public static void setVideoDeinterlaceMode(String value) { videoDeinterlaceMode = normalize(value); }
+    public static String resolveVideoDeinterlaceMode(String persisted)
+    { return videoDeinterlaceMode == null ? persisted : videoDeinterlaceMode; }
+    public static String resolveGpuFilter(String persisted) { return gpuFilter == null ? persisted : gpuFilter; }
+    public static void setGpuFilter(String value) { gpuFilter = opensagetv.vibe.miniclient.video.GpuDeinterlacePolicy.filter(value); }
+    public static String resolveGpuFieldOrder(String persisted) { return gpuFieldOrder == null ? persisted : gpuFieldOrder; }
+    public static void setGpuFieldOrder(String value) { gpuFieldOrder = opensagetv.vibe.miniclient.video.GpuDeinterlacePolicy.parity(value); }
+    public static String resolveGpuOutputRate(String persisted) { return gpuOutputRate == null ? persisted : gpuOutputRate; }
+    public static void setGpuOutputRate(String value) { gpuOutputRate = "field".equals(value) ? "field" : "frame"; }
     public static void setBufferPreset(String value) { bufferPreset = normalize(value); }
     public static Integer getSubtitleOffsetMs() { return subtitleOffsetMs; }
     public static void setSubtitleOffsetMs(int value)
@@ -201,6 +230,10 @@ public final class ActivePlayerSessionOverrides
     {
         return backend != null || gsyEngine != null || decodingMethod != null || codecMode != null
                 || dvdTimestampRepair != null || mimDirectDeinterlace != null
+                || ijkSoftwareDeinterlace != null
+                || ijkDeinterlaceFilter != null
+                || videoDeinterlaceMode != null
+                || gpuFilter != null || gpuFieldOrder != null || gpuOutputRate != null
                 || bufferPreset != null
                 || subtitleOffsetMs != null || subtitleSafeAreaPercent != null
                 || subtitleTextScalePercent != null || subtitleTextStyle != null
@@ -216,7 +249,11 @@ public final class ActivePlayerSessionOverrides
                 + ", decode=" + value(decodingMethod)
                 + ", queue=" + value(codecMode) + ", dvdPts="
                 + value(dvdTimestampRepair) + ", deinterlace="
-                + value(mimDirectDeinterlace) + ", buffer=" + value(bufferPreset)
+                + value(mimDirectDeinterlace) + ", ijkDeinterlace="
+                + value(ijkSoftwareDeinterlace) + ", ijkFilter=" + value(ijkDeinterlaceFilter) + ", videoDeinterlace="
+                + value(videoDeinterlaceMode) + ", gpuFilter=" + value(gpuFilter)
+                + ", gpuOrder=" + value(gpuFieldOrder) + ", gpuRate=" + value(gpuOutputRate)
+                + ", buffer=" + value(bufferPreset)
                 + ", subtitleOffsetMs=" + value(subtitleOffsetMs)
                 + ", subtitleSafeArea=" + value(subtitleSafeAreaPercent)
                 + ", subtitleScale=" + value(subtitleTextScalePercent)

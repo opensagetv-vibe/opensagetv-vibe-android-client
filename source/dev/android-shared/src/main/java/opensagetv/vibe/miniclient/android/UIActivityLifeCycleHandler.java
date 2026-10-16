@@ -271,6 +271,10 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
 
     public void onPause(Activity activity)
     {
+        // Application pause callbacks arrive after this method returns. Stop
+        // the optional read-only listener before potentially slow teardown;
+        // never alter playback or wait for its diagnostics worker here.
+        opensagetv.vibe.miniclient.android.diagnostics.ClientDiagnosticWebService.pauseActivity(activity);
         activityResumed = false;
         ActivePlayerProcessOverlay.hide();
         cancelKeyboardTask();
@@ -605,6 +609,29 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
     {
         // hide system ui, in case keyboard is visible
         hideSystemUI(activity);
+    }
+
+    /**
+     * Route Android's system/predictive Back callback through the same key-map
+     * path as a physical remote. This preserves dialog dismissal, SageTV BACK,
+     * and the one-event suppression guard without finishing active playback.
+     *
+     * @return true when the active MiniClient key listener consumed Back;
+     *         false during startup/disconnect so the Activity may finish.
+     */
+    public boolean dispatchSystemBack()
+    {
+        hideSystemUI(activity);
+        long now = SystemClock.uptimeMillis();
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BACK, 0);
+        KeyEvent up = new KeyEvent(now, now, KeyEvent.ACTION_UP,
+                KeyEvent.KEYCODE_BACK, 0);
+        boolean downHandled = dispatchKeyEvent(down);
+        boolean upHandled = dispatchKeyEvent(up);
+        log.info("System Back routed to MiniClient handled={}/{}",
+                downHandled, upHandled);
+        return downHandled && upHandled;
     }
 
     public void onDestroy()
