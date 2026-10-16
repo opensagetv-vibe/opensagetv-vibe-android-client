@@ -13,3 +13,7 @@ Dockerfile text eol=lf
 *.jpeg binary
 *.pdn binary
 *.zip binary
+
+# Unified-diff context lines intentionally contain a single leading space.
+# Keep those bytes valid without weakening whitespace checks on Java/C source.
+source/dev/ijkplayer/native/*.patch whitespace=-blank-at-eol

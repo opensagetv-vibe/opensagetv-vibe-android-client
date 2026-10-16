@@ -300,6 +300,9 @@ The startup repair validates their exact bytes; changing only the active copy
 will deliberately restore the previous canonical value. Retire any owned
 `.gradle.bad` repair backup after confirming it contains no unique work, and
 regenerate the project manifest before validation or publication.
+Native rebuild patch payloads retain unified-diff blank context lines. Their
+narrow `.gitattributes` rule exempts only blank-at-EOL in that patch directory;
+do not strip the diff syntax or weaken whitespace validation for runtime code.
 
 Repository CI and physical A/V-analysis unit tests use the pinned host-only
 NumPy/SciPy versions in tests/requirements.txt. They are not APK dependencies

@@ -407,6 +407,12 @@ device/result context are retained in the checklist ledger and compact reports.
 
 ## Checklist change ledger
 
+- 2026-10-16 pre-push RELEASE-002 correction: the outgoing-diff gate correctly
+  stopped publication on the IJK rebuild patch's three valid single-space
+  context lines. Preserve unified-diff syntax and exempt blank-at-EOL only for
+  that patch directory, not runtime Java/C. No GitHub workflow was triggered by
+  the rejected local-only attempt; regenerate/check manifest before pushing.
+
 - 2026-10-16 RELEASE-002 pre-commit: clean66-task build/strictAPK pass for
   v0.5.102/code2101111/APK1720478b, JVM326core/154shared and173MCP tests pass.
   Fixed four stale source assertions/version check and missing seven-owner
