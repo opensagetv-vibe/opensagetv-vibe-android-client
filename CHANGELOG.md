@@ -4,6 +4,9 @@
 
 ## 0.5.103 - 2026-10-19
 
+- Publish the exact RESUME-001 qualified sideload APK after green exact-source
+  GitHub CI; independently verify all four public assets and the complete
+  source archive. Documentation follow-ups do not replace the release assets.
 - Prepare an initial seek map for nonzero server bookmarks on growing Pull
   recordings in Media3 and independent legacy Exo (including GSY delegates).
 - Preserve queued server targets across delayed IJK/System player construction,

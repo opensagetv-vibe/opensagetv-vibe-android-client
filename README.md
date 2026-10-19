@@ -1,6 +1,6 @@
 # OpenSageTV Vibe Android Client
 
-Current sideload release line: **v0.5.103**. Use the APK on the
+Current GitHub sideload release: **v0.5.103**. Use the APK on the
 [release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.103).
 
 Version0.5.103 preserves server-selected initial/bookmarked

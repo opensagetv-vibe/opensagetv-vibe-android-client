@@ -1,6 +1,24 @@
 # OpenSageTV Vibe Android Client handoff
 
-## RELEASE-003 IN PROGRESS (revision386, 2026-10-19)
+## RELEASE-003 COMPLETE (revision387, 2026-10-19)
+
+Android v0.5.103 published2026-10-19T21:08:09Z at:
+https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.103
+Immutable source0f4c2692e92ce2bdea2fdf81fa119c87c2cc621c has green required
+CI39324804279. Four independently downloaded public assets match GitHub and
+canonical digests; APK17dc88c5/sourceZIPe393d510. Exact1692-file source ZIP,
+safe paths/content hashes and clean source provenance pass. Package/signing,
+versionCode2101112 and the RESUME-001 physical candidate are unchanged.
+No device/server/plugin mutation or issue comment during publication.
+
+Both execution orders387 remove RELEASE-003; conditional ONN-003 evidence is
+next, not a new broad matrix. This documentation follow-up does not rebuild,
+retag or replace the qualified release. Compact authority is
+artifacts/results/RELEASE-003/RESULT.md; canonical packages stay in
+artifacts/releases/v0.5.103. Reviewed disposable staging/raw is retired to
+root deleteme with original relative paths and hash checks.
+
+### Pre-publication evidence (revision386)
 
 User authorizes Android repository push and GitHub v0.5.103 publication.
 Retain the exact RESUME-001 tested APK17dc88c5/code2101112 and existing
@@ -18,7 +36,7 @@ verified host downloads and offline container installation, not disabled TLS.
 Corrected local CI-equivalent source suite:902tests pass/5documented skips;
 full project validation,1692-file manifest and debug-variant package/signer
 inspection pass. Shared build-env pilot34402124 has greenCI39133370623.
-Require the new Android commit's own green CI before public release.
+The required new Android commit's green CI is recorded above.
 
 ## RESUME-001 COMPLETE (revision385, 2026-10-19)
 

@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **386** (2026-10-19)
+Checklist revision: **387** (2026-10-19)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **386** (2026-10-19). A completed
+Order reviewed against checklist revision **387** (2026-10-19). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -56,7 +56,13 @@ client changes are stable. If a late shared-code change invalidates evidence,
 rerun only the affected rows and final matrix portion, not every completed
 device/player combination.
 
-Current386: RELEASE-003 is authorized for Android0.5.103 publication. Preserve
+Current387: RELEASE-003 complete. Android0.5.103 source0f4c269 has green
+CI39324804279; public APK17dc88c5/sourceZIPe393d510 and all four downloaded
+assets verify.1692-file source archive matches its manifest. Release/tag stay
+immutable; this is documentation-only closure. Both orders remove publication;
+next conditional ONN-003 evidence remains open, no broad matrix replay.
+
+Prior386: RELEASE-003 is authorized for Android0.5.103 publication. Preserve
 the exact tested APK17dc88c5; local CI-equivalent source checks, clean commit/
 audit, exact-HEAD green GitHub CI, package/source manifest and independently
 verified public assets precede closure. No unrelated physical matrix replay.
@@ -150,25 +156,14 @@ Client/companion releases and their affected gates are complete; upstream
 catalog review/aggregation does not justify another physical matrix. Deferred
 VCE-003 belongs to its project, not an Android release blocker.
 
-1. **RELEASE-003** - publish the qualified0.5.103 resume correction after the
-   affected checks, exact-source CI and public-asset verification.
-2. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
+1. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
    stuck-state diagnostic; published0.5.100 HDMI startup-overlap/Pull/Push
    observations clear normally and do not justify a speculative hide timer.
-3. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
+2. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
    complete any release-bound capability correction before code freeze.
-4. **STORE-001 through STORE-004** - perform production signing, inspection,
+3. **STORE-001 through STORE-004** - perform production signing, inspection,
    listing, and publication only after external ownership/prerequisites are
    approved.
-
-## Authorized publication
-
-- [ ] **RELEASE-003 - Publish Android0.5.103.** Commit/push the qualified
-  RESUME-001 correction after local source/metadata/manifest checks and shared
-  GitHub audit. Require exact-HEAD green CI; package the unchanged tested APK
-  with source, checksums and provenance. Publish bullet-point release notes;
-  independently verify public downloads and tag/source identities. Retain
-  development signing and settings, retire disposable verification staging.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
 
@@ -431,6 +426,22 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+- [x] **RELEASE-003 - Publish Android0.5.103.** Commit/push the qualified
+  RESUME-001 correction after local source/metadata/manifest checks and shared
+  GitHub audit. Require exact-HEAD green CI; package the unchanged tested APK
+  with source, checksums and provenance. Publish bullet-point release notes;
+  independently verify public downloads and tag/source identities. Retain
+  development signing and settings, retire disposable verification staging.
+  Completed2026-10-19T21:08:09Z: immutable0f4c269 source/CI39324804279 PASS;
+  local902source checks/5skips and source/debug package gates pass; four public
+  downloads match all recorded digests. Source1692-file ZIP content verifies.
+  Exact APK17dc88c5 unchanged from stock175/non-Pro RESUME-001 qualification.
+  No plugin/device/server mutation, no unrelated matrix or issue closure.
+  Compact artifacts/results/RELEASE-003/RESULT.md; reviewed raw/staging moves
+  recoverably to root deleteme, canonical release assets remain in place.
+
+| 387 | 2026-10-19 | [x] RELEASE-003 complete: Android0.5.103 public/verified at immutable0f4c269, greenCI39324804279, four independent downloads and exact1692-file source hashes pass. Same tested APK17dc88c5, development signer/settings retained; affected evidence only, no server/plugin changes. Both orders remove publication; conditional ONN-003 remains next. Documentation closure does not rebuild/retag assets. |
 
 | 386 | 2026-10-19 | User authorizes RELEASE-003 Android0.5.103 push/publication. Exact tested17dc88c5 APK unchanged; run local CI-equivalent source preflight then exact-HEAD remoteCI, packaging/public download checks. Both orders put publication before conditional backlog; no unrelated matrix/plugin/server change. |
 
