@@ -10,14 +10,14 @@ class IjkPendingSeekTests(unittest.TestCase):
         source=(VIDEO/'IJKMediaPlayerImpl.java').read_text()
         seek=source.split('public void seek(long timeInMS)',1)[1].split('private int getAudioTrackPosition',1)[0]
         guard=seek.index('player == null || !playerReady')
-        pending=seek.index('preSeekPos = timeInMS;',guard)
+        pending=seek.index('pendingStartupSeek.set(timeInMS);',guard)
         native=seek.index('seekToImpl(timeInMS);')
         self.assertLess(pending,native)
         self.assertIn('return;',seek[pending:native])
         self.assertNotIn('timeInMS > 0',seek)
         prepared=source.split('public void onPrepared(IMediaPlayer mp)',1)[1]
-        self.assertIn('seekToImpl(preSeekPos);',prepared)
-        self.assertIn('preSeekPos = -1;',prepared)
+        self.assertIn('seekToImpl(requestedPositionMs);',prepared)
+        self.assertIn('long requestedPositionMs = pendingStartupSeek.take();',prepared)
 
     def test_failed_tuple_workarounds_are_not_runtime_dependencies(self):
         player=(VIDEO/'IJKMediaPlayerImpl.java').read_text()

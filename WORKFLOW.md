@@ -33,6 +33,13 @@ interruption of recordings/other users still require their own authority.
 
 This repository uses the same root interface as every OpenSageTV Vibe project:
 
+MCP ADB unit tests include executable POSIX mock scripts. Run that suite inside
+the supported dev container, not native Windows Python; WinError193 from a
+host mock executable is not a physical ADB or client failure. Cross-platform
+source-contract tests may still run with host Python. Keep device-mutating
+gates serial through final preference restoration, even after a live capture
+marker or provisional verdict appears.
+
 ```text
 dev.cmd test|validate|build|install|all
 ./dev.sh test|validate|build|install|all
@@ -50,6 +57,13 @@ client against stock first. Server-side Sage.jar or FFmpeg/MIM changes are a
 last resort, must be optional and capability-negotiated, and must preserve a
 bounded stock fallback. A Vibe server may prove an optional enhancement, but
 must not replace the stock-server regression gate.
+
+For live capture, guard every server sharing the physical/network encoder
+before playback mutation, not only the selected server. A second server's
+recording can replace the first server's capture file despite healthy player
+counters. Follow docs/TEST_ENVIRONMENT.md; unknown/active shared ownership
+aborts without stopping the existing client or encoder. Do not interrupt a
+recording to manufacture growth evidence.
 
 Local commissioning uses only the ignored `config/firetv.toml`; the GitHub and
 handoff-safe schema is `config/firetv.example.toml`. Run `dev.cmd config-check`
@@ -126,6 +140,16 @@ Android then performs its guarded DEV001 launch as its commissioning action.
 The sibling build environment's `WORKFLOW.md` defines the common contract.
 
 ## Capture and artifact retirement
+
+Serialize Gradle work that shares this checkout: do not overlap `dev build`
+(which cleans generated module outputs) with focused Gradle compile/unit tasks.
+That race removes classes/resources while the other compiler reads them and
+can produce misleading missing-package errors or an undeletable clean tree.
+Wait for each invocation's actual completion before the next Gradle command.
+Keep `config/dev-root-build.gradle.canonical` and `source/dev/build.gradle`
+version codes synchronized: the normal repair preflight deliberately restores
+the canonical file before building. A change to only the generated root copy
+will not survive that preflight.
 
 For a focused direct-container Gradle command from native PowerShell, pass
 `bash ./gradlew <tasks>` as Docker arguments rather than piping a here-string

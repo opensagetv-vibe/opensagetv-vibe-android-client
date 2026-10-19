@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **376** (2026-10-16)
+Checklist revision: **386** (2026-10-19)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **376** (2026-10-16). A completed
+Order reviewed against checklist revision **386** (2026-10-19). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -56,7 +56,35 @@ client changes are stable. If a late shared-code change invalidates evidence,
 rerun only the affected rows and final matrix portion, not every completed
 device/player combination.
 
-Current376: companion0.1.0 beta is published with verified assets and SageTV
+Current386: RELEASE-003 is authorized for Android0.5.103 publication. Preserve
+the exact tested APK17dc88c5; local CI-equivalent source checks, clean commit/
+audit, exact-HEAD green GitHub CI, package/source manifest and independently
+verified public assets precede closure. No unrelated physical matrix replay.
+
+Prior385: RESUME-001 closes after stock175/SageMC/non-Pro real padded first
+Watch, independent resume/growth and affected gates pass. Private preferences
+and power restored; compact evidence retained and completed raw retired.
+No publication requested. Next conditional work remains below.
+
+Prior381: user freed the shared tuner;175/232 independently idle. RESUME-001
+Media3/legacy Exo live recreation and growth beyond preparation duration pass;
+normal growing Stop/Watch also passes on Media3 (101048ms requested), with
+only its owned recording flag cancelled and136 preferences restored. Next
+qualify actual scheduled pre-padding through stock STV UI. No APK change since
+17dc88c5; preserve completed player matrices.
+
+Prior380: RESUME-001 implementation and completed-file normal-resume gates
+are complete on232/non-Pro25 across Media3/legacy Exo/IJK and GSY delegates
+(System uses its declared Media3 fallback, not native TS support). Fixed-extent
+Media3/Exo source recreation retains nonzero targets; continuation encounters
+independently logged encoder halts/shared175 capture ownership. Final candidate
+Media3 normal-resume HDMI passes; power/preferences restored. Next reserve an
+isolated tuner or explicit idle recording window before a genuinely advancing producer
+and qualify scheduled padded initial Watch/growing reopen. Do not replay completed-file or
+unrelated matrices. Preserve136 preferences/power and server watch decisions;
+no stock175, Core/plugin change, restart or publication.
+
+Prior376: companion0.1.0 beta is published with verified assets and SageTV
 catalogPR130 submitted/open. Native VCE-002/005/007 complete; future owned-DVD
 provider remains separate. Remove VCE-006 from the execution order. Android
 release/tag/APK stay unchanged; ONN-003 needs affected-user stuck-state data.
@@ -122,14 +150,25 @@ Client/companion releases and their affected gates are complete; upstream
 catalog review/aggregation does not justify another physical matrix. Deferred
 VCE-003 belongs to its project, not an Android release blocker.
 
-1. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
+1. **RELEASE-003** - publish the qualified0.5.103 resume correction after the
+   affected checks, exact-source CI and public-asset verification.
+2. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
    stuck-state diagnostic; published0.5.100 HDMI startup-overlap/Pull/Push
    observations clear normally and do not justify a speculative hide timer.
-2. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
+3. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
    complete any release-bound capability correction before code freeze.
-3. **STORE-001 through STORE-004** - perform production signing, inspection,
+4. **STORE-001 through STORE-004** - perform production signing, inspection,
    listing, and publication only after external ownership/prerequisites are
    approved.
+
+## Authorized publication
+
+- [ ] **RELEASE-003 - Publish Android0.5.103.** Commit/push the qualified
+  RESUME-001 correction after local source/metadata/manifest checks and shared
+  GitHub audit. Require exact-HEAD green CI; package the unchanged tested APK
+  with source, checksums and provenance. Publish bullet-point release notes;
+  independently verify public downloads and tag/source identities. Retain
+  development signing and settings, retire disposable verification staging.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
 
@@ -297,6 +336,7 @@ so the authored fixture remains the primary physical timing gate. See
 
 ## 3. Final physical playback matrix and release gate
 
+
 - [ ] **PULL-003 - Generated long-TS startup after stock resume/zero seek.**
   New354 witness on stock Windows185/non-Pro25/Media3/Pull/GPUOff: registered
  900second MPEG-2/AC-3/CEA fixture resolves exactly, Watch/fromBeginning applies,
@@ -392,8 +432,47 @@ device/result context are retained in the checklist ledger and compact reports.
 
 ## Checklist change ledger
 
+| 386 | 2026-10-19 | User authorizes RELEASE-003 Android0.5.103 push/publication. Exact tested17dc88c5 APK unchanged; run local CI-equivalent source preflight then exact-HEAD remoteCI, packaging/public download checks. Both orders put publication before conditional backlog; no unrelated matrix/plugin/server change. |
+
+- [x] **RESUME-001 - Preserve the server's initial scheduled-start and resume target.**
+  USER_TEST3/v0.5.102 Media3/Pull capture starts at -0:02:58 instead of the
+  scheduled programme start. Initial growing-source preparation lacks the
+  temporary seekable snapshot used for subsequent seeks. Inspect/fix Media3,
+  independent legacy Exo, IJK and Android System plus all GSY delegates; keep
+  server-selected zero/nonzero bookmarks, reject stale callbacks/requests and
+  never hard-code padding or alter the server's watched metadata. Cover early
+  seeks before UI setup, growing and completed files, STOP/reopen, file replacement,
+  append/EOF, and unaffected Push/Fixed ownership. Run only affected compile,
+  unit/source/package and physical gates on232/non-Pro25. Preserve preferences,
+  power and watched-state checkpoints. Record actual backend/transport and
+  visible output; unsupported native System must not be called a native PASS.
+
+  Completed2026-10-19/revision385; source/parent: section3 final playback gate.
+  Initial queued target/zero/new-file isolation and growing snapshot ownership
+  fixes pass affected build/JVM/source/package gates. Stock175/non-Pro real
+  three-minute-padded first Watch179988ms is preserved; actual222041ms at44754ms
+  age and same-session289906->356621ms continuation with HDMI. Stock Media3,
+  Exo and IJK resume/growth pass; earlier232 independent/GSY rows carried
+  forward with native System TS fallback explicitly not native support.
+  Raw35's typed-response/cleanup oracle misses remain honest; corrected36
+  verifies the same first Watch without corrective Watch/Seek/history reset.
+ 25oracle checks pass,136prefs and manual power restored. Existing recording
+  protected; owned test schedule ended with partial preserved. No Core/plugin/
+  installation/restart/publication changes. Compact evidence RESULT.md and
+  resume-gates.json under artifacts/results/RESUME-001; all remaining114raw
+  files95193278bytes retired recoverably, source fixtures/current APK retained.
+
 | Revision | Date | Change |
 |---|---|---|
+| 385 | 2026-10-19 | [x] RESUME-001 closes: unchanged17dc88c5 installed0.5.103/code2101112 preserves real stock175/SageMC first-Watch padding179988ms, actual222041ms/44754ms age and same-session continuation289906->356621ms/independent HDMI. Stock Media3/Exo/IJK resume/growth and earlier232 GSY evidence remain explicit. Typed Sagex wrapper/counter/metadata/cleanup oracle corrections,25checks; no manufactured Watch/Seek/reset or native System support claim.136prefs/power restored; existing recording protected, owned test ended with partial kept.114remainingraw95193278bytes retired recoverably. Both orders remove completed parent; no Core/plugin/restart/publication change. |
+| 384 | 2026-10-19 | Stock175/non-Pro30 Media3 resume56006->72218/18333ms and34 Exo104255->120037/17681ms pass with HDMI.33 IJK real growing Stop/Watch153358->156871/5373ms continues222349ms; actual MPEG-2 Software is not called a hardware PASS, existing favourite recording remains active,136prefs restore.31 optional channel-metadata and32 reset-counter oracle mistakes corrected using public exact writer identity/monotonic traps;22 checks pass.35 owned15:30 Girlfriends has three-minute padding, independently idle-1 assignment verified before capture, actual file starts15:27:00.012, existing-0 recording preserved. Both orders now name only real padded first Watch; no new runtime/Core/plugin/installation/restart/release changes. |
+| 383 | 2026-10-19 | User switches remaining tests to stock175/non-Pro25. Cancel232 test schedule and restore136prefs; stock28 preflight refuses transient old232 UI and stock29 creates no recording/no padding claim. Stock30 Media3 ordinary resume passes56006->72218ms/18333ms age, independent HDMI1:17.567,136prefs restored.175 favourite InsideEdition7.1 is recording: add exact existing-recording Watch mode with public writer metadata and no tune/pin/cancel; IJK31 active.19 oracle checks pass; both orders now target stock175, no installation/Core/FFmpeg/restart change. |
+| 382 | 2026-10-19 | RESUME-001: real15:00 programme scheduled through stock STV to capture14:57, first Watch pending; run25 excluded for late setup. IJK26 raw8181ms plus131480ms target matches existing mapped139638ms/relative-clock trap; fix measurement oracle only and rerun its incomplete growing reopen.17 oracle/10 initial/4 IJK/18 transition checks pass.111 corrected/completed raw files92,294,463bytes retired recoverably with path/hash checks. Both orders name padded Watch and IJK reopen; candidate17dc88c5 unchanged, no Core/plugin/restart/publication. |
+| 381 | 2026-10-19 | User frees tuner. Both175/232 verified recording/UI/client idle. Same17dc88c5 candidate: Media3/Exo live reprepare/recreation retains target, reads beyond frozen extent and advances to113809/109160ms beyond81314/75008ms preparation durations, independent HDMI reviewed. Stock STV manual test pin allows real growing Stop/Watch:101048ms target ->106807ms/10063ms age; continues172542ms beyond137770ms snapshot. Own MR flag visually cancelled,136prefs restored. Actual padded initial Watch is next; both execution orders reconciled without unrelated matrices or Core/plugin changes. |
+| 380 | 2026-10-19 | RESUME-001 remains open: final17dc88c5 Media3 normal resume passes with independent HDMI1:56.867->1:59.867, target96137/actual111627/age17254ms. Run21 confirms5.1/nonzero recreation, but OpenDCT stops232 output then starts another file on the same encoder; both175/232 report recordingCount1. Require shared-owner public activity guards before playback mutation and do not stop an existing client on guard refusal;13 oracle tests pass. Reserve a separate tuner/idle window before remaining live/padded-Watch gates.136prefs and manual keep-awake power restored. Both orders updated; no Core/plugin/file change, restart or publication. |
+| 379 | 2026-10-19 | RESUME-001: installed fixed-extent17dc88c5 candidate passes clean66-task build, strict APK and30 focused JVM cases. Media3/Exo nonzero recreation advances; full continuation remains unqualified because independent232 logs/stat prove encoder halts at40,878,532/52,358,000 bytes. Attempted5.1 stayed2.1; require observed channel after TV readiness. Playback-health33 checks pass. Run19 capture invocation invalid despite retained bookmark; run20 is the corrected final-APK HDMI check. Both orders retain only unfinished producer/padded-Watch gates; no Core/plugin/restart/publication. |
+| 378 | 2026-10-19 | RESUME-001: shared initial-target correction, clean build/package and focused tests complete. Six completed-TS normal-resume rows pass on232/non-Pro25 with136 preferences restored; native System rejects TS and its safe Media3 fallback retains the target. Real live Pull seek15s passes, but a passthrough-output rebuild buffers; isolate the production restart operation before attribution. Growing/padded Watch remains open. Both orders now describe only unfinished gates; unrelated matrices preserved. |
+| 377 | 2026-10-19 | Add RESUME-001 for the reported initial pre-padding/resume defect. User requests a client correction for all players and focused physical qualification on232/non-Pro25. Initial map and native prepare-queue gaps are under investigation; no fix or physical PASS yet. Both orders put this bounded correction first, preserve unrelated matrices and stock175. |
 | 376 | 2026-10-16 | Companion VCE-006 published/verified0.1.0 beta and SageTV PR130 submitted; native002/005/007 acceptance complete, future003 not shipped. Both suggested orders remove completed publication; ONN-003 remains first pending affected-user evidence. Tracking only, no APK/runtime/version change or unrelated matrix rerun. |
 
 - [x] **RELEASE-002 - Approved source refresh and0.5.102 sideload release.**

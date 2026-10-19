@@ -28,7 +28,8 @@ class LiveProgramTransitionTest(unittest.TestCase):
             "exoplayer2/Exo2PullDataSource.java",
         ):
             source = self.read(relative)
-            self.assertIn("seekableSnapshotPreparation && size >= 0", source, relative)
+            self.assertIn("seekableSnapshot.resolveExtent(effectivelyGrowing, size)", source, relative)
+            self.assertIn("Math.max(0, snapshotExtent - dataSpec.position)", source, relative)
             self.assertIn("return reportedLength;", source, relative)
             self.assertIn("beginSeekableSnapshotPreparation()", source, relative)
             self.assertIn("endSeekableSnapshotPreparation()", source, relative)

@@ -273,6 +273,11 @@ final class PlaybackHealthProbe
         out.dataSourceOpenCount = source.getOpenCount();
         out.dataSourceOpenWaitMs = source.getOpenWaitMs();
         out.dataSourceLastOpenPosition = source.getLastOpenPosition();
+        out.dataSourceInitialPhysicalSize = source.getInitialPhysicalSize();
+        out.dataSourceInitialReportedLength = source.getInitialReportedLength();
+        out.dataSourceLastReportedLength = source.getLastReportedLength();
+        out.dataSourceSnapshotPreparationCount = source.getSnapshotPreparationCount();
+        out.dataSourceSnapshotFirstEndOpenCount = source.getSnapshotFirstEndOpenCount();
         out.dataSourceLastOpenMonotonicMs = source.getLastSourceOpenMonotonicMs();
         out.dataSourceFirstReadAfterOpenMonotonicMs = source.getFirstReadAfterOpenMonotonicMs();
         out.dataSourceFirstReadAfterOpenPosition = source.getFirstReadAfterOpenPosition();
@@ -296,6 +301,11 @@ final class PlaybackHealthProbe
         out.dataSourceOpenCount = invokeLongOptional(source, "getOpenCount", -1);
         out.dataSourceOpenWaitMs = invokeLongOptional(source, "getOpenWaitMs", -1);
         out.dataSourceLastOpenPosition = invokeLongOptional(source, "getLastOpenPosition", -1);
+        out.dataSourceInitialPhysicalSize = invokeLongOptional(source, "getInitialPhysicalSize", -1);
+        out.dataSourceInitialReportedLength = invokeLongOptional(source, "getInitialReportedLength", -1);
+        out.dataSourceLastReportedLength = invokeLongOptional(source, "getLastReportedLength", -1);
+        out.dataSourceSnapshotPreparationCount = invokeLongOptional(source, "getSnapshotPreparationCount", -1);
+        out.dataSourceSnapshotFirstEndOpenCount = invokeLongOptional(source, "getSnapshotFirstEndOpenCount", -1);
         out.dataSourceLastOpenMonotonicMs = invokeLongOptional(source, "getLastSourceOpenMonotonicMs", -1);
         out.dataSourceFirstReadAfterOpenMonotonicMs = invokeLongOptional(source, "getFirstReadAfterOpenMonotonicMs", -1);
         out.dataSourceFirstReadAfterOpenPosition = invokeLongOptional(source, "getFirstReadAfterOpenPosition", -1);
@@ -665,6 +675,11 @@ final class PlaybackHealthProbe
         long dataSourceOpenCount = -1;
         long dataSourceOpenWaitMs = -1;
         long dataSourceLastOpenPosition = -1;
+        long dataSourceInitialPhysicalSize = -1;
+        long dataSourceInitialReportedLength = -1;
+        long dataSourceLastReportedLength = -1;
+        long dataSourceSnapshotPreparationCount = -1;
+        long dataSourceSnapshotFirstEndOpenCount = -1;
         long dataSourceNetworkReadCount = -1;
         long dataSourceNetworkReadRequestedBytes = -1;
         long dataSourceNetworkReadBytes = -1;
@@ -827,6 +842,11 @@ final class PlaybackHealthProbe
             append(out, p + "dataSourceOpenCount", dataSourceOpenCount);
             append(out, p + "dataSourceOpenWaitMs", dataSourceOpenWaitMs);
             append(out, p + "dataSourceLastOpenPosition", dataSourceLastOpenPosition);
+            append(out, p + "dataSourceInitialPhysicalSize", dataSourceInitialPhysicalSize);
+            append(out, p + "dataSourceInitialReportedLength", dataSourceInitialReportedLength);
+            append(out, p + "dataSourceLastReportedLength", dataSourceLastReportedLength);
+            append(out, p + "dataSourceSnapshotPreparationCount", dataSourceSnapshotPreparationCount);
+            append(out, p + "dataSourceSnapshotFirstEndOpenCount", dataSourceSnapshotFirstEndOpenCount);
             append(out, p + "dataSourceLastOpenMonotonicMs", dataSourceLastOpenMonotonicMs);
             append(out, p + "dataSourceFirstReadAfterOpenMonotonicMs", dataSourceFirstReadAfterOpenMonotonicMs);
             append(out, p + "dataSourceFirstReadAfterOpenPosition", dataSourceFirstReadAfterOpenPosition);

@@ -182,7 +182,7 @@ def _compact_state(state: dict) -> dict:
         "backgroundSessionTimeoutSeconds",
         "discPlaybackPolicy", "discSkipMenus", "discSkipPreviews",
         "discCompatibilityFallback", "discMpeg2TimestampRepair",
-        "connected", "playerActive",
+        "connected", "playerActive", "mediaChannel", "mediaSourceIdentity",
         "legacyCaptionCallbacksNegotiated", "legacyCaptionWireEventCount",
         "legacyCaptionWireBytes", "legacyCaptionCallbackActive",
         "imageAllocationRecoveryAttempts", "imageAllocationRecoveryEvictions",
@@ -301,6 +301,9 @@ def _compact_state(state: dict) -> dict:
         "health_directErrorSession", "health_directErrorAsset",
         "health_directErrorCode", "health_directErrorSegmentIndex",
         "health_dataSourceOpenCount", "health_dataSourceOpenWaitMs", "health_dataSourceLastOpenPosition",
+        "health_dataSourceInitialPhysicalSize", "health_dataSourceInitialReportedLength",
+        "health_dataSourceLastReportedLength", "health_dataSourceSnapshotPreparationCount",
+        "health_dataSourceSnapshotFirstEndOpenCount",
         "sourceOpenMonotonicMs", "sourceFirstReadMonotonicMs", "sourceFirstReadPosition",
         "health_dataSourceLastOpenMonotonicMs", "health_dataSourceFirstReadAfterOpenMonotonicMs",
         "health_dataSourceFirstReadAfterOpenPosition",
@@ -350,7 +353,14 @@ def _compact_state(state: dict) -> dict:
         "trapLastAudioHeadFrames", "trapLastAudioSessionId", "trapLastSurfaceValid", "trapLastProbeSupported",
         "trapLastVideoDecoderKind", "trapLastAudioDecoderKind", "trapRecent",
     )
-    return {key: state.get(key) for key in keys if key in state}
+    compact = {key: state.get(key) for key in keys if key in state}
+    # Segment identity is useful for growing/seek oracles, but raw Direct/SMB
+    # URIs can contain private paths or authorization data. Never export them
+    # through compact player snapshots merely to compare two source opens.
+    media_uri = str(state.get("mediaUri") or "")
+    if media_uri:
+        compact["mediaSourceIdentity"] = hashlib.sha256(media_uri.encode("utf-8")).hexdigest()
+    return compact
 
 def _counter_advanced(before: int | None, after: int | None) -> bool:
     if before is None or after is None:
@@ -2836,7 +2846,7 @@ def dev_set_ime_suppression(enabled: bool) -> dict:
 
 @mcp.tool()
 def dev_player_control(action: str) -> dict:
-    """Call the active Android MiniPlayerPlugin directly: play, pause, or stop."""
+    """Call the active Android player: play/pause/stop or its existing restart_audio menu action."""
     return adb.player_control(action)
 
 

@@ -1,5 +1,119 @@
 # Android playback diagnostic standard
 
+## Initial scheduled start and watched-position resume (RESUME-001)
+
+SageTV owns the requested start, including pre-padding and its saved watched
+position. Do not add a fixed skip, rewrite watch history, or issue a corrective
+seek after Watch to manufacture a passing startup. Record the initial
+MEDIACMD_SEEK target, actual data-source/transport, first advancing position,
+and an independent picture where available. A saved Pull preference is not
+proof that Core actually selected Pull.
+
+For a growing TS, Media3/legacy Exo must obtain the temporary finite-length
+seek map before attaching a nonzero initial position. The snapshot is for
+extractor preparation only: subsequent reads must remain open-ended so appends
+continue. Test this separately from a completed-file bookmark. Native IJK and
+System must retain seeks received between synchronous LOAD and deferred UI
+setup/preparation; zero is a valid request and a new LOAD clears the old one.
+GSY delegates retain their independent engines; System fallback is not a
+native-System pass.
+
+A late initial seek can arrive after the first source is already attached.
+Growing reprepare must construct a fresh ProgressiveMediaSource, not reuse
+its cached non-placeholder unseekable timeline: that can clamp the new start
+to zero before the replacement extractor publishes its seek map. Preserve the
+same MediaItem, Pull transport and caption/offset wrappers. A public Seek
+acknowledgment or briefly advertised media time is not landing evidence;
+verify the actual player clock after advancing output has recovered.
+Each replacement progressive loader also needs its own mutable Pull datasource.
+Fork the same host/growth/SMB/read-size policy, then retire the old session on
+its loader's close (including an already-closed load). Do not let an old
+loader's close or range probe change the new loader's socket or length. Normal
+range opens within one active source still reuse that source's connection.
+
+`scripts/generate_resume_fixture.py` creates a copyright-free timed AVC/AAC
+control. Remux with `ffmpeg -i control.mp4 -map 0 -c copy control.ts`, commission
+the exact test-tree path, then use `scripts/mcp_initial_resume_test.py` with
+an explicit new `artifacts/active/RESUME-001/<run>.json` output. It seeds only
+that generated fixture through public server Seek, stops, reopens with normal
+Watch and verifies the server target without another positioning request.
+It restores private preferences/captions and never clears real-recording
+watched state. Run device-mutating gates serially and wait for final process
+completion, including restoration, before starting the next gate. A generated
+completed fixture cannot qualify the genuinely growing/padded recording gate.
+
+`scripts/mcp_growing_initial_source_test.py` uses the existing public TV/tune
+and active audio-output controls to exercise source recreation at a nonzero
+position in a real live recording. It requires an idle-recording guard before
+tuning, actual Pull, an actual recording, a new source-open witness and later
+advancing A/V beyond the preparation snapshot. This is deliberately labeled
+decoder recreation, not proof of initial Watch of a padded scheduled recording.
+For segmented TV recordings, compute a server-relative target from the public
+full-window media time and seek-start anchor; keep the decoder's segment-local
+clock separate. Require the same hashed segment identity before/after the
+seek and continuity interval. A completed older segment reaching EOF is not
+a live append failure. `--capture-hdmi` captures at the final verified live
+stage; independently review the picture before calling it a visual pass.
+
+Pass `--shared-capture-server` for every other server sharing the encoder.
+Before tuning require recording/client/UI counts zero for all owners, not
+merely the selected playback server.175/232 originally fought over one OpenDCT
+encoder; their halted files must not be blamed on the client snapshot boundary.
+`--normal-reopen` instead pins an owned test recording with the stock SageTV7
+Record UI. Visually verify Record this show -> Cancel this Recording before
+proceeding. Stop must leave the recorder active; ordinary Watch must request
+and retain its nonzero bookmark without a corrective seek. At cleanup cancel
+only that owned manual flag and visually verify Record this show returns.
+Both drivers accept `--server <commissioned-alias>`; pass
+`stock-compatibility` for175 and `vibe-test` for232 without editing the TOML.
+For a recorder already running, growing `--existing-recording-path <exact-path>
+--normal-reopen` independently verifies public GetCurrentlyRecordingMediaFiles
+metadata, then only watches that file. It never tunes, pins or cancels its
+recording. Normal playback/seek history can advance; never clear/reset it.
+Other capture owners must still be idle. Do not run a second device driver
+until the previous process has finished its private settings restoration.
+IJK can reset its native clock to segment-relative after a growing-file seek.
+Keep raw position and traps in the result; use the production mapped clock
+only with the actual IJK class and its existing
+`growing_pull_seek_relative_clock` callback witness. A low raw clock alone is
+not proof of restart-to-zero. Never replace observed output with an advertised
+seek target. Other engines retain the independent raw-position oracle.
+
+For actual scheduled pre-padding use `scripts/mcp_scheduled_resume_ui_test.py
+--air-start <ISO8601-with-timezone> --shared-capture-server <other-owner-address>
+--output artifacts/active/RESUME-001/<run>.json`. Repeat the required
+`--shared-capture-server` for every other encoder owner; the selected server is
+always guarded too. Read target addresses/serials from commissioning rather
+than embedding lab addresses in the helper or HDMI readiness marker.
+Begin at least10 minutes before the programme, schedule a new test airing via
+Guide/Record and set start padding through its per-recording options. Inspect
+each screenshot and explicitly mark owned-recording-created. Leave playback
+closed during padding so it cannot create watched history. Once the programme
+starts, choose its normal Watch action and mark watch-verified; do not seek.
+The gate compares the actual initial server seek with programme start minus
+public available-file start, then requires advancing A/V and independent HDMI.
+Late UI setup without actual earlier captured bytes is invalid fixture setup,
+not a player failure. Cancel the owned recording flag and restore preferences.
+Default setup lead is10minutes. An explicit `--setup-lead-minutes` can shorten
+the preparation window, but cannot waive the independent actual-padding/start
+assertions; a late file still fails fixture qualification. Inspect the selected
+STV's actual menus: SageMC's entry navigation is not the stock SageTV7 sequence.
+When another recording is running, declare exact independently idle configured
+`--reserved-capture-device` names and `--test-airing-id`. Require their schedules
+empty before setup, the owned padded airing assigned to one of them before
+capture, and the existing recordings still active. Never force a busy tuner.
+Sagex may wrap a single object as `MediaFile` instead of collection `Result`;
+normalize only these proven typed shapes and still require the exact ID/writer.
+SageMC's Record during playback opens Save Partial and pauses. Inspect the UI;
+do not replay the stock SageTV7 Record-menu sequence. Saving a partial shortens
+its owned schedule to now while retaining a historical manual flag. Verify the
+exact file stopped and schedule ended rather than re-starting or deleting it
+merely to force that flag false. Restore the driver's private settings/power.
+If an initial observation stops only on that proven response-shape oracle,
+`mcp_padded_watch_continuation.py` can finish observing the SAME session. It
+must never Watch/Seek/reset history or take over settings cleanup; the original
+raw failure remains visible, with the independently corrected result separate.
+
 ## AutoAspect/Comskip OSD reproduction
 
 Use a marker-bearing long recording with both STVIs verified in the selected

@@ -15,6 +15,11 @@ public interface PlaybackDataSourceTelemetry extends SmbTelemetrySource
     long getOpenCount();
     long getOpenWaitMs();
     long getLastOpenPosition();
+    default long getInitialPhysicalSize() { return -1L; }
+    default long getInitialReportedLength() { return -1L; }
+    default long getLastReportedLength() { return -1L; }
+    default long getSnapshotPreparationCount() { return -1L; }
+    default long getSnapshotFirstEndOpenCount() { return -1L; }
     long getLastSourceOpenMonotonicMs();
     long getFirstReadAfterOpenMonotonicMs();
     long getFirstReadAfterOpenPosition();

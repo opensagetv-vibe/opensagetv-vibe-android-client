@@ -40,6 +40,7 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     private volatile GSYPlayerEngine resolvedEngine = GSYPlayerEngine.AUTO;
     private volatile int systemFallbackCount;
     private volatile String systemFallbackReason = "";
+    private volatile long lastRequestedSeekMs = -1L;
 
     public GSYMediaPlayerImpl(AndroidUIController activity)
     {
@@ -118,6 +119,12 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
                 delegate.setServerMediaMetadataExplicit(serverMediaMetadataExplicit);
                 delegate.load(lastMajorTypeHint, lastMinorTypeHint, lastEncodingHint,
                         lastUrlString, lastHostname, lastTimeshifted, lastBufferSize);
+                // Native System may reject a container during asynchronous
+                // prepare, after SageTV already sent its initial bookmark.
+                // Carry that request into the fallback's new source instead
+                // of silently starting its Media3 delegate at byte/time zero.
+                long requestedPositionMs = lastRequestedSeekMs;
+                if (requestedPositionMs >= 0L) delegate.seek(requestedPositionMs);
             }
         });
     }
@@ -160,6 +167,7 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
                      String hostname, boolean timeshifted, long bufferSize)
     {
         loadGeneration++;
+        lastRequestedSeekMs = -1L;
         lastMajorTypeHint = majorTypeHint;
         lastMinorTypeHint = minorTypeHint;
         lastEncodingHint = encodingHint;
@@ -183,7 +191,10 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public void stop() { if (d() != null) d().stop(); }
     @Override public void pause() { if (d() != null) d().pause(); }
     @Override public void play() { if (d() != null) d().play(); }
-    @Override public void seek(long timeMS) { if (d() != null) d().seek(timeMS); }
+    @Override public void seek(long timeMS) {
+        if (timeMS >= 0L) lastRequestedSeekMs = timeMS;
+        if (d() != null) d().seek(timeMS);
+    }
     @Override public float setPlaybackRate(float rate) { return d() == null ? 1.0f : d().setPlaybackRate(rate); }
     @Override public float getPlaybackRate() { return d() == null ? 1.0f : d().getPlaybackRate(); }
     @Override public boolean hasRenderedFirstVideoFrame() { return d() != null && d().hasRenderedFirstVideoFrame(); }

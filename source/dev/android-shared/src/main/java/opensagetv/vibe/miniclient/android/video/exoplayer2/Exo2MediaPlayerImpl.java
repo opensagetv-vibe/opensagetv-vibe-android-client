@@ -60,6 +60,7 @@ import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.PendingPlaybackSeek;
 import opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput;
 import opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner;
 import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
@@ -194,6 +195,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
     @Override
     protected void onPlaybackLoadStarted()
     {
+        pendingStartupSeek.reset();
         lastGpuFailureWitness="";
         mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
@@ -386,7 +388,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
         return mpeg2InterlaceObserver.getFieldPictureCount();
     }
     private MediaSource mediaSource;
-    private long playbackStartPosition = -1;
+    private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     private volatile boolean audioPassthroughEnabled;
     private volatile boolean audioOutputRebuildQueued;
     private volatile boolean exclusiveDiagnosticAudioSuspended;
@@ -448,8 +450,21 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 return;
             try
             {
-                Exo2PullDataSource pull = (Exo2PullDataSource) dataSource;
+                Exo2PullDataSource previousPull = (Exo2PullDataSource) dataSource;
+                Exo2PullDataSource pull = previousPull.newPreparationSource();
                 pull.beginSeekableSnapshotPreparation();
+                dataSource = pull;
+                // A previously published unseekable timeline must not clamp
+                // this new start to zero while the snapshot map is rebuilding.
+                // Retain the MediaItem, transport and caption/offset wrappers,
+                // but use a fresh ProgressiveMediaSource for this preparation.
+                final DataSource seekDataSource = pull;
+                mediaSource = new ProgressiveMediaSource.Factory(
+                        new DataSource.Factory()
+                        {
+                            @Override public DataSource createDataSource() { return seekDataSource; }
+                        }, withPassthroughOffset(createCaptionAwareExtractorsFactory(true)))
+                        .createMediaSource(mediaSource.getMediaItem());
                 PlaybackDebugTrap.recordDetailed(smb
                                 ? "smb_seek_reprepare_before"
                                 : "growing_pull_seek_reprepare_before",
@@ -457,6 +472,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                 expectedPlayer.setMediaSource(mediaSource, targetMs);
                 expectedPlayer.prepare();
                 expectedPlayer.setPlayWhenReady(resume);
+                previousPull.retireAfterCurrentLoad();
                 PlaybackDebugTrap.recordDetailed(smb
                                 ? "smb_seek_reprepare_after"
                                 : "growing_pull_seek_reprepare_after",
@@ -1266,7 +1282,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
 
                         log.logDebug("Seek player is null storing position: " + timeInMS);
 
-                        playbackStartPosition = timeInMS;
+                        pendingStartupSeek.set(timeInMS);
                     }
                 }
                 else
@@ -1281,7 +1297,7 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             {
 
                 log.logDebug("Seek Resume: " + timeInMS);
-                playbackStartPosition = timeInMS;
+                pendingStartupSeek.set(timeInMS);
             }
         }
         catch (Exception ex)
@@ -1581,10 +1597,14 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
                         catch (Exception ex)
                         { log.logError("Error releasing MediaSession for audio-output rebuild", ex); }
                     }
-                    retainedAudioRebuildDataSource = expectedDataSource;
+                    // Preserve queued Push bytes, not a retiring Pull loader's
+                    // mutable range/socket state. Its asynchronous close must
+                    // not invalidate the replacement player's source probes.
+                    retainedAudioRebuildDataSource = pushMode ? expectedDataSource : null;
+                    if (!pushMode) releaseDataSource();
                     if (!pushMode)
                     {
-                        playbackStartPosition = positionMs;
+                        pendingStartupSeek.set(positionMs);
                         exactAudioOffsetReanchorSeekPending =
                                 reason.startsWith("passthrough-offset-reanchor:");
                     }
@@ -2505,16 +2525,21 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             }
 
 
-            boolean haveStartPosition = (playbackStartPosition >= 0);
-            long requestedStartPosition = playbackStartPosition;
+            long requestedStartPosition = pendingStartupSeek.take();
+            boolean haveStartPosition = requestedStartPosition >= 0L;
             log.logDebug("ExoLogging - Preparing playback");
             if (haveStartPosition)
             {
                 // Bind the queued resume seek to the new MediaSource timeline. A
                 // standalone seekTo() before setMediaSource() is reset when the new
                 // source is attached and caused resumed recordings to begin at zero.
+                // Match Media3's initial growing-file seek contract: publish a
+                // temporary loader-thread size snapshot for the seek map, not
+                // a permanent EOF or a hard-coded padding adjustment.
+                if (!pushMode && requestedStartPosition > 0L
+                        && dataSource instanceof Exo2PullDataSource)
+                    ((Exo2PullDataSource) dataSource).beginSeekableSnapshotPreparation();
                 player.setMediaSource(mediaSource, requestedStartPosition);
-                playbackStartPosition = -1;
                 PlaybackDebugTrap.recordDetailed("initial_seek_attached_to_source", this,
                         "appliedMs=" + requestedStartPosition);
                 log.logDebug("ExoLogging - Start Position: " + requestedStartPosition);
@@ -2574,7 +2599,19 @@ public class Exo2MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSour
             log.logDebug("Video Player is online");
         }
 
-        this.playerReady = true;
+        // Do not lose a newer SEEK received while the initial source was
+        // being attached. Match seek()'s lock when publishing readiness.
+        playbackPositionLock.lock();
+        try
+        {
+            this.playerReady = true;
+            long queuedPositionMs = pendingStartupSeek.take();
+            if (!pushMode && queuedPositionMs >= 0L) seekToImpl(queuedPositionMs);
+        }
+        finally
+        {
+            playbackPositionLock.unlock();
+        }
         if (playRequested)
             super.play();
         else

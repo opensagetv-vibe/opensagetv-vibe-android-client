@@ -11,6 +11,7 @@ import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.PendingPlaybackSeek;
 import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.media.SubtitleTrack;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
@@ -31,7 +32,7 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     }
 
     private final FailureListener failureListener;
-    private long preSeekPos = -1;
+    private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     private boolean prepareStarted = false;
     private boolean failureReported = false;
     private boolean potentiallyGrowing;
@@ -73,6 +74,13 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
     }
 
     @Override
+    protected void onPlaybackLoadStarted()
+    {
+        // Clear only at synchronous LOAD, never in deferred Surface setup.
+        pendingStartupSeek.reset();
+    }
+
+    @Override
     protected long getPlayerMediaTimeMillis(long lastServerTime)
     {
         return player == null ? 0 : player.getCurrentPosition();
@@ -85,7 +93,6 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
         // video frame visible immediately before calling setupPlayer().  Releasing here
         // again hides/destroys that freshly-created SurfaceView and can leave
         // MediaPlayer.setDisplay() with a released Surface.
-        preSeekPos = -1;
         prepareStarted = false;
         failureReported = false;
         stoppedForResume = false;
@@ -165,13 +172,13 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("player_prepared", GSYSystemMediaPlayerImpl.this);
                     playerReady = true;
+                    long requestedPositionMs = pendingStartupSeek.take();
+                    if (!pushMode && requestedPositionMs >= 0L)
+                    {
+                        seekToImpl(requestedPositionMs);
+                    }
                     state = PLAY_STATE;
                     mp.start();
-                    if (!pushMode && preSeekPos >= 0)
-                    {
-                        seekToImpl(preSeekPos);
-                        preSeekPos = -1;
-                    }
                 }
             });
 
@@ -322,9 +329,10 @@ public final class GSYSystemMediaPlayerImpl extends BaseMediaPlayerImpl<MediaPla
         super.seek(timeMS);
         if (consumeMimDirectSeekHandled())
             return;
-        if (player == null || !playerReady || state == NO_STATE || state == LOADED_STATE)
+        if (player == null || !playerReady || stoppedForResume
+                || state == NO_STATE || state == LOADED_STATE || state == STOPPED_STATE)
         {
-            preSeekPos = timeMS;
+            pendingStartupSeek.set(timeMS);
             return;
         }
         seekToImpl(timeMS);

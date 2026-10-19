@@ -1256,8 +1256,8 @@ class AdbClient:
 
     def player_control(self, action: str) -> dict[str, Any]:
         value = str(action).strip().lower()
-        if value not in {"play", "pause", "stop"}:
-            raise ValueError("action must be play, pause, or stop")
+        if value not in {"play", "pause", "stop", "restart_audio"}:
+            raise ValueError("action must be play, pause, stop, or restart_audio")
         return self.dev_control("player_control", action=value)
 
     def request_competing_audio_focus(self, mode: str) -> dict[str, Any]:

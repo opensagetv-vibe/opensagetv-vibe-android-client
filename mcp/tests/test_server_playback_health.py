@@ -1,10 +1,29 @@
 import unittest
+import hashlib
 from unittest import mock
 
 from sagetv_dev_mcp import server
 
 
 class PlaybackHealthTest(unittest.TestCase):
+    def test_snapshot_length_witnesses_survive_compaction(self):
+        fields = {'health_dataSourceInitialPhysicalSize':123456789,
+                  'health_dataSourceInitialReportedLength':-1,
+                  'health_dataSourceLastReportedLength':-1,
+                  'health_dataSourceSnapshotPreparationCount':1,
+                  'health_dataSourceSnapshotFirstEndOpenCount':0}
+        self.assertEqual(fields, server._compact_state({**fields, 'privateToken':'secret'}))
+
+    def test_segment_identity_is_stable_without_exporting_private_uri(self):
+        uri = 'http://private-host/session?token=secret'
+        compact = server._compact_state({'mediaUri':uri, 'mediaChannel':'2.1'})
+        self.assertEqual(compact, {'mediaChannel':'2.1',
+            'mediaSourceIdentity':hashlib.sha256(uri.encode()).hexdigest()})
+        self.assertNotIn('secret', str(compact))
+        self.assertEqual(compact, server._compact_state(compact))
+        self.assertNotEqual(compact['mediaSourceIdentity'],
+            server._compact_state({'mediaUri':uri+'/other'})['mediaSourceIdentity'])
+
     def test_gpu_profile_is_explicit_current_or_one_next_stage_arm(self):
         with mock.patch.object(server.adb,'dev_control',return_value={'accepted':True}) as control:
             self.assertEqual(server.dev_gpu_output_profile(),{'accepted':True})

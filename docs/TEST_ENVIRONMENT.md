@@ -1,5 +1,16 @@
 # Local test environment
 
+Live-TV tests must guard every server sharing the encoder, not only the
+selected playback server. On2026-10-19,232 and175 both controlled OpenDCT
+HDHR10703705-0:175 recording activity caused STOP/START to a different output
+filename while232's capture still appeared active, invalidating growth gates.
+Do not restart/retune/stop the shared encoder to make a test pass. Require
+read-only activity-idle proof for every owner or use a separately reserved
+tuner/recording window. The growing-resume driver now requires explicit
+`--shared-capture-server 192.168.10.175` (repeat for additional owners) and
+refuses before client checkpoint/cleanup/playback mutation when one is active.
+An unknown activity reply also aborts. Never call this a client EOF defect.
+
 Server controls must resolve the selected device's actual complete client ID.
 Never fall back to the sole other remote UI: during fresh connection registration,
 that UI can belong to another device. INTERLACE-004's second run proved the old

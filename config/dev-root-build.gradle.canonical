@@ -36,7 +36,7 @@ allprojects {
 
     ext {
 
-        appVersionCode = 2101111
+        appVersionCode = 2101112
         // VERSION is the single source for APK metadata and the Settings UI.
         appVersionName = vibeVersionName
 

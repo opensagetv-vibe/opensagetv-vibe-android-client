@@ -360,6 +360,26 @@ expected_video_mime = "video/avc"
 expected_subtitle = "dvb_or_teletext"
 expected_teletext_pes = "preserved"
 
+[[fixtures.cases]]
+id = "resume_avc_aac"
+enabled = false
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/RESUME001/VibeResume-AVC-AAC-240s.mp4"
+modes = { startup = true, resume = true }
+expected_container = "mp4"
+expected_video_mime = "video/avc"
+minimum_duration_seconds = 239
+
+[[fixtures.cases]]
+id = "resume_avc_aac_ts"
+enabled = false
+path_type = "server_path"
+path = "/var/media/OpenSageTV_Vibe_Tests/RESUME001/VibeResume-AVC-AAC-240s.ts"
+modes = { startup = true, resume = true }
+expected_container = "mpegts"
+expected_video_mime = "video/avc"
+minimum_duration_seconds = 239
+
 [capture]
 enabled = false
 backend = "directshow"

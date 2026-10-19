@@ -58,6 +58,7 @@ import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.util.Logger;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.PendingPlaybackSeek;
 import opensagetv.vibe.miniclient.android.video.GpuDeinterlaceOutput;
 import opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner;
 import opensagetv.vibe.miniclient.android.video.AndroidCodecPolicy;
@@ -216,6 +217,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void onPlaybackLoadStarted()
     {
+        pendingStartupSeek.reset();
         lastGpuFailureWitness="";
         mimDirectDiagnosticDataSource = null;
         firstVideoFrameRendered = false;
@@ -341,7 +343,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 : new Media3PassthroughOffsetExtractorsFactory(factory, controller);
     }
     private MediaSource mediaSource;
-    private long playbackStartPosition = -1;
+    private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     private volatile String activePlaybackUrl;
     private volatile boolean audioPassthroughEnabled;
     private volatile boolean audioOutputRebuildQueued;
@@ -411,8 +413,22 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
             try
             {
-                Media3PullDataSource pull = (Media3PullDataSource) dataSource;
+                Media3PullDataSource previousPull = (Media3PullDataSource) dataSource;
+                Media3PullDataSource pull = previousPull.newPreparationSource();
                 pull.beginSeekableSnapshotPreparation();
+                dataSource = pull;
+                // ProgressiveMediaSource retains its last published timeline.
+                // Reusing an initially unseekable growing source can resolve
+                // this new nonzero start to zero before the fresh extractor
+                // publishes its finite snapshot seek map. Keep the same URI,
+                // transport and caption/offset wrappers, but not that timeline.
+                final DataSource seekDataSource = pull;
+                mediaSource = new ProgressiveMediaSource.Factory(
+                        new DataSource.Factory()
+                        {
+                            @Override public DataSource createDataSource() { return seekDataSource; }
+                        }, withPassthroughOffset(createCaptionAwareExtractorsFactory(true)))
+                        .createMediaSource(mediaSource.getMediaItem());
                 PlaybackDebugTrap.recordDetailed(smb
                                 ? "smb_seek_reprepare_before"
                                 : "growing_pull_seek_reprepare_before",
@@ -420,6 +436,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 expectedPlayer.setMediaSource(mediaSource, targetMs);
                 expectedPlayer.prepare();
                 expectedPlayer.setPlayWhenReady(resume);
+                previousPull.retireAfterCurrentLoad();
                 PlaybackDebugTrap.recordDetailed(smb
                                 ? "smb_seek_reprepare_after"
                                 : "growing_pull_seek_reprepare_after",
@@ -1890,7 +1907,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
                         log.logDebug("Seek player is null storing position: " + timeInMS);
 
-                        playbackStartPosition = timeInMS;
+                        pendingStartupSeek.set(timeInMS);
                     }
                 }
                 else
@@ -1905,7 +1922,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
 
                 log.logDebug("Seek Resume: " + timeInMS);
-                playbackStartPosition = timeInMS;
+                pendingStartupSeek.set(timeInMS);
             }
         }
         catch (Exception ex)
@@ -3333,8 +3350,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
 
 
-            boolean haveStartPosition = (playbackStartPosition >= 0);
-            long requestedStartPosition = playbackStartPosition;
+            long requestedStartPosition = pendingStartupSeek.take();
+            boolean haveStartPosition = requestedStartPosition >= 0L;
             log.logDebug("Media3Logging - Preparing playback");
             if (haveStartPosition)
             {
@@ -3342,8 +3359,15 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 // new MediaItem. Calling seekTo() before setMediaSource() addresses the
                 // old/empty timeline and is discarded when the source is attached,
                 // which made stock-server resume always start at zero.
+                // A growing TS is normally open-ended. Its initial nonzero
+                // server bookmark needs the same temporary length/seek map as
+                // a later growing-file seek, otherwise Media3 resolves it to
+                // zero. No SIZE I/O is done here; open() obtains the snapshot
+                // on the loader thread and growth reads remain unbounded.
+                if (!pushMode && requestedStartPosition > 0L
+                        && dataSource instanceof Media3PullDataSource)
+                    ((Media3PullDataSource) dataSource).beginSeekableSnapshotPreparation();
                 player.setMediaSource(mediaSource, requestedStartPosition);
-                playbackStartPosition = -1;
                 PlaybackDebugTrap.recordDetailed("initial_seek_attached_to_source", this,
                         "appliedMs=" + requestedStartPosition);
                 log.logDebug("Media3Logging - Start Position: " + requestedStartPosition);
@@ -3402,7 +3426,20 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             log.logDebug("Video Player is online");
         }
 
-        this.playerReady = true;
+        // SEEK can arrive while construction is consuming the first bookmark.
+        // Publish readiness and drain any newer request under the same lock as
+        // seek(); subsequent requests will queue normally behind this UI work.
+        playbackPositionLock.lock();
+        try
+        {
+            this.playerReady = true;
+            long queuedPositionMs = pendingStartupSeek.take();
+            if (!pushMode && queuedPositionMs >= 0L) seekToImpl(queuedPositionMs);
+        }
+        finally
+        {
+            playbackPositionLock.unlock();
+        }
         if (playRequested)
             super.play();
         else
@@ -4024,10 +4061,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         catch (Exception ex)
                         { log.logError("Error releasing MediaSession for audio-output rebuild", ex); }
                     }
-                    retainedAudioRebuildDataSource = expectedDataSource;
+                    // Only Push owns queued bytes that must survive a decoder
+                    // replacement. A Pull loader can close asynchronously after
+                    // release; sharing its mutable datasource with the new
+                    // player races CLOSE/range probes and can publish a zero
+                    // size or IO_READ_POSITION_OUT_OF_RANGE. Retire that source
+                    // through the existing non-waiting session cleanup and let
+                    // setup construct a fresh Pull/HTTP source at the bookmark.
+                    retainedAudioRebuildDataSource = pushMode ? expectedDataSource : null;
+                    if (!pushMode) releaseDataSource();
                     if (!pushMode)
                     {
-                        playbackStartPosition = positionMs;
+                        pendingStartupSeek.set(positionMs);
                         exactAudioOffsetReanchorSeekPending =
                                 reason.startsWith("passthrough-offset-reanchor:");
                     }

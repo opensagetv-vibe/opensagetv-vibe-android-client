@@ -51,8 +51,15 @@ final class DebugPlayerCommands
             player.pause();
         else if ("stop".equals(action))
             player.stop();
+        else if ("restart_audio".equals(action))
+        {
+            // Exercise the existing production menu operation without changing
+            // encoded/decoded output, offset, stream ownership or server state.
+            if (!player.supportsAudioOutputRestart() || !player.restartAudioOutput())
+                throw new IllegalStateException("active backend rejected audio-output restart");
+        }
         else
-            throw new IllegalArgumentException("action must be play, pause, or stop");
+            throw new IllegalArgumentException("action must be play, pause, stop, or restart_audio");
         return "op=player_control;action=" + safe(action)
                 + ";beforeState=" + beforeState
                 + ";accepted=true;inputPath=android_debug_direct_player_api";

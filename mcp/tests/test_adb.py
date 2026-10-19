@@ -1134,6 +1134,15 @@ finally:
         self.assertIn("--es op relative_seek_check", commands[6])
         self.assertIn("--es deltas_ms 10000,-10000", commands[6])
 
+    def test_existing_audio_restart_is_bounded_player_control(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        reply = 'Broadcast completed: result=1, data="ok=true;op=player_control;action=restart_audio;accepted=true"\n'
+        with patch.object(c, "shell", return_value=reply) as shell:
+            self.assertTrue(c.player_control("restart_audio")["accepted"])
+        self.assertIn("--es action restart_audio", shell.call_args.args[0])
+        with self.assertRaises(ValueError):
+            c.player_control("restart_server")
+
     def test_frame_step_rejects_zero_before_broadcast(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
         with self.assertRaisesRegex(ValueError, "non-zero"):

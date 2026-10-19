@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.5.103 - 2026-10-19
+
+- Prepare an initial seek map for nonzero server bookmarks on growing Pull
+  recordings in Media3 and independent legacy Exo (including GSY delegates).
+- Preserve queued server targets across delayed IJK/System player construction,
+  apply native initial seeks before playback starts, and retain the bookmark
+  through GSY System-to-Media3 fallback. Explicit zero remains a valid target.
+- Replace the cached unseekable source timeline for growing Pull repreparation
+  in both Exo engines, covering a resume request arriving after source attach.
+- Isolate replacement Pull loaders and clean up retired sessions, including
+  audio-output recreation, while retaining queued Push bytes and existing
+  audio-offset calculations.
+- Freeze one preparation extent across TS duration probes, without imposing
+  that byte boundary on growing playback reads. Nonzero recreation advances
+  on both Exo engines; final Media3 bookmark resume has independent HDMI proof.
+- Qualify scheduled pre-padding and saved-position resume on stock175 with
+  the non-Pro Fire TV: a real three-minute-padded first Watch retains179988ms,
+  and Media3, legacy Exo and IJK retain normal bookmarks/growing playback.
+  Earlier232 independent-player/GSY results remain identified separately;
+  unsupported native System TS is explicitly a safe Media3 fallback.
+- Guard shared capture owners and reserve an independently idle tuner for a
+  new test recording. Correct stock-only metadata/counter/UI test assumptions
+  without changing production playback or rewriting watched history.
+- Keep watched metadata and padding decisions server-owned; no Core/plugin,
+  remote key, decoder, or audio-offset change. Focused232/non-Pro qualification
+  has passed affected gates. This remains the development-signed GitHub
+  sideload distribution, not a production-store release.
+
 ## 0.5.102 - 2026-10-16
 
 - Published the immutable sideload release after exact-source green CI; four

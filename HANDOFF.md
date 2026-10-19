@@ -1,5 +1,66 @@
 # OpenSageTV Vibe Android Client handoff
 
+## RELEASE-003 IN PROGRESS (revision386, 2026-10-19)
+
+User authorizes Android repository push and GitHub v0.5.103 publication.
+Retain the exact RESUME-001 tested APK17dc88c5/code2101112 and existing
+development sideload identity. Run local CI-equivalent source contracts and
+package/manifest checks before pushing; require green exact-HEAD remote CI
+before publishing APK/source/checksums/provenance. Independently download and
+verify public assets. No unrelated device matrix, plugin update or restart.
+Prior RESUME-001 physical/build/unit evidence below remains authoritative.
+Local full source preflight caught a stale0.5.102 version assertion and hard-
+coded scheduled-gate capture-owner addresses before any push. Corrected the
+version contract and required explicit shared owners/configured serials;26
+resume-oracle,57backend and13environment focused checks pass. Runtime/APK
+remain unchanged. Dependency download certificate failure was handled by
+verified host downloads and offline container installation, not disabled TLS.
+Corrected local CI-equivalent source suite:902tests pass/5documented skips;
+full project validation,1692-file manifest and debug-variant package/signer
+inspection pass. Shared build-env pilot34402124 has greenCI39133370623.
+Require the new Android commit's own green CI before public release.
+
+## RESUME-001 COMPLETE (revision385, 2026-10-19)
+
+The local0.5.103/code2101112 debug candidate is installed on non-Pro
+192.168.10.25/AFTMM/API25. APK SHA256:
+17dc88c5de7c0493259c64af4dd792d7ccfe56515d120ad59ae0aff2163914d9.
+No commit, release or issue comment was performed during RESUME-001;
+publication is now separately authorized under RELEASE-003 above.
+
+Stock175/SageMC real three-minute-padded first Watch passes: actual capture
+15:27:00.012 for15:30 airing; server target179988ms equals actual padding,
+position222041ms at44754ms age. Same first Watch continues289906->356621ms
+with unchanged source/seek and advancing A/V; independent HDMI reviewed.
+Raw35's typed MediaFile-vs-Result assertion is preserved as an oracle failure;
+corrected36 observes that same session without another Watch/Seek/history reset.
+SageMC Save Partial pauses were test UI, not claimed uninterrupted cadence.
+Owned test65930211/66047642 used independently idle tuner-1; existing Inside
+Edition stayed on-0 and ended on its normal schedule. The test schedule was
+shortened to15:37:47.166, recordingCount0/exact file no longer recording.
+Its historical manual flag/partial file remain deliberately preserved.
+
+Stock175 Media3/legacy Exo normal resume and IJK growing Stop/Watch/continuity
+pass with HDMI and136private preferences restored. Actual IJK MPEG-2 Software
+fallback is not hardware qualification. Earlier232 independent/GSY completed-
+file rows remain valid; unsupported native System TS is explicitly a Media3
+fallback, not native System support. No unrelated full-matrix replay.
+Clean66-task build/debug package inspection,30focused JVM cases,81ADB,
+33health and affected source checks pass;25physical-oracle checks pass.
+No new runtime source change since the installed17dc88c5 candidate.
+
+Manual keep-awake ended: original global7/system2147483647 restored.
+Normal test playback advanced Inside Edition's bookmark; nothing cleared or
+rewrote watched metadata. No stock Core/FFmpeg/installation file, plugin,
+server restart, Pro device, key mapping or audio-offset policy changed.
+Compact evidence: artifacts/results/RESUME-001/RESULT.md and resume-gates.json.
+All remaining114raw local files/95193278bytes retired recoverably under root
+deleteme with original relative paths; earlier111files/92294463bytes likewise.
+Original USER_TEST3 share files, canonical fixtures, current APK, source,
+credentials, settings and persistent ADB identities remain untouched.
+Next: finish authorized RELEASE-003 publication, then conditional backlog in
+TASKS.md; do not automatically start another device matrix.
+
 ## RELEASE-002 COMPLETE (revision376, 2026-10-16)
 
 Companion follow-up: Client Extension0.1.0 beta is now published/independently

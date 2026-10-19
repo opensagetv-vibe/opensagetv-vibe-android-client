@@ -28,6 +28,7 @@ import opensagetv.vibe.miniclient.android.video.PlaybackDataSourceTelemetry;
 import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.android.video.PlayerRuntimeTuning;
 import opensagetv.vibe.miniclient.android.video.GrowingPlaybackSourcePolicy;
+import opensagetv.vibe.miniclient.android.video.GrowingSeekSnapshot;
 import opensagetv.vibe.miniclient.android.video.smb.SmbDirectConfig;
 import opensagetv.vibe.miniclient.android.video.smb.SmbSourceSelector;
 
@@ -50,7 +51,12 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     private Uri uri;
     private final GrowingPlaybackSourcePolicy growthPolicy;
     private volatile boolean effectivelyGrowing;
-    private volatile boolean seekableSnapshotPreparation;
+    private final GrowingSeekSnapshot seekableSnapshot = new GrowingSeekSnapshot();
+    private volatile long initialPhysicalSize = -1L;
+    private volatile long initialReportedLength = -1L;
+    private volatile long lastReportedLength = -1L;
+    private volatile long snapshotPreparationCount;
+    private volatile long snapshotFirstEndOpenCount = -1L;
     private volatile boolean endOfInput;
 
     private long closedNetworkReadCount;
@@ -144,13 +150,16 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             lastOpenPosition = dataSpec.position;
         }
         this.startPos = dataSpec.position;
+        if (openCount == 1L) initialPhysicalSize = size;
         endOfInput = false;
         effectivelyGrowing = growthPolicy.resolve(dataSource, size);
         if (retainedPullSource != null)
             retainedPullSource.setProbeCacheEnabled(!effectivelyGrowing);
         log.debug("Open: Offset: {}, Requested Length: {}, Size: {}", startPos, dataSpec.length, size);
 
-        if (size >= 0 && dataSpec.position > size)
+        long snapshotExtent = seekableSnapshot.resolveExtent(effectivelyGrowing, size);
+        long knownAvailableSize = Math.max(size, snapshotExtent);
+        if (knownAvailableSize >= 0 && dataSpec.position > knownAvailableSize)
         {
             log.debug("IO_READ_POSITION_OUT_OF_RANGE: Offset: {}, Size: {}", dataSpec.position, size);
             DataSourceException ds = new DataSourceException(PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE);
@@ -173,8 +182,8 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             // temporary size snapshot while rebuilding a seek map. Without a
             // finite input length Media3 marks the item unseekable and resolves
             // an otherwise valid SageTV live seek back to byte/time zero.
-            reportedLength = seekableSnapshotPreparation && size >= 0
-                    ? Math.max(0, size - dataSpec.position)
+            reportedLength = snapshotExtent >= 0
+                    ? Math.max(0, snapshotExtent - dataSpec.position)
                     : C.LENGTH_UNSET;
         }
         else if (dataSpec.length != C.LENGTH_UNSET)
@@ -193,17 +202,23 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
             reportedLength = bytesRemaining;
         }
 
+        if (openCount == 1L) initialReportedLength = reportedLength;
+        lastReportedLength = reportedLength;
         return reportedLength;
     }
 
     @Override
-    public void close() throws IOException
+    public synchronized void close() throws IOException
     {
-        if (dataSource != null)
+        try
         {
-            accumulateAndCloseDataSource();
+            if (dataSource != null) accumulateAndCloseDataSource();
         }
-        bytesRemaining = C.LENGTH_UNSET;
+        finally
+        {
+            bytesRemaining = C.LENGTH_UNSET;
+            if (sessionRetired) releaseRetainedResources();
+        }
     }
 
     private void accumulateAndCloseDataSource()
@@ -373,12 +388,34 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     }
 
     @Override
-    public void releaseSession()
+    public synchronized void releaseSession()
     {
+        sessionRetired = true;
         try { close(); }
         catch (IOException ignored) { }
+    }
+
+    private boolean sessionRetired;
+
+    private void releaseRetainedResources()
+    {
         if (retainedPullSource != null) retainedPullSource.release();
         if (smbSource != null) smbSource.release();
+    }
+
+    /** A new loader must not share mutable range state with a retiring one. */
+    public Media3PullDataSource newPreparationSource()
+    {
+        return new Media3PullDataSource(host,
+                growthPolicy.isConfiguredPotentiallyGrowing(),
+                growthPolicy.isMetadataExplicit(), smbConfig, pullReadBytes);
+    }
+
+    /** Let the old loader finish cancellation before releasing its own socket. */
+    public synchronized void retireAfterCurrentLoad()
+    {
+        sessionRetired = true;
+        if (dataSource == null) releaseRetainedResources();
     }
 
     public boolean isSmbModeConfigured() { return smbConfig != null; }
@@ -386,7 +423,8 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     /** Makes the next growing-source preparation seekable without ending growth reads. */
     public void beginSeekableSnapshotPreparation()
     {
-        seekableSnapshotPreparation = true;
+        snapshotPreparationCount++;
+        seekableSnapshot.begin();
     }
 
     /** The SIZE-growth probe result used for seek/reprepare policy. */
@@ -436,8 +474,15 @@ public class Media3PullDataSource implements DataSource, HasClose, SessionOwnedD
     /** Restores the normal unknown-length contract after the first post-seek frame. */
     public void endSeekableSnapshotPreparation()
     {
-        seekableSnapshotPreparation = false;
+        if (snapshotFirstEndOpenCount < 0L) snapshotFirstEndOpenCount = openCount;
+        seekableSnapshot.end();
     }
+
+    @Override public long getInitialPhysicalSize() { return initialPhysicalSize; }
+    @Override public long getInitialReportedLength() { return initialReportedLength; }
+    @Override public long getLastReportedLength() { return lastReportedLength; }
+    @Override public long getSnapshotPreparationCount() { return snapshotPreparationCount; }
+    @Override public long getSnapshotFirstEndOpenCount() { return snapshotFirstEndOpenCount; }
 
     private long currentPhysicalReadCount()
     {

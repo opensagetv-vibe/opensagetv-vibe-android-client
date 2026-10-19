@@ -8,6 +8,7 @@ import android.view.SurfaceHolder;
 import opensagetv.vibe.miniclient.android.MiniclientApplication;
 import opensagetv.vibe.miniclient.android.ui.AndroidUIController;
 import opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl;
+import opensagetv.vibe.miniclient.android.video.PendingPlaybackSeek;
 import opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap;
 import opensagetv.vibe.miniclient.android.video.DecodingMethod;
 import opensagetv.vibe.miniclient.android.video.MediaSessionCallbackHandler;
@@ -34,7 +35,7 @@ import static opensagetv.vibe.miniclient.util.Utils.toHHMMSS;
  */
 public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMediaDataSource>
 {
-    long preSeekPos = -1;
+    private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     long resumeTimeOffset = -1;
     boolean resumeMode = false;
     int initialAudioStreamPos = -1;
@@ -81,6 +82,14 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     public void setServerMediaMetadataExplicit(boolean explicit)
     {
         serverMediaMetadataExplicit = explicit;
+    }
+
+    @Override
+    protected void onPlaybackLoadStarted()
+    {
+        // OPENURL owns this reset. Deferred setup must preserve any SEEK the
+        // server sends before Android gets around to constructing the player.
+        pendingStartupSeek.reset();
     }
 
     /**
@@ -313,10 +322,10 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                                 IJKMediaPlayerImpl.this);
                         if (playerReady)
                         {
-                            if (preSeekPos != -1)
+                            long requestedPositionMs = pendingStartupSeek.take();
+                            if (requestedPositionMs >= 0L)
                             {
-                                seekToImpl(preSeekPos);
-                                preSeekPos = -1;
+                                seekToImpl(requestedPositionMs);
                             }
                             playerToResume.start();
                             if (mediaSession != null)
@@ -375,7 +384,6 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     {
         log.debug("Creating Player");
 
-        preSeekPos = -1;
         resumeTimeOffset = -1;
         resumeMode = false;
         initialAudioStreamPos = -1;
@@ -545,17 +553,17 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                                 IJKMediaPlayerImpl.this);
                         return;
                     }
-                    player.start();
-                    state = PLAY_STATE;
-
                     if (!pushMode)
                     {
-                        if (preSeekPos != -1)
+                        long requestedPositionMs = pendingStartupSeek.take();
+                        if (requestedPositionMs >= 0L)
                         {
                             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
-                                log.debug("Resuming At Position: {}", preSeekPos);
-                            seekToImpl(preSeekPos);
-                            preSeekPos = -1;
+                                log.debug("Resuming At Position: {}", requestedPositionMs);
+                            // Native IJK accepts a seek in PREPARED. Apply the
+                            // server target before start(), avoiding playback
+                            // of pre-padding while the bookmark is still queued.
+                            seekToImpl(requestedPositionMs);
                         }
                         else
                         {
@@ -563,6 +571,9 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                                 log.debug("No Resume");
                         }
                     }
+
+                    player.start();
+                    state = PLAY_STATE;
 
                     if (MiniclientApplication.get().getClient().properties().getBoolean(PrefStore.Keys.announce_software_decoder, false))
                     {
@@ -654,7 +665,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
             {
                 log.debug("Setting Pre-Seek {}", timeInMS);
             }
-            preSeekPos = timeInMS;
+            pendingStartupSeek.set(timeInMS);
             return;
         }
 
