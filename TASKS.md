@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **411** (2026-11-08)
+Checklist revision: **412** (2026-11-08)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **411** (2026-11-08). A completed
+Order reviewed against checklist revision **412** (2026-11-08). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -169,30 +169,27 @@ Client/companion releases and their affected gates are complete; upstream
 catalog review/aggregation does not justify another physical matrix. Deferred
 VCE-003 belongs to its project, not an Android release blocker.
 
-1. **RELEASE-004** - commit/audit/push qualified112, require green exact-commit
-   GitHub CI, publish and independently verify all public assets/tag. Local
-   checks and physical qualification are complete; do not repeat those matrices.
-2. **RESTART-001** - user confirmation of the original Pro Stop/Restart on
+1. **RESTART-001** - user confirmation of the original Pro Stop/Restart on
    installed112 (retaining111), after completed reader/UI/seek/install gates.
    Do not repeat those prerequisites or add a server dependency.
    VCE-013/MCP-COMPANION-TS-001 deferred, not required commissioning gates.110
    surface before/after Media3/legacy and Pro install gates are complete;
    do not repeat them as the next prerequisite or change protected175 Core.
-3. **SEEK-002** - collect recurrence feedback on installed112 (retaining109's
+2. **SEEK-002** - collect recurrence feedback on installed112 (retaining109's
    credit/wake corrections) after completed
    Pro175 remote/public/150s/EOF/wake-lifecycle and non-Pro Media3/legacy gates.
    Preserve keys/settings/targets; do not claim every rare stall eliminated.
    Original post-FLUSH gap remains distinct from the captured pre-FLUSH lock.
-4. **STALL-001** - correlate the captured Pro175 incoming-Push delivery gap
+3. **STALL-001** - correlate the captured Pro175 incoming-Push delivery gap
    with producer/server/network evidence; diagnosis only, no blind recovery.
-5. **GREEN-001** - diagnose the confirmed windowed-preview failure using the
+4. **GREEN-001** - diagnose the confirmed windowed-preview failure using the
    captured non-Pro/stock175 green-preview versus working-full-screen evidence.
-6. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
+5. **ONN-003** - reproduce the affected STV/plugin/rule state from the user's
    stuck-state diagnostic; published0.5.100 HDMI startup-overlap/Pull/Push
    observations clear normally and do not justify a speculative hide timer.
-7. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
+6. **DEVICE-001** - proceed when the affected tablet evidence/hardware exists;
    complete any release-bound capability correction before code freeze.
-8. **STORE-001 through STORE-004** - perform production signing, inspection,
+7. **STORE-001 through STORE-004** - perform production signing, inspection,
    listing, and publication only after external ownership/prerequisites are
    approved.
 
@@ -555,27 +552,6 @@ so the authored fixture remains the primary physical timing gate. See
 
 ## 3. Final physical playback matrix and release gate
 
-- [ ] **RELEASE-004 - Publish qualified0.5.112 client and source.** User
-  authorizes client repository push and GitHub release. Preserve the exact
- 534ad0e1 APK qualified on non-Pro/Pro, existing debug signer/package/settings
-  and stock compatibility. Review all unpublished104..112 changes, run affected
-  JVM/source/packaging checks and required CI-equivalent contracts; no repeated
-  physical matrices. Pre-commit completed-checklist/order/manifest maintenance,
-  correct author/committer identity and shared GitHub audit precede push. Require
-  green CI for the exact outgoing commit before release. Publish bullet-point
-  changes/fixes/compatibility/validation/known limitations; include APK, source,
-  manifest and checksums. Independently download/verify all public assets and
-  archive manifest/tag. Retire owned temporary staging to root deleteme. Leave
-  Community356/rare-seek field confirmation open; do not post/close that issue.
-  Local readiness411: exact534ad0e1 APK/strict signer-package inspection,
-  47 affected JVM tests,934 host contracts (6 explicit platform/optional skips)
-  and33 mocked MCP playback-health tests pass. Full-source manifest initially
-  failed only because new release docs had not yet been regenerated; corrected
-  and rerun, not a runtime failure. MCP test invocation needed commissioned
-  config before import; no device control was sent by the mocked suite. Origin
-  and local main both371f1e4 before commit. Preserve prior stock175/non-Pro/Pro
-  physical evidence; next outgoing identity/clean audit and exact-HEAD CI.
-
 
 - [ ] **PULL-003 - Generated long-TS startup after stock resume/zero seek.**
   New354 witness on stock Windows185/non-Pro25/Media3/Pull/GPUOff: registered
@@ -671,6 +647,23 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+- [x] **RELEASE-004 - Publish qualified0.5.112 client and source.** User-
+  authorized client repository update/publication completes on source701d9fd,
+  exact-HEAD green CI42494058884 (934tests/5documented skips), correct outgoing
+  identity/clean audit and shared verify-head/verify-release. Latest112 is public
+  with four assets, concise grouped bullet notes and unchanged qualified APK
+ 534ad0e1/code2101121. Independent downloads match local/GitHub/manifest/checksum
+  bytes;1,711-file sourceZIPdf1f26a8 and immutable tag match. Local47 affected
+  JVM/934contracts(6Windows skips)/33mocked MCP/strict package gates pass; prior
+  stock175 non-Pro/Pro physical evidence retained without repeating matrices.
+  README/changelog/handoff/orders412 updated; follow-up main bookkeeping is
+  documentation-only, tag/assets stay immutable. No other repository/plugin,
+  server/Core/config/restart, device setting or Community356 post/closure.
+  Compact results/RELEASE-004/RESULT.md and PUBLIC_VERIFICATION.json supersede
+  retired owned staging/downloads/local raw logs. Existing field gates remain.
+
+| 412 | 2026-11-08 | [x] RELEASE-004: Android112 public/verified on exact source701d9fd and greenCI42494058884; four independently downloaded assets and1,711-file source archive/tag match, exact534ad0e1 APK unchanged. Both orders412 remove publication, retain field-feedback gates. README/changelog/current handoff updated; follow-up main record is administrative only. No unrelated device matrix/server/plugin changes or issue closure. |
 
 | 411 | 2026-11-08 | [x] RELEASE-004 local readiness sub-gate: exact534ad0e1 APK retained,47 affected JVM/934 host contracts(6 explicit skips)/33 mocked MCP tests and strict package pass. Existing clean66-task build and physical evidence retained; no new device/server mutation. Regenerated release-doc manifest fixes the only initial host failure; commissioned config fixes a test-import invocation, not runtime. Both orders411 advance to outgoing audit/push/exact-source CI/publication/download verification. |
 

@@ -4,6 +4,11 @@
 
 ## 0.5.112 - 2026-11-08
 
+- Publish exact tested APK534ad0e1 and source701d9fd after green exact-source
+  CI42494058884. All four public assets independently download/hash-match;
+  the1,711-file source archive and immutable tag verify. Follow-up publication
+  records do not replace the released binary or expand its physical test scope.
+
 - Honor explicit Push selection while retaining its saved `dynamic` value;
   keep ordinary Pull, SMB, Fixed and negotiated MIM Direct ownership separate.
 - Recreate stale Media3 Push timelines on FLUSH and avoid false minute-period

@@ -1,5 +1,31 @@
 # OpenSageTV Vibe Android Client handoff
 
+## RELEASE-004 published and verified (revision412)
+
+Public latest is v0.5.112, published2026-11-08T15:20:44Z:
+https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.112
+Immutable release source/tag701d9fd9f59835b26596818b7d40ded97776d7a7 has green
+exact-source Repository checks42494058884 (934tests/5documented skips).
+SourceZIPdf1f26a8895442101e953c2ef507f21c43bdaa4dbd50d65c672b9edcf0f713ec;
+APK534ad0e1745137b16900e17683179c848094ba30b41e0e8f875cdd250fe84880 remains
+the exact non-Pro/Pro-qualified112/code2101121 build, with unchanged signature.
+
+All four public downloads match local bytes, GitHub SHA digests, manifest and
+checksums. Clean source provenance,1,711 archived manifest files and tag match
+independently. Shared outgoing audit/verify-head/verify-release pass before
+this post-publication documentation-only bookkeeping. Tag/assets stay immutable;
+subsequent main docs commits do not imply an unshipped runtime change.47 affected
+JVM/934 local contracts(6Windows skips)/33 mocked MCP/package checks pass; no
+repeated device matrix, server/Core/plugin/config change/restart or issue post.
+
+README/changelog/task/order412 now reflect publication. RELEASE-004 complete;
+RESTART-001/SEEK-002 await field feedback, Community356 exact case unconfirmed.
+Compact artifacts/results/RELEASE-004/RESULT.md and PUBLIC_VERIFICATION.json
+retain release evidence. Owned staging/downloads/corrected local logs retire
+recoverably to root deleteme; active failure evidence/signing/settings stay.
+Pro/non-Pro already have this exact APK; do not reinstall or retest merely for
+this administrative update. Next work begins with the existing open field gates.
+
 ## RELEASE-004 local readiness complete (revision411)
 
 Qualified112/code2101121 APK534ad0e1 remains unchanged. Strict APK/package/signer

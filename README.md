@@ -1,12 +1,14 @@
 # OpenSageTV Vibe Android Client
 
-Current GitHub sideload release: **v0.5.103**. Use the APK on the
-[release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.103).
+Current GitHub sideload release: **v0.5.112**. Use the APK on the
+[release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.112).
 
-Version0.5.103 preserves server-selected initial/bookmarked
-positions across player preparation, including the initial growing-TS seek-map
-path. RESUME-001 affected qualification passed, including genuine scheduled
-pre-padding on stock175/non-Pro Fire TV. Publication status is in HANDOFF.md.
+Version0.5.112 improves Push negotiation, seek responsiveness, retained-player
+restart/video-surface recovery and bounded stall diagnostics. It retains103's
+server-selected initial/bookmarked positions and growing-TS seek-map handling.
+Stock175/non-Pro Media3/legacy actual Push/Pull growing-recording qualification
+and Pro update/playback pass. Community356's exact unsupplied recording remains
+unconfirmed; see release limitations and HANDOFF.md for scoped evidence.
 It keeps the existing Dev sideload package/signing identity; an update install
 preserves settings. This is not a production Appstore/Play release. Stock
 SageTV remains supported, optional MIM enhancements are capability-negotiated,
