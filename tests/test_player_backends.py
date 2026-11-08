@@ -315,6 +315,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # their existing event and no decoder-clock polling is introduced.
         reviewed_plugin_watch_recovery_hash = "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367"
         self.assertIn(dev_hash, {
+            # STOP-hidden output must return even when FLUSH prepared the
+            # retained decoder before PLAY, so STATE_IDLE is already gone.
+            "98db97f735656e7f41f012822f5d3eb472125e140619fdf2a802c0a91802470c",
             reviewed_plugin_watch_recovery_hash,
             reviewed_ijk_teletext_discovery_hash,
             baseline_hash,
@@ -485,7 +488,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.103")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.112")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")

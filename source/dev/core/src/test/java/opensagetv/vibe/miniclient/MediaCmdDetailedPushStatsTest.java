@@ -141,6 +141,43 @@ public class MediaCmdDetailedPushStatsTest
         verify(player, times(2)).onServerPushAnchor(0L);
     }
 
+    @Test
+    public void boundsSharedOrdinaryPushWireCreditWithoutChangingBytesOrDvd() throws Exception
+    {
+        MiniClient client = mock(MiniClient.class);
+        MiniClientConnection connection = mock(MiniClientConnection.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.getCurrentConnection()).thenReturn(connection);
+        when(player.getBufferLeft()).thenReturn(4 * 1024 * 1024);
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        setBooleanField(command, "pushMode", true);
+        MiniClientConnection.detailedBufferStats = false;
+        byte[] packet = new byte[32768 + 8];
+        MediaCmd.writeInt(32768, packet, 0);
+        byte[] response = new byte[16];
+        assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER,
+                packet.length, packet, response));
+        assertEquals(131072, MediaCmd.readInt(0, response));
+        verify(player).pushData(packet, 8, 32768);
+
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_FLUSH, 0, new byte[0], response);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, 8, new byte[8], response);
+        assertEquals(131072, MediaCmd.readInt(0, response));
+        when(player.getBufferLeft()).thenReturn(-1);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, 8, new byte[8], response);
+        assertEquals(-1, MediaCmd.readInt(0, response));
+
+        when(player.getBufferLeft()).thenReturn(4 * 1024 * 1024);
+        setBooleanField(command, "dvdSessionPending", true);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, 8, new byte[8], response);
+        assertEquals(4 * 1024 * 1024, MediaCmd.readInt(0, response));
+        setBooleanField(command, "dvdSessionPending", false);
+        setBooleanField(command, "pushMode", false);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, 8, new byte[8], response);
+        assertEquals(4 * 1024 * 1024, MediaCmd.readInt(0, response));
+    }
+
     private static void setPlayer(MediaCmd command, MiniPlayerPlugin player)
     {
         try

@@ -1,5 +1,498 @@
 # OpenSageTV Vibe Android Client handoff
 
+## RELEASE-004 local readiness complete (revision411)
+
+Qualified112/code2101121 APK534ad0e1 remains unchanged. Strict APK/package/signer
+inspection,47 affected JVM tests,934 host contracts(6 explicit skips),33 mocked
+MCP playback-health tests pass. Initial manifest-only failure was stale release
+docs before regeneration; MCP import needed commissioned config. Neither is a
+runtime fault, and the mocked suite issued no physical controls. All unpublished
+104..112 source changes reviewed as the previously authorized client fixes;
+no unrelated changes or other-repository publication included.
+
+Both orders411 now target clean outgoing identity/audit/commit/push, green
+exact-source GitHub CI, four-asset publication and independent public verification.
+Preserve existing clean build/non-Pro/Pro qualification, no repeated device
+matrix or stock changes. README still identifies103 until publication succeeds.
+Changelog consolidates112 changes and retains private-build qualification history.
+
+## RELEASE-004 authorized (revision410)
+
+User authorizes Android GitHub repository update and release. Publish exact
+qualified112/code2101121 APK534ad0e1, not a rebuilt replacement. Review all
+unpublished104..112 fixes and existing physical evidence; affected JVM/source/
+packaging plus required CI-equivalent checks, pre-commit task/order/manifest,
+identity/shared gate audit and exact-commit GitHub success precede publication.
+APK/source/checksums/manifest downloads must independently match final bytes.
+Only client repository is in scope. No physical matrix replay, stock server
+change/restart or Community356 comment/closure. Both orders410 updated.
+
+## GROW-001 complete /112 installed (revision409)
+
+112/code2101121 APK534ad0e1745137b16900e17683179c848094ba30b41e0e8f875cdd250fe84880
+independently verified installed on non-Pro25 then Pro29. It packages existing
+unreleased105 explicit-Push/111 restart fixes, not another guessed runtime seek
+or timestamp correction. Stock175 non-Pro existing growing CBS66345462 single
+segment passes16 near-edge->0/60s/15s seeks across Media3/legacy actual Push/Pull,
+real A/V and increasing writer size; picture/first-row HDMI reviewed. Every
+row restores136prefs/captions/power/disconnected state. No recording/tuner changes.
+
+Then Pro guarded update/15s Push smoke passes, actual picture and advancing
+clock/A/V/transport;249prefs/-450ms retained. Fresh original CBS source (user
+changed from prior Sunday Today) restored near1130308ms with actual1130744ms/
+advancing A/V. Update helper now guards changed source and verifies restoration
+instead of ACK. Pro stays playing, non-Pro disconnected.25 JVM/99 host/clean66-
+task build/strict package pass; manifest/order409 validated at final handoff.
+
+No Core/plugin/server configuration change/restart, public release/commit/post.
+232 unavailable, not an idle witness; not needed because no retune or new capture.
+Reporter356 did not supply diagnostic/recording; local original symptom is not
+reproduced in either transport, so no proven reporter fix claimed. Obtain their
+diagnostic/original TS before any additional runtime change. GROW-001 closes
+only requested local qualification/install; RESTART-001/SEEK-002 field feedback
+remain open on112. Both orders409 remove the completed local gate. Compact
+artifacts/results/GROW-001/RESULT.md supersedes completed raw retired to root
+deleteme; earlier open-failure evidence untouched. Do not replay broad matrices.
+
+## GROW-001 non-Pro-first candidate112 (revision408)
+
+User authorizes a plausible Community356 client update, non-Pro test first
+then Pro install.112/code2101121 packages existing unreleased explicit-Push
+negotiation correction, retaining111 restart and109 credit/wake fixes. No
+new speculative timestamp/seek heuristic or production server dependency.
+Reporter has not supplied version/transport/log/source; no confirmed fix claim.
+
+Non-Pro25/AFTMM and Pro29/AFTKRT ADB are reachable with persisted keys/time0.
+175 has one real CBS News Sunday Morning66345462 capture in progress, single
+MPEG2-TS segment; use existing recording Watch only, never retune/cancel it.
+232 health is unreachable, so no capture/restart/idle claim. Stock175 stays
+untouched. New bounded driver proves actual transport, near-edge->0/backward
+landing, advancing A/V and byte growth; snapshots/restores preferences/power.
+Build/affected gates pending; install Pro only after non-Pro qualification.
+No commit/GitHub release/comment authorized this turn. Both orders408 reviewed.
+
+## RESTART-001 client-only111 installed / user confirmation (revision407)
+
+111/code2101120 final FEA83AE48DA6CDD42661CF884E5B75AA12B9F5FCE4EAFF68CD6D93F9F8BAB412
+installed Pro29 and non-Pro25. Pro package path/hash/version independently
+match. Original Sunday Today66345457/position,249preferences/-450ms retained.
+Final TV48 full-screen1920/no popup, actual reviewed program picture,16.001s
+normal clock/video13763->14695/audio7332->7818 pass. Pro remains playing.
+44's decoder/media passed but channel prompt blocked fullscreen; cancelled
+only the prompt.47 used window-only Full Screen On (wrong oracle), corrected
+with the existing TV playback-OSD command. No channel change approved.
+
+Shared MediaCmd/MediaThread one-shot now handles stopped/ended retained
+ordinary Push FLUSH after completing the reply. Stock negotiated type5 reload
+owns its target/new reader; no guessed seek/private event/runtime MCP plugin.
+Normal playing/paused seeks, Fixed, Pull, DVD excluded;250ms dispatch bound,
+no timer/retry. Retained Media339 and final GSY System->Media343 prove actual
+reconnect and near-zero advancing A/V, then120933/120506ms seeks without another
+reconnect. Stock log45 independently witnesses target0/new reader within201ms.
+Natural SageMC Media340/legacy41 restart shows actual near-zero picture/CC,
+but opened fresh readers already: separate UI/backend controls, not the new
+retained trigger.41 distinct affected JVM/99 host/build/source checks pass.
+
+36 was not a new reproduction (user clarified).37/38 local STOP/public Play
+was an oracle mismatch,42 manual popup setup unqualified. No new field failure
+inferred. VCE-013/MCP-COMPANION-TS-001 deferred/not deployed. Stock175 Sage.jar
+still d76ded98... unchanged, no server plugin/config/FFmpeg/service restart.
+No commit/release requested or performed. Compact results/RESTART-001/RESULT.md
+preserves scopes; completed/corrected raw36..48 retired under root deleteme.
+Original27..30 parent failure evidence remains active. Both orders407 await
+only user's original Pro Stop/Restart confirmation; do not repeat unrelated
+matrices or completed qualification. Do not claim a full IJK/receiver gate.
+
+## RESTART-001 client-only111 candidate (revision406, 2026-11-08)
+
+User clarified no new restart failure occurred now; healthy Pro36/Sunday Today
+read-only snapshot is not another failure. Preserve original27 as authority.
+Stock175 Core hash still d76ded98... unchanged. No plugin/server restart.
+
+Candidate111/code2101120 APK C9EFD93FDF0C2E74BA15FD9D482DA24EB2433027FD5EF58F45B896548F940162
+implements RetainedPushRestartPolicy in shared MediaCmd/MediaThread: actual
+and selected Push only; FLUSH of stopped/ended retained decoder marks one
+request consumed after reply. Existing negotiated type5 reconnect asks stock
+VideoFrame to free/reload its reader at its own position. No inferred zero,
+client seek, new protocol or normal MCP dependency.250ms local dispatch budget;
+no retry/timer. Wire STOP tracks EOS-masked stop; normal playing/paused seeks,
+Pull, Fixed and DVD excluded. Five policy JVM/source/build checks pass.
+
+Non-Pro before/after seam37/38 used local debug STOP but public Play, which
+Core can ignore because its own state is already PLAY. Corrected harness
+uses local PLAY; do not call those gate failures new reproductions. EOF can
+mask local STOP as EOS_STATE; latest candidate accepts both. Physical39 with
+updated APK/harness active, not qualified. Pro still110/-450ms; do not install
+111 before actual zero-restart/positive-seek/reconnect A/V gates pass.
+Next retain settings and use only affected gates; no publication requested.
+
+## RESTART-001 client-only direction (revision405, 2026-11-08)
+
+User requires all fixes to prioritize the client; server/extension changes
+are a last resort after an evidenced client/protocol limitation, then Core
+only after plugin alternatives. Workspace rules and Android workflow now
+state this explicitly. The prior plugin-next action below is superseded:
+VCE-0130.1.1 and MCP-COMPANION-TS-0010.1.7 stay local/deferred, not installed,
+and the175 restart question is superseded. No server changes or restart.
+
+110 surface correction remains installed/qualified; stock zero-restart still
+open. Next inspect stock MiniClientSageRenderer media reconnect/reload and
+Android MiniClientConnection's forceMediaReconnect/installMediaReconnectSocket
+path for a bounded client correction preserving target/GFX and all players.
+Do not infer restart0 from FLUSH or blindly reconnect every seek. Pro user
+changed to growing Sunday Today66345457 (two segments); fresh checkpoint
+required before controls, segment-relative and total times differ legitimately.
+Keep Pro-450ms/preferences and non-Pro state. Both orders405 updated; no
+new runtime/physical pass, commit or publication claimed by this policy edit.
+
+## RESTART-001 surface handoff / plugin gate pending (revision404)
+
+110/code2101119 installed on Pro29 and non-Pro25, independently queried Pro
+base.apk SHA52FEF47DB9527089010D1C2270A5DCDB43F283F857378C08ED4657CDC8FCF93B.
+Pro install/smoke33 passes249prefs/-450ms restored. User had changed to SVU
+66300913 before its fresh checkpoint; do not claim33 replays earlier66300914.
+Non-Pro109 baseline32 reproduces audio639/video0/hidden surface after existing
+debug STOP + public stock Seek/FLUSH + debug PLAY.110 Media3 gate34 and
+independent legacy35 pass with valid/shown surface, advancing A/V, positions
+63696/63669ms and independently reviewed program screenshots.136prefs/power/
+disconnected state restored.31's BUFFERING-only oracle was corrected to accept
+prepared READY as well, not hidden by a production change. Client sub-gate
+complete;82 affected host tests,3 selected Android JVM/build/project/manifest/
+diff/order404 checks pass. No full IJK/receiver/HDMI-wide matrix claimed.
+
+Still OPEN: actual stock zero/EOF restart gap. Optional Client Extension
+VCE-0130.1.1 TS hook and Core MCP MCP-COMPANION-TS-0010.1.7 fixed commissioning
+controls are implemented/local stock-JAR tested, not deployed/physically
+qualified/published. Runtime TS playback needs no MCP; no private fields or
+Core copy. Only explicit0 -> public stock MiniPlayer.seek(1ms), default-off/
+per-UI/lifecycle/other-seek/third-party guards. Actual stock JAR bytecode
+verified target reset omission in zero shortcut.232 authenticated read-only
+activity/companion probes time out; no idle proof.175 restart question pending,
+no authority/window/restart/Core/plugin/config/server mutation inferred.
+Next continue safely available stock plugin before/after, Off/Disable/other-UI/
+restoration gates once authorized/reachable. Do not repeat completed client
+surface prerequisites. Compact results/RESTART-001/RESULT.md; raw original
+failure remains parent active/SEEK-00227..30, current comparisons31..35.
+No commit/release requested or performed. Both orders404 prioritize remaining
+plugin gate before SEEK-002 field recurrence. No Core MCP .jar is required by
+normal runtime workaround; it only keeps test controls bounded and repeatable.
+
+## RESTART-001 new field failure (revision403, 2026-11-08)
+
+User109 Pro175 Law & Order66300914 restart black/past end, then audio-only.
+Snapshot27/diag28/server27 preserve exact state: 65KB replacement payload,
+BUFFERING/playerposition0, hidden invalid surface, raw server3730479ms beyond
+3599999ms guide duration. Stock6:47:12 Seek0 is immediately undone by
+FastMpeg2Reader stale target3598 -> old EOF. Verified seek(0) source does not
+clear private pending target; MiniClient FLUSH carries no target. Separate
+Core parser issue, not inferred from video rendering or proof of credit cause.
+Public Seek1ms29 resumes audio but surface stays invalid. Exact public Close/
+Watch30 recovers original source near19405ms with video1075/audio614/valid
+surface and unchanged-450ms. This is recovery, not permanent stock parser fix.
+
+Client cause: Base.stop hides SurfaceView GONE. ExoStart only restores output
+if decoder IDLE; an intervening FLUSH prepares before PLAY, so that branch is
+missed.110 shared Base.play now restores only GONE with UI-thread/current-
+session/PLAY guards, never background INVISIBLE, no clock/seek/audio changes.
+Source normalization pin reviewed98db97f7 in validator/source test.
+110/code2101119 built, APK SHA256
+52FEF47DB9527089010D1C2270A5DCDB43F283F857378C08ED4657CDC8FCF93B.
+Pro guarded install/smoke33 passes,249preferences restored. Non-Pro109 exact
+debug STOP + public Seek/FLUSH + debug PLAY seam32 reproduces READY/audio639
+but video0 and hidden invalid surface.31's BUFFERING-only oracle was too
+strict; READY is equally prepared, so it is not a distinct product failure.
+110/non-Pro same regression34 currently running after install; then independent
+legacy check. Real STV zero/EOF restart remains separate/unfixed; evaluate
+stock-compatible player hook before Core.175 plugin-only restart question
+pending; no new permission inferred, no Core/config/plugin/restart performed.
+Both execution orders403 prioritize this fresh failure before field follow-up.
+
+## SEEK-002 candidate109 qualified handoff (revision402, 2026-11-08)
+
+Current109/code2101118 is installed on Pro29 and non-Pro25, preserving data.
+Build/independent Pro installed APK SHA256:
+E6D819F66C4CC148B3550C6CD62848070422C290214024A351D32CA1600FD827.
+Ordinary Push wire credit128KiB bounds outstanding pusher work;4MiB ring,
+decoder buffers/keys/targets/audio offsets stay unchanged. Explicit Media3
+NETWORK wake ownership corrects the verified MAX-detector implicit-NONE
+side effect; its relationship to prior TCP loss remains unproven.
+
+Pro stock175: wake-lock acquire/pause/resume/Home/release passes;24 real remote
+SNL seeks and6 public seeks pass (frame237..1086ms/READY436..1309ms).
+Same Ask60581821 continuity comparison that failed108 at121.96s now passes
+150.1s with advancing A/V, client/server gap2178..2410ms (<3000ms), no player
+error and real ENDED at EOF. These are callback/clock gates, not fresh physical
+speaker/HDMI A/V calibration. User's249 preferences/-450ms remain unchanged.
+
+EOF gate's old cleanup accepted Seek without actual playback restoration.
+Read-only24 caught BUFFERING/no A/V at the tail; do not treat that ACK as a
+restored position. Helper now guards exact source, closes/reopens only its
+own ended file, seeks and requires actual advancing A/V/settled position.
+Recovery25 physically verifies original60581821 at1291805ms, offset-450ms.
+Two new helper tests protect source guard and verified EOF restoration.
+
+Non-Pro109 stock175: six same SNL Media3 seeks pass frame309..576ms/
+READY444..753ms; six independent legacy Exo pass251..337ms/516..1060ms.
+Both restore136 preferences, power and disconnected state. Shared wire policy
+tests cover DVD/Pull exclusion, custom payload floor/FLUSH, bytes and EOS.
+IJK/physical HDMI/receiver matrices not rerun; no unrelated-matrix claim.
+33 Core/3 Media3 JVM tests,80 host tests, build/project/task-order validation
+pass. Final manifest/diff checks accompany this handoff.
+
+Compact authoritative evidence: artifacts/results/SEEK-002/RESULT.md; unique
+failure/JVM/TCP and candidate109 reports remain active for field comparison.
+Superseded107/108 installed APK copies retired recoverably to root deleteme,
+matching workspace-relative paths; root CLEANUP_REPORT records hashes.
+.175 Sage.jar remains D76DED981B9BC51E25B9CEC821B6ABEB771B46C2996DC45E453349B5E703FCB0;
+no agent server restart/Core/plugin/config change. No commit/release requested
+or performed. SEEK-002 remains open for recurrence feedback on this installed
+candidate; original post-FLUSH15s case remains a distinct unproven cause.
+Both execution orders402 advance from completed local qualification to field
+recurrence evidence; do not rerun all matrices or add blind recovery.
+
+## SEEK-002 candidate109 (revision401, 2026-11-08)
+
+108/code2101117 installed/independent Pro readback B97D3395.24 remote and6
+public SNL seeks pass: remote frame266..609ms, READY444..934ms, before-state
+to-frame1019..1542ms. Settings249/offset-450 preserved, original file/position
+restored. Active matched-remote15/public16/witness15.128KiB wire cap observed.
+150s continuity17 stopped121.96s: advancing A/V but server clock4954ms behind
+client,3160ms no media header, all replies locally completed/free131072.
+This is not a full fix; EOF gate not reached. No counter/threshold weakening.
+
+Exact upstream Media3 1.11.0 ExoPlayerImpl lines458..471 proves detector MAX
+implicitly switches default wake mode to NONE. Pro dumpsys Wi-Fi had123
+acquired/123 released/no held lock.109/code2101118 explicitly selects
+C.WAKE_MODE_NETWORK only for ordinary server Push; adds normal WAKE_LOCK
+permission. Media3 owns release at pause/free, no Activity-wide lock or
+persistent settings. Relationship to TCP loss unproven; configuration bug is
+verified. Retain128KiB credit. Build session51395 running, targeted Core and
+Media3 timeout policy tests; next guarded Pro install, actual Wi-Fi lock
+acquire/pause/release/Home, matched remote/150s/EOS and idle non-Pro legacy
+smoke. Pro still108 with prior playback restored; do not claim109 installed.
+All current results under active/SEEK-002; update compact result before raw
+retirement. No stock175 Core/plugin/config changes/restarts by agent, no
+commit/publication. Both orders401 keep SEEK-002 first.
+
+## SEEK-002 candidate108 (revision400, 2026-11-08)
+
+107/512KiB is insufficient.35 JVM/77 host checks, independent Pro APK readback
+66F0F52F and20s Push smoke pass,249 settings restored. External175/OpenDCT/
+unrelated-container restart interrupted qualification, not performed by agent.
+Cold UI initially failed fullscreen oracle despite advancing A/V; after Main
+Menu settled, confirmed SageMC OSD and restored60581821/350055ms/-450ms.
+
+107 SNL public12 seeks pass, third remote key waits15.220s before first frame
+(FLUSH->frame427ms/READY582ms), landing+457ms. Synchronized TCP Send-Q393138/
+lost272/backoff3/cwnd1/RTO1920ms; same pusher-lock/checkLazies wait, reply worker
+socket read; client waiting header/all replies locally written/max38ms.
+Original397 post-FLUSH case stays separate. Active public12/remote13/witness12.
+
+108/code2101117 reduces credit128KiB, retains bootstrap/larger forced-payload
+floor,4MiB ring, keys/targets/audio/DVD/Pull/EOS boundaries.33 affected JVM and
+APK build pass; B97D33952C2F973CC5C754C425D115BDF847E7A46FF3283FB639D23104A62EBD.
+Guarded Pro install/smoke14 running. Next original-source remote skips and
+throughput/150s/EOS before success claim. No Core/plugin/config/server restart,
+commit or publication. Both orders400 keep SEEK-002 first.
+
+## SEEK-002 candidate107 (revision399, 2026-11-08)
+
+User resumes task. Bounded Pro current-file18 seeks pass/restored, then matched
+SNL106 test captures a long wait before FLUSH. Stock JVM snapshot proves
+VideoFrame seek blocked on decoderLock held by Pusher in FastPusherReply.
+checkLazies; reply worker socket read. TCP Send-Q477702/unacked330/RTO4112ms.
+Frame313ms/READY464ms after FLUSH; this stage differs from original397's
+post-FLUSH header gap. Preserve both, no claim of identical cause.
+Original Ask This Old House65798976/22432ms was restored to23420ms, playing,
+offset-450ms unchanged. No server changes/restarts. Private witness03 and
+matched-public03 in active/SEEK-002. Remote phase did not run after failure.
+
+Candidate107/code2101116: OrdinaryPushCreditPolicy at shared MediaCmd wire
+reply bounds credit512KiB after first real ordinary payload; ring remains4MiB
+and decode buffers unchanged. INIT/OPENURL reset bootstrap, FLUSH preserves
+learned custom payload floor to avoid forced-size deadlock. DVD/Pull/Direct,
+negative EOS, keys/targets/audio untouched. Diagnostic fields separate last
+completed wire credit from physical player free bytes. Focused JVM/host tests
+and APK build underway. Next install guarded107, verify actual wire credit,
+rerun only affected matched Pro175 public/remote and continuity/EOF plus
+ordinary Push backend smoke. Harness now measures landing from device first
+frame, not request wall wait; excessive request latency fails independently.
+Both orders399 keep SEEK-002 first. No release/commit requested or performed.
+
+## SEEK-002 intermittent client investigation (revision398, 2026-11-08)
+
+User authorizes a client fix, cites working HD200 and confirms most seeks work.
+No Core/plugin/configuration changes. Non-Pro25/AFTMM idle/disconnected before
+test; installed existing106/code2101115 APK3B780F26 and exact-context stock175
+SNL66330911 GSY(System)->Media3 Hardware actual Push baseline. Six forward/back
+seeks including4613031ms: first frame301..720ms, READY495..812ms, clock error
+-463..-3584ms inside existing5s tolerance. Non-reproduction, not a fault fix.
+136 preferences, power and disconnected state restored. Pro never controlled;
+latest read-only state shows actively playing stock175/Push at offset-450ms.
+Asked permission before interrupting that viewer for matched testing.
+
+Next reproduce the rare Pro failure and compare legacy stock-protocol buffer/
+seek behavior; no speculative timer, duplicate seek or backend restart. No
+header for14.8s in the historical incident, then prompt frame. Exact-offset
+bounded SMB reads now8..19ms warm cache, not historical I/O proof. Comskip
+overlaps but cause unproven; current TCP counters cannot attribute the past
+event. Read-only SSH/stock server installation unchanged, no restart. Both
+orders398 prioritize SEEK-002. New helper mcp_push_seek_delivery_test.py and
+focused contracts; active baseline01 retained, compact results updated.
+No new packaged runtime fix/build/version/release claimed.
+
+## SEEK-002 new Push witness (revision397, 2026-11-08)
+
+User reports long pause after skipping106/Pro29/stock175, then pauses playback.
+Read-only source/server/client correlation captures SNL66330911 completed7GB
+TS: server FF02:08:47.872 -> seek/FLUSH48.086..101 -> first replacement bytes
+02:09:03.085 -> first frame03.259/READY03.371. Schema2 incident15.253s with
+14.833s waiting_header, equal completed command/reply counts46557, last local
+Push reply4MiB free, max dispatch167ms/write52ms, zero socket failure and media
+worker waiting in socketRead0 for next header. Actual Push agrees with selected
+dynamic/Push; GSY(System)->Media3 hardware MPEG-2/AC-3, current offset-450ms.
+Server seek/read preparation is implicated; exact disk/parser/lock cause is not
+proven. Final seek refinement is7ms, not the entire15s. postSeek=false is a
+diagnostic heuristic miss contradicted by explicit FLUSH/remote/server evidence.
+No play/pause/seek/settings/server/APK mutations. User PAUSE02:10:15 and later
+server PLAY02:12:30 exist; tool did not send either. Docker Desktop was stopped;
+started/reused SDK container/persistent identity to read ADB. Unique active/
+SEEK-00220261108 evidence retained; compact results/SEEK-002/RESULT.md updated.
+Both orders397 reviewed unchanged: narrowed evidence, no dependency/matrix
+change or speculative fix. No new release/build.
+
+## STALL-002 COMPLETE (revision396, 2026-11-03)
+
+User requests troubleshooting changes/install on Pro. Candidate106/code2101115
+adds numeric per-connection media socket-stage timing, partial-read progress,
+Push data versus empty polls and reply write/flush durations/free bytes. Existing
+optional diagnostics setting gates collection; no protocol/recovery/player/
+BaseMediaPlayerImpl change. Schema2 incidents carry ID/wall/monotonic clocks,
+selected versus actual mode, one bounded off-main media worker stack after1.5s.
+Server correlation/TCP metrics are explicit unavailable; no fake remote ACK.
+First build's preference constant corrected to AndroidPrefStore.STREAMING_MODE.
+Final build,31 selected JVM,90 host/source checks pass. Installed and independent
+Pro base.apk readback SHA3B780F26BAC020F23760D362793EE92E85AB03F67B7956F6C9F512E08C19F087
+match. Final stock175/Pro GSY->Media3 hardware Push23.428s smoke has advancing
+video325->1719/audio216->942/clock6214->29728, packet/reply counters advance,
+zero socket failure and visible normal Today picture.249 preferences restored,
+offset-375ms unchanged; initially disconnected client returned disconnected.
+No server/Core/plugin/restart/power/commit/release. First schema2 long-stall
+field incident awaits recurrence, not a claimed upstream fault correction.
+Compact results/STALL-002/RESULT.md. Raw retirement command was blocked before
+execution; seven owned files/60769487B remain active/STALL-002, recorded in
+root artifacts/CLEANUP_REPORT.md; no second staging copy/deletion. Active
+candidate is source/dev/.../android-tv-debug.apk; canonical firetv104 retained
+as rollback, not relabeled106. Both orders396 return to parent STALL-001.
+
+## STALL-001 OPEN (revision394, 2026-11-03)
+
+Read-only Pro29/AFTKRT105/stock175/SageMC inspection captures reported16.753s
+stall at07:40:56.943..07:41:13.695 CST. Selected dynamic/Push is actual Push,
+GSY(System delegate Media3)/hardware MPEG-2/AC-3. Growing Today66270563;
+user offset now-375ms, unchanged. Byte pipe empty/free4MiB, no Push arrival for
+13.139s, no blocked write, no seek/FLUSH/error/reprepare. Delivery resumes and
+playback recovers naturally. Not the prior stale-duration bug or Pull mismatch.
+Existing stock server/OpenDCT logs and WLAN counters cannot determine whether
+producer, server pusher/storage or network stopped delivering; avoid attribution
+from cumulative errors or unrelated later locator timeout. Minimum evidence in
+active/STALL-001, compact results/STALL-001/RESULT.md. Diagnosis-only: no controls,
+settings, install, restart, Core/plugin change or publication. Both orders394
+prioritize bounded source/send/receive correlation; SEEK-002 still open.
+
+## SEEK-002 OPEN (revision393, 2026-10-30)
+
+User authorizes honoring actual Push. Candidate105/code2101114 adds a pure
+isForcedPush policy for legacy dynamic/explicit push, suppressing Pull containers
+only after MIM Direct precedence. Pull/SMB/Fixed and all prior104 changes stay.
+Build/affected tests and actual same-engine Pro175 seek/150s/EOS gate in progress;
+no publication, keys/audio change or server restart. Physical helper now selects
+Push without temporarily spoofing a different backend's capabilities.
+
+User requests interactive testing: automation has stopped and Pro105 is left
+connected to175 at SageMC My TV. APK071E4F74F0BFE7E93446BD97B81A9C2BEFADAFA87633ED67753B26293AA0E7E0
+is installed; build,22 focused JVM,100 host tests and source validation pass.
+Actual same-engine Push negotiated. First seek FLUSH->frame470ms/READY598ms,
+host observation1093ms, but a snapshot shortly afterward still held position0
+and was21609ms behind the elapsed-adjusted target. Do not claim completed
+latency/landing qualification: distinguish startup settling from a real defect.
+Private preference restoration verified, but automatic re-Watch errored; readback
+confirms normal connected My TV, not restored advancing playback. No subsequent
+playback controls; user may start a recording. Gate01 raw remains active.150s/
+EOF regression was not reached on105; previous104 results stay separate.
+User subsequently reports "Skipping is better" on the installed105. Retain
+that interactive observation separately from the incomplete automated landing/
+continuity gate. Leave the Pro untouched for continued user testing.
+
+Clarification: user selected UI **Push**, not Auto/Pull. UI/MCP persist it as
+legacy `dynamic`; negotiation still advertises Pull containers. Fresh snapshot02
+confirms selected dynamic/actual Pull on175. Treat this as a client selection/
+negotiation mismatch, not user error. The next correction should evaluate honoring
+explicit Push before making unrelated Pull tuning changes. No runtime/settings change.
+
+User reports sometimes-delayed skipping on Pro after104. Read-only ADB/saved
+session captures confirm actual Pull/GSY->Media3/hardware MPEG-2 on175, not the
+previous Push timeout path. Around02:16:20 final forward dispatch16ms, first
+frame7888ms/READY8021ms and17 range opens. Final backward dispatch13ms,
+first4890ms/READY5088ms and11 opens. Buffered control205/220ms; applied targets
+match requests. No corresponding player error. Trace/source put delay in
+out-of-buffer TS range/probe/loading, but precise I/O/CPU/cache contribution
+needs matched measurement. Auto's actual transport differed after reconnect;
+capability code itself matches100/current, so do not blame104 without proof.
+No playback controls, settings/APK change, server restart or implementation in
+this diagnosis. Later optional ui.state query found no registered Pro context;
+did not reconnect it or attribute that to a crash. Preserve raw active/SEEK-002;
+compact report results/SEEK-002/RESULT.md. Both orders392 prioritize bounded
+seek investigation; PUSH-001 remains complete for its150s ordinary-Push scope.
+
+## PUSH-001 COMPLETE (revision391, 2026-10-29)
+
+User requests correction after Pro29/stock175 Media3 Push skips every minute,
+keeps playing and displays incorrect timeline. Actual installed0.5.100/API30;
+private traces show cached2512ms duration, advancing A/V, playing-not-ending
+timeout near62500ms then local reprepare/clamp. Fresh repeat captured15:01:52.
+Final candidate0.5.104/code2101113 replaces ordinary-Push progressive sources on FLUSH
+while retaining the byte pipe, captions/offset wrappers and server anchor. Only
+the stale-duration detector is relaxed for ordinary Push, not DVD/HTTP or genuine
+buffering/no-progress. Existing growing-Pull policy remains independent.
+Stats/web/debug now use the same calibrated Android MediaCmd clock as wire
+replies rather than raw mux-write-end. FinalAPK A0BCBC20909B5CE2B1BCC27ACEB3B3463DBD6D3F89BB9C4AD70A5796BF275BB3
+independently read back from Pro. Actual GSY(System safely delegated to Media3)
+hardware MPEG-2/AC-3 Push on175 passes29405ms tail -> fresh unknown duration,
+150.1s A/V progression,69..82ms server/client gap, zero player error/rebuild
+and real ENDED at EOF.20 focused JVM and affected host/source/build/validation
+gates pass.242 preferences restored, passthrough/-300ms unchanged; independent
+readback confirms original dynamic/Pull playback advancing at restored position.
+No server/Core/plugin or keys change, no commit/push/release. Both orders391
+return to GREEN-001; user can test installed104. Compact authority is
+artifacts/results/PUSH-001/RESULT.md; baseline compact report retained and
+completed/corrected raw retires to root deleteme. Prior GREEN-001 changes preserved.
+
+## GREEN-001 OPEN (revision389, 2026-10-19)
+
+User reboot restores the exact7.1 windowed preview; HDMI06 now shows normal
+picture at unchanged452x254/1280x720 MTK buffer geometry. Failed02 drops257/
+renders13 while clock advances4815ms/audio/buffer continue; working full-screen
+03 renders258/drops0 across4281ms. Postboot07 same GSY/Media3 Hardware/Pull/
+Auto renders~59.7fps but is explicitly full-screen, not preview-cadence proof.
+Current server BG property black. A transient windowed decode/presentation
+state is proven, not its exact trigger or faulty client/driver code. No runtime
+fix or settings/server change justified yet. Keep focused trigger/recovery
+investigation open; retain minimum failure/recovery A/B, no broad matrix.
+
+Read-only non-Pro25/stock175/SageMC inspection confirms Vibe0.5.103 has a green
+small live7.1 Program Info preview in independent HDMI, not merely screencap.
+GSY resolved Media3/actual Pull/hardware OMX.MTK MPEG-2.452x254 surface valid,
+clock835390->840205/video908->921; repeated flushes. User then confirms working
+full-screen; HDMI03 shows normal broadcast/CEA, same backend1920x1080 surface,
+clock968050->972331/video2890->3148. No playback/key/settings change by tools.
+Original1.14.0 also had green preview, but that does not explain away Vibe.
+Root cause remains unproven: investigate windowed composition/surface/resize
+and decoder presentation rather than declaring a stopped stream. No runtime
+fix, server change, restart or new release. Preserve active/GREEN-001 A/B until
+diagnosed; compact artifacts/results/GREEN-001/RESULT.md. Both orders389 put
+this focused task before conditional backlog, not another broad matrix.
+
 ## RELEASE-003 COMPLETE (revision387, 2026-10-19)
 
 Android v0.5.103 published2026-10-19T21:08:09Z at:

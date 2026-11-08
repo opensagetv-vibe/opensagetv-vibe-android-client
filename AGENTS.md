@@ -34,6 +34,20 @@ interruption of recordings/other users still require their own authority.
 These instructions apply to humans, Codex, and other AI tools working in this
 repository.
 
+## Client-first production fixes (highest priority)
+
+For every fix, investigate and implement a safe client-only correction first
+using the existing stock protocol, across affected player backends. Server
+plugins, Client Extension and FFmpeg/MIM runtime changes are a last resort.
+Before using one, record the exact missing client/protocol capability,
+alternatives examined and evidence that a safe client-only fix cannot meet
+the requirement. Convenience or easier testing is not proof. Core follows
+only after both client and stock-compatible plugin alternatives are exhausted.
+Keep extensions optional with safe stock fallback and preserve restart/activity
+guards. MCP is the first boundary for new server test controls, not a required
+normal-playback dependency or a substitute for a client fix. Fix proven defects
+owned by existing plugins without duplicating their functionality in clients.
+
 ## Read first
 
 Before changing code, read:
@@ -254,6 +268,10 @@ Record skipped device tests as SKIPPED, never PASS.
 - Legacy ExoPlayer remains the default until physical commissioning says
   otherwise.
 - Preserve Push/Pull/Fixed behavior and do not merge their ownership semantics.
+- The saved streaming value `dynamic` means **Push**, not Pull or Auto. Always
+  distinguish selected mode from runtime-negotiated transport in diagnostics,
+  tests and user updates. If selected Push actually negotiates Pull, describe
+  that mismatch explicitly; never relabel the user's selection as Pull.
 - Keep Media3, Legacy Exo, IJK, and GSY engines independently testable.
 - Every optional client/server extension must be explicitly capability- or
   version-negotiated. `Auto` must preserve or restore the established stock

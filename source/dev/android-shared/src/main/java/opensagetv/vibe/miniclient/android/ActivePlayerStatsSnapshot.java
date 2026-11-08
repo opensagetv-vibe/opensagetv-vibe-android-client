@@ -177,7 +177,7 @@ final class ActivePlayerStatsSnapshot
                 top, MiniclientApplication.get().getMimDirectSession());
         out.backend = friendlyBackend(top.getClass().getSimpleName());
         out.state = miniState(top.getState());
-        out.positionMs = top.getMediaTimeMillis(media.getLastServerStartPosition());
+        out.positionMs = media.getMediaTimeMillis();
         out.bufferedAheadMs = top.getBufferedPlaybackAheadMillis();
         out.bufferBytes = top.getBufferLeft();
         out.playbackRate = top.getPlaybackRate();

@@ -2,6 +2,127 @@
 
 ## Unreleased
 
+## 0.5.112 - 2026-11-08
+
+- Honor explicit Push selection while retaining its saved `dynamic` value;
+  keep ordinary Pull, SMB, Fixed and negotiated MIM Direct ownership separate.
+- Recreate stale Media3 Push timelines on FLUSH and avoid false minute-period
+  end-of-playback timeouts on healthy server-owned streams. Statistics and
+  diagnostics now use the same calibrated timeline as SageTV replies.
+- Bound outstanding ordinary Push wire credit to128KiB after real payload,
+  preserving physical receive/decoder buffers, EOS and custom payload floors.
+  Keep player-owned Media3 network wake locks scoped to active Push playback.
+- Restore STOP-hidden video surfaces on PLAY and use one negotiated stock
+  reconnect after a stopped/ended retained-Push FLUSH. SageTV owns the reload
+  position; normal playing/paused seeks, Pull, Fixed and DVD are excluded.
+- Improve optional bounded Push-stall reports with packet/reply timings,
+  incident identifiers and one off-main-thread media-worker snapshot. No
+  payload logging, blind command replay or additional automatic seek is added.
+- Qualify the exact112 APK on stock175/non-Pro Media3 and legacy Exo using
+  actual Push/Pull:16 growing-recording seeks, advancing A/V, independent
+  picture/HDMI and settings restoration pass. Pro installation and Push smoke
+  preserve all249settings, the current programme/position and-450ms offset.
+- Keep the existing Android6+/ARM32/ARM64 Dev sideload identity/signature and
+  settings-preserving update. No modified Sage.jar or new server plugin is
+  required. No dependency, remote-key or audio-offset algorithm change.
+- Community356's unsupplied recording and rare field stalls remain unconfirmed;
+  local passes are not proof that every reported case is resolved. Existing
+  unrelated IJK/DVD/receiver/device matrices retain their recorded scope.
+
+### Qualification history (private0.5.104..0.5.112 candidates)
+
+The following notes describe intermediate private builds and their status at
+the time. The qualified final values and publication scope are listed above;
+versions104..111 were not separately published.
+
+- Candidate0.5.112 is qualified on non-Pro and installed on Pro for Community356.
+  Packages the existing unreleased explicit-Push negotiation fix; no new
+  timestamp correction, default change, synthetic seek or server dependency.
+  Add an exact existing-recording/actual-transport/backward-landing A/V gate,
+  with recording-size growth and preference/power restoration witnesses.
+  Stock175/non-Pro actual Media3/legacy Push/Pull pass16 growing rewinds;
+  reviewed picture/HDMI,25 JVM/99 host/build/package checks pass. Pro update/
+  Push smoke restores all249settings/current source/position/-450ms offset.
+  Strengthen update-test restoration to guard changed source and observe
+  real A/V, not just a Seek ACK. No server change or GitHub publication.
+  The reporter's unsupplied recording is not yet a confirmed fixed case.
+
+- Candidate0.5.111: a stopped/ended retained ordinary-Push FLUSH can request
+  one negotiated stock reconnect immediately after its reply. Stock SageTV
+  recreates the reader and owns its reload position; no plugin, new command
+  or client-generated seek target. Normal playing/paused seeks, Pull, Fixed
+  and DVD are excluded. Retained-reader Media3/GSY and natural SageMC Restart
+  Media3/legacy controls pass on stock175/non-Pro; positive seeks still work.
+  Installed on Pro with matching APK hash, preserved settings/-450ms offset
+  and actual full-screen A/V/clock smoke. Await original-user confirmation;
+  no server installation/change, GitHub release or full IJK matrix claimed.
+
+- Prepare0.5.110: shared PLAY restores a STOP-hidden video surface even when
+  FLUSH already prepared the retained decoder before PLAY. Current-session/
+  state guards preserve replacement ownership and background invisibility.
+  Fixes the reproduced audio-only STOP/FLUSH/PLAY seam without changing seek
+  targets, audio offsets or buffers. Stock parser restart-at-zero is a separate
+  issue; reopening a recording is recovery, not proof that it is corrected.
+
+- Candidate0.5.109 is installed on Pro and non-Pro with app data retained.
+  Pro stock175 passes24 remote/6 public seeks,150s advancing A/V/timeline
+  continuity, real EOF and player-owned network-lock pause/Home lifecycle.
+  Non-Pro stock175 passes six Media3 and six independent legacy Exo seeks.
+  Preserve keys, targets, physical receive buffers and user audio offsets.
+  Correct the test helper's post-EOF restoration: require reopened advancing
+  playback at the saved position, not just a public Seek acknowledgement.
+  This is bounded qualification, not proof that every intermittent stall is
+  eliminated; no GitHub release or fresh full HDMI/receiver matrix claimed.
+
+- Prepare0.5.109: explicitly select Media3 network wake ownership for ordinary
+  Push. Media3 1.11 otherwise implicitly selects no wake lock when the
+  stale-duration detector is relaxed. Retain128KiB credit; locks are owned by
+  the player and released on pause/free, not held for the whole Activity.
+  This corrects a verified configuration side effect; its relationship to
+  the observed TCP loss still needs physical qualification.
+
+- Prepare0.5.108: reduce the experimental ordinary-Push credit to128KiB after
+  the512KiB trial still reproduced a remote-skip stall with synchronized TCP
+  loss/retransmission backoff. Keep all existing bootstrap/custom payload/DVD/
+  EOS boundaries. This is not yet a qualified fix; throughput and matched
+  public/remote seek validation are required before a success claim.
+
+- Prepare0.5.107: bound ordinary MiniClient Push credit to512KiB after the
+  first real payload, reducing outstanding server pusher work that can block
+  a seek while network replies drain. Shared wire policy covers all players;
+  physical receive/decoder buffers, keys, targets, audio offsets, DVD and
+  Pull/Direct remain unchanged. Preserve bootstrap/custom forced payload sizes
+  and EOS; diagnostics distinguish completed wire credit from ring capacity.
+  A real Pro175 pre-FLUSH lock/reply-drain delay was captured; qualification
+  is pending, and the earlier post-FLUSH gap remains a separate investigation.
+
+- Prepare0.5.106: extend optional Push-stall diagnostics with numeric receive,
+  partial-payload, command-processing and reply-write timings, zero-byte polls
+  and actual last Push free-space reply. Incident reports add correlation ID,
+  timestamps and one bounded off-main media-thread snapshot. No protocol,
+  buffering, seeking, audio-offset or recovery-policy change. Server/TCP
+  observations remain explicitly unavailable rather than inferred locally.
+  Pro175 final candidate installation/readback and actual Push smoke pass;
+  249 preferences restored. This is not a published release or stall-fix claim.
+
+- Prepare0.5.105: honor the UI Push selection during ordinary MiniClient
+  negotiation instead of allowing stock Core to select Pull file-range reads.
+  Preserve its legacy stored value, MIM Direct ownership precedence and existing
+  Pull/SMB/Fixed behavior. Pro175 physical qualification is pending; retain the
+  prior104 stale-duration/timeline correction rather than replacing it.
+
+- Prepare0.5.104: replace cached ordinary Media3 Push timelines on server FLUSH
+  and retain server-owned EOS instead of treating a stale short decoder duration
+  as playback failure every60seconds. Genuine no-progress/buffering detection,
+  DVD/HTTP/Pull policies, keys and audio offsets remain unchanged. Final
+  Pro175 candidate passes real Push tail/back seek,150seconds continuous A/V,
+  timeline alignment and normal EOF; this is not a published release.
+- Use the same calibrated Android MiniClient Push clock for playback statistics,
+  diagnostic web and debug checks as for SageTV timeline replies, instead of
+  adding decoder position to a raw mux-write-end timestamp after a skip.
+- Independently verify the installed Pro candidate; restore242 user settings,
+  including encoded passthrough/-300ms offset and the original playback mode.
+
 ## 0.5.103 - 2026-10-19
 
 - Publish the exact RESUME-001 qualified sideload APK after green exact-source

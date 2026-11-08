@@ -49,8 +49,15 @@ public final class ConnectionLifecycleDiagnostics
         return trace == null ? -1L : trace.reconnectCount.get();
     }
 
+    public static MediaTransportDiagnostics latestMediaTransport()
+    {
+        Trace trace = latest;
+        return trace == null ? null : trace.mediaTransport;
+    }
+
     static final class Trace
     {
+        final MediaTransportDiagnostics mediaTransport = new MediaTransportDiagnostics();
         private final long generation;
         private final String serverAddress;
         private final long createdMonotonicMs = monotonicMs();
@@ -227,6 +234,7 @@ public final class ConnectionLifecycleDiagnostics
             out.append(";connectionEventQueueDepth=").append(eventQueueDepth);
             out.append(";connectionEventQueueMaxDepth=").append(eventQueueMaxDepth);
             out.append(";connectionEventSequence=").append(eventSequence.get());
+            out.append(";mediaTransportJson=").append(mediaTransport.snapshotJson());
             out.append(";connectionRecent=");
             synchronized (recent)
             {

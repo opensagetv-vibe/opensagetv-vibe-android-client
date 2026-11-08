@@ -5,7 +5,7 @@
         <CheckBoxPreference
             android:defaultValue="true"
             android:key="automatic_push_stall_diagnostics"
-            android:summary="Save a bounded, redacted incident after an already-playing Push stream buffers for at least 1.5 seconds"
+            android:summary="Capture buffer, packet/reply timing and one media-thread snapshot after Push buffers for at least 1.5 seconds; never changes playback"
             android:title="Automatic Push-stall diagnostics" />
     </PreferenceCategory>
 

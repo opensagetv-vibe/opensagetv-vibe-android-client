@@ -26,6 +26,8 @@ import java.util.concurrent.Executors;
 
 import opensagetv.vibe.miniclient.ConnectionLifecycleDiagnostics;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
+import opensagetv.vibe.miniclient.MediaTransportDiagnostics;
+import opensagetv.vibe.miniclient.android.prefs.AndroidPrefStore;
 import opensagetv.vibe.miniclient.android.video.PlaybackHealthSnapshot;
 import opensagetv.vibe.miniclient.android.video.PlaybackHealthSource;
 import opensagetv.vibe.miniclient.net.PushBufferDataSource;
@@ -59,6 +61,23 @@ public final class PushStallDiagnosticRecorder
     private boolean postSeek;
     private long startedMs;
     private long recoveredMs;
+    private IncidentEvidence incident;
+    private boolean threadCaptureScheduled;
+
+    /** Filled on the existing single I/O executor before that incident is written. */
+    private static final class IncidentEvidence
+    {
+        final String id = UUID.randomUUID().toString();
+        final long wallMs = System.currentTimeMillis();
+        final long monotonicMs = SystemClock.elapsedRealtime();
+        final long generation = ConnectionLifecycleDiagnostics.latestGeneration();
+        final MediaTransportDiagnostics transport = ConnectionLifecycleDiagnostics.latestMediaTransport();
+        final String selectedMode;
+        long threadWallMs;
+        String threadStack = "not_captured";
+        String threadTransport = "null";
+        IncidentEvidence(String selectedMode) { this.selectedMode = selectedMode; }
+    }
 
     private final Runnable sampler = new Runnable()
     {
@@ -124,6 +143,8 @@ public final class PushStallDiagnosticRecorder
         startedMs = SystemClock.elapsedRealtime();
         recoveredMs = 0L;
         samples.clear();
+        incident = new IncidentEvidence(selectedMode());
+        threadCaptureScheduled = false;
         capture();
         main.postDelayed(sampler, SAMPLE_MS);
     }
@@ -143,12 +164,17 @@ public final class PushStallDiagnosticRecorder
         StringBuilder out = new StringBuilder(768);
         out.append('{');
         number(out, "elapsedMs", now - startedMs);
+        number(out, "wallMs", System.currentTimeMillis());
+        number(out, "monotonicMs", now);
         bool(out, "recovering", recovering);
         bool(out, "postSeek", postSeek);
         number(out, "playerState", player.getState());
         number(out, "positionMs", safeMediaTime());
         number(out, "bufferedAheadMs", player.getBufferedPlaybackAheadMillis());
-        number(out, "advertisedFreeBytes", player.getBufferLeft());
+        MediaTransportDiagnostics transport = incident.transport;
+        number(out, "advertisedFreeBytes", transport == null ? -1
+                : transport.lastCompletedPushCreditBytes());
+        number(out, "playerBufferFreeBytes", player.getBufferLeft());
         text(out, "player", player.getClass().getSimpleName());
         text(out, "videoDecoder", optional("getSelectedVideoDecoderForDebug"));
         text(out, "audioDecoder", optional("getSelectedAudioDecoderForDebug"));
@@ -162,6 +188,25 @@ public final class PushStallDiagnosticRecorder
         }
         number(out, "connectionGeneration", ConnectionLifecycleDiagnostics.latestGeneration());
         number(out, "connectionReconnects", ConnectionLifecycleDiagnostics.latestReconnectCount());
+        out.append("\"mediaTransport\":").append(transport == null ? "null" : transport.snapshotJson()).append(',');
+        // One bounded stack snapshot only after a meaningful stall; never
+        // enumerate every thread or sample stacks on the media/main thread.
+        if (!threadCaptureScheduled && now - startedMs >= MINIMUM_INCIDENT_MS && transport != null)
+        {
+            threadCaptureScheduled = true;
+            final IncidentEvidence evidence = incident;
+            final MediaTransportDiagnostics observedTransport = transport;
+            IO.execute(new Runnable()
+            {
+                @Override public void run()
+                {
+                    if (!enabled()) return;
+                    evidence.threadWallMs = System.currentTimeMillis();
+                    evidence.threadTransport = observedTransport.snapshotJson();
+                    evidence.threadStack = observedTransport.workerStack();
+                }
+            });
+        }
         number(out, "readCalls", push.readCalls);
         number(out, "readRequestedBytes", push.readRequestedBytes);
         number(out, "readWaitMs", push.readWaitMs);
@@ -202,6 +247,7 @@ public final class PushStallDiagnosticRecorder
         final ArrayList<String> copy = new ArrayList<String>(samples);
         final long incidentDuration = stallDuration;
         final boolean incidentPostSeek = postSeek;
+        final IncidentEvidence evidence = incident;
         active = false;
         recovering = false;
         samples.clear();
@@ -209,7 +255,7 @@ public final class PushStallDiagnosticRecorder
         {
             @Override public void run()
             {
-                writeIncident(copy, outcome, incidentDuration, incidentPostSeek);
+                writeIncident(copy, outcome, incidentDuration, incidentPostSeek, evidence);
             }
         });
     }
@@ -223,7 +269,7 @@ public final class PushStallDiagnosticRecorder
     }
 
     private void writeIncident(List<String> evidence, String outcome, long duration,
-            boolean expectedPostSeek)
+            boolean expectedPostSeek, IncidentEvidence incidentEvidence)
     {
         try
         {
@@ -234,10 +280,20 @@ public final class PushStallDiagnosticRecorder
             File target = new File(directory, "push-stall-" + utc() + "-"
                     + UUID.randomUUID().toString().substring(0, 8) + ".jsonl");
             StringBuilder value = new StringBuilder(evidence.size() * 768 + 256);
-            value.append("{\"schema\":1,\"outcome\":\"").append(outcome)
+            value.append("{\"schema\":2,\"incidentId\":\"").append(incidentEvidence.id)
+                    .append("\",\"startedWallMs\":").append(incidentEvidence.wallMs)
+                    .append(",\"startedMonotonicMs\":").append(incidentEvidence.monotonicMs)
+                    .append(",\"connectionGeneration\":").append(incidentEvidence.generation)
+                    .append(",\"selectedMode\":\"").append(incidentEvidence.selectedMode)
+                    .append("\",\"actualTransport\":\"Push\",\"outcome\":\"").append(outcome)
                     .append("\",\"durationMs\":").append(duration)
                     .append(",\"postSeek\":").append(expectedPostSeek)
-                    .append(",\"sampleCount\":").append(evidence.size()).append("}\n");
+                    .append(",\"sampleCount\":").append(evidence.size())
+                    .append(",\"threadSnapshotWallMs\":").append(incidentEvidence.threadWallMs)
+                    .append(",\"threadTransport\":").append(incidentEvidence.threadTransport)
+                    .append(",\"mediaWorkerStack\":\"").append(escape(incidentEvidence.threadStack))
+                    .append("\",\"serverCorrelation\":\"unavailable_client_only\"")
+                    .append(",\"tcpMetrics\":\"unavailable_no_portable_socket_api\"}\n");
             for (String sample : evidence) value.append(sample).append('\n');
             FileOutputStream output = new FileOutputStream(temporary);
             try
@@ -260,6 +316,16 @@ public final class PushStallDiagnosticRecorder
     {
         try { return player.getMediaTimeMillis(0L); }
         catch (RuntimeException ignored) { return -1L; }
+    }
+
+    private String selectedMode()
+    {
+        String mode = preferences.getString(AndroidPrefStore.STREAMING_MODE, "dynamic");
+        if ("dynamic".equalsIgnoreCase(mode) || "push".equalsIgnoreCase(mode)) return "Push";
+        if ("fixed".equalsIgnoreCase(mode)) return "Fixed";
+        if ("pull".equalsIgnoreCase(mode)) return "Pull";
+        if ("smb_direct".equalsIgnoreCase(mode) || "smb_auto".equalsIgnoreCase(mode)) return "SMB";
+        return "Unknown";
     }
 
     private String optional(String methodName)

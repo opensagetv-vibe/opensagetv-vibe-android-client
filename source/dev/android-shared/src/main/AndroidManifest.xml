@@ -6,6 +6,9 @@
         android:required="true" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Ordinary LAN Push needs low-latency network wake ownership while the
+         player is actively playing/buffering. Media3 releases it on pause/free. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- SageTV/MIM serves configured LAN media and capabilities over HTTP.

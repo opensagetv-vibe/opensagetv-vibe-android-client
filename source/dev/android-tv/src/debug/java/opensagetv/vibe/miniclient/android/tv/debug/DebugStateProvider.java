@@ -327,7 +327,7 @@ final class DebugStateProvider
         long serverFlushMonotonicMs = mediaCmd.getLastServerFlushMonotonicMs();
         long serverAnchorMonotonicMs = mediaCmd.getLastServerAnchorMonotonicMs();
         long nowMonotonicMs = System.nanoTime() / 1000000L;
-        long sageTimelineMs = player.getMediaTimeMillis(mediaCmd.getLastServerStartPosition());
+        long sageTimelineMs = mediaCmd.getMediaTimeMillis();
         out.append(";playerClass=").append(safe(player.getClass().getName()));
         out.append(";state=").append(player.getState());
         out.append(";mediaTimeMs=").append(sageTimelineMs);

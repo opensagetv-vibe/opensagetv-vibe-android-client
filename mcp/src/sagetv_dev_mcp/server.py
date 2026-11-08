@@ -204,7 +204,7 @@ def _compact_state(state: dict) -> dict:
         "connectionEventQueuedCount", "connectionEventDequeuedCount",
         "connectionReconnectCount", "connectionGfxQueueDepth",
         "connectionGfxQueueMaxDepth", "connectionEventQueueDepth",
-        "connectionEventQueueMaxDepth", "connectionEventSequence", "connectionRecent",
+        "connectionEventQueueMaxDepth", "connectionEventSequence", "connectionRecent", "mediaTransportJson",
         "appVisibilityState", "backgroundTransitionGeneration", "pausedByBackground",
         "wasPlayingBeforeBackground", "backgroundMonotonicMs", "foregroundMonotonicMs",
         "backgroundPauseRequestCount", "backgroundPlayRequestCount",

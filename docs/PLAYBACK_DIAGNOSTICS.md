@@ -1,5 +1,146 @@
 # Android playback diagnostic standard
 
+## Growing recording cannot rewind from live edge (GROW-001)
+
+Community356 is not a confirmed instance of RESUME-001 or RESTART-001. The
+reporter already tried Vibe but supplied no version, actual transport or
+diagnostic/sample.112 packages the existing unreleased105 explicit-Push
+negotiation correction: selected Push (`dynamic`) hides ordinary Pull formats
+so stock Core owns seeks instead of silently selecting Android range reads.
+This applies before backend selection; MIM Direct precedence and Pull/SMB/
+Fixed paths remain unchanged. Never force every user to Push or label a local
+test as proof that the reporter's unsupplied file is fixed.
+
+Run `scripts/mcp_growing_rewind_test.py` on the exact idle non-Pro25/stock175
+with an explicit current MediaFile ID, player, Push/Pull and new output under
+`artifacts/active/GROW-001/`. It Watches only an already-recording single
+segment; it never tunes, creates, pins or cancels a recording. Independent
+public metadata must show the same writer and increasing byte size. It seeks
+near the current edge, then0,60s,15s and requires actual advancing A/V plus
+the correct clock/transport, not a public Seek ACK. Preferences, captions and
+temporary awake settings are restored even on failure. `--hold-seconds 30`
+publishes an identity/expiry marker for an independent host HDMI capture.
+
+Get the affected user's diagnostic ZIP immediately after a failed rewind and
+compare that same file during recording and after completion. Preserve original
+TS bytes when inspecting timestamp faults: remuxing/re-encoding can remove the
+fault. Do not modify stock Core, history or recording schedules to mask it.
+
+## Retained-player restart (RESTART-001)
+
+After ordinary Push Stop/EOF, stock FastMpeg2Reader can retain an earlier
+pending target when asked to seek0. This is separate from a hidden video
+surface.111 retains110's PLAY visibility repair and adds a shared, one-shot
+reconnect only for a stopped/ended retained Push player receiving FLUSH.
+The reply is completed first; negotiated stock type5 reconnect lets VideoFrame
+capture its own reload position and recreate the reader. The client never
+guesses zero or sends a replacement seek. MCP/Client Extension is not required
+for normal recovery; test automation alone uses the existing public bridge.
+
+Require selected Push (`dynamic`) AND actual Push. Normal playing/paused seeks,
+Pull/SMB, Fixed and DVD are excluded. No timer/retry or continuous monitoring;
+an expired250ms local dispatch or unsupported/encrypted reconnect leaves the
+existing path unchanged. Correlate `retained_push_restart_reconnect` with the
+server reload/new reader, resulting actual A/V and position, not merely ACKs.
+
+`mcp_push_restart_reconnect_test.py` targets an idle commissioned device and
+the exact original recording. Its local STOP/PLAY seam qualifies the retained
+decoder path; `--natural-stv-restart` separately selects the known SageMC EOF
+popup's Restart entry. Natural Restart can already open a fresh reader, so
+that control alone does not prove the new reconnect ran. Capture its event.
+Do not use public Play after local debug STOP as proof of a PLAY wire command:
+Core can already be in PLAY and legitimately do nothing. A manual Stop popup
+depends on STV settings; missing popup is an unqualified setup, not a failed
+decoder. Never alter settings or approve channel/tuner interruption to force it.
+
+## Ordinary Push cached duration and minute-period skips (PUSH-001)
+
+`Player stuck playing without ending for 60000 ms` is not an I/O timeout.
+Compare the actual decoder epoch duration/position, server FLUSH and output
+events before attributing it to a decoder or network. The Pro175 report retained
+a2512ms progressive duration after seeking away from a short tail, rendered
+healthy media beyond it and repeatedly triggered reprepare. Ordinary Push must
+create a fresh ProgressiveMediaSource on FLUSH, retaining the server-owned byte
+pipe and caption/offset wrappers. Its duration is not the recording's timeline.
+Only the inappropriate playing-not-ending detector is relaxed for non-DVD
+server Push; real no-progress/buffering/suppression and server EOS remain active.
+Growing Pull retains its separate proven-growth policy; DVD and HTTP are excluded.
+
+Stats, diagnostic web and debug position checks use the Android MiniClient's
+`MediaCmd.getMediaTimeMillis()` — the same calibrated anchor as wire replies.
+`getLastServerStartPosition()` is the raw mux-write-end diagnostic, not a decoder
+epoch base. Do not add decoder position to that raw value to verify landing.
+This changes no Sage.jar or server API and does not manufacture a corrective seek.
+
+Run `scripts/mcp_push_epoch_timeout_test.py --force-push --install-apk <APK>
+--output artifacts/active/PUSH-001/<unique-run>.json` in the standard SDK container
+with paired workspace/env, commissioned device/server aliases and an explicit
+`SAGETV_ARTIFACT_DIR` under that active task. Start with an affected long recording.
+The existing real-MCP tools scope installation, context and playback; public
+Core MCP handles media-relative seeking. The helper fills a short final epoch,
+seeks back, compares advancing A/V and client/server timelines for150seconds,
+requires a real decoder ENDED event at final EOF and restores exact settings and
+the prior recording position. It never tunes, clears history or restarts a server.
+
+The saved Push selection remains historically `dynamic`. From candidate105,
+ordinary Push suppresses Pull-container advertisement so stock Core cannot
+silently prefer file-range reading. MIM Direct keeps its earlier ownership
+override; Pull/SMB/Fixed retain separate policies. Explicit Push may require
+stock server remux/transcode for unsupported source containers; it is not a
+promise of zero server work for every format. The helper selects real Push with
+the original backend throughout connection and Watch, never spoofing a different
+engine's capabilities. Require actual Push; a Pull fallback is not a pass.
+`--seek-latency` additionally measures four forward/back targets, real FLUSH,
+first-frame/READY events and target continuity, separately from request ACK.
+Restore exact preferences and reconnect their original mode afterward.
+Unique failure evidence stays active until its correction and written result.
+
+For an intermittent ordinary-Push seek, use
+`scripts/mcp_push_seek_delivery_test.py --media-file-id <exact-id> --output
+artifacts/active/SEEK-002/<unique-run>.json` through the commissioned SDK
+container. It refuses an already-connected test device, verifies exact client/
+UI/source and actual Push, issues each target once, and compares fresh FLUSH,
+frame/READY and settled clocks. Settings and power restore independently of
+session-exit failure. This is a bounded same-source baseline, not proof that a
+rare failure is fixed. Do not interrupt an active viewer on another device or
+infer historical storage/network health from later successful reads/counters.
+
+Candidate108 additionally bounds ordinary Push **wire credit** to128KiB after
+the first real payload. This is separate from `PUSH_BUFFER_LIMIT` (maximum
+packet size), the physical4MiB receive ring, and the backend's decoded buffer.
+Stock MiniPlayer drains pipelined replies under its decoder lock; a matched
+Pro175 witness caught that lock blocking seek while TCP had477702B queued.
+Smaller credits bound outstanding work but do not eliminate network loss or
+prove that every starvation incident has the same cause. All backends inherit
+this shared MediaCmd policy; DVD, Pull/SMB/Direct, startup probes and EOS retain
+their original behavior. A server-forced payload larger than128KiB becomes
+the credit floor once observed, and that floor survives FLUSH to avoid a poll
+deadlock. INIT/OPENURL resets it. Diagnostics report completed local wire
+credit separately from `playerBufferFreeBytes`; neither is a remote TCP ACK.
+
+When relaxing Media3 stuck-duration detection, explicitly retain ordinary-Push
+network wake ownership. Media3 1.11 otherwise chooses WAKE_MODE_NONE when a
+detector is MAX. Candidate109 uses player-owned WAKE_MODE_NETWORK, with the
+normal WAKE_LOCK permission, only for ordinary server Push. Verify playback
+acquires and pause/Home/free release the Wi-Fi lock; the system broker's UID
+can be1000, so identify the application by its WorkSource UID. Do not add an
+Activity-wide lock or change saved Android power settings. This fixes the
+verified configuration side effect, not a proven cause of all TCP loss.
+
+Explicit `--current-playback` compares the selected connected Push session
+without reconnecting or changing preferences. `--switch-recording` temporarily
+Watches the exact supplied recording then restores the original file/position.
+Use only within an authorized test on that selected device, never another UI.
+`--input remote` exercises actual Android Left/Right key dispatch rather than
+only public Seek. Bound repeats with `--cycles 1` through `--cycles 4`.
+Idle-device `--player exoplayer`/`media3`/`gsyplayer` comparisons checkpoint and
+restore the backend preference; current-playback mode rejects backend changes.
+The helper refuses a changed external source during restoration. It measures
+landing from the device's first frame; time spent waiting for a seek cannot
+be counted as decoded playback. Excessive request-to-frame delay fails as a
+separate latency gate. A slow marker permits external bounded read-only JVM/
+TCP capture; do not infer a disk or network cause from a client header wait.
+
 ## Initial scheduled start and watched-position resume (RESUME-001)
 
 SageTV owns the requested start, including pre-padding and its saved watched
@@ -897,6 +1038,31 @@ media bytes, media path or URI, server address, credentials, or client ID.
 Manual diagnostic ZIPs and Always-mode logs include the retained incidents.
 This is evidence only: it does not change bytes, free-space replies, seek
 destinations, buffering policy, or recovery behavior.
+
+From106, schema2 also records an incident UUID, wall/monotonic start clocks,
+selected mode (`dynamic` means Push) and actual Push transport. Each sample has
+`mediaTransport`: waiting_header, reading_payload with expected/received byte
+counts, dispatching, writing_reply, or a completed/closed stage. Separate ages
+and counters distinguish real Push media from zero-byte polls. Last/max command
+processing and reply-write times and the last encoded Push free-space value
+show whether a delay is before input, inside dispatch, or while returning a
+reply. Local write/flush completion is NOT a remote acknowledgment. Snapshots
+mark concurrent transitions `consistent=false` instead of locking the socket.
+
+Only a meaningful incident schedules one off-main media-worker stack (at most
+16 frames); no whole-process enumeration or healthy-playback stack polling.
+The existing diagnostics switch/default,30s/140sample/fourfile bounds and
+manual/web/SMB/server export paths remain. The debug/MCP snapshot additionally
+exposes `mediaTransportJson` on demand. Disabling prevents incident persistence
+and turns off socket observations at the next loop boundary; no settings are
+migrated. Payload bytes are counted, never retained by this observer.
+
+`serverCorrelation=unavailable_client_only` and
+`tcpMetrics=unavailable_no_portable_socket_api` are honest limitations, not
+zero measurements. Correlate an incident ID/wall time with existing stock MCP
+read-only UI state and external server/source/TCP observations where available.
+No Core patch or new normal-playback MCP dependency is introduced. The106
+diagnostic enhancement does not itself fix the13s upstream delivery gap.
 
 The on-screen **Playback Stats** panel is the preferred first look during a
 physical reproduction. Use compact mode while watching for a symptom and

@@ -2290,6 +2290,23 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     }
 
                     PlaybackDebugTrap.record("flush_reprepare_before", Media3MediaPlayerImpl.this);
+                    // ProgressiveMediaSource retains its non-placeholder timeline
+                    // after release. Reattaching it after a server FLUSH can carry
+                    // a former near-EOF duration (observed: 2512 ms) into a new
+                    // decoder epoch, clamp local seeks and trigger a false end
+                    // timeout every minute. Keep the same server-owned byte pipe
+                    // and caption/offset policy, but obtain a fresh timeline.
+                    final Media3PushDataSource pushSource = (Media3PushDataSource) dataSource;
+                    mediaSource = new ProgressiveMediaSource.Factory(
+                            new DataSource.Factory()
+                            {
+                                @Override public DataSource createDataSource()
+                                {
+                                    return pushSource;
+                                }
+                            }, withPassthroughOffset(createCaptionAwareExtractorsFactory(false)))
+                            .createMediaSource(mediaSource.getMediaItem());
+                    PlaybackDebugTrap.record("push_flush_fresh_source", Media3MediaPlayerImpl.this);
                     player.setMediaSource(mediaSource, true);
                     player.prepare();
                     PlaybackDebugTrap.record("flush_reprepare_after", Media3MediaPlayerImpl.this);
@@ -2563,23 +2580,40 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
         ExoPlayer.Builder builder = new ExoPlayer.Builder(context.getContext(), renderersFactory);
 
-        if (Media3GrowingPlaybackTimeoutPolicy.shouldRelaxPlayingNotEnding(
+        boolean serverOwnedPush = Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(
+                pushMode, dvdPushMode, httpls);
+        if (serverOwnedPush)
+        {
+            // Media3 1.11.0 implicitly selects WAKE_MODE_NONE when any stuck
+            // detector is set to Integer.MAX_VALUE. Relaxing the invalid Push
+            // duration detector must not also relinquish active playback's
+            // CPU/network wake ownership. Let Media3 scope both locks to
+            // READY/BUFFERING with playWhenReady=true, releasing on pause/free.
+            // This is not an Activity-wide lock or a persistent Wi-Fi setting.
+            builder.setWakeMode(C.WAKE_MODE_NETWORK);
+            PlaybackDebugTrap.record("server_push_network_wake_mode", this);
+        }
+        if (serverOwnedPush || Media3GrowingPlaybackTimeoutPolicy.shouldRelaxPlayingNotEnding(
                 pushMode, httpls,
                 dataSource instanceof Media3PullDataSource
                         && ((Media3PullDataSource) dataSource).isSmbModeConfigured(),
                 preparedGrowingMediaServerPull))
         {
-            // A recording-in-progress can render appended TS bytes beyond the
+            // A recording-in-progress or server-owned Push epoch can render TS bytes beyond the
             // finite duration Media3 discovered at its first OPEN. Media3 1.11
             // otherwise mistakes that healthy state for a player that failed
             // to end, raises ERROR_CODE_TIMEOUT after 60 seconds, and forces a
             // TS reprepare that can land at an earlier sync point. Keep the
             // buffering/no-progress/suppression detectors at their defaults;
-            // only this stale-duration detector is inapplicable to growing Pull.
+            // only this stale-duration detector is inapplicable. Ordinary Push
+            // completion still comes from SageTV EOS/STOP, not a guessed period.
             builder.setStuckPlayingNotEndingTimeoutMs(
                     Media3GrowingPlaybackTimeoutPolicy.PLAYING_NOT_ENDING_TIMEOUT_MS);
-            PlaybackDebugTrap.record("growing_pull_stale_duration_timeout_relaxed", this);
-            log.logDebug("Growing Pull stale-duration timeout relaxed; other stuck-player detectors retained");
+            PlaybackDebugTrap.record(serverOwnedPush
+                    ? "server_push_stale_duration_timeout_relaxed"
+                    : "growing_pull_stale_duration_timeout_relaxed", this);
+            log.logDebug((serverOwnedPush ? "Server Push" : "Growing Pull")
+                    + " stale-duration timeout relaxed; other stuck-player detectors retained");
         }
 
         if (dvdPushMode)

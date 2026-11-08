@@ -538,7 +538,7 @@ final class DebugAsyncPlayerChecks
     {
         // This is the same value returned by MediaCmd.MEDIACMD_GETMEDIATIME to SageTV,
         // which is what drives SageTV's displayed playback timeline/time bar.
-        return player.getMediaTimeMillis(mediaCmd.getLastServerStartPosition());
+        return mediaCmd.getMediaTimeMillis();
     }
 
     private static long currentPlayerPositionMs(MediaCmd mediaCmd, MiniPlayerPlugin player)

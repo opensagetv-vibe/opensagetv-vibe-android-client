@@ -12,6 +12,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestEnvironmentWorkflowTests(unittest.TestCase):
+    def test_client_first_fixes_require_proof_before_server_workaround(self):
+        marker = "## Client-first production fixes (highest priority)\n"
+        blocks = []
+        for name in ("AGENTS.md", "WORKFLOW.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertIn(marker, text, name)
+            block = text.split(marker, 1)[1].split("\n## ", 1)[0].strip()
+            for requirement in (
+                "safe client-only correction first",
+                "across affected player backends",
+                "runtime changes are a last resort",
+                "exact missing client/protocol capability",
+                "Convenience or easier testing is not proof",
+                "Core follows",
+                "not a required\nnormal-playback dependency",
+            ):
+                self.assertIn(requirement, block, name)
+            blocks.append(block)
+        self.assertEqual(blocks[0], blocks[1])
+        # Standalone checkouts still enforce the rule without a parent workspace.
+        workspace_rules = ROOT.parent.parent / "AGENTS.md"
+        if workspace_rules.is_file():
+            text = workspace_rules.read_text(encoding="utf-8")
+            self.assertIn("### Client-first production fixes (highest priority)", text)
+            self.assertIn("For every Vibe task", text)
+            self.assertIn("a safe client-only correction cannot satisfy", text)
+
     def test_all_present_vibe_project_task_workflows_share_server_boundary_policy(self):
         expected = None
         checked = 0

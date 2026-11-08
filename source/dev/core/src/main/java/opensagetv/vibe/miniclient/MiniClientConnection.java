@@ -1312,7 +1312,14 @@ public class MiniClientConnection implements SageTVInputCallback
                             propVal = capabilityProfile.pushFormats() + "," +
                                     capabilityProfile.pullFormats();
                         }
-                        else if (!canDoPullStreaming
+                        // MIM Direct above owns its source even though it uses
+                        // a Pull-shaped Core session. Ordinary explicit Push
+                        // must instead hide Pull containers: otherwise stock
+                        // Core may choose file-range reads despite the UI mode.
+                        // Leave Fixed's existing remux/transcode and forced
+                        // Pull/SMB capability paths unchanged below.
+                        else if (StreamingModePolicy.isForcedPush(client.properties().getStreamingMode())
+                                || !canDoPullStreaming
                                 || ((client.properties().getFixedEncodingPreference().equalsIgnoreCase("always")
                                 || client.properties().getFixedRemuxingPreference().equalsIgnoreCase("always"))
                                 && "fixed".equalsIgnoreCase(client.properties().getStreamingMode())))
@@ -2705,27 +2712,55 @@ public class MiniClientConnection implements SageTVInputCallback
             try {
                 os = connectionWorkers.mediaSocket().getOutputStream();
                 is = new java.io.DataInputStream(connectionWorkers.mediaSocket().getInputStream());
+                final MediaTransportDiagnostics transport = connectionDiagnostics.mediaTransport;
+                transport.socketOpened();
                 while (alive) {
                     byte[] cmd = new byte[4];
                     int command, len;
                     int retval;
                     byte[] retbuf = new byte[16];
+                    // Reuse the existing diagnostics preference. No timer or
+                    // protocol change; disabled mode keeps readFully unchanged.
+                    final boolean observeTransport = client.properties().getBoolean(
+                            PrefStore.Keys.automatic_push_stall_diagnostics, true);
+                    transport.setEnabled(observeTransport);
+                    transport.waitingForHeader();
                     is.readFully(cmd);
 
                     command = (cmd[0] & 0xFF);
                     len = ((cmd[1] & 0xFF) << 16) | ((cmd[2] & 0xFF) << 8) | (cmd[3] & 0xFF);
+                    transport.headerReceived(command, len);
                     connectionDiagnostics.mediaCommand(command);
                     if (cmdbuffer.length < len) {
                         cmdbuffer = new byte[len];
                     }
-                    is.readFully(cmdbuffer, 0, len);
+                    transport.readPayload(is, cmdbuffer, len, observeTransport);
+                    int pushBytes = observeTransport && command == MediaCmd.MEDIACMD_PUSHBUFFER && len >= 4
+                            ? MediaTransportDiagnostics.firstWord(cmdbuffer) : -1;
+                    transport.payloadCompleted(pushBytes);
 
                     retval = myMedia.ExecuteMediaCommand(command, len, cmdbuffer, retbuf);
+                    transport.dispatchCompleted();
 
                     if (retval > 0) {
+                        int pushFree = observeTransport && command == MediaCmd.MEDIACMD_PUSHBUFFER && retval >= 4
+                                ? MediaTransportDiagnostics.firstWord(retbuf) : -1;
+                        transport.replyStarted(retval, pushFree);
                         os.write(retbuf, 0, retval);
                         os.flush();
+                        transport.replyCompleted();
                         connectionDiagnostics.mediaReply(command);
+                    }
+                    if (command == MediaCmd.MEDIACMD_FLUSH
+                            && myMedia.takeRetainedPushRestartReconnect()) {
+                        // FLUSH has been fully acknowledged above. Reuse the
+                        // negotiated stock reconnect; VideoFrame captures its
+                        // own pending seek position and recreates the reader.
+                        // No guessed target, private event or MCP dependency.
+                        boolean accepted = requestTransportRenegotiationReconnect();
+                        PlaybackDebugEventBridge.recordAsyncDetailed(
+                                "retained_push_restart_reconnect", null,
+                                "accepted=" + accepted + ";serverOwnsPosition=true");
                     }
                     // SageTV closes the old player socket after it receives the DEINIT reply,
                     // then waits for a freshly registered MiniPlayer media socket before it
@@ -2738,8 +2773,10 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                 }
             } catch (Exception e) {
+                connectionDiagnostics.mediaTransport.failed();
                 log.logError("Error w/ Media Thread", e);
             } finally {
+                connectionDiagnostics.mediaTransport.socketClosed();
                 try {
                     os.close();
                 } catch (Exception e) {

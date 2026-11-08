@@ -9,6 +9,16 @@ import static org.junit.Assert.assertTrue;
 public class Media3GrowingPlaybackTimeoutPolicyTest
 {
     @Test
+    public void ordinaryPushUsesServerEndRatherThanGuessedDecoderDuration()
+    {
+        assertTrue(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(true, false, false));
+        assertFalse(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(true, true, false));
+        assertFalse(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(true, false, true));
+        assertFalse(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(false, false, false));
+        assertFalse(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxServerOwnedPush(false, true, false));
+    }
+
+    @Test
     public void relaxesOnlyProvenGrowingMediaServerPull()
     {
         assertTrue(Media3GrowingPlaybackTimeoutPolicy.shouldRelaxPlayingNotEnding(

@@ -77,6 +77,9 @@ public class MediaCmd
     private volatile int sageTvClosedCaptionState;
     private volatile boolean sageTvClosedCaptionStateReceived;
     private boolean pushMode;
+    private final OrdinaryPushCreditPolicy ordinaryPushCredit = new OrdinaryPushCreditPolicy();
+    private final RetainedPushRestartPolicy retainedPushRestart = new RetainedPushRestartPolicy();
+    private boolean retainedPlayerStopped;
     private boolean dvdSessionPending;
     private long dvdPushedBytes;
     private long dvdEpochPushedBytes;
@@ -386,6 +389,9 @@ public class MediaCmd
         switch (cmd)
         {
             case MEDIACMD_INIT:
+                retainedPushRestart.reset();
+                retainedPlayerStopped = false;
+                ordinaryPushCredit.reset();
                 resetDvdProtocolStats();
                 dvdInitCount++;
                 try
@@ -414,12 +420,17 @@ public class MediaCmd
 
             case MEDIACMD_DEINIT:
 
+                retainedPushRestart.reset();
+                retainedPlayerStopped = false;
                 writeInt(1, retbuf, 0);
                 PlaybackDebugEventBridge.recordAsync("server_deinit_command", playa);
                 close();
                 return 4;
 
             case MEDIACMD_OPENURL:
+                retainedPushRestart.reset();
+                retainedPlayerStopped = false;
+                ordinaryPushCredit.reset();
                 this.setLastServerStartPosition(-1);
                 resetPushTimelineAnchor();
                 pushEpochPayloadPublished = false;
@@ -564,6 +575,7 @@ public class MediaCmd
                 if (playa == null)
                     return 4;
                 PlaybackDebugEventBridge.recordAsync("server_stop_command", playa);
+                retainedPlayerStopped = true;
                 playa.stop();
                 return 4;
             case MEDIACMD_PAUSE:
@@ -579,11 +591,25 @@ public class MediaCmd
                 if (playa == null)
                     return 4;
                 log.debug("Play was called");
+                retainedPlayerStopped = false;
                 PlaybackDebugEventBridge.recordAsync("server_play_command", playa);
                 playa.play();
                 return 4;
             case MEDIACMD_FLUSH:
                 writeInt(1, retbuf, 0);
+                // Inspect the old state BEFORE backend.flush() prepares it.
+                // Never treat every ordinary seek as a restart. The media
+                // worker consumes this only after acknowledging FLUSH, so the
+                // server decoder lock is not held waiting on our reconnect.
+                retainedPushRestart.flush(
+                        pushMode && !dvdSessionPending && playa != null
+                                && client.properties() != null
+                                && "dynamic".equalsIgnoreCase(client.properties().getStreamingMode()),
+                        pushMode && playa != null, dvdSessionPending,
+                        playa != null && (retainedPlayerStopped
+                                || playa.getState() == MiniPlayerPlugin.STOPPED_STATE
+                                || playa.getState() == MiniPlayerPlugin.EOS_STATE),
+                        monotonicMs());
 
                 if (playa != null && pushMode)
                 {
@@ -893,6 +919,11 @@ public class MediaCmd
                     }
                 }
 
+                // Credit bounds the server's pipelined work, not the physical
+                // ring. Apply at the shared wire boundary for every backend;
+                // DVD drain, Pull, probing and negative EOS replies stay intact.
+                rv = ordinaryPushCredit.available(rv,
+                        pushMode && !dvdSessionPending && playa != null, buffSize);
                 writeInt(rv, retbuf, 0);
                 lastPushReply = rv;
 
@@ -1178,7 +1209,15 @@ public class MediaCmd
         return 4;
     }
 
-    private long getMediaTimeMillis()
+    /**
+     * The canonical player clock used by GETMEDIATIME and local displays.
+     * Detailed Push timestamps describe the END of a write, not the decoder
+     * epoch's start. Diagnostics must use the same calibrated anchor as the
+     * wire reply; calling the player with the raw anchor can display the old
+     * file tail after a backwards seek and disturb caption clock observation.
+     * The raw-anchor getter remains available for protocol diagnostics only.
+     */
+    public long getMediaTimeMillis()
     {
         if (playa != null)
         {
@@ -1226,6 +1265,11 @@ public class MediaCmd
     {
         if (myConn != null && myConn.getUiRenderer() != null)
             myConn.getUiRenderer().onPlaybackLoadStarted();
+    }
+
+    boolean takeRetainedPushRestartReconnect()
+    {
+        return retainedPushRestart.take(monotonicMs());
     }
 
     public long getLastServerStartPosition()

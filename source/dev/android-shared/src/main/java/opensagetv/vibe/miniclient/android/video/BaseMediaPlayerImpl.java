@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -1393,6 +1394,26 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         mimDirectController().recordRecoveryPlaying(this,true);
         beginPlaybackOperation(PlaybackSessionController.Operation.PLAY);
         state = PLAY_STATE;
+        final PlaybackSessionController.Token playSession = currentPlaybackSession();
+        context.runOnUiThread(new Runnable()
+        {
+            @Override public void run()
+            {
+                // STOP hides the shared SurfaceView. A retained Push player
+                // can receive FLUSH (which already prepares it) before PLAY,
+                // so backend STATE_IDLE-only restoration misses this case.
+                // Restore only STOP's GONE state, not background INVISIBLE,
+                // and never resurrect a replaced/stopped playback session.
+                if (isCurrentPlaybackSession(playSession) && state == PLAY_STATE
+                        && context.getVideoView() != null
+                        && context.getVideoView().getVisibility() == View.GONE)
+                {
+                    context.setupVideoFrame();
+                    PlaybackDebugTrap.record("play_restore_stopped_surface",
+                            BaseMediaPlayerImpl.this);
+                }
+            }
+        });
         fixedCaptionController().setPaused(this, false);
         scheduleTeletextClock();
         scheduleFullscreenPromotionCheck();

@@ -2,7 +2,7 @@ package opensagetv.vibe.miniclient.android.video.media3;
 
 /**
  * Selects the one Media3 stuck-player detector that is invalid for a SageTV
- * growing Pull source.
+ * growing Pull source or a server-owned ordinary Push epoch.
  *
  * <p>Media3's playing-not-ending detector compares the current position with
  * the period duration discovered when a progressive source was first opened.
@@ -19,6 +19,19 @@ final class Media3GrowingPlaybackTimeoutPolicy
     static final int PLAYING_NOT_ENDING_TIMEOUT_MS = Integer.MAX_VALUE;
 
     private Media3GrowingPlaybackTimeoutPolicy() { }
+
+    /**
+     * Ordinary Push is an open-ended, non-seekable decoder epoch, not the
+     * recording's full timeline. Only SageTV can terminate or reposition it.
+     * A duration estimated at a previous stream tail must not make healthy
+     * output "fail to end". Keep actual no-progress/buffering detectors, and
+     * leave the separately drained DVD pipeline and HTTP sources unchanged.
+     */
+    static boolean shouldRelaxServerOwnedPush(boolean pushMode, boolean dvdPushMode,
+                                              boolean httpSource)
+    {
+        return pushMode && !dvdPushMode && !httpSource;
+    }
 
     static boolean shouldRelaxPlayingNotEnding(boolean pushMode, boolean httpSource,
                                                 boolean smbMode,

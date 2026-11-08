@@ -31,6 +31,22 @@ stop independent authorized work for a status question or a dependency-only
 permission request. Unrelated work, publication, destructive actions and
 interruption of recordings/other users still require their own authority.
 
+## Client-first production fixes (highest priority)
+
+For every fix, investigate and implement a safe client-only correction first
+using the existing stock protocol, across affected player backends. Server
+plugins, Client Extension and FFmpeg/MIM runtime changes are a last resort.
+Before using one, record the exact missing client/protocol capability,
+alternatives examined and evidence that a safe client-only fix cannot meet
+the requirement. Convenience or easier testing is not proof. Core follows
+only after both client and stock-compatible plugin alternatives are exhausted.
+Keep extensions optional with safe stock fallback and preserve restart/activity
+guards. MCP is the first boundary for new server test controls, not a required
+normal-playback dependency or a substitute for a client fix. Fix proven defects
+owned by existing plugins without duplicating their functionality in clients.
+
+## Common interface and testing
+
 This repository uses the same root interface as every OpenSageTV Vibe project:
 
 MCP ADB unit tests include executable POSIX mock scripts. Run that suite inside
@@ -81,6 +97,15 @@ in SageTV independently of Android preference checkpoints; a failed restore
 is a failed gate. Preserve the captured value, never assume Off or claim an
 uncaptured earlier baseline was restored. Keep this production-neutral test
 workflow behind the existing supported caption/MCP API boundary.
+
+## Streaming-mode terminology
+
+`streaming_mode=dynamic` is the backward-compatible saved value for **Push**.
+It is not a Pull or Auto preference. The UI label and MCP `push` mapping are
+authoritative for user intent. Log/report both selected mode and observed
+transport: for example, "Selected Push (`dynamic`), actual Pull" is a client
+negotiation mismatch, not a user-selected Pull session. Confirm actual runtime
+ownership/data source before assigning transport-specific causes or gate passes.
 
 ## ADB command path
 

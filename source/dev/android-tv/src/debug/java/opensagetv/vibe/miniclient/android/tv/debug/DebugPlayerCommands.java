@@ -356,7 +356,7 @@ final class DebugPlayerCommands
 
     private static long currentSageTimelineMs(MediaCmd mediaCmd, MiniPlayerPlugin player)
     {
-        return player.getMediaTimeMillis(mediaCmd.getLastServerStartPosition());
+        return mediaCmd.getMediaTimeMillis();
     }
 
     private static long currentPlayerPositionMs(MediaCmd mediaCmd, MiniPlayerPlugin player)
