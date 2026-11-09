@@ -226,6 +226,10 @@ implied. The user now authorizes trying the remaining disabled capabilities:
   order/manifest. Corrected source-offer hashes and scheduling inventory only;
   runtime/APK unchanged. Empty generated step retired recoverably. Existing
   physical/build/JVM qualification retained; next outgoing audit and CI.
+  Outgoing cumulative-diff audit also caught two extra blank EOF lines in the
+  new public Media3 source adaptations. Removed only those blank lines; no Java
+  statements/runtime behavior changed. Recheck staged and cumulative diff before
+  pushing; current APK remains the qualified exact candidate.
 
 - [ ] **STALL-001 - Correlate Pro ordinary-Push delivery starvation.** User
   reports long stopping on2026-11-03. Read-only Pro29/stock175/SageMC105 trace

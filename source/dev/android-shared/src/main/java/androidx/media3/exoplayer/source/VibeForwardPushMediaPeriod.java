@@ -1583,4 +1583,3 @@ import opensagetv.vibe.miniclient.video.ForwardCacheSeekTransaction;
     }
   }
 }
-

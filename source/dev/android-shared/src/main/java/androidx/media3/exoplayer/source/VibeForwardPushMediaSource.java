@@ -576,4 +576,3 @@ public final class VibeForwardPushMediaSource extends BaseMediaSource
     refreshSourceInfo(timeline);
   }
 }
-

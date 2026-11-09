@@ -2,6 +2,11 @@
 
 ## Current work (revision442; latest)
 
+Outgoing audit blocked locally on two extra blank EOF lines in newly tracked
+Media3 source adaptations; remove only that whitespace and recheck the staged
+and cumulative diff before push. No statement/runtime/APK change, no CI failure
+email generated because this was caught before push.
+
 RELEASE-005 local preflight passes1000 source tests(6 skips),178 mocked MCP,
 project validation, strict exact APK1151-entry/signer checks and task/manifest.
 Source-offer ARM hashes and missing IJK scheduling inventory corrected, no
