@@ -1,6 +1,15 @@
 # OpenSageTV Vibe Android Client handoff
 
-## Current work (revision443; latest)
+## Current work (revision444; latest)
+
+RELEASE-005 public release/reply are complete, but administrative main79cd636
+CI42630870952 failed a test-only cross-pipe race. stdout reply is not a stderr
+collector completion fence. Test now waits at most1s for TAIL, preserves RPC
+deadline/bounded ring/reader cleanup assertions and avoids printing262KiB on
+failure. No production/MCP runtime/APK change. Next focused repeat/exact main
+CI; both orders444 prioritize this bounded follow-up. Do not rebuild or retag.
+
+## Verified publication (revision443)
 
 RELEASE-005 COMPLETE. Android0.5.114 latest published from immutable source
 beb49c5a839b87521bdafee7028257009e61650c after greenCI42629740169.

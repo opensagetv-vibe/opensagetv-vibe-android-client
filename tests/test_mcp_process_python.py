@@ -33,7 +33,16 @@ class McpChildPython(TestCase):
         try:
             self.assertTrue(client.request('probe',timeout=3)['result']['ok'])
             tail=client.stderr_snapshot()
-            self.assertIn('TAIL',tail)
+            # stdout and stderr have independent collectors. The child flushes
+            # stderr first, but publishing the stdout reply does not prove that
+            # the other thread has appended its final read. Wait for that
+            # evidence here, never block production protocol replies on logs.
+            deadline=time.monotonic()+1.0
+            while 'TAIL' not in tail and time.monotonic()<deadline:
+                time.sleep(.005)
+                tail=client.stderr_snapshot()
+            self.assertTrue('TAIL' in tail,
+                            'stderr collector did not publish flushed sentinel before deadline')
             self.assertLessEqual(len(tail),64*4096)
         finally:client.close()
         self.assertFalse(client._stderr_reader.is_alive())

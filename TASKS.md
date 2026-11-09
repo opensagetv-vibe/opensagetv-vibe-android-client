@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **443** (2026-11-09)
+Checklist revision: **444** (2026-11-09)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **443** (2026-11-09). A completed
+Order reviewed against checklist revision **444** (2026-11-09). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -171,6 +171,9 @@ VCE-003 belongs to its project, not an Android release blocker.
 
 RELEASE-005 publication and Community356 reply are complete; retain immutable
 source/APK and public-download proof. Do not repeat publication or its gates.
+0. **RELEASE-005** - close only the administrative follow-up CI race: bounded
+   stderr-collector test synchronization, focused tests and green exact main CI.
+   No APK rebuild, release retag or repeated physical gates.
 
 All nine scoped EXT-009..017 tasks are complete to supported scope; see the
 ledger and compact reports. No additional standalone work or broad matrix is
@@ -208,6 +211,15 @@ implied. The user now authorizes trying the remaining disabled capabilities:
    approved.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
+
+- [ ] **RELEASE-005 - Close administrative follow-up CI.** Public114/source
+  beb49c5 and discussion reply19493102 remain verified. Main documentation
+  commit79cd636 CI42630870952 exposed a test-only race: stdout reply may arrive
+  before the independent stderr collector publishes its final TAIL chunk.
+  Fix only the test with a bounded sentinel wait; retain protocol timeout,
+  bounded tail and reader cleanup assertions. Local focused repeat and exact
+  main CI must pass before final handoff. No production wait/API/runtime change,
+  APK replacement, retag, server/device mutation or repeated physical matrix.
 
 - [ ] **STALL-001 - Correlate Pro ordinary-Push delivery starvation.** User
   reports long stopping on2026-11-03. Read-only Pro29/stock175/SageMC105 trace
@@ -752,7 +764,9 @@ device/result context are retained in the checklist ledger and compact reports.
 
 ## Checklist change ledger
 
-- [x] **RELEASE-005 - Publish qualified0.5.114 and reply to Community356.**
+| 444 | 2026-11-09 | Reopen RELEASE-005 only for administrative main CI42630870952: test_large_partial_line_cannot_block_protocol_reply assumed independent stdout/stderr collectors publish together. Bound the test's sentinel wait and error output without weakening protocol timeout/tail/cleanup assertions or changing runtime. Both orders prioritize focused harness validation/exact main CI; public114/source/reply stay verified and immutable. |
+
+- [x] **RELEASE-005 publication sub-gate - Publish qualified0.5.114 and reply to Community356.**
   User-authorized latest Android sideload/source update includes qualified113
   handoff and114 playback/caption/cache fixes. Exact tested02/8F31F6F7 APK,
   code2101141, public immutable sourcebeb49c5 and greenCI42629740169.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Correct a diagnostics-harness CI race by waiting briefly for the independent
+  stderr collector's flushed sentinel; protocol replies remain nonblocking.
+  No app/runtime change or replacement of the published0.5.114 APK.
+
 ## 0.5.114 - 2026-11-09
 
 - Publish exact tested8F31F6F7 APK and sourcebeb49c5 after green exact-source
