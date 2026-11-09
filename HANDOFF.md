@@ -1,6 +1,17 @@
 # OpenSageTV Vibe Android Client handoff
 
-## Current work (revision444; latest)
+## Current work (revision445; latest)
+
+RELEASE-005 public publication/reply AND administrative CI follow-up COMPLETE.
+Main1204ce5 test-only synchronization passes7 host/7 Linux harness checks,
+50 repeated sentinel cases and exact GitHub CI42631739100. Runtime protocol
+replies remain nonblocking; no APK/release/tag/physical-evidence change.
+Both orders445 remove completed follow-up, next unfinished work remains
+EXT-018 hardware negatives/renderer implementation, then019..022. Trial off.
+Current closure is documentation only, not another binary release.
+Public114/sourcebeb49c5/reply19493102 and compact proof below remain authoritative.
+
+## Prior CI follow-up (revision444)
 
 RELEASE-005 public release/reply are complete, but administrative main79cd636
 CI42630870952 failed a test-only cross-pipe race. stdout reply is not a stderr

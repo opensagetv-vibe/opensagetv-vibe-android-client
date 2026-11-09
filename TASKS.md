@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **444** (2026-11-09)
+Checklist revision: **445** (2026-11-09)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **444** (2026-11-09). A completed
+Order reviewed against checklist revision **445** (2026-11-09). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -171,9 +171,9 @@ VCE-003 belongs to its project, not an Android release blocker.
 
 RELEASE-005 publication and Community356 reply are complete; retain immutable
 source/APK and public-download proof. Do not repeat publication or its gates.
-0. **RELEASE-005** - close only the administrative follow-up CI race: bounded
-   stderr-collector test synchronization, focused tests and green exact main CI.
-   No APK rebuild, release retag or repeated physical gates.
+The administrative stderr-test race is corrected: main1204ce5 exact CI42631739100
+passes after7 host/7 Linux harness checks and50 repeated sentinel tests. No
+runtime/APK/release change; no remaining RELEASE-005 implementation work.
 
 All nine scoped EXT-009..017 tasks are complete to supported scope; see the
 ledger and compact reports. No additional standalone work or broad matrix is
@@ -211,15 +211,6 @@ implied. The user now authorizes trying the remaining disabled capabilities:
    approved.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
-
-- [ ] **RELEASE-005 - Close administrative follow-up CI.** Public114/source
-  beb49c5 and discussion reply19493102 remain verified. Main documentation
-  commit79cd636 CI42630870952 exposed a test-only race: stdout reply may arrive
-  before the independent stderr collector publishes its final TAIL chunk.
-  Fix only the test with a bounded sentinel wait; retain protocol timeout,
-  bounded tail and reader cleanup assertions. Local focused repeat and exact
-  main CI must pass before final handoff. No production wait/API/runtime change,
-  APK replacement, retag, server/device mutation or repeated physical matrix.
 
 - [ ] **STALL-001 - Correlate Pro ordinary-Push delivery starvation.** User
   reports long stopping on2026-11-03. Read-only Pro29/stock175/SageMC105 trace
@@ -763,6 +754,16 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+- [x] **RELEASE-005 administrative follow-up - Close main CI.** Test-only
+  independent-pipe publication race corrected by bounded TAIL synchronization,
+  without production delay or weakening RPC timeout/tail/reader-cleanup checks.
+ 7 host/7 Linux harness tests and50 repeated sentinel cases PASS; exact source
+ 1204ce5 CI42631739100 SUCCESS. Public114/sourcebeb49c5 and reply19493102
+  stay immutable/verified, no APK rebuild or physical matrix replay. Both
+  orders445 remove completed follow-up and retain open EXT work/trial off.
+
+| 445 | 2026-11-09 | [x] RELEASE-005 administrative CI follow-up closes after7 host/7 Linux/50 repeated harness tests and green exact-source1204ce5 CI42631739100. Test-only oracle synchronization, no runtime delay/weakening/rebuilt APK. Both orders remove completed follow-up; public114/source/reply unchanged. |
 
 | 444 | 2026-11-09 | Reopen RELEASE-005 only for administrative main CI42630870952: test_large_partial_line_cannot_block_protocol_reply assumed independent stdout/stderr collectors publish together. Bound the test's sentinel wait and error output without weakening protocol timeout/tail/cleanup assertions or changing runtime. Both orders prioritize focused harness validation/exact main CI; public114/source/reply stay verified and immutable. |
 
