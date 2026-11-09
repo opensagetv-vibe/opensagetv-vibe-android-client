@@ -13,7 +13,7 @@ Workspace-wide dependencies and release ordering may also be mirrored in the
 parent workspace `task.md`, but Android-only work must remain current here so
 the repository can be developed independently of Codex.
 
-Checklist revision: **442** (2026-11-09)
+Checklist revision: **443** (2026-11-09)
 
 ## Stable checklist rules
 
@@ -46,7 +46,7 @@ section whenever a task is added, completed, removed, deferred, unblocked, or
 changes dependencies. Change it only when the dependency graph or matrix timing
 actually changes.
 
-Order reviewed against checklist revision **442** (2026-11-09). A completed
+Order reviewed against checklist revision **443** (2026-11-09). A completed
 sub-gate must disappear from the next-action wording even when its parent task
 remains open; the next unfinished gate takes its place.
 
@@ -169,10 +169,8 @@ Client/companion releases and their affected gates are complete; upstream
 catalog review/aggregation does not justify another physical matrix. Deferred
 VCE-003 belongs to its project, not an Android release blocker.
 
-Publication of the already qualified client takes priority over new experiments:
-0. **RELEASE-005** - outgoing identity audit, exact-source GitHub CI,
-   release114, independent public downloads and verified discussion356 reply.
-   Preserve tested02 APK; do not repeat completed physical matrices.
+RELEASE-005 publication and Community356 reply are complete; retain immutable
+source/APK and public-download proof. Do not repeat publication or its gates.
 
 All nine scoped EXT-009..017 tasks are complete to supported scope; see the
 ledger and compact reports. No additional standalone work or broad matrix is
@@ -210,26 +208,6 @@ implied. The user now authorizes trying the remaining disabled capabilities:
    approved.
 
 ## 1. ONN hardware MPEG-2 and long-recording UI regression
-
-- [ ] **RELEASE-005 - Publish qualified0.5.114 and reply to Community356.**
-  User-authorized Android repository update, latest sideload release and forum
-  reply. Publish exact tested02 APK8F31F6F7/code2101141, including qualified113
-  handoff and114 playback/caption/cache changes. Review all outgoing source,
-  keep unfinished EXT-018 hardware trial default off and unsupported flags false.
-  Reuse documented affected physical/build/JVM evidence; run required source CI,
-  changed MCP and packaging checks, task cleanup/manifest and outgoing audit.
-  Require green exact-source CI before publication, independent public download
-  hashes/source archive/tag verification, then an accurate discussion356 reply.
-  Do not claim the unsupplied reporter recording is fixed or close the thread.
-  Local preflight PASS:1000 source tests(6 explicit skips),178 mocked MCP tests,
-  project validation, strict1151-entry exact APK inspection/signer and task
-  order/manifest. Corrected source-offer hashes and scheduling inventory only;
-  runtime/APK unchanged. Empty generated step retired recoverably. Existing
-  physical/build/JVM qualification retained; next outgoing audit and CI.
-  Outgoing cumulative-diff audit also caught two extra blank EOF lines in the
-  new public Media3 source adaptations. Removed only those blank lines; no Java
-  statements/runtime behavior changed. Recheck staged and cumulative diff before
-  pushing; current APK remains the qualified exact candidate.
 
 - [ ] **STALL-001 - Correlate Pro ordinary-Push delivery starvation.** User
   reports long stopping on2026-11-03. Read-only Pro29/stock175/SageMC105 trace
@@ -773,6 +751,25 @@ device/result context are retained in the checklist ledger and compact reports.
   already pass. Google Play no longer accepts APK-only Android TV releases.
 
 ## Checklist change ledger
+
+- [x] **RELEASE-005 - Publish qualified0.5.114 and reply to Community356.**
+  User-authorized latest Android sideload/source update includes qualified113
+  handoff and114 playback/caption/cache fixes. Exact tested02/8F31F6F7 APK,
+  code2101141, public immutable sourcebeb49c5 and greenCI42629740169.
+ 1000 source checks(6 skips),178 MCP, project validation, strict1151-entry APK/
+  signer, task/manifest, outgoing identity/ancestry/cumulative-diff audit pass.
+  Corrected native source-offer/scheduling docs and two EOF blank lines without
+  changing runtime statements or the qualified APK. Reused affected physical/
+  build/JVM evidence; no unrelated matrix replay. Four independently downloaded
+  public assets match local hashes and GitHub digests;1779-file archive/tag/
+  latest verify. Release https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.114
+  Reply https://github.com/OpenSageTV/Community/discussions/356#discussioncomment-19493102
+  No discussion closure or unsupplied-recording fixed claim. EXT018..022 remain
+  open, hardware trial default off.11 redundant owned release files/502361692B
+  retired recoverably after compact results/RELEASE-005/RESULT.md retained proof. Both
+  orders443 remove completed publication; no server/plugin/restart changes.
+
+| 443 | 2026-11-09 | [x] RELEASE-005 complete: exact tested114 APK/sourcebeb49c5 published after greenCI42629740169, four independent public hashes/archive/tag/latest verify, discussion356 reply19493102 posted without closure/fixed claim. Both orders remove publication; unfinished EXT trials stay off/open. README/changelog/handoff/result and cleanup reconciled; follow-up source is administrative only. |
 
 | 442 | 2026-11-09 | RELEASE-005 local preflight PASS:1000 source/6 skips,178 MCP, project validation, exact1151-entry APK/signer, order and source manifest. Correct stale native source-offer hashes and missing IJK scheduling inventory; no runtime/APK change. Empty generated step retired. Both orders advance to outgoing audit/exact-source CI/publication/public verification/discussion reply; no broad matrix replay. |
 

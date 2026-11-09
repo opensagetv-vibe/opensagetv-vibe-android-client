@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-## 0.5.114 - 2026-11-09 (release preparation; publication pending)
+## 0.5.114 - 2026-11-09
+
+- Publish exact tested8F31F6F7 APK and sourcebeb49c5 after green exact-source
+  CI42629740169. Four public assets independently download/hash-match; the
+  1,779-file source archive, latest pointer and immutable tag verify. Post a
+  scoped follow-up to Community356 without closing it or claiming the
+  reporter's unsupplied recording is proven fixed. Administrative publication
+  records do not replace the binary or expand physical qualification.
 
 - Release preflight passes1000 source checks(6 explicit skips),178 mocked MCP
   tests, project validation and strict exact APK inspection. Update the native
@@ -91,7 +98,7 @@
   unsupported cache-seek flag. Media3/legacy near/far/paused and ordinary Push
   regression pass; unknown/WhenNeeded/copy/Direct retain detailed anchors.
 
-## 0.5.113 - 2026-11-08 (local candidate; not published)
+## 0.5.113 - 2026-11-08 (included in0.5.114; no separate release)
 
 - Reset the local ordinary-Push decoder/clock epoch when stock MiniPlayer
   switches files without OPENURL/FLUSH and its data-bearing mux clock moves

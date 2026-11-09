@@ -1,6 +1,27 @@
 # OpenSageTV Vibe Android Client handoff
 
-## Current work (revision442; latest)
+## Current work (revision443; latest)
+
+RELEASE-005 COMPLETE. Android0.5.114 latest published from immutable source
+beb49c5a839b87521bdafee7028257009e61650c after greenCI42629740169.
+Exact tested APK8F31F6F7931F7A34C2D07FC5C244C3E89C725BCD3828E82F950105DB0C37949F
+is unchanged from installed Pro29/Non-Pro25. All4 unauthenticated public
+downloads/hash/GitHub digests match; source archive1779 files/tag/latest verify.
+Release: https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.114
+Posted/verified reply: https://github.com/OpenSageTV/Community/discussions/356#discussioncomment-19493102
+No issue/discussion closure or reporter-specific fixed claim. Local source1000
+(6 explicit skips), MCP178, project/strict APK checks pass; reuse affected
+physical/native/JVM/build evidence instead of repeating unrelated matrices.
+Current follow-up is documentation only; do not retag/rebuild the public APK.
+Both orders443 remove completed RELEASE-005; EXT-018..022 remain open and
+hardware stepping trial default off. Next actual work is remaining hardware
+fallback/format/track/lifecycle and Media3/legacy renderer qualification.
+Retired11 redundant release staging/verification/notes/inspection files,
+502361692bytes, recoverably to matching root deleteme paths after compact
+results/RELEASE-005/RESULT.md retained hashes. All moved hashes match, current
+candidate remains active. No files permanently deleted.
+
+## Prior release preparation (revision442)
 
 Outgoing audit blocked locally on two extra blank EOF lines in newly tracked
 Media3 source adaptations; remove only that whitespace and recheck the staged
