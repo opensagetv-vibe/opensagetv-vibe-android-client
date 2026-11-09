@@ -2,6 +2,118 @@
 
 ## Unreleased
 
+## 0.5.114 - 2026-11-09 (release preparation; publication pending)
+
+- Release preflight passes1000 source checks(6 explicit skips),178 mocked MCP
+  tests, project validation and strict exact APK inspection. Update the native
+  source-offer hashes/reconstruction notes and IJK scheduling inventory. These
+  documentation corrections do not alter the tested8F31F6F7 APK or replay
+  unrelated physical matrices. GitHub sideload identity/signature is unchanged.
+
+- Add an isolated, default-off IJK hardware forward-frame trial, separate from
+  software CEA/FIFO flushing. Non-Pro/stock175 MTK AVC Fixed command28 and normal
+  repeated-Pause gates show one new frame, held pause and A/V resume; unchanged
+  software Push regression passes. Ordinary H264 Push also passes. Correct a
+  hardware-trial-only normalized Fixed epoch undercount using actual current
+  decoder-output proof; retained seek/step/resume and HDMI pass, with stock UI
+  reporting lag documented separately. General Push FRAME_STEP remains disabled pending
+  broader lifecycle/backend and full raw-PTS contract qualification.
+
+- Correct legacy FFmpeg MP1/MP2 MIME aliases during codec negotiation. A playable
+  narration track was omitted from the advertised profile, causing the stock
+  path to deliver a filtered stream without Teletext. Reuse Media3's exact
+  existing mapping; no new decoder, dependency, settings reset or server patch.
+- Coalesce whole CEA records into bounded legacy callbacks and retain data/reset
+  under explicit connection-queue backpressure. Corrects a reproduced caption
+  burst crash without growing the input FIFO, dropping keys or changing Core.
+- Complete scoped EXT-009..017 server-playback parity qualification. Ordinary
+  detailed Push now has atomic forward selected-queue seeks in Media3 and
+  legacy Exo, including both GSY delegates; default captions, audio tracks,
+  paused/negative/epoch and classic producer-fallback gates pass on Non-Pro/175.
+  General cache/FRAME_STEP claims stay false; IJK/System cache seeks remain
+  unsupported. No standalone features or universal HD300-equivalence claim.
+- Complete EXT-016 supported ARM Software IJK forward stepping: the normal
+  repeated-Pause route advances actual frames while audio stays paused; serial,
+  request/output epoch and PCM fences protect resume. Push/Fixed normal-key,
+  displayed clock and retained-file gates pass. Hardware/DVD/reverse remain
+  unavailable; no unsupported bundled FRAME_STEP capability is advertised.
+- Restore actual received MPEG PES PTS origin only in guaranteed classic Fixed
+  basic wire replies; local normalized playback clock and detailed/ordinary
+  Push/DVD contracts remain separate. Media3/IJK near/far/paused gates pass.
+
+- Begin authorized server-connected HD300 parity tasks EXT-009..017; standalone
+  playback/USB/CD/music-shell features are explicitly excluded.
+- Harden native Push clock arithmetic and add reset/pause/unknown-sample,
+  long-running and MPEG PTS-rollover regression coverage; no synthetic clock.
+- Withdraw the unsupported Push buffer-seeking claim. IJK ignores command29;
+  Media3's TS Push period adjusted a buffered paused seek back to0 in the
+  physical probe. No backend currently promises this property. Stock Core's
+  Fixed branch ignores the flag, so its actual runtime gate remains separate.
+- Fence queued native-rate and scan callbacks by session generation so a stale
+  callback cannot change a replacement rate/session; avoid identical endpoint
+  seeks. Preserve native versus seek-based scan and existing DVD key behavior.
+- Correct completed stock TS/MPG rate rejection using the same loader's resolved
+  finite/non-growing contract rather than the conservative filename hint.
+  Explicit active/circular-buffer, unresolved, Push and DVD guards remain.
+- Restore optional refresh preferences per Window, including Auto, without
+  leaking an old Activity's physical mode or overwriting an external change.
+- Correct Auto CC2 selecting the same service as CC1 when English preference
+  moved CC1 away from the first codec-ranked candidate. Keep explicit language
+  choices authoritative and CC/DVB selection APIs separate.
+- Reject the buffered-seek Push frame-step prototype after its physical
+  unseekable-timeline failure. Its real Software IJK renderer-step replacement
+  passes the supported scope above; the bundled Push protocol flag stays false.
+- EXT-009 clock gates pass non-Pro175 IJK and final Media3 handoff/pause/resume;
+  safe Push frame-step rejection/no clock jump passes.136settings/CC/power
+  restored, Pro unchanged.85 affected JVM/184 source checks and build/package
+  pass. Eight scoped tasks are now complete; EXT-010 remains open. No
+  public release, Pro update, new server dependency or stock Core change.
+- EXT-012 focused non-Pro175 CEA/Teletext stock state cycles and explicit local
+  DVB Off/On/seek/pause/resume pass with reviewed readable text/bitmap and
+  settings restoration; no DVB-through-CC or second-service payload claim.
+- EXT-014 bounded native DVD gates pass ALADDIN and authored root/language/title
+  transitions with selected SPU, actual A/V, accepted approximate seeking,
+  independent HDMI and full preference/power restoration. Reuse unchanged
+  DVD001/002/003 evidence; no new standalone navigator or exact-seek requirement.
+- Implement IJK ARM software raw A53 callbacks through the existing native
+  Bundle and stock caption event225, with bounded packets, PTS/serial/seek/
+  player-lifetime fencing and an independent caption clock. Preserve FFmpeg,
+  SDL and Java AAR bytes; hardware/fallback/x86 remain unsupported. Software
+  Pull/Push caption selection/seek/flush/pause, final metadata-reset gate,
+  unsupported Hardware negative and native software clock/handoff pass. Native
+  FIFO flush admission and debug-exporter defects corrected, not full hardware
+  IJK parity. Compact EXT-013 result retains original build/evidence provenance.
+- Correct paused Fixed seek retaining a previous epoch's time over a genuinely
+  rendered new frame at zero. Fresh same-period post-reset first-frame proof
+  and progress revocation protect unknown/playing/Pull/DVD cases; all four
+  Exo/Media3 delegates pass. Guaranteed classic Fixed/Always/remuxOff/DirectOff
+  negotiates basic stats so stock Core owns seeks instead of ignoring the
+  unsupported cache-seek flag. Media3/legacy near/far/paused and ordinary Push
+  regression pass; unknown/WhenNeeded/copy/Direct retain detailed anchors.
+
+## 0.5.113 - 2026-11-08 (local candidate; not published)
+
+- Reset the local ordinary-Push decoder/clock epoch when stock MiniPlayer
+  switches files without OPENURL/FLUSH and its data-bearing mux clock moves
+  substantially backwards. Preserve the server-supplied position; never
+  force a seek0 or require a server/plugin change. Shared across player backends.
+- Exclude DVD, trick-mode/empty/EOS packets, small timestamp reordering and
+  normal explicit-FLUSH seeks. Emit one bounded handoff event for diagnosis.
+- Re-anchor IJK's retained native presentation counter on ordinary Push FLUSH
+  instead of carrying an earlier file's resume offset. Count actual native
+  presentation progress only; wall time bounds discontinuities, not playback.
+- Document current HD300 behavioural gaps separately from the historical
+  EXT-004 audit, including source/binary evidence and device-only limitations.
+- Non-Pro/stock175 baseline reproduced112's stale75-minute clock while the new
+  recording mux was only8seconds in. Media3/legacy/GSY pass the original growing
+  handoff; IJK passes a completed adjacent-TV handoff plus native seek/clock and
+  independent HDMI picture/audio.33 affected JVM/76 source contracts(1skip),
+  clean build/incremental IJK build and strict APK checks pass.
+- Final113/code2101131 APK a56b92b5 is independently read back from Pro; same
+  programme/position and249 preferences restored. A cleared session-only audio
+  offset was detected and restored to the captured-600ms without changing the
+  saved-300ms default. No Core/plugin/server restart or public release.
+
 ## 0.5.112 - 2026-11-08
 
 - Publish exact tested APK534ad0e1 and source701d9fd after green exact-source

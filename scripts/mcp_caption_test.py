@@ -17,9 +17,30 @@ from mcp_lifecycle_test import (
 from mcp_smoke_test import compact_tool_result, tool_call
 from mcp_config_values import add_fixed_encoding_args, fixed_config_from_args, validate_fixed_config
 from mcp_playback_test import start_recording_via_search
+from mcp_forward_cache_probe import probe as probe_forward_cache
+from mcp_forward_cache_probe import probe_audio_tracks
+from sagetv_dev_mcp.config import load_config
+from sagetv_dev_mcp.adb import AdbClient
 
 
 CAPTION_TIME_RE = re.compile(r"(?<!\d)(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})(?!\d)")
+
+
+def require_same_live_process(baseline: dict, current: dict) -> None:
+    """Old crash-buffer entries are evidence, not crashes during this gate.
+
+    Retain them instead of clearing device logs. Reject any new relevant
+    signature, missing process or PID replacement after the launch checkpoint.
+    """
+    old_pids = set(baseline.get('pids') or [])
+    require(bool(old_pids) and baseline.get('running') is True,
+            'Caption crash checkpoint needs a running process')
+    require(current.get('running') is True and set(current.get('pids') or []) == old_pids,
+            'Caption process stopped or restarted during the gate')
+    require(not current.get('signatureDetected') or (
+            bool(current.get('signatureFingerprint')) and
+            current.get('signatureFingerprint') == baseline.get('signatureFingerprint')),
+            f'New caption crash signature: {current}')
 
 
 def caption_time_count(text: str) -> int:
@@ -423,7 +444,20 @@ def main() -> int:
         default=2.5,
         help="Clock-advance sampling window used with --show-stv-timeline",
     )
+    parser.add_argument('--forward-cache-trial', action='store_true',
+                        help='Unadvertised Media3 queue-source command29 caption qualification')
+    parser.add_argument('--production-cache', action='store_true',
+                        help='Verify default detailed-Push source without enabling debug trial')
+    parser.add_argument('--exercise-cache-audio-tracks', action='store_true')
     args = parser.parse_args()
+    queue_gate = args.forward_cache_trial or args.production_cache
+    if args.forward_cache_trial and args.production_cache:
+        parser.error('Default source must not be qualified by enabling its debug override')
+    if args.exercise_cache_audio_tracks and not queue_gate:
+        parser.error('Cache track qualification requires the scoped queue trial')
+    if queue_gate and (args.player not in ('media3', 'exoplayer')
+            or args.streaming != 'dynamic' or args.mim_direct_mode != 'off'):
+        parser.error('Cache caption gate requires an extractor ordinary Push with Direct off')
     if args.legacy_extender_callback and args.expect_no_legacy_callback:
         parser.error("--legacy-extender-callback and --expect-no-legacy-callback are mutually exclusive")
     if args.track_codec and (args.authority != "stv" or args.legacy_extender_callback):
@@ -449,6 +483,7 @@ def main() -> int:
         parser.error(str(exc))
 
     client = MCPProcess()
+    trial_adb = None
     original_server_caption_state = None
     try:
         negotiated, _ = initialize(client)
@@ -495,6 +530,14 @@ def main() -> int:
             "renderer": "" if args.renderer == "keep" else args.renderer,
         })
         wait_automation_ready(client)
+        crash_baseline = call_dict(client, "dev_crash_probe", timeout=30.0)
+        if queue_gate:
+            cfg = load_config()
+            trial_adb = AdbClient(serial=cfg.device, dev_package=cfg.dev_package,
+                                  adb=cfg.adb, aapt=cfg.aapt)
+            if args.forward_cache_trial:
+                enabled = trial_adb.dev_control('push_cache_trial', enabled='true')
+                require(enabled.get('enabled') is True, 'Cache trial not enabled before Watch')
         if args.authority == "stv":
             original_server_caption_state = checkpoint_server_caption_state(client)
             print("PASS: server caption setting checkpointed before test controls")
@@ -574,7 +617,7 @@ def main() -> int:
                 timeout=30.0,
             )
             crash = call_dict(client, "dev_crash_probe", timeout=30.0)
-            require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
+            require_same_live_process(crash_baseline, crash)
             print(
                 "PASS: unsupported backend stayed playable without false legacy-caption "
                 f"negotiation or event-225 output; capture={compact_tool_result(screenshot)}"
@@ -779,6 +822,10 @@ def main() -> int:
                         f"localCueText={callback_state.get('currentSubtitleCueText')!r} "
                         f"capture={compact_tool_result(capture)}"
                     )
+            if trial_adb:
+                print('PASS: caption cache command29 '+json.dumps(probe_forward_cache(client, trial_adb)))
+                if args.exercise_cache_audio_tracks:
+                    print('PASS: switched audio cache command29 '+json.dumps(probe_audio_tracks(client, trial_adb)))
             for seek_index, command in enumerate(args.seek_command, start=1):
                 before_seek_wire = int(callback_state.get("legacyCaptionWireEventCount", 0))
                 seek_settle_ms = args.seek_settle_ms
@@ -880,7 +927,7 @@ def main() -> int:
                     f"wireEvents={settled_state.get('legacyCaptionWireEventCount')}"
                 )
             crash = call_dict(client, "dev_crash_probe", timeout=30.0)
-            require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
+            require_same_live_process(crash_baseline, crash)
             print(
                 f"ANDROID LEGACY CAPTION CALLBACK TRANSPORT ({args.player}): PASS; "
                 "rendered text requires separate screenshot review"
@@ -1165,6 +1212,10 @@ def main() -> int:
                 f"mediaProgressMs={media_progress_ms} "
                 f"longestNaturalCueGapS={longest_progress_gap_s:.3f}"
             )
+        if trial_adb:
+            print('PASS: caption cache command29 '+json.dumps(probe_forward_cache(client, trial_adb)))
+            if args.exercise_cache_audio_tracks:
+                print('PASS: switched audio cache command29 '+json.dumps(probe_audio_tracks(client, trial_adb)))
         for seek_index, command in enumerate(args.seek_command, start=1):
             seek_settle_ms = args.seek_settle_ms
             if seek_settle_ms is None:
@@ -1304,13 +1355,19 @@ def main() -> int:
         # explicitly by --toggle-off-on; ordinary DVB/Teletext rendering gates
         # should finish after proving the selected track and cue continuity.
         crash = call_dict(client, "dev_crash_probe", timeout=30.0)
-        require(not bool(crash.get("signatureDetected")), f"Crash signature detected: {crash}")
+        require_same_live_process(crash_baseline, crash)
         print(f"ANDROID CAPTIONS ({args.player}): PASS")
         if args.require_mim_direct_owned:
             require_mim_direct_ownership(client, args.mim_direct_mode, "settled after controls")
         return 0
     except Exception as exc:
         print(f"ANDROID CAPTIONS ({args.player}): FAIL\n{exc}", file=sys.stderr)
+        try:
+            caps = call_dict(client, 'dev_codec_capabilities')
+            print('FAILED-GATE CODEC PROFILE: '+json.dumps({key: value for key, value in caps.items()
+                  if key.startswith('discovered') or key == 'legacyFfmpegAc3Available'}), file=sys.stderr)
+        except Exception as caps_error:
+            print(f'WARN: failed-gate codec snapshot unavailable: {caps_error}', file=sys.stderr)
         try:
             diagnostics = call_dict(client, "collect_playback_diagnostics", {
                 "label": f"caption-{args.player}-failure",
@@ -1321,6 +1378,14 @@ def main() -> int:
         return 1
     finally:
         caption_restore_failed = False
+        if trial_adb:
+            try:
+                trial_adb.dev_control('push_cache_trial', enabled='false')
+            except Exception as exc:
+                caption_restore_failed = True
+                print(f'FAIL: cache trial disable: {exc}', file=sys.stderr)
+            finally:
+                trial_adb.close()
         if original_server_caption_state is not None:
             try:
                 restore_server_caption_state(client, original_server_caption_state)

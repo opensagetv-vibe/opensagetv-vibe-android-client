@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.exoplayer.source.VibeForwardPushMediaSource;
 import androidx.media3.exoplayer.source.TrackGroupArray;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.text.Cue;
@@ -94,6 +95,7 @@ import opensagetv.vibe.miniclient.video.MediaReplacementPolicy;
 import opensagetv.vibe.miniclient.video.Mpeg2PictureTimestampCompleter;
 import opensagetv.vibe.miniclient.video.NativeDvdVideoSupportPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackFrameStepPolicy;
+import opensagetv.vibe.miniclient.video.PlaybackRatePolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSeekPolicy;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.PlaybackSyncPointPolicy;
@@ -183,6 +185,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     static final long FAST_SWITCH_FIRST_FRAME_TIMEOUT_MS = 8_000L;
     private final DecoderAttemptTelemetry decoderAttemptTelemetry =
             new DecoderAttemptTelemetry();
+    private final opensagetv.vibe.miniclient.android.video.PushPausedZeroWitness pausedZeroWitness =
+            new opensagetv.vibe.miniclient.android.video.PushPausedZeroWitness();
     private final Set<String> sessionDecoderExclusions = new LinkedHashSet<>();
     /** Last real HLS child datasource, retained only for health diagnostics. */
     private volatile DataSource mimDirectDiagnosticDataSource;
@@ -217,6 +221,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void onPlaybackLoadStarted()
     {
+        pausedZeroWitness.clear();
         pendingStartupSeek.reset();
         lastGpuFailureWitness="";
         mimDirectDiagnosticDataSource = null;
@@ -342,7 +347,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         return controller == null ? factory
                 : new Media3PassthroughOffsetExtractorsFactory(factory, controller);
     }
-    private MediaSource mediaSource;
+    private volatile MediaSource mediaSource;
     private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     private volatile String activePlaybackUrl;
     private volatile boolean audioPassthroughEnabled;
@@ -1388,7 +1393,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public long getPlayerMediaTimeMillis(long lastServerTime)
     {
+        long zeroGeneration = pausedZeroWitness.generation();
         long position = this.getPlaybackPosition();
+        if (pushMode && !dvdPushMode) pausedZeroWitness.position(zeroGeneration, position);
         if (dvdPushMode && player != null && android.os.Looper.myLooper() == player.getApplicationLooper())
             position = player.getCurrentPosition();
 
@@ -1418,6 +1425,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
         return lastServerTime + position;
     }
+
+    @Override protected boolean hasConfirmedPausedZeroPosition()
+    { return playerReady && pausedZeroWitness.confirmed(); }
+    @Override public String getPushPausedZeroWitnessForDebug() { return pausedZeroWitness.diagnostics(); }
 
     @Override
     public void dvdSetStc(int stc)
@@ -1537,8 +1548,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     PlaybackDebugTrap.record("frame_step_stale", Media3MediaPlayerImpl.this);
                     return;
                 }
-                Format videoFormat = stepPlayer.getVideoFormat();
-                float frameRate = videoFormat == null ? Format.NO_VALUE : videoFormat.frameRate;
+                // H.262 Format.frameRate is often unknown even though the
+                // parsed MPEG sequence header has a proven source rate.
+                float frameRate = getContentFrameRateHz();
                 long targetMs = PlaybackFrameStepPolicy.targetPositionMs(
                         stepPlayer.getContentPosition(), stepPlayer.getDuration(), amount, frameRate);
                 PlaybackDebugTrap.record("frame_step_invoke", Media3MediaPlayerImpl.this);
@@ -1584,8 +1596,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     public float setPlaybackRate(float rate)
     {
+        Media3PullDataSource pull = dataSource instanceof Media3PullDataSource
+                ? (Media3PullDataSource) dataSource : null;
+        boolean finiteSource = pull != null && pull.getInitialReportedLength() > 0L
+                && !pull.isEffectivelyGrowing();
         if (pushMode || dvdPushMode || !playerReady || player == null
-                || mediaContext.isTimeshifted() || mediaContext.getBufferSize() > 0L)
+                || !PlaybackRatePolicy.allowsLocalRate(mediaContext.isTimeshifted(),
+                        mediaContext.isMetadataExplicit(), mediaContext.getBufferSize(), finiteSource))
             return playbackRateController.getRate();
         beginPlaybackOperation(PlaybackSessionController.Operation.PLAYBACK_RATE);
         float accepted = playbackRateController.setRate(rate, playbackRateDriver);
@@ -1851,9 +1868,65 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
     }
 
+    /** Forward command29 uses selected decoder sample queues, not byte I/O. */
+    @Override public boolean canHandleServerSeek()
+    {
+        MediaSource source = mediaSource;
+        return super.canHandleServerSeek() ||
+                (pushMode && !dvdPushMode
+                 && (state == PLAY_STATE || state == PAUSE_STATE)
+                 && source instanceof VibeForwardPushMediaSource
+                 && ((VibeForwardPushMediaSource)source).isForwardCacheReady());
+    }
+
+    public String getForwardCacheStateForDebug()
+    {
+        MediaSource source = mediaSource;
+        return source instanceof VibeForwardPushMediaSource
+                ? ((VibeForwardPushMediaSource)source).forwardCacheState() : "off";
+    }
+
+    private MediaSource createOrdinaryPushSource(DataSource.Factory dataFactory,
+            ExtractorsFactory extractors, MediaItem item)
+    {
+        MediaSource.Factory factory =
+                opensagetv.vibe.miniclient.video.PushBufferSeekPolicy.useForwardCacheSource(
+                        MiniClientConnection.detailedBufferStats)
+                ? new VibeForwardPushMediaSource.Factory(dataFactory, extractors)
+                : new ProgressiveMediaSource.Factory(dataFactory, extractors);
+        return factory.createMediaSource(item);
+    }
+
     @Override
     public void seek(long timeInMS)
     {
+        if (pushMode && !dvdPushMode && mediaSource instanceof VibeForwardPushMediaSource)
+        {
+            final PlaybackSessionController.Token session = currentPlaybackSession();
+            final ExoPlayer active = player;
+            final MediaSource source = mediaSource;
+            context.runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    if (!isCurrentPlaybackSession(session) || player != active || mediaSource != source)
+                        return;
+                    long current = active.getContentPosition();
+                    long buffered = active.getBufferedPosition();
+                    if (timeInMS >= current && buffered >= timeInMS
+                            && ((VibeForwardPushMediaSource)source).isForwardCacheReady())
+                    {
+                        // Do not call Base.seek: it clears extractor read-ahead
+                        // caption state for a producer replacement. This path
+                        // retains the very same FIFO/period and selected queues.
+                        active.seekTo(timeInMS);
+                        PlaybackDebugTrap.recordDetailed("push_forward_cache_seek", Media3MediaPlayerImpl.this,
+                                "targetMs=" + timeInMS + ",fromMs=" + current);
+                    }
+                    else
+                        onUnsupportedServerSeek(timeInMS);
+                }
+            });
+            return;
+        }
         if (mimDirectController().owns(this))
         {
             // Direct replacement performs bounded HTTP. Never hold the
@@ -2297,16 +2370,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     // timeout every minute. Keep the same server-owned byte pipe
                     // and caption/offset policy, but obtain a fresh timeline.
                     final Media3PushDataSource pushSource = (Media3PushDataSource) dataSource;
-                    mediaSource = new ProgressiveMediaSource.Factory(
+                    mediaSource = createOrdinaryPushSource(
                             new DataSource.Factory()
                             {
                                 @Override public DataSource createDataSource()
                                 {
                                     return pushSource;
                                 }
-                            }, withPassthroughOffset(createCaptionAwareExtractorsFactory(false)))
-                            .createMediaSource(mediaSource.getMediaItem());
+                            }, withPassthroughOffset(createCaptionAwareExtractorsFactory(false)),
+                            mediaSource.getMediaItem());
                     PlaybackDebugTrap.record("push_flush_fresh_source", Media3MediaPlayerImpl.this);
+                    currentPlaybackPosition = 0L;
+                    pausedZeroWitness.reset(android.os.SystemClock.elapsedRealtime());
                     player.setMediaSource(mediaSource, true);
                     player.prepare();
                     PlaybackDebugTrap.record("flush_reprepare_after", Media3MediaPlayerImpl.this);
@@ -2784,6 +2859,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
 
         player.addAnalyticsListener(new AnalyticsListener()
         {
+            @Override public void onRenderedFirstFrame(EventTime eventTime, Object output, long renderTimeMs)
+            {
+                if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer
+                        || !pushMode || dvdPushMode) return;
+                androidx.media3.common.Timeline timeline = listenerPlayer.getCurrentTimeline();
+                int index = listenerPlayer.getCurrentPeriodIndex();
+                boolean currentPeriod = eventTime.mediaPeriodId != null && index >= 0
+                        && index < timeline.getPeriodCount()
+                        && eventTime.mediaPeriodId.periodUid.equals(timeline.getUidOfPeriod(index));
+                pausedZeroWitness.rendered(renderTimeMs, currentPeriod);
+            }
+
             @Override
             public void onVideoDecoderInitialized(EventTime eventTime, String decoderName,
                     long initializedTimestampMs, long initializationDurationMs)
@@ -3378,9 +3465,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     dvdEpochExtractorsFactory = null;
                     pushExtractors = withPassthroughOffset(defaultPushExtractors);
                 }
-                mediaSource = new ProgressiveMediaSource.Factory(
-                        dataSourceFactory, pushExtractors)
-                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+                mediaSource = dvdPushMode
+                        ? new ProgressiveMediaSource.Factory(dataSourceFactory, pushExtractors)
+                            .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)))
+                        : createOrdinaryPushSource(dataSourceFactory, pushExtractors,
+                            MediaItem.fromUri(Uri.parse(sageTVurl)));
             }
 
 

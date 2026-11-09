@@ -216,6 +216,7 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
             public void pauseForFocusLoss()
             {
                 MiniPlayerPlugin player = getCurrentPlayer();
+                opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap.record("audio_focus_pause", player);
                 if (player != null)
                     player.pause();
             }
@@ -224,6 +225,7 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
             public void resumeAfterFocusGain()
             {
                 MiniPlayerPlugin player = getCurrentPlayer();
+                opensagetv.vibe.miniclient.android.video.PlaybackDebugTrap.record("audio_focus_resume", player);
                 if (player != null && player.getState() == MiniPlayerPlugin.PAUSE_STATE)
                     player.play();
             }

@@ -12,6 +12,48 @@ import static org.mockito.Mockito.when;
 
 public class MediaCmdDetailedPushStatsTest
 {
+    @Test
+    public void fastFileHandoffFlushesLocallyBeforeAdmittingNewPayload() throws Exception
+    {
+        MiniClient client = mock(MiniClient.class);
+        MiniPlayerPlugin player = mock(MiniPlayerPlugin.class);
+        when(client.getCurrentConnection()).thenReturn(mock(MiniClientConnection.class));
+        when(player.getBufferLeft()).thenReturn(4096);
+        when(player.getState()).thenReturn(MiniPlayerPlugin.PLAY_STATE);
+        when(player.getMediaTimeMillis(anyLong())).thenAnswer(i -> i.getArgument(0, Long.class));
+        MediaCmd command = new MediaCmd(client);
+        setPlayer(command, player);
+        setBooleanField(command, "pushMode", true);
+        MiniClientConnection.detailedBufferStats = true;
+        byte[] packet = new byte[22];
+        MediaCmd.writeInt(4, packet, 0);
+        byte[] response = new byte[16];
+        MediaCmd.writeInt(4_538_676, packet, 14);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, packet.length, packet, response);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, packet.length, packet, response);
+        org.mockito.Mockito.clearInvocations(player);
+
+        MediaCmd.writeInt(6360, packet, 14);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, packet.length, packet, response);
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(player);
+        order.verify(player).flush();
+        order.verify(player).onServerPushAnchor(6360L);
+        order.verify(player).pushData(packet, 18, 4);
+        assertEquals(6360, command.getMediaTimeMillis());
+        verify(player, org.mockito.Mockito.never()).seek(anyLong());
+        // A local reset is not a claimed wire FLUSH or replacement server seek.
+        assertEquals(0, command.getLastServerFlushSequence());
+        assertEquals(-1, command.getLastServerRequestedSeekMs());
+
+        MediaCmd.writeInt(6500, packet, 14);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, packet.length, packet, response);
+        verify(player, times(1)).flush();
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_FLUSH, 0, new byte[0], response);
+        MediaCmd.writeInt(1000, packet, 14);
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_PUSHBUFFER, packet.length, packet, response);
+        verify(player, times(2)).flush(); // only the explicit FLUSH, no double reset
+    }
+
     @After
     public void restoreDetailedStatsFlag()
     {

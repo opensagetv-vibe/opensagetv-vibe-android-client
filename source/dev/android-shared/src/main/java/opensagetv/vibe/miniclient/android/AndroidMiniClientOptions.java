@@ -240,7 +240,9 @@ public class AndroidMiniClientOptions implements MiniClientOptions {
                             && FfmpegLibrary.isAvailable()
                             && !getPrefs().getString(PrefStore.Keys.exoplayer_ffmpeg_extension_setting, "1").equalsIgnoreCase("0"))
                     {
-                        if(FfmpegLibrary.supportsFormat(allCodecs[i].getAndroidMimeType()))
+                        if(FfmpegLibrary.supportsFormat(
+                                opensagetv.vibe.miniclient.video.FfmpegAudioMimePolicy.canonicalMimeType(
+                                        allCodecs[i].getAndroidMimeType())))
                         {
                             log.debug("Audio codec added because it is supported by FFmpeg ext: " + allCodecs[i].getName());
                             supportedCodecs.add(allCodecs[i]);

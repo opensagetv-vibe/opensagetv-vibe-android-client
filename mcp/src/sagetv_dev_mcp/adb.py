@@ -1472,6 +1472,12 @@ class AdbClient:
         """Refresh the local video Surface without changing server transport."""
         return self.dev_control("refresh_video_output")
 
+    def display_refresh(self, policy: str = "inspect") -> dict[str, Any]:
+        """Inspect/apply one temporary current-Window policy, without saving it."""
+        if policy not in {"inspect", "off", "seamless", "always"}:
+            raise ValueError("policy must be inspect, off, seamless or always")
+        return self.dev_control("display_refresh", policy=policy)
+
     def local_player_seek(self, target_ms: int) -> dict[str, Any]:
         # Compatibility alias for older backend-isolation callers.
         return self.dev_control("seek_absolute", target_ms=max(0, int(target_ms)))

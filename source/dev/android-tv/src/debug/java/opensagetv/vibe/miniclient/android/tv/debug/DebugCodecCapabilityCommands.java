@@ -24,10 +24,17 @@ final class DebugCodecCapabilityCommands
         String backend = health.backendClass.contains("Exo2") ? "legacy_exo"
                 : health.backendClass.contains("Media3") ? "media3" : "unknown";
         PrefStore prefs = MiniclientApplication.get(context).getClient().properties();
+        MiniClient client = MiniclientApplication.get(context).getClient();
+        String discovered = client.getCurrentConnection() == null ? ""
+                : client.getCurrentConnection().getDiscoveredCodecCapabilitiesForDebug();
         String queueMode = "legacy_exo".equals(backend)
                 ? prefs.getString(PrefStore.Keys.exo2_codec_mode, PlayerRuntimeTuning.DEFAULT_CODEC_MODE)
                 : prefs.getString(PrefStore.Keys.media3_codec_mode, PlayerRuntimeTuning.DEFAULT_CODEC_MODE);
         return "op=codec_capabilities;"
+                + discovered
+                + "legacyFfmpegAc3Available=" + ("legacy_exo".equals(backend)
+                    && com.google.android.exoplayer2.ext.ffmpeg.FfmpegLibrary.isAvailable()
+                    && com.google.android.exoplayer2.ext.ffmpeg.FfmpegLibrary.supportsFormat("audio/ac3")) + ';'
                 + DeviceCodecCapabilityProfile.current().compactWire() + ';'
                 + DeviceAudioCapabilityProfile.current(context).compactWire() + ';'
                 + "codecInterlaceObserved=" + health.mpeg2InterlaceObservation + ';'

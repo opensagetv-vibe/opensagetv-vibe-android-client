@@ -65,8 +65,8 @@ Distributed artifacts:
 | File | SHA-256 |
 | --- | --- |
 | `source/dev/libs/ijkplayer-java-0.8.8-SNAPSHOT.aar` | `a3ff7dd25911989d49704480c810ac6428e9acd4d5c5e4a9f85cc88f352416bf` |
-| `source/dev/libs/ijkplayer-armv7a-0.8.8-SNAPSHOT.aar` | `bc1498a45a842b82c0890074acf90cfcaa0a2c43e03e9fda496da44daedd3ab2` |
-| `source/dev/libs/ijkplayer-arm64-0.8.8-SNAPSHOT.aar` | `37cec45af055fdf0d6f30735ab1234f2f4e9683c991a117d36430b5b7d91e86a` |
+| `source/dev/libs/ijkplayer-armv7a-0.8.8-SNAPSHOT.aar` | `54b4494000c4748f63a736c96f4eeb81e3421b1ec14ae3f260e6eb83ecb75422` |
+| `source/dev/libs/ijkplayer-arm64-0.8.8-SNAPSHOT.aar` | `cd358f4b13307d600eb86355d01e1a967d7f9a3f0eeb66acbf9e0ef599d62ef4` |
 | `source/dev/libs/ijkplayer-x86-0.8.8-SNAPSHOT.aar` | `a25d604b326c40be85b047958faf87597a9989ce83a8102a9400bdf2dc1c511e` |
 
 The native binaries report IJKPlayer `k0.8.8` and FFmpeg
@@ -81,12 +81,23 @@ and `source/dev/ijkplayer/build-ijk.sh` preserves the recorded NDK r13b and
 `--disable-linux-perf` build inputs from the original artifact build. The
 embedded configuration contains `--disable-gpl --disable-nonfree`.
 
-The current unreleased ARM AARs replace only libijkplayer.so with the reviewed
-interlaced-only software hook. Java, libijkffmpeg.so and libijksdl.so remain
+The current ARM AARs replace only libijkplayer.so with the reviewed
+player-glue adaptations. Java, libijkffmpeg.so and libijksdl.so remain
 byte-identical to the original artifacts. `scripts/build_ijk_deinterlace.py`
 pins/hashes the k0.8.8/FFmpeg sources above and SoundTouch commit
 6bf39cd3bf6b0c156267d12446b0d6bdcfcd53c2, and applies
-source/dev/ijkplayer/native/software-deinterlace.patch plus vibe_deinterlace.h.
+the patches/helpers under source/dev/ijkplayer/native/: software-deinterlace,
+push-flush, raw-cea, paused-step, hardware-step and presentation-clock patches,
+with their retained vibe_*.h source. These implement the software field hook,
+bounded raw caption forwarding, Push epoch/flush handling and native paused
+stepping. The hardware-step trial remains default off and is not a claim of
+all-device support. Reconstruct candidates in the unified container using:
+
+```text
+python3 scripts/build_ijk_deinterlace.py --build-dir /tmp/vibe-ijk-player-build --output-dir artifacts/active/EXT-018/native-build
+```
+
+The exact patches and their application order are owned by that script.
 Its player-only compile uses the unified NDK21.0.6113669/API23/Clang/static C++
 runtime; it never rebuilds/upgrades FFmpeg or SDL or enables GPL/nonfree.
 The native adaptation retains LGPL-2.1-or-later terms; its complete source,

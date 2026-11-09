@@ -1,0 +1,92 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -376,3 +376,9 @@
+     int step;
++    int vibe_step_request;
++    int vibe_step_serial;
++    int vibe_step_start_ms;
++    int vibe_step_presented_ms;
++    int vibe_step_audio_floor_ms;
++    int vibe_step_discard_pcm;
+ 
+ #if CONFIG_AVFILTER
+--- a/ijkmedia/ijkplayer/ff_ffplay.c
++++ b/ijkmedia/ijkplayer/ff_ffplay.c
+@@ -874,1 +874,4 @@
++static void vibe_step_presented(FFPlayer *ffp, Frame *frame);
++static void vibe_step_reset(FFPlayer *ffp);
++
+ static void video_image_display2(FFPlayer *ffp)
+@@ -913,1 +916,2 @@
+-        SDL_VoutDisplayYUVOverlay(ffp->vout, vp->bmp);
++        if (SDL_VoutDisplayYUVOverlay(ffp->vout, vp->bmp) == 0)
++            vibe_step_presented(ffp, vp);
+@@ -1222,2 +1222,7 @@
+     if (is->pause_req && !pause_on) {
++        /* Keep the audio resume floor, but never reuse a previous stepped
++         * frame's paused clock after normal playback starts again. */
++        __atomic_store_n(&is->vibe_step_presented_ms, 0, __ATOMIC_RELEASE);
++        __atomic_store_n(&is->vibe_step_request, 0, __ATOMIC_RELEASE);
++
+         set_clock(&is->vidclk, get_clock(&is->vidclk), is->vidclk.serial);
+@@ -1253,1 +1257,3 @@
++#include "vibe_paused_step.h"
++
+ static double compute_target_delay(FFPlayer *ffp, double delay, VideoState *is)
+@@ -2581,1 +2587,9 @@
++    /* Only an explicitly stepped software Push stream owns this floor.
++     * Drop old complete PCM frames; partial trimming happens after resample. */
++    int vibe_floor = __atomic_load_n(&is->vibe_step_audio_floor_ms, __ATOMIC_ACQUIRE);
++    if (vibe_floor > 0 && !isnan(af->pts) &&
++            af->pts + (double)af->frame->nb_samples / af->frame->sample_rate
++                    <= (double)vibe_floor / 1000.0)
++        goto reload;
++
+     data_size = av_samples_get_buffer_size(NULL, af->frame->channels,
+@@ -2698,1 +2712,14 @@
++    if (vibe_floor > 0 && !isnan(af->pts) && is->audio_tgt.freq > 0 &&
++            is->audio_tgt.frame_size > 0) {
++        int skip = (int)ceil(FFMAX(0.0, (double)vibe_floor / 1000.0 - af->pts)
++                * is->audio_tgt.freq);
++        int samples = resampled_data_size / is->audio_tgt.frame_size;
++        if (skip >= samples) goto reload;
++        is->audio_buf += skip * is->audio_tgt.frame_size;
++        resampled_data_size -= skip * is->audio_tgt.frame_size;
++        /* Do not clear a newer step's floor if it replaced ours. */
++        __atomic_compare_exchange_n(&is->vibe_step_audio_floor_ms, &vibe_floor,
++                0, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
++    }
++
+     return resampled_data_size;
+@@ -2731,1 +2762,3 @@
++    if (__atomic_exchange_n(&is->vibe_step_discard_pcm, 0, __ATOMIC_ACQ_REL))
++        is->audio_buf_index = is->audio_buf_size;
+     while (len > 0) {
+@@ -3442,2 +3475,3 @@
+             int64_t seek_target = is->seek_pos;
++            vibe_step_reset(ffp);
+             int vibe_flush = ffp->vibe_push_input && seek_target == INT64_MAX;
+@@ -4259,1 +4293,7 @@
++    if (opt_category == FFP_OPT_CATEGORY_PLAYER && name &&
++            !strcmp(name, "vibe-paused-step")) {
++        if (value >= 0 && value <= INT_MAX) vibe_step_request(ffp, (int)value);
++        return; /* Runtime action, never retain/replay as a startup option. */
++    }
++
+     AVDictionary **dict = ffp_get_opt_dict(ffp, opt_category);
+@@ -4530,2 +4570,6 @@
+     double pos_clock = get_master_clock(is);
++    if (is->pause_req && is->vibe_step_serial == is->videoq.serial &&
++            __atomic_load_n(&is->vibe_step_presented_ms, __ATOMIC_ACQUIRE) > 0)
++        pos_clock = (double)__atomic_load_n(&is->vibe_step_presented_ms,
++                __ATOMIC_ACQUIRE) / 1000.0;
+     if (isnan(pos_clock)) {
+--- a/ijkmedia/ijkplayer/android/ijkplayer_jni.c
++++ b/ijkmedia/ijkplayer/android/ijkplayer_jni.c
+@@ -941,1 +941,6 @@
++        case 12065: /* Local software frame actually submitted, not a seek ack. */
++            if (msg.arg2 == ijkmp_get_property_int64(mp, VIBE_CEA_SERIAL_PROPERTY, -1))
++                post_event(env, weak_thiz, MEDIA_INFO, 12065, msg.arg1);
++            break;
++
+         case VIBE_CEA_MESSAGE: {

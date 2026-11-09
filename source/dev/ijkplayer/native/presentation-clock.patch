@@ -1,0 +1,52 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -382,3 +382,7 @@
+     int vibe_step_discard_pcm;
++    int vibe_output_min_serial;
++    int vibe_output_reported_epoch;
++    int vibe_output_pts_ms;
++    int vibe_output_serial;
+ 
+ #if CONFIG_AVFILTER
+@@ -591,2 +595,3 @@
+     int vibe_push_input;
++    int vibe_output_epoch;
+     int vibe_raw_cea;
+--- a/ijkmedia/ijkplayer/ff_ffplay_options.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_options.h
+@@ -67,2 +67,4 @@
++    { "vibe-output-epoch", "client generation for actual Push video output proof",
++        OPTION_OFFSET(vibe_output_epoch), OPTION_INT(0, 0, INT_MAX) },
+     { "vibe-push-input", "server owns replacement Push bytes, not file seeking",
+         OPTION_OFFSET(vibe_push_input), OPTION_INT(0, 0, 1) },
+--- a/ijkmedia/ijkplayer/ff_ffplay.c
++++ b/ijkmedia/ijkplayer/ff_ffplay.c
+@@ -874,4 +874,5 @@
+ static void vibe_step_presented(FFPlayer *ffp, Frame *frame);
+ static void vibe_step_reset(FFPlayer *ffp);
++#include "vibe_push_presentation.h"
+ 
+ static void video_image_display2(FFPlayer *ffp)
+@@ -4296,2 +4296,8 @@
++    if (opt_category == FFP_OPT_CATEGORY_PLAYER && name &&
++            !strcmp(name, "vibe-output-epoch") && ffp->is &&
++            value > 0 && value <= INT_MAX) {
++        vibe_arm_output_epoch(ffp, (int)value);
++        return;
++    }
+     if (opt_category == FFP_OPT_CATEGORY_PLAYER && name &&
+             !strcmp(name, "vibe-paused-step")) {
+@@ -4575,2 +4582,3 @@
+                 __ATOMIC_ACQUIRE) / 1000.0;
++    pos_clock = vibe_paused_presentation_clock(ffp, pos_clock);
+     if (isnan(pos_clock)) {
+--- a/ijkmedia/ijkplayer/android/ijkplayer_jni.c
++++ b/ijkmedia/ijkplayer/android/ijkplayer_jni.c
+@@ -942,2 +942,7 @@
++        case 12066: /* Epoch-fenced actual video output, including paused0. */
++            if (msg.arg2 == ijkmp_get_property_int64(mp, VIBE_CEA_SERIAL_PROPERTY, -1))
++                post_event(env, weak_thiz, MEDIA_INFO, 12066, msg.arg1);
++            break;
++
+         case 12065: /* Local software frame actually submitted, not a seek ack. */
+             if (msg.arg2 == ijkmp_get_property_int64(mp, VIBE_CEA_SERIAL_PROPERTY, -1))

@@ -1,5 +1,599 @@
 # OpenSageTV Vibe Android Client handoff
 
+## Current work (revision442; latest)
+
+RELEASE-005 local preflight passes1000 source tests(6 skips),178 mocked MCP,
+project validation, strict exact APK1151-entry/signer checks and task/manifest.
+Source-offer ARM hashes and missing IJK scheduling inventory corrected, no
+runtime or candidate02 change. Empty generated root step retired recoverably.
+Next: commit/outgoing audit, exact-source CI, public114/download verification,
+then an accurate Community356 reply. Both orders442 retain publication first.
+
+User authorizes RELEASE-005: publish exact qualified114 APK02/8F31F6F7 and
+Android source, then reply to OpenSageTV/Community discussion356 without closure
+or claiming the unsupplied reporter recording is proven fixed. Scope is Android
+only, not every sibling repo/plugin. Required source/MCP/package checks,
+outgoing audit and exact-source CI precede publication/download verification.
+Reuse qualified physical/native/build/JVM records; hardware trial remains off.
+Both orders442 prioritize publication before further experimental EXT work.
+
+EXT-018 is a working hardware IJK prototype, NOT production enabled or closed.
+All EXT-018..022 remain unchecked. Non-Pro25 current candidate02/local114/
+code2101141 SHA256:
+8F31F6F7931F7A34C2D07FC5C244C3E89C725BCD3828E82F950105DB0C37949F
+artifacts/active/EXT-018/hardware-step-02-debug.apk. Pro29 now also installed114
+on user request,249 private preferences restored; exact installed APK readback
+hash matches02. Pro was disconnected before/after, so no active session audio
+override needed restoration. GSY/selected Push (`dynamic`)/hardware unchanged.
+Hardware-step trial remains nonpersistent/default off; this is an installation,
+not Pro stepping qualification. No server controls/restart/publication.
+Old09
+F947AF68 rollback under EXT-010/canonical firetv9A older. No Core/plugin/
+restart/tuner/recording/publication/commit change. No active physical gates.
+
+IJK MTK AVC hardware stock175 Non-Pro:01 Fixed command28/02 normal Pause and
+04 ordinary UK H264 Push pass (33/34ms or UK20ms, actual frames/holds/no29/
+FLUSH/resume);03 unchanged software Push/CEA passes.05 is a false absolute
+native-vs-rebased oracle failure.06 corrected delta oracle passes steps but
+burn158091 versus logical5678+150000 demonstrates~2.4s actual epoch undercount.
+Hardware Fixed/native counter is normalized after actual current-serial output;
+old unknown-origin accumulation discards its initial progress.02 adds narrowly
+scoped trustNormalizedEpoch only for explicit hardware trial/basic replies/
+current decoder-output proof. Detailed ordinary streams and software unchanged.
+No guessed offset, timer or server seek to fake alignment.
+
+Corrected07/02 passes six initial/replacement normal-Pause steps,34/33ms,
+held pause, no server29/FLUSH during each step and both A/V resumes. Reviewed
+last burn158725/frame4757 versus native8763+150000 =158763 (38ms). Stock paused
+UI158284 lags441ms, not a frame-exact server claim. New6s independent HDMI
+169703/frame5086, audio mean-17.7/max-6.7dB; not physical lip-sync/cadence proof.
+All136prefs/public CC/power restore, trial off, own client exits. Build21511
+PASS49s, strict1151 entries/signer PASS,18 focused JVM PASS and release-Java
+97439 PASS34s;5 hardware-oracle/4 native/earlier58 backend contracts pass.
+
+Native AARs remain prototype01 ARMv754b44940/ARM64cd358f4b:712/714 exports,
+dependencies and all non-player entries unchanged. ARM64 build/ABI only.
+Hardware option is separate from software FIFO flush/raw CEA. Nonpersistent
+debug receiver hardware_step_trial, default off; Push protocol flags false.
+Do NOT claim all disabled capabilities work or publish as fully qualified.
+
+Next: hardware fallback/format/track-change and lifecycle cancellation negatives;
+then independent Media3/legacy renderer-owned stepping (GSY inherits delegates).
+Their ordinary Push stepping is still disabled. EXT-019 needs real indexed A/V
+packet ownership: FIFO readAt ignores byte positions, queues destructively
+dequeue, default3 decoded frames keep only the shown frame. Reverse/System/
+full raw-PTS contracts remain distinct unfinished tasks. Both orders440 current.
+Compact EXT-018 result preserves provenance; unique open comparisons/current
+candidate/rollback inputs remain active. Retire corrected/superseded raw only
+after meaningful results and guarded containment/hash checks.
+Corrected05/06/obsolete APK01/HDMI02 plus helper now retired21 files/79073315B,
+all moved hashes match; root cleanup report records recoverable paths. Current
+02/07 and unique ordinary-Push/software/native A/B inputs remain. Final backend
+58/project/order440/1780-file manifest checks pass; no commit or publication.
+
+## Prior work (revision437)
+
+All nine scoped server-connected HD300 parity tasks EXT-009..017 are closed
+to their documented supported scope. No standalone features or universal
+hardware-equivalence claim. Non-Pro25/stock175 qualification completed on local
+0.5.114/code2101141. Current09 APK SHA256:
+F947AF68880C3D0F4C5884A359F37287F4216B2C58ED4F29AFF1F8891A1F020F
+at artifacts/active/EXT-010/forward-cache-default-09-debug.apk.
+Canonical artifacts/firetv APK9A remains an older rollback, NOT this build.
+Pro remains113; no publication/commit, server Core/plugin/restart or recording
+change. Each physical owner restored136 preferences, public CC and power,
+then exited only its exact test client.
+
+EXT-010 now uses real selected A/V forward queue transactions in ordinary
+detailed Push for Media3 and legacy Exo plus both GSY delegates. Basic classic
+Fixed/Always keeps producer-owned seeking; Pull/Direct/DVD keep existing paths.
+Broader PUSH_BUFFER_SEEKING and FRAME_STEP remain false. IJK/System cache seeks
+are unsupported; their WhenNeeded target limitation is not called a pass.
+Use supported classic Fixed/Always basic or Pull rather than fake cache seeks.
+
+Default Media334 tracks/Teletext,35 GSY positive/negative/paused/independent HDMI,
+36 epoch and earlier CEA/DVB gates pass. Legacy37 GSY PS,39 DVB,40 epoch,
+corrected41 Teletext/audio tracks/cache and42 basic fallback pass. Legacy41
+restores enAC3/narMP2 and Teletext by canonicalizing the MP2 MIME alias exactly
+as Media3 already did; real29 targets105911000/130444000/151280000us, zeroFLUSH,
+1405 callbacks. Final42 uses basic replies/cacheoff, real producer FLUSH each
+near/far/paused, two rejected unsupported29 probes, raw origin1400ms. Reviewed
+paused burn620153/Core620993 (-840ms): not frame-exact transcoder landing.
+IJK10 remains the passed affected CEA batch regression. No broader matrix rerun.
+
+Both extractor adaptations retain pinned public Apache source attribution;
+no dependency upgrade/native relink for the cache or alias changes. Canonical
+native ARM32/ARM64 AAR hashes remain44e02b9e/f651fe69; ARM64 is build/ABI only,
+not physical qualification. Build69338 focused JVM plus release-Java compile
+passes; MCP health34 and focused source contracts pass. Final project validation,
+manifest and raw retirement are recorded in the compact EXT-010 result.
+Both suggested orders437 remove completed EXT-010; unrelated feedback/deferred
+tasks remain open. Do not replay these completed matrices as a next prerequisite.
+
+## Prior work (revision436)
+
+Eight of nine scoped tasks complete; EXT-010 remains. Non-Pro25 installed09
+F947AF68880C3D0F4C5884A359F37287F4216B2C58ED4F29AFF1F8891A1F020F,
+build51676 succeeds45s, strict1151 entries/signer pass. Codec source/queue
+07 production logic unchanged since passing37/39/40;09 adds proven MP2 alias
+negotiation correction and read-only discovered-profile diagnostics. Shared
+FfmpegAudioMimePolicy preserves Media3's existing exact mapping; legacy now
+uses audio/mpeg-L1/L2 before its case-sensitive FFmpeg capability query. No
+new dependency, native relink, renderer or Core/plugin change.2 Core alias/
+2 unchanged Media3 alias/6 transaction JVM gates and focused source tests pass.
+
+Legacy GSY MPEGPS37 PASS near181017/paused621168, actual21168000us queue
+transaction/noFLUSH, four playing/paused rejections retain epoch/progression,
+paused delta0, public far600000 replacement passes. Reviewed burn620653 versus
+Core621168 (-515ms); do not claim frame-exact Core transcoder landing. Legacy
+DVB39/08 PASS68226000us/noFLUSH +Off/On/continuity/producerFF/pause/readable
+'Well, I mean, to be honest,' bitmap. Legacy default epoch40/08 PASS old
+1806910/new48808, one implicit handoff/noOPENURL, pause49956->49956/resume.
+Both recording sources audioAC3, so MP2-only capability addition does not
+invalidate their transport rows. Media3 unchanged mapping/earlier gates retain
+provenance; IJK10 independent bridge regression still valid.
+
+38 Teletext failed before any cache input: source PAT/PMT repeated but no
+Teletext descriptors/services/PES, only narration MP2. Frozen discovered codec
+profile lacked MP2/MPG1L2 even though active FFmpeg decoded it. Root cause:
+legacy queried lower-case audio/mpeg-l2, while its wrapper needs mpeg-L2;
+Media3 already had this fix. Read-only diagnostics use existing immutable
+profile, never re-probe on startup. New dev_codec_capabilities fields report
+discovered codecs/containers (before Fixed masking), not secret preferences.
+The legacyFfmpegAc3Available field is only evaluated when an active legacy
+backend is detected; false before Watch is NOT an AC3 support failure.
+
+Corrected legacy-cache-corrected-41 running83691 on09, ordinary selected Push
+(`dynamic`), actual Push, no debug override. Snapshot confirms MP2/MPG1L2 plus
+MPEG1 newly advertised, other video/container lists unchanged; original enAC3+
+narMP2 tracks restored, Teletext descriptors2072/services1/PES2585/cues305.
+Await full CC/track/cache/pause/visual verdict, then classic basic fallback and
+final affected checks/docs/manifest/cleanup. Keep unique38 evidence until
+correction fully passes. Core/plugins/restarts/recordings/Pro untouched;
+canonical9A rollback still unchanged. Both orders436 current.
+
+## Prior work (revision435)
+
+Eight of nine scoped tasks complete; EXT-010 open. Non-Pro25 installed new
+07 SHA3B16EA34BA5380EFD2E67E0667205FC0B22824F713610E42FEA0A57687FC7BA1
+for legacy-only qualification. Build60120 succeeds41s after replacing obsolete
+Checker compatqual.NullableType with the current existing qual.Nullable type
+annotation; no extra dependency/checksum/native change. Strict1151 entries and
+same signer pass. Current physical legacy-cache-ps-37.json running26532:
+GSY legacy Exo actual Fixed MPEGPS, debug detailed override, real29 + playing/
+paused backward/outside-window negatives, public far replacement. Never call
+the 'dvd' container profile authored DVD playback. Source adaptation has exact
+public Exo2.18.1 originals3aee2b9d.../52f388b5... under root artifacts/temp/
+EXT-010-legacy-exo-source, full original Apache headers preserved. No vendor
+code/SeekMap/byte seek/dependency upgrade. Same core atomic queue helper;
+ordinary detailed legacy FLUSH gets a new source, basic/Pull/Direct/DVD unchanged.
+
+Completed default Media3 gates on06/EF6549CA (no further Media3 runtime change):
+34 tracks/Teletext PASS actual104066000us, audio1->0 targets132071000 and
+156332000us, zeroFLUSH, offsets/output unchanged, reviewed1405wire/readable
+'management and marine biology at Kendall College.' Default GSY35 PASS
+near153839/paused621002, four negative playing/paused probes keep queues/epoch
+and paused delta0. Actual paused target21112000us, burn621154/Core621002
+152ms difference, not frame-exact. Independent6s HDMI reviewed647280 with
+645.5/646/646.5 roll-up; audio mean-26.2/max-6.2dB, no lip-sync/cadence claim.
+Default epoch36 PASS old1807399/new47490, one local handoff/noOPENURL, pause
+48423->48423/resume. IJK batch regression10 on04 passes all CC/seek/pause/
+visual gates1396 events; burn80147/78.5/79/79.5 readable. Raw09/10 retired26/
+14509373B after compact013 record, rollback preserved. All136prefs/CC/power
+restore, exact own client exits. No Core/plugin/restart/tuner/recording/Pro/
+publication change. Canonical9A APK remains rollback until final qualification.
+
+Next legacy ordinary default TT+track, DVB, retained-file and classic basic
+fallback after37; add only affected tests/docs/manifest/cleanup, not full matrix.
+Protocol general cache/frame-step capability remains false, IJK/System safe
+unsupported. Both orders435 current. Do not close EXT-010 before legacy gates.
+
+## Prior work (revision434)
+
+Eight of nine scoped tasks complete; EXT-010 remains. Non-Pro25 installed
+32E2039AD9CC710411FB86AEB620255FF2638888852305E18E0208BC98EFE5E3
+candidate04. Strict1151 entries/signature pass. Candidate05 F756C050 default
+Media3 detailed-Push source builds55s but not installed:33 exposes loader EOF
+setting readiness false despite unread sample queues. Corrected source retains
+selected AV window after EOF, still returns Exo TIME_END_OF_SOURCE. Sparse
+optional seek failure restores cursor; no selected AV cannot claim success.
+Candidate06 build46289 active; do not install before success/strict inspection.
+
+Epoch30 PASS on03: exactly1 implicit handoff/noOPENURL, old1807673/new47552,
+pause48895->48895/resume. Teletext31 PASS on03 actual29 target114058000us,
+noFLUSH; CC cycle/producer seek/pause and reviewed readable caption. DVB32 PASS
+on04 actual29 target81920000us/noFLUSH, Off/On/cue continuity/producer seek/
+pause and reviewed 'I want that. Three points to Matt.' bitmap over video.
+Audio33 first switch/probe succeeds (target142123000us), second source-headroom
+gate refuses before a command because EOF disabled readiness. Keep unique33
+failure evidence until correction; track probes now use5s exact transactions
+to fit the finite192s fixture rather than consume it with three20s jumps.
+
+IJK default caption10 running21737 on04, corrected launch PID/signature oracle,
+same batching source as final candidate. Next install06 then repeat corrected
+track gate, default GSY/Media3 positive/negative command gates without debug
+enable, default Media3 epoch and basic fallback if affected. Protocol buffer-seek
+flag stays false (forward-only selected queues are not general random access).
+No Core/plugin/server restart/tuner/recording/Pro/publication changes. Canonical
+9A rollback unchanged. Cleanup81 owned obsolete files/393216709B recorded in
+root report; current cache/native inputs and minimal failures remain. Orders434.
+
+## Prior work (revision433)
+
+Eight of nine scoped tasks complete, EXT-010 open. Non-Pro25 installed
+45F32119030777967AA9E5EE8FA220F034D74058670BA3EDA1636D58328A0003
+candidate03; canonical artifacts/firetv rollback9A539528 unchanged. Strict
+inspection1151 entries/signer passes; Gradle75452 succeeds41s. Trial is
+debug-only/default off/unadvertised, every helper disables it in finally.
+
+Actual command29 cache28 and CC1-caption29 playing/paused PASS, zero FLUSH,
+exact transaction lastTargetUs. Paused burn616683/Core616697 and617016/
+617043 errors14/27ms. Independent29 HDMI reviewed628194 with readable
+626.5/627/627.5 captions, audio mean-17.7dB/max-4.8dB, not lip-sync proof.
+Far600000 public producer seek resets period. Crash27 is corrected by caption
+batching/backpressure; no repeat. IJK default09 completes all CC cycles/seek/
+pause and readable burn108642 versus107/107.5/108 captions, but final test
+falsely treats historical27 crash as new. Corrected child oracle checks launch
+PID and signature baseline without clearing logs;35 authority tests pass.
+
+Next: epoch30 currently running (Media3 ordinary Push trial, contiguous old
+66285901 ->66285915, seed1800000, pause/resume). Finish default IJK caption
+rerun, ordinary-Push TT/DVB cache command gates, track/negative/GSY scope before
+production activation. New bounded helper mcp_forward_cache_probe sends actual
+zero-reply29 and requires exact transaction/no FLUSH/same-source A-V. No Core,
+plugin, restart, tuner/recording, Pro or publication changes. Orders433 current.
+
+## Prior work (revision432)
+
+Eight of nine scoped parity tasks complete; EXT-010 remains. Canonical tested
+APK9A539528 in artifacts/firetv unchanged; non-Pro25 currently has experimental
+F8D830FA candidate02, trial disabled after each failed gate and136prefs/CC/
+power restored. Pro untouched; no Core/plugin/server restart/recording control.
+
+Trial25 TS and26 PS public preparation/near seeks play via producer FLUSH1,
+no command29. Do not count them as cache success. New --cache-command-probe
+explicitly dispatches client MediaCmd29 for near/paused phases; not a claim
+stock Core chose that branch. Probe27 disconnects via app crash18:03:18.370:
+ConnectionEventRouter.enqueue Queue full <- MiniClientConnection.postSubtitleInfo
+<- LegacyExtenderCaptionBridge.drainTo on pool-4-thread-1. Full diagnostic
+20261109-000623_forward-cache-27-disconnect_* under active EXT-010; keep minimal
+failure evidence until correction passes. Historical Amazon service crashes
+are unrelated; this exact Vibe stack is proven.
+
+Implemented client fix: whole8-byte record coalescing <=16KiB per callback,
+one bounded batch per existing clock drain. Connection FIFO remains100, full
+queue has typed backpressure (no input replay/drop/growth). Caption Sink catches
+only that type, retains data/reset until accepted, preserves608/708 records/PTS
+and reset-before-data ordering. Stock CCSubtitleHandler length/8 parsing and
+unsigned16-bit callback framing checked. First burst/fragment/order/backpressure/
+router/transaction JVM build23437 passes. Candidate03 build75452 pending adds
+exact lastTargetUs witness and selected-track-only queue transaction; no install
+until success. Re-run explicit27 scenario on new guarded APK, inspect actual
+target transaction/native frame, then affected CEA/Teletext/state/epoch gates.
+Keep --forward-cache-trial isolated/unadvertised; default source stays upstream.
+MCP compact whitelist now carries pushForwardCacheState;34 health tests pass.
+Both orders432 current. Source downloads/native SDK scratch remain active.
+
+## Prior work (revision431)
+
+Eight of nine parity tasks complete; EXT-010 remains. Installed non-Pro9A539528
+passes Media3/GSY-legacy-PS/IJK ordinary Push/GSY-Media3 safety20/22/23/24;
+native caption08 full cycles/seek/flush/pause/resume plus reviewed burn84.251
+with readable82.5/83.0/83.5 roll-up passes,1757 wire events.136prefs/CC/power
+restore/exact exit. Compact reports retain all harness corrections;21 native
+14617ms over14619ms is normal playback, not a jump. No Core/plugin/Pro change.
+
+Continuing real cache implementation rather than stopping at safe rejection:
+debug-only Media3 selected-queue trial imports pinned Apache1.11.0 period/source
+into distinct VibeForwardPush classes (original tag/source SHA retained). It
+never invents SeekMap or reopens byte offsets. Atomic required-AV transaction
+restores retained read indices on partial rejection; forward range/epoch only.
+Normal code stays on original Media3 source with trial flag false; no preference
+or advertised property. New helper --forward-cache-trial requires actual
+command29 and no producer FLUSH, public CC restored after temporary test Off.
+Trial builds79612/99977 and5 transaction/7 policy JVM tests pass, source
+contracts (including all58 backend checks) pass. F8D830FAC2945B3D087B32EE5C200F772256586A377FDF05ADC2A3AA7323B99D
+candidate02 is installed only on non-Pro; canonical artifacts/firetv APK remains
+tested9A539528, preserve it for rollback. Strict1151-entry/signature inspection
+passes. Gate25 TS public preparation/near seeks pass via producer FLUSH, not
+command29: valid buffered queue~39s, header mux=-500, so positive feature proof
+correctly FAILS. Trial disabled/prefs/CC/power restored. Independent PS gate26
+session90364 active with the same candidate and explicit100000ms preparation.
+Do not silently count producer replacement as native-cache success. Then caption/
+pause/epoch/track gates; no claim of production cache support before those pass.
+Both orders431 current. Native SDK scratch/current04 and root staging source
+artifacts/temp/EXT-010-media3-source remain active inputs, don't retire yet.
+
+## Prior work (revision430)
+
+Eight of nine scoped parity tasks complete. EXT-016 supported ARM Software IJK
+forward step closes: normal Pause-key Push06/Fixed07, actual displayed-frame
+clock/hold/resume and final retained-file clock08 pass. See compact RESULT.
+Current installed non-Pro APK4B813502, native AAR04; Media3 basic/raw-PTS16
+and IJK17 pass preparation/near/far/paused seeks with settings restored.
+EXT-010 remains: finish remaining affected delegates/ordinary Push and exact
+unsupported command29 negative gates. Client-only guard being built preserves
+zero-byte command29 framing and Pull/Direct/DVD ownership. WhenNeeded stock
+Core ignores capability flag; don't claim native cache-seek support or closure.
+Stock175/Core/plugins/Pro unchanged; recording1 observed, no restart. No publish.
+Both orders430 remove EXT-016. Native scratch/AAR inputs remain active EXT-010.
+
+## Prior work (revision429)
+
+Installed non-Pro25 F921D921126DDC9830FDE51E49CA2210C1FD1A4ADB34B5314F6E7ACB0E2823BE.
+Final native step06 normal repeated Pause uses production EventRouter, not
+only debug command28. Three real frames22883->22884->22886,33/33ms, logical
+763560 versus burn763563 (3ms), presented errors0ms. Pause holds, A/V resumes,
+6s independent HDMI/readable CC/audio mean-24.6/max-7.4dB reviewed.136prefs/
+CC/power restored, exact exit.14 clock/2 gate JVM tests, focused source/build/
+strict package pass. Known normalized origin avoids double-counting small
+native corrections; actual first-frame/read-start/generation proof retained.
+04/05 failed trials remain recorded. EXT-016 final Fixed normal-key/retained-
+file gates remain. EXT-010 IJK11 headroom before any seek;12 source100000ms
+preparation PASS then read-only UI timeout with healthy playback. Activity32ms,
+recording1/no restart.13 preparation PASS but helper reused pre-prep bookmark
+when skipping unavailable native cache-depth polling; corrected oracle for14.
+Seven scoped tasks complete; EXT-010/016 open. Both orders429 current.
+Stock175/Core/plugins/Pro unchanged. No publication/commit this batch.
+
+## Current work (revision428)
+
+Seven tasks complete; EXT-010/016 remain. Real software IJK step01 Push and02
+Fixed pass three frames, clock hold, reverse/playing rejection and A/V resume.
+Independent reviewed Push images19281->19282->19284/native33,34ms; no FLUSH/
+producer Seek. EE68B23A repeats diagnostic03 with6s independent HDMI captured.
+Measured native12749/presented9401/effective673440 -> reported682841 against
+burn686252, ~3.4s initial progress lost. First PREPARED fresh-origin61A70DCC
+failed04 with +837ms overcount; retain unique state, not a ready candidate.
+Current source moves fresh proof to actual first video output, revokes on
+retained ready-player FLUSH, fences native reads by pre-read time/generation
+and refuses older observations rather than re-anchoring/counting twice.
+Build49863 active; then install only on idle non-Pro, normal repeated Pause
+gate with exact clock alignment plus reviewed burned PTS/HDMI. Actual native
+step output is already proven but production normal-key route not yet gated.
+FRAME_STEP flag stays false; server raw-PTS command29 bundled paused seek is
+separately unqualified. No new server/plugin capability or proprietary copy.
+No Pro/Core/plugin/restart/publication change. Both task orders428 current.
+
+## Current work (revision427; latest status)
+
+Seven of nine scoped tasks complete. EXT-010/016 remain open. C6278985 actual
+classic Fixed/Always basic fallback passes Media3 MPEGTS08/legacy MPEG2PS10
+near/far/paused; ordinary Push legacy09 retains detailed anchors and passes.
+All four delegates passed paused-zero F00 correction. No command29 cache pass
+from producer-FLUSH rows. WhenNeeded/copy/Direct retain established detailed
+contract; need qualify their possible server-side-transcode cache branch.
+Native GSY/IJK affected cases remain; do not replay completed unrelated matrix.
+Installed/test candidate09467ED8C95C881566C1363536E55256153C05477E6E91AF7CAB9BE882837328
+adds ARM Software IJK real one-frame renderer request/completion, not FIFO Seek.
+Native02 ABI712/714 exports/deps and all non-player AAR entries unchanged; new
+strict AAR hashes9e518b66/f70e5480,2 gate tests/2 native contracts/build pass.
+Actual Push step01 active. No positive step claim before actual frames and
+resume pass. FRAME_STEP protocol flag remains false because stock paused Seek
+also sends raw-PTS command29; that bundled contract is not yet implemented.
+Native candidate01 is superseded pre-cancellation development output, NOT
+release evidence; native02 is the exact reviewed source/build candidate.
+EXT-013 now closed in its feasible software scope; compact result/ABI/build
+JSON retained.68 raw files125276566bytes retired under original root-deleteme
+paths. Active EXT-010 rollback and persistent cache retained. Native scratch
+/tmp/vibe-ext013-wf4ohzqh now serves active EXT-016 builds, do not retire yet.
+Stock175/Core/plugins/Pro untouched. No publication/commit this batch.
+
+## Current parity work (revision426)
+
+Seven of nine scoped tasks complete. EXT-013 closes feasible ARM Software raw
+CEA with final Push07/F00C6A19 readable STV frame and1700wire events, seek/flush/
+metadata reset/pause/resume. Pull02/Push05/hardware-negative03/software native
+clock06 also pass; compact results/EXT-013/RESULT.md records hashes/limits.
+Both orders426 remove EXT-013. Native hardware output does not expose A53 and
+remains unadvertised, not a false hardware caption pass.
+EXT-010 candidate C627898583A01FB5FF36BF3DD5B69B5D458E2C9727789453876BFB6E14E7EDBB
+adds bounded stock-negotiation fallback: ONLY Fixed+Always+remuxOff+DirectOff
+uses basic buffer protocol, avoiding stock Core's unsupported client-cache
+seek branch. Other source-clock/unknown modes keep detailed stats/anchors.
+Actual Media3 gate08 active; no feature/correction pass claimed before results.
+Paused-zero correction already passed all four Exo/Media3/GSY delegates onF00.
+EXT-016 real paused renderer step remains; safe rejection is not completion.
+No server/Core/plugin/restart/Pro/publication changes.
+
+## Current parity work (revision425; supersedes historical candidate statuses)
+
+Installed non-Pro25 local114 F00C6A1904555BAEFDB66C6961B9FD400561F1268D7649474335AE3042031E60.
+EXT-009/011/012/014/015/017 complete; EXT-010/013/016 remain open. Stock175
+untouched, no restart; Pro113 unchanged. Both task orders425 list next gates.
+EXT-010 real paused Fixed seek held previous-epoch position while native0 had
+already rendered target. Same-period post-reset first-frame witness now allows
+paused zero only with Push/non-DVD/anchor0; positive progress revokes witness.
+Media3/legacy/GSY-Media3 pass actual paused target/clock hold/resume. GSY/legacy
+gate07 follows; ordinary Push affected smoke and actual cache-seek disposition
+remain. Classic Fixed MPEGTS/PS near/far gates use producer FLUSH, not command29.
+Test oracle compares Core mediaTime-seekStart; decoder transcode time is local.
+IJK software Pull02/Push05, hardware-negative03 and software clock/handoff06
+pass; native raw A53/serial/queue and eligible software FIFO FLUSH corrected.
+F00 also resets discovered CEA inventory at seek/FLUSH; final Push07 pending.
+ARM exports712/714 and dependencies unchanged; no hardware IJK raw CEA claim.
+Current native AARs/source patches/checksums canonical; candidate/baselines and
+unique raw failure evidence stay active013 until final report/closure cleanup.
+EXT-016 remains real renderer step work, not a withdrawn seekTo prototype.
+
+## Continuing all authorized parity tasks (historical revision424)
+
+User explicitly objects to stopping at checkpoints. Continue independent
+authorized implementation/gates, not just a status response. EXT-009/011/012/
+014/015/017 are complete; EXT-010/013/016 remain open. Both task orders424
+remove completed gates and unblock IJK raw-caption implementation.
+EXT-012 compact artifacts/results/EXT-012/RESULT.md records new readable
+CEA/Teletext/DVB gates on AB624A1D/local114/non-Pro175 and precise limits;
+136prefs/CC/power restore each. Archived disabled stress fixtures stay disabled.
+New guarded wrapper delegates CC cleanup in-process and owns prefs/power.
+
+EXT-011 reproducible rejection applies to completed TS imports as well as TV:
+legacy OPENURL guesses active=true by extension, and rate eligibility ignored
+the loader's resolved source contract. Candidate reuses SAME loader's finite,
+non-growing result; explicit active/circular buffers/unopened/Push/DVD still
+reject, no new probe/main-thread I/O or server dependency. Imported Media3
+gate04 passes2x23308/11621ms, forward33281/8398, reverse-39243/8478 and
+return1x3457/3399 with actual A/V. Gate03's APK install succeeded but the
+helper looked for a nonexistent installed field; corrected result parser,
+restoration passed and04 reused installed bytes without another install.
+Gate05 legacy/TV plus independent6s HDMI passes:2x23190/11625ms, forward34618/
+8482, reverse-39410/8562, normal3408/3410. Actual PBS feather/readable CC and
+audio mean-30/max-6.1dB reviewed. Growing NFL66345476 has two segments:06 API
+object and07 finite-snapshot oracles were wrong.08 independently proves
+5009371408->5013807720B writer growth and2x rejection/healthy1x. Public
+media-relative test preparation selects writer, never a production repair.
+EXT-011 compact result supersedes13 retired raw files/15559596bytes.
+
+Earlier candidate APK B34F4A0E1566FB670FDC21958C8EFF56727CD8830C2E2B050AD6286C384FA4AF
+also fixes optional display preference restoration: Window-owned weak lease,
+Auto0 retained, repeated Off/new Activity/external preference changes cannot
+reuse an old global physical-mode ID.6 lease tests plus existing cadence/GPU/
+rate policy/controller tests and67-task build pass; no physical mode-switch
+qualification claimed yet. Pro113 remains untouched. `.175` is recording:
+no tuner, recording control, Core/plugin/config change or restart. `.232`
+read-only health timeout, not an idle or runtime-failure witness.
+
+EXT-017 guarded measurement completes both actual renderers with measured
+no-change disposition: SageMC Info/Home/preview/highlights/alpha and independent
+HDMI pass, queue max1/sampled0..1 both. No quantified batch/diffuse benefit or
+new capability claim.16 raw files30351214bytes retire after compact result.
+
+Current non-Pro114 APK EB581C77FE7FD0A0FC45B810F5269C902E569CEA0648A6F573B4BCC335D31157
+adds bounded existing-callback diagnostics for display request/restore,
+MediaSession play/pause and audio-focus pause/resume. No new background monitor
+or ignored PAUSE. EXT-01503 proves apply17958ms -> FireOS MediaSession PAUSE
+199ms later -> stock server PAUSE42ms later,0 actual key events, valid Surface,
+no codec error. Canonical PAL25fps selects actual50Hz/mode11 from59.94/mode2;
+Off restores preferred Auto0.01/02 continuity expectations failed;02 HDMI/pause
+trace proves platform pause, not frame/decoder corruption.04 completed exact
+Window restoration and explicit test-Play recovery after PROVEN platform pause,
+not a seamless mode-switch claim or production auto-play workaround.82 mocked ADB tests,
+focused policy/controller/renderer unit/source tests and builds pass.
+EXT-014 completes ALADDIN02 plus second authored01 native DVD gates. ALADDIN
+lands544080 for540000±12000, pause/play/cadence observation and independent HDMI
+pass. Authored FireTV root/Languages/root/title passes with reviewed SPU yellow
+selection, main title, actual audio/video. Both restore136prefs/power/exit.
+Compact result records reused unchanged DVD001/002/003 evidence and limitations;
+no exact-seek/all-device cadence/standalone navigator claim. All gates finished;
+no device test remains running. Continue EXT-010/013/016 implementation.
+Superseding DVD-idle status: EXT-013 hardware-negative03 now runs on non-Pro175.
+IJK software Pull02/1CF1637F passed all stock CC states/seek/pause and reviewed
+readable STV text; native01 already worked but missing debug exporter fields
+caused oracle failure. Final installed916E78CA adds unsupported-path lease
+guard; every hardware/fallback/x86 path remains unadvertised. Native ARM32/64
+rebuilt player-only A53 callback, bounded128total queue/93bytes, PTS/native
+serial checks, unchanged all other AAR entries. Real data -> stock event225,
+no local text duplicate/invented tracks. Actual Push/flush and negative cleanup/
+report remain. Both source AAR baselines and pre-native EB APK kept active013
+for rollback until native gate closure. Current candidate source/native libs
+changed; no need to rerun unrelated completed Media3/DVD/graphics matrices.
+No commit/push/release authorized by this batch. Previous sections retain
+historical hash provenance, not the current candidate's installed identity.
+
+## EXT-009 complete; EXT-010..017 active (revision418, local114)
+
+User authorizes all nine server-connected playback follow-ups and completion;
+standalone USB/CD/music-shell features explicitly excluded. EXT-009 closes
+with bounded clock hardening/PTS-wrap tests and focused non-Pro175 IJK plus
+final Media3 implicit handoff/pause/resume. Valid unchanged113 legacy/GSY clock
+gates remain valid; no repeated full matrix. Final114/code2101141 local APK
+9cebf25e269a5f5ac8f694760fe29bcf36104c2c754e94c990b02379eea59ffd installed
+non-Pro only; Pro stays113 with its preserved session settings untouched.
+Both completed runs restore136prefs/public CC/power and disconnect the client.
+Stock175 was recording: no tuner control, Core/plugin/config change or restart.
+
+Implemented but not physically complete: generation-fenced native-rate/scan
+callbacks (7 deterministic tests); Auto CC2 distinct-service resolution when
+English moves CC1 out of sort position (10 slot tests/34 caption contracts).
+Push cache-seek capability now returns false for current unqualified backends:
+IJK ignores command29, Media3's unseekable TS period adjusted a buffered paused
+53572->53605ms seek back to0 despite105344ms buffered. Its frame-step prototype
+was withdrawn, never advertised. Final04 proves safe rejection/no paused-clock
+jump; EXT-016 still needs a proper renderer-level positive implementation.
+Stock Core's Fixed in-buffer branch ignores the property, so no runtime Fixed
+seek repair is claimed merely from negotiation. No fake seek map was added.
+
+Probe02's raw passed=true is a helper error, not feature PASS. It failed a late
+assertion after provisional success; catch now sets passed=false.03 correctly
+fails. Compact artifacts/results/EXT-009/RESULT.md distinguishes both from the
+final safe gate. Keep minimum03 failure evidence for EXT-010/016; retire raw
+completed/corrected cases recoverably.85 affected JVM and184 Python contracts,
+clean66-task/incremental builds and strict debug APK/signer pass; no skips.
+One host caption-test import lacked MCP PYTHONPATH and version-pin test still
+expected112; configured container rerun/version114 correction pass. No gate
+failure is hidden as a runtime success.
+
+Next: EXT-010 actual Fixed/in-buffer ownership (do not patch stock Core), then
+EXT-011 physical rate/return-to-play and EXT-012 physical selection/continuity.
+EXT-011 guarded controls probe01 is now complete as NOT_QUALIFIED: exact175/
+non-Pro/Media3 Pull and a finite3599095ms old recording, but command30/2x
+returns1x before the measurement. Existing native-rate eligibility rejects
+historical timeshift/buffer hints; actual growing-versus-completed ownership
+must be resolved safely before changing that guard. No claimed2x/scan pass.
+136prefs/public CC/power restore and exit pass; retain minimal
+artifacts/active/EXT-011/media3-rates-01.json. New
+scripts/mcp_server_playback_controls_test.py has three source guard tests,
+explicit owned output, exact identity/source/transport and failure cleanup.
+Total affected source checks187 (prior184+3). Final non-Pro APK readback hash
+exactly matches9cebf25e/code2101141. No test process is still running.
+
+EXT-013 native research read/hash-verifies pinned k0.8.8 source at container
+/tmp/vibe-ext013-wf4ohzqh/player/ijkplayer-k0.8.8 (owned system temp; no source
+mutation). queue_picture has AVFrame access; existing onNativeInvoke/Bundle
+may carry a proper raw callback without a Java AAR ABI change. Payload/PTS/
+serial, software/hardware and native rebuild remain unimplemented/unqualified.
+No text-to-raw hack or invented CEA track was added. EXT-014/015/017 next gates
+remain explicit in TASKS.md4B; no blanket hardware/GFX parity completion.
+Both suggested orders418 enumerate all eight remaining tasks individually.
+No commit/push/tag/release/issue post has been authorized by this task batch.
+
+## GROW-002 / EXT-008 complete (revision416; local113, not published)
+
+113/code2101131 final APK SHA256
+a56b92b5bda95019d23746309f7080e52131c161fd17112b22ed2146fa1f7ec6.
+User authorized client fix, non-Pro175 reproduction/qualification then Pro
+update, and a current HD300 gap inventory. All are complete for the scoped
+defect; no public release/commit/issue post, server/Core/plugin change/restart
+or tuner/recording control. Public latest remains112; do not relabel its assets.
+
+Stock Core fastLoad replaces a consecutive TV file without OPENURL/FLUSH.
+112 non-Pro reproduced old75-minute clock against new mux8s.113 locally resets
+decoder/anchor on a substantial ordinary-Push mux regression, excludes DVD/
+trick/EOS/empty/jitter and establishes a two-packet baseline after explicit
+boundaries to avoid a stale-header double flush. No guessed seek0/reconnect.
+IJK independently re-anchors retained native presentation counters without
+simulating time. Source-linked implementation/evidence is in
+artifacts/results/GROW-002/RESULT.md and docs/PLAYBACK_DIAGNOSTICS.md.
+
+Non-Pro25/stock175/SageMC actual Push: Media3, legacy and GSY System->Media3
+pass original growing CBS->Face the Nation handoff; IJK passes completed
+adjacent PBS TV66285901->66285915 after the original destination disappeared.
+All have one local handoff/no OPENURL, no redundant seed reset and advancing
+new-file clocks/output; IJK native~30fps plus independent HDMI picture/audio.
+136prefs/CC/power restore and non-Pro disconnects.33 focused JVM and76 source
+contracts(1 explicit skip), clean build/incremental IJK rebuild, strict package/
+signer/canonical Gradle pass. No unrelated completed matrix was repeated.
+
+Both devices have final a56b92b5. Pro readback hash/code verify;249 persisted
+prefs and latest user source/position (SVU66300913 near1416048ms) restore and
+15s actual Push A/V smoke passes. Session-only audio was-600ms, device default
+-300ms. Initial preservation check FAILED when install cleared that volatile
+override; exact-source follow-up24 restores-600ms through existing active-audio
+API without changing saved default. Do not restore the older-450ms snapshot.
+Pro stays playing. WORKFLOW now requires active-session preservation as well
+as SharedPreferences. No unresolved playback failure is hidden as a pass;
+expired-source/full-reload/unsupported-IJK-counter oracle corrections are
+explicit in the result. Raw completed/corrected captures retire to root deleteme.
+
+EXT-008's current30-domain source/binary gap inventory is in
+docs/PLAYER_SERVER_COMPATIBILITY.md. It supersedes historical99 capability
+dispositions (unified surfaces/remote FS/aspect already exist). Hardware STC
+reads are proven by HD300 beta call-sites, not guessed from symbol names.
+Push frame-step, backend-independent Push-buffer-seeking claim, trick-play/
+disc/standalone/caption/GFX/output scope remain distinct candidates; no blanket
+vendor implementation or speculative capability enablement. Both orders416
+remove the completed tasks and resume existing field-feedback work.
+
 ## RELEASE-004 published and verified (revision412)
 
 Public latest is v0.5.112, published2026-11-08T15:20:44Z:

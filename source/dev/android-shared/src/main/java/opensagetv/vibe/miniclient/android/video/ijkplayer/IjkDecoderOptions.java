@@ -33,6 +33,12 @@ public final class IjkDecoderOptions
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", hardware ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", mpeg2Hardware ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
+        // New ARM glue observes real software AVFrame A53 side data before
+        // dropping/filtering frames. Opaque MediaCodec surfaces remain native;
+        // no 608/708 track is created until actual valid content is observed.
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vibe-raw-cea",
+                opensagetv.vibe.miniclient.video.LegacySubtitleCallbackPolicy.shouldAdvertise(
+                        "ijkplayer", method.preferenceValue(), System.getProperty("os.arch", "")) ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer");
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 0);

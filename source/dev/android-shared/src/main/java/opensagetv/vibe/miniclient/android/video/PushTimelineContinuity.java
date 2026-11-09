@@ -15,6 +15,13 @@ public final class PushTimelineContinuity
 {
     private PushTimelineContinuity() { }
 
+    public static boolean acceptsPausedZero(boolean push, boolean dvd, boolean paused,
+            long serverAnchorMs, long nativeTimeMs, boolean freshFrameWitness)
+    {
+        return push && !dvd && paused && serverAnchorMs == 0L && nativeTimeMs == 0L
+                && freshFrameWitness;
+    }
+
     public static long pendingMediaTime(boolean pushMode, boolean dvdPush,
                                         long replacementServerAnchorMs,
                                         boolean hasStableMediaTime,

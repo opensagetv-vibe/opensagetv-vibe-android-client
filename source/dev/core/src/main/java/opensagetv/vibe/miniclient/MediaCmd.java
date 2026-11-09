@@ -24,6 +24,7 @@ import java.util.Map;
 
 import opensagetv.vibe.miniclient.media.MediaUrlContext;
 import opensagetv.vibe.miniclient.media.PushTimelineAnchorEstimator;
+import opensagetv.vibe.miniclient.media.PushStreamHandoff;
 import opensagetv.vibe.miniclient.prefs.PrefStore;
 import opensagetv.vibe.miniclient.uibridge.Dimension;
 import opensagetv.vibe.miniclient.uibridge.Rectangle;
@@ -79,6 +80,7 @@ public class MediaCmd
     private boolean pushMode;
     private final OrdinaryPushCreditPolicy ordinaryPushCredit = new OrdinaryPushCreditPolicy();
     private final RetainedPushRestartPolicy retainedPushRestart = new RetainedPushRestartPolicy();
+    private final PushStreamHandoff pushStreamHandoff = new PushStreamHandoff();
     private boolean retainedPlayerStopped;
     private boolean dvdSessionPending;
     private long dvdPushedBytes;
@@ -124,6 +126,9 @@ public class MediaCmd
     private boolean pushEpochPayloadPublished;
     private final PushTimelineAnchorEstimator pushTimelineAnchorEstimator =
             new PushTimelineAnchorEstimator();
+    private final opensagetv.vibe.miniclient.media.BasicPushPtsClock basicPushPtsClock =
+            new opensagetv.vibe.miniclient.media.BasicPushPtsClock();
+    private volatile long lastWireMediaTimeMs = -1L;
     /** Epoch-start anchor derived from MPEG-TS PTS; -1 preserves raw fallback. */
     private long correctedPushTimelineStartMs = -1L;
     private boolean correctedPushTimelineReported;
@@ -536,7 +541,7 @@ public class MediaCmd
                 // first metadata/PUSHBUFFER command.  The server always waits
                 // for an integer reply; returning zero bytes here deadlocks the
                 // media socket until SageTV's 30-second timeout closes the UI.
-                long theTime = playa == null ? 0 : getMediaTimeMillis();
+                long theTime = playa == null ? 0 : getWireMediaTimeMillis();
                 writeInt((int) theTime, retbuf, 0);
                 if (startupMediaTimeTraceRemaining > 0
                         && monotonicMs() <= startupMediaTimeTraceDeadlineMs)
@@ -671,6 +676,26 @@ public class MediaCmd
                     statsTargetBWKbps = Math.max(0, (int) readShort(12, cmddata));
                     statsServerMuxTimeMs = readInt(14, cmddata);
 
+                    long previousMuxMs = pushStreamHandoff.getPreviousMuxMs();
+                    if (pushStreamHandoff.observe(pushMode && !dvdSessionPending,
+                            buffSize, true, statsServerMuxTimeMs, flags)
+                            && playa != null)
+                    {
+                        // Stock MiniPlayer fastLoad switches files WITHOUT an
+                        // OPENURL or FLUSH. Discard the previous decoder byte
+                        // epoch before admitting this payload, then calibrate
+                        // from the new file's supplied mux/PTS timestamps below.
+                        // Never send a seek/reconnect or assume its target is0.
+                        PlaybackDebugEventBridge.recordAsyncDetailed(
+                                "push_stream_handoff", playa,
+                                "previousMuxMs=" + previousMuxMs
+                                        + ";replacementMuxMs=" + statsServerMuxTimeMs);
+                        playa.flush();
+                        setLastServerStartPosition(-1L);
+                        resetPushTimelineAnchor();
+                        pushEpochPayloadPublished = false;
+                    }
+
                     // Stock SageTV defines this timestamp as the end of the
                     // bytes currently being pushed. Exo/Media3 positions are
                     // relative to the beginning of the post-FLUSH byte epoch,
@@ -779,6 +804,8 @@ public class MediaCmd
                         }
                         try
                         {
+                            if (!MiniClientConnection.detailedBufferStats && pushMode && !dvdSessionPending)
+                                basicPushPtsClock.observe(cmddata, bufDataOffset, buffSize);
                             playa.pushData(cmddata, bufDataOffset, buffSize);
                             if (dvdSessionPending)
                             {
@@ -1015,9 +1042,18 @@ public class MediaCmd
                 if (playa != null)
                 {
                     log.debug("MEDIACMD_SEEK called: {}", seekTime);
-                    playa.seek(seekTime);
+                    if (playa.canHandleServerSeek())
+                        playa.seek(seekTime);
+                    else
+                    {
+                        PlaybackDebugEventBridge.recordAsyncDetailed(
+                                "server_seek_unsupported", playa, "requestedMs=" + seekTime);
+                        playa.onUnsupportedServerSeek(seekTime);
+                    }
                 }
 
+                // Stock Core does not read a response to command29. Returning
+                // a synthetic status would corrupt the next command's framing.
                 return 0;
 
             case MEDIACMD_SETRATE:
@@ -1227,6 +1263,21 @@ public class MediaCmd
         return lastServerStartTime;
     }
 
+    private long getWireMediaTimeMillis()
+    {
+        long position = getMediaTimeMillis();
+        // Stock's basic protocol expects hardware-style raw MPEG PTS and
+        // subtracts its parser origin. Detailed replies already carry a
+        // calibrated file/epoch clock; DVD has its separate VM/STC contract.
+        if (pushMode && !dvdSessionPending && !MiniClientConnection.detailedBufferStats)
+            position = basicPushPtsClock.wirePositionMs(position);
+        lastWireMediaTimeMs = position;
+        return position;
+    }
+
+    public long getBasicPushPtsOriginMs() { return basicPushPtsClock.originMs(); }
+    public long getLastWireMediaTimeMs() { return lastWireMediaTimeMs; }
+
     private void setLastServerStartPosition(long position)
     {
         this.lastServerStartTime = position;
@@ -1249,9 +1300,18 @@ public class MediaCmd
                 ? correctedPushTimelineStartMs : lastServerStartTime;
     }
 
+    /** Read-only on-demand witness; raw buffer-end anchor is a different clock. */
+    public long getEffectiveServerStartPositionForDebug()
+    {
+        return getEffectiveServerStartPosition();
+    }
+
     private void resetPushTimelineAnchor()
     {
+        pushStreamHandoff.reset();
         pushTimelineAnchorEstimator.reset();
+        basicPushPtsClock.reset();
+        lastWireMediaTimeMs = -1L;
         correctedPushTimelineStartMs = -1L;
         correctedPushTimelineReported = false;
     }

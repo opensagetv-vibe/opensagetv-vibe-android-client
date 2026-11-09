@@ -77,6 +77,12 @@ original FFmpeg/SDL libraries and Java bindings. Pinned source archives, native
 patch/helper, NDK version and reconstruction instructions are supplied in
 scripts/build_ijk_deinterlace.py, source/dev/ijkplayer/native and the source offer.
 No GPL/nonfree feature or new decoder library is enabled.
+The same source offer includes software-only raw A53 caption delivery, FIFO
+epoch flushing, paused-step and actual output-epoch/clock adaptations. These
+change only player glue, not FFmpeg, SDL, Java bindings or their licenses.
+The unreleased EXT-018 hardware-step trial has its separate reviewed native
+patch in the same source offer. It remains default off and does not enable
+software-only CEA/flush behavior on MediaCodec or introduce another library.
 The rebuilt player glue statically links NDK21's LLVM libc++/libc++abi rather
 than the historical STL runtime. Preserve its complete Apache-2.0 with LLVM
 exceptions and legacy dual-license notices in third_party/licenses/LLVM-libcxx.txt
@@ -84,6 +90,16 @@ and LLVM-libcxxabi.txt; exact NDK distribution source remains available from
 the Android NDK21.0.6113669 archive. FFmpeg and SDL are not relinked.
 
 ## External commissioning services and media
+
+The EXT-010 detailed-Push forward-cache implementation includes distinctly named
+adaptations of AndroidX Media3 1.11.0 ProgressiveMediaPeriod/Source. Their original
+Android Open Source Project copyright and Apache-2.0 headers are retained in
+source/dev/android-shared/src/main/java/androidx/media3/exoplayer/source/.
+Dependency audit records exact original source hashes and the limited changes;
+no proprietary extender firmware code is copied.
+The parallel legacy implementation preserves the same Apache attribution from
+the pinned public google/ExoPlayer r2.18.1 ProgressiveMediaPeriod/Source, with
+its original hashes and compile-only annotation adaptation in the audit.
 
 The debug-only secure-decoder gate references Axinom's public DRM test vectors,
 public test entitlement, and Widevine license endpoint. It streams the remote

@@ -51,6 +51,7 @@ import opensagetv.vibe.miniclient.video.FullscreenPlaybackPolicy;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
 import opensagetv.vibe.miniclient.video.PostSeekPushRecoveryController;
+import opensagetv.vibe.miniclient.video.PushBufferSeekPolicy;
 import opensagetv.vibe.miniclient.video.VideoInfoResponse;
 
 //import org.videolan.libvlc.LibVLC;
@@ -88,6 +89,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected boolean hasStableMediaTime = false;
     /** Prevent detailed diagnostics from repeating on every GETMEDIATIME poll. */
     private boolean pushTimelineHoldReported = false;
+    private long lastUnsupportedServerSeekMessageMs = -1L;
     protected boolean flushed = false;
     protected VideoInfo videoInfo = null;
 
@@ -1223,6 +1225,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
      */
     protected abstract long getPlayerMediaTimeMillis(long lastServerTime);
 
+    /** Backends opt in only with real post-reset frame and current-period proof. */
+    protected boolean hasConfirmedPausedZeroPosition() { return false; }
+    public String getPushPausedZeroWitnessForDebug() { return "unsupported"; }
+
     @Override
     public long getMediaTimeMillis(long lastServerTime)
     {
@@ -1281,7 +1287,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
         long mt = mimDirectController().adjustPosition(
                 this, getPlayerMediaTimeMillis(lastServerTime));
-        if (mt <= 0)
+        boolean confirmedPausedZero = PushTimelineContinuity.acceptsPausedZero(pushMode,
+                lastUri != null && lastUri.startsWith("push:dvd"), state == PAUSE_STATE,
+                lastServerTime, mt, hasConfirmedPausedZeroPosition());
+        if (mt < 0L || (mt == 0L && !confirmedPausedZero))
         {
             if (VerboseLogging.DETAILED_PLAYER_LOGGING)
             {
@@ -1291,6 +1300,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             return mediaTimeWhilePushAnchorPending(lastServerTime);
         }
         // we have some data, so we are not flushing/seeking
+        if (confirmedPausedZero && hasStableMediaTime && lastMediaTime > 0L)
+            PlaybackDebugTrap.recordDetailed("push_paused_zero_presented", this,
+                    "previousEpochMs=" + lastMediaTime + ";newEpochMs=0;anchorMs=0");
         lastMediaTime = mt;
         hasStableMediaTime = true;
         pushTimelineHoldReported = false;
@@ -1420,6 +1432,26 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.debug("Play was called");
+        }
+    }
+
+    @Override public boolean canHandleServerSeek()
+    {
+        return PushBufferSeekPolicy.canHandleServerSeek(pushMode,
+                lastUri != null && lastUri.startsWith("push:dvd"));
+    }
+
+    @Override public void onUnsupportedServerSeek(long requestedMs)
+    {
+        // Core may ignore PUSH_BUFFER_SEEKING for transcoded WhenNeeded.
+        // Do not reset a live period to zero, replay the request, change keys,
+        // or claim it landed. Pull/Direct/DVD retain their existing seek path.
+        long now = SystemClock.elapsedRealtime();
+        if (lastUnsupportedServerSeekMessageMs < 0L
+                || now - lastUnsupportedServerSeekMessageMs >= 5000L)
+        {
+            lastUnsupportedServerSeekMessageMs = now;
+            message("Buffered seeking unavailable; use Pull or Fixed / Always.");
         }
     }
 

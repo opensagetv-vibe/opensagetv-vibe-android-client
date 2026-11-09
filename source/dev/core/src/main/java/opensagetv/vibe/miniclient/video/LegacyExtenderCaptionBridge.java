@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import opensagetv.vibe.miniclient.ConnectionEventBackpressureException;
 
 /**
  * Converts extractor CEA cc_data triplets into the raw eight-byte records used
@@ -23,6 +24,13 @@ public final class LegacyExtenderCaptionBridge
     public interface Sink
     {
         void postSubtitleInfo(long pts45Khz, long duration45Khz, byte[] data, int flags);
+
+        /** Only a known full event FIFO is retryable; never hide unrelated faults. */
+        default boolean tryPostSubtitleInfo(long pts, long duration, byte[] data, int flags)
+        {
+            try { postSubtitleInfo(pts, duration, data, flags); return true; }
+            catch (ConnectionEventBackpressureException full) { return false; }
+        }
     }
 
     private final Sink sink;
@@ -36,6 +44,12 @@ public final class LegacyExtenderCaptionBridge
     private int forwardedSamples;
     private long forwardedBytes;
     private boolean forwardingCurrentStream;
+    private boolean flushPending;
+    // The event header/payload lengths are unsigned16-bit on stock Core.
+    // Batch complete8-byte CC records, preserve every embedded PTS/control and
+    // bound work per clock callback rather than enqueue hundreds after a jump.
+    private static final int MAX_BATCH_BYTES = 16 * 1024;
+    private static final int MAX_BATCHES_PER_DRAIN = 1;
 
     public LegacyExtenderCaptionBridge(Sink sink)
     {
@@ -92,7 +106,12 @@ public final class LegacyExtenderCaptionBridge
         while (recentSamples.size() > MAX_RECENT_SAMPLES)
             recentSamples.removeFirst();
         forwardingCurrentStream = true;
-        enqueueInPresentationOrder(new PendingCaption(timeUs, pts45Khz, payload));
+        if (payload.length <= MAX_BATCH_BYTES)
+            enqueueInPresentationOrder(new PendingCaption(timeUs, pts45Khz, payload));
+        else
+            for (int start = 0; start < payload.length; start += MAX_BATCH_BYTES)
+                enqueueInPresentationOrder(new PendingCaption(timeUs, pts45Khz,
+                        Arrays.copyOfRange(payload, start, Math.min(payload.length, start + MAX_BATCH_BYTES))));
         return true;
     }
 
@@ -132,20 +151,43 @@ public final class LegacyExtenderCaptionBridge
     {
         synchronized (emissionLock)
         {
-            List<PendingCaption> due = new ArrayList<PendingCaption>();
-            synchronized (this)
+            if (flushPending)
             {
-                while (!pending.isEmpty() && pending.peekFirst().timeUs <= playbackTimeUs)
+                if (!sink.tryPostSubtitleInfo(0, 0, buildCea608ResetRecords(),
+                        CC_SUBTITLE | FLUSH_SUBTITLE_QUEUE)) return;
+                flushPending = false;
+            }
+            for (int batch = 0; batch < MAX_BATCHES_PER_DRAIN; batch++)
+            {
+                List<PendingCaption> due = new ArrayList<PendingCaption>();
+                int bytes = 0;
+                synchronized (this)
                 {
-                    PendingCaption caption = pending.removeFirst();
-                    due.add(caption);
-                    forwardedSamples++;
-                    forwardedBytes += caption.payload.length;
+                    for (PendingCaption caption : pending)
+                    {
+                        if (caption.timeUs > playbackTimeUs || bytes + caption.payload.length > MAX_BATCH_BYTES)
+                            break;
+                        due.add(caption);
+                        bytes += caption.payload.length;
+                    }
+                }
+                if (due.isEmpty()) return;
+                byte[] data = new byte[bytes];
+                int offset = 0;
+                for (PendingCaption caption : due)
+                {
+                    System.arraycopy(caption.payload, 0, data, offset, caption.payload.length);
+                    offset += caption.payload.length;
+                }
+                if (!sink.tryPostSubtitleInfo(due.get(0).pts45Khz, 0, data,
+                        CC_SUBTITLE | PTS_VALID)) return; // Nothing dequeued; next existing clock retries.
+                synchronized (this)
+                {
+                    for (PendingCaption caption : due) pending.remove(caption);
+                    forwardedSamples += due.size();
+                    forwardedBytes += bytes;
                 }
             }
-            for (PendingCaption caption : due)
-                sink.postSubtitleInfo(caption.pts45Khz, 0, caption.payload,
-                        CC_SUBTITLE | PTS_VALID);
         }
     }
 
@@ -185,7 +227,7 @@ public final class LegacyExtenderCaptionBridge
         // next real mode and PAC controls remain authoritative.
         synchronized (emissionLock)
         {
-            sink.postSubtitleInfo(0, 0, buildCea608ResetRecords(),
+            flushPending = !sink.tryPostSubtitleInfo(0, 0, buildCea608ResetRecords(),
                     CC_SUBTITLE | FLUSH_SUBTITLE_QUEUE);
         }
     }

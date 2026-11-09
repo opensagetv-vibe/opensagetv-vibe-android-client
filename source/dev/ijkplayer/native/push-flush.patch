@@ -1,0 +1,63 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -583,2 +583,3 @@
+     int audio_disable;
++    int vibe_push_input;
+     int vibe_raw_cea;
+--- a/ijkmedia/ijkplayer/ff_ffplay_options.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_options.h
+@@ -67,2 +67,4 @@
++    { "vibe-push-input", "server owns replacement Push bytes, not file seeking",
++        OPTION_OFFSET(vibe_push_input), OPTION_INT(0, 0, 1) },
+     { "vibe-raw-cea", "forward real software-decoder A53 side data",
+         OPTION_OFFSET(vibe_raw_cea), OPTION_INT(0, 0, 1) },
+--- a/ijkmedia/ijkplayer/ff_ffplay.c
++++ b/ijkmedia/ijkplayer/ff_ffplay.c
+@@ -3442,2 +3442,3 @@
+             int64_t seek_target = is->seek_pos;
++            int vibe_flush = ffp->vibe_push_input && seek_target == INT64_MAX;
+             int64_t seek_min    = is->seek_rel > 0 ? seek_target - is->seek_rel + 2: INT64_MIN;
+@@ -3449,2 +3450,17 @@
+-            ret = avformat_seek_file(is->ic, -1, seek_min, seek_target, seek_max, is->seek_flags);
++            if (vibe_flush) {
++                /* Stock already replaced the byte epoch. Discard old AVIO,
++                 * parser and decoder buffers WITHOUT seeking that FIFO.
++                 * -1 is Java LONG_MAX after IJK's 32-bit seek message. */
++                if (is->ic->pb) {
++                    is->ic->pb->buf_ptr = is->ic->pb->buf_end;
++                    is->ic->pb->eof_reached = 0;
++                    is->ic->pb->error = 0;
++                }
++                avformat_flush(is->ic);
++                is->seek_pos = 0; /* unknown native clock until real new PTS */
++                seek_target = 0;
++                ret = 0;
++            } else {
++                ret = avformat_seek_file(is->ic, -1, seek_min, seek_target, seek_max, is->seek_flags);
++            }
+             if (ret < 0) {
+@@ -3458,2 +3477,3 @@
+                     packet_queue_put(&is->audioq, &flush_pkt);
++                    if (vibe_flush) SDL_AoutFlushAudio(ffp->aout);
+                     // TODO: clear invaild audio data
+@@ -3472,2 +3492,2 @@
+-                if (is->seek_flags & AVSEEK_FLAG_BYTE) {
++                if (vibe_flush || (is->seek_flags & AVSEEK_FLAG_BYTE)) {
+                    set_clock(&is->extclk, NAN, 0);
+@@ -3506,2 +3526,2 @@
+-            if (ffp->enable_accurate_seek) {
++            if (ffp->enable_accurate_seek && !vibe_flush) {
+                 is->drop_aframe_count = 0;
+@@ -4468,2 +4488,2 @@
+-    int64_t seek_pos = milliseconds_to_fftime(msec);
++    int64_t seek_pos;
+     int64_t duration = milliseconds_to_fftime(ffp_get_duration_l(ffp));
+@@ -4473,2 +4493,8 @@
++    if (ffp->vibe_push_input && (msec == -1L || (int64_t)msec == INT64_MAX)) {
++        stream_seek(is, INT64_MAX, 0, 0);
++        return 0;
++    }
++    seek_pos = milliseconds_to_fftime(msec);
++
+     if (duration > 0 && seek_pos >= duration && ffp->enable_accurate_seek) {
+         toggle_pause(ffp, 1);

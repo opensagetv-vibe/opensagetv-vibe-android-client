@@ -102,33 +102,44 @@ public final class CaptionSlotPolicy
         }
         if (candidates.isEmpty()) return null;
         boolean fullyAutomatic = language.isEmpty();
-        if (fullyAutomatic && slot == 1)
+        if (fullyAutomatic)
         {
+            SubtitleTrack firstSlot = candidates.get(0);
             for (SubtitleTrack candidate : candidates)
-                if (isEnglishLanguage(reliableLanguage(candidate))) return candidate;
-        }
-        if (fullyAutomatic && slot == 2 && candidates.size() > 1)
-        {
-            // Keep CC1 as the English virtual slot when available, then use
-            // the first distinct non-English service for CC2. If the stream
-            // only has English services, retain the second distinct track.
-            boolean hasEnglish = false;
-            for (SubtitleTrack candidate : candidates)
-                if (isEnglishLanguage(reliableLanguage(candidate))) { hasEnglish = true; break; }
-            if (hasEnglish)
+                if (isEnglishLanguage(reliableLanguage(candidate)))
+                {
+                    firstSlot = candidate;
+                    break;
+                }
+            if (slot != 2) return firstSlot;
+            // English preference can move CC1 away from candidates[0]. A
+            // positional candidates[1] fallback then assigned CC1 and CC2 to
+            // the SAME Teletext service. Resolve CC2 against the actual CC1,
+            // not its former sort position. Explicit language choices below
+            // remain authoritative and may intentionally select one service.
+            if (isEnglishLanguage(reliableLanguage(firstSlot)))
                 for (SubtitleTrack candidate : candidates)
                 {
                     String candidateLanguage = reliableLanguage(candidate);
                     // An empty language is unknown (not a non-English
                     // service). Do not let an unlabeled CEA-608 fallback
                     // displace a described secondary-language service.
-                    if (!candidateLanguage.isEmpty()
+                    if (!sameService(candidate, firstSlot) && !candidateLanguage.isEmpty()
                             && !isEnglishLanguage(candidateLanguage))
                         return candidate;
                 }
-            return candidates.get(1);
+            for (SubtitleTrack candidate : candidates)
+                if (!sameService(candidate, firstSlot)) return candidate;
+            return firstSlot; // A single discovered service can fill both slots.
         }
         return candidates.get(0);
+    }
+
+    private static boolean sameService(SubtitleTrack left, SubtitleTrack right)
+    {
+        return left.getIndex() == right.getIndex()
+                && left.getSubtitleCodec() == right.getSubtitleCodec()
+                && left.getAccessibilityChannel() == right.getAccessibilityChannel();
     }
 
     public static boolean isBroadcastCaption(SubtitleTrack track)

@@ -703,6 +703,17 @@ finally:
         with self.assertRaisesRegex(ValueError, "mode must be"):
             c.set_active_player_overlay(mode="forever")
 
+    def test_display_refresh_is_explicit_bounded_and_does_not_save_policy(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        with patch.object(c, "dev_control", return_value={"ok": True}) as control:
+            for policy in ("inspect", "off", "seamless", "always"):
+                self.assertTrue(c.display_refresh(policy)["ok"])
+            self.assertEqual(control.call_count, 4)
+            self.assertEqual(control.call_args.kwargs, {"policy": "always"})
+            with self.assertRaisesRegex(ValueError, "policy must be"):
+                c.display_refresh("force_unsupported_mode")
+            self.assertEqual(control.call_count, 4)
+
     def test_parse_debug_broadcast_snapshot(self):
         text = 'Broadcasting: Intent { act=opensagetv.vibe.miniclient.DEBUG_CONTROL }\nBroadcast completed: result=1, data="ok=true;op=snapshot;connected=true;player=media3;state=2;mediaTimeMs=123456"\n'
         result = parse_broadcast_result(text)

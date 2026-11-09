@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import opensagetv.vibe.miniclient.ConnectionEventBackpressureException;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -77,7 +78,8 @@ public class LegacyExtenderCaptionBridgeTest
         assertFalse(bridge.onCeaSample(2_000L, second));
         bridge.drainTo(2_000L);
 
-        assertEquals(2, sink.events.size());
+        assertEquals(1, sink.events.size());
+        assertEquals(16, sink.events.get(0).data.length);
     }
 
     @Test
@@ -92,10 +94,12 @@ public class LegacyExtenderCaptionBridgeTest
         assertTrue(bridge.onCeaSample(1_050L, new byte[] { 0x04, 0x23, 0x24 }));
         bridge.drainTo(1_100L);
 
-        assertEquals(3, sink.events.size());
-        assertEquals(45L, sink.events.get(0).pts);
-        assertEquals(47L, sink.events.get(1).pts);
-        assertEquals(49L, sink.events.get(2).pts);
+        assertEquals(1, sink.events.size());
+        byte[] records = sink.events.get(0).data;
+        assertEquals(24, records.length);
+        assertEquals(45, records[3] & 255);
+        assertEquals(47, records[11] & 255);
+        assertEquals(49, records[19] & 255);
     }
 
     @Test
@@ -200,6 +204,86 @@ public class LegacyExtenderCaptionBridgeTest
                 assertEquals(records[offset - 2], records[offset + 6]);
             }
         }
+    }
+
+    @Test public void captionBurstUsesOneBoundedCallbackWithEveryRecordPreserved()
+    {
+        RecordingSink sink = new RecordingSink();
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge(sink);
+        for (int i=0; i<600; i++)
+            assertTrue(bridge.onCeaSample(i*33000L, new byte[]{4,0x21,0x22}));
+        bridge.drainTo(20000000L);
+        assertEquals(1, sink.events.size());
+        assertEquals(4800, sink.events.get(0).data.length);
+        assertEquals(600, bridge.getForwardedSamples());
+        assertEquals(0, bridge.getPendingSamples());
+    }
+
+    @Test public void fullEventQueueRetainsDataAndRetriesWithoutDuplicatingRecords()
+    {
+        final List<byte[]> accepted = new ArrayList<>();
+        final boolean[] full = {true};
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge((pts,duration,data,flags) -> {
+            if (full[0]) throw new ConnectionEventBackpressureException();
+            accepted.add(data);
+        });
+        bridge.onCeaSample(1000,new byte[]{4,0x21,0x22});
+        bridge.onCeaSample(2000,new byte[]{4,0x23,0x24});
+        bridge.drainTo(3000);
+        assertEquals(2, bridge.getPendingSamples()); assertEquals(0, bridge.getForwardedSamples());
+        full[0]=false;
+        bridge.drainTo(3000); bridge.drainTo(3000);
+        assertEquals(1, accepted.size()); assertEquals(16, accepted.get(0).length);
+        assertEquals(2, bridge.getForwardedSamples()); assertEquals(0, bridge.getPendingSamples());
+    }
+
+    @Test public void resetBackpressureRetainsResetAheadOfLaterCaptionData()
+    {
+        final List<Integer> flags = new ArrayList<>();
+        final boolean[] full = {true};
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge((pts,duration,data,kind) -> {
+            if (full[0]) throw new ConnectionEventBackpressureException();
+            flags.add(kind);
+        });
+        bridge.postFlush();
+        bridge.onCeaSample(1000,new byte[]{4,0x21,0x22});
+        bridge.drainTo(2000);
+        assertEquals(0,flags.size()); assertEquals(1,bridge.getPendingSamples());
+        full[0]=false;
+        bridge.drainTo(2000);
+        assertEquals(2,flags.size());
+        assertEquals(LegacyExtenderCaptionBridge.CC_SUBTITLE | LegacyExtenderCaptionBridge.FLUSH_SUBTITLE_QUEUE,
+                flags.get(0).intValue());
+    }
+
+    @Test public void largePayloadSplitsAtRecordBoundariesBelowUnsigned16BitWireLimit()
+    {
+        RecordingSink sink = new RecordingSink();
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge(sink);
+        byte[] data = new byte[5000*3];
+        for(int i=0;i<data.length;i+=3){data[i]=(byte)(4+(i/3)%4);data[i+1]=0x21;data[i+2]=0x22;}
+        bridge.onCeaSample(1000,data);
+        int drains=0;
+        while(bridge.getPendingSamples()>0 && drains++<10) bridge.drainTo(2000);
+        int total=0;
+        int record=0;
+        for(Event event:sink.events){
+            assertTrue(event.data.length<=16384);assertEquals(0,event.data.length%8);total+=event.data.length;
+            for(int i=0;i<event.data.length;i+=8){
+                assertEquals(record++%4,event.data[i+4]&255);
+                assertEquals(0x21,event.data[i+5]&255);assertEquals(0x22,event.data[i+6]&255);
+            }
+        }
+        assertEquals(40000,total); assertEquals(3,sink.events.size());
+    }
+
+    @Test(expected=IllegalArgumentException.class) public void unrelatedSinkErrorsRemainVisible()
+    {
+        LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge((pts,dur,data,flags) -> {
+            throw new IllegalArgumentException("Not queue backpressure");
+        });
+        bridge.onCeaSample(1000,new byte[]{4,0x21,0x22});
+        bridge.drainTo(2000);
     }
 
     private static final class RecordingSink implements LegacyExtenderCaptionBridge.Sink

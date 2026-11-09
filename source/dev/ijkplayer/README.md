@@ -34,6 +34,55 @@ path.
 The historical full-build instructions below reconstruct the unpatched baseline,
 not the Vibe software-field hook. Do not overwrite patched AARs with that build.
 
+EXT-013 also applies `native/raw-cea.patch` plus `native/vibe_cea_packet.h`.
+It forwards actual software AVFrame `AV_FRAME_DATA_A53_CC` bytes before dropping
+or filtering pictures. It does not OCR/render text or upgrade FFmpeg/SDL/Java.
+The native queue caps outstanding total messages at128 and each payload at93
+bytes, frees aborted/OOM packets, and rejects obsolete decoder serials at JNI
+dispatch. PTS normalization matches IJK's existing native presentation getter.
+The Java player lease additionally fences seek/flush/replacement callbacks and
+clocks the existing raw event225 bridge independently of STV redraws. Only real
+observed content adds a caption-format entry; languages/services stay unknown.
+`native/vibe_cea_jni.h` calls the pinned existing native-invoke listener directly
+for this one Vibe event, avoiding the original gateway's per-packet INFO log.
+All normal native HTTP/control invoke events keep their existing gateway.
+`native/push-flush.patch` recognizes the existing Java LONG_MAX flush sentinel
+(truncated to-1 in IJK's32-bit seek message), only for the explicit qualified
+software Push input option. It discards old AVIO/parser/decoder/audio buffers
+without repositioning the server-owned FIFO, advances decoder serials, and
+completes the flush. Pre-prepare Flush resumes caption admission on actual
+prepare because IJK rejects pre-prepare seeks without a completion callback.
+This path never requests a producer/file Seek0; hardware/other ABIs stay native.
+
+EXT-016's qualified ARM Software implementation applies `native/paused-step.patch` and
+`native/vibe_paused_step.h`. Only explicit software ARM Push can request one
+forward decoder frame. Completion follows successful SDL output of a newer
+frame, with request/decoder serial fences, rather than advancing a clock at
+acceptance. Audio stays paused; old queued PCM is flushed and trimmed to that
+actual video frame before resuming. Reverse stepping is not claimed. The
+ordinary Push FRAME_STEP protocol flag remains off until its separate paused
+decode-to contract is qualified; debug command acceptance alone is not a gate.
+Run scripts/verify_ijk_native_candidate.py against a NEW candidate directory
+before replacing AARs or updating strict verification pins. No Java ABI,
+FFmpeg/SDL binary, MiniClient event, or proprietary firmware code is added.
+Hardware MediaCodec does not pass software AVFrames through this function;
+do not advertise hardware IJK CEA support or infer captions from format guesses.
+`native/presentation-clock.patch` and `native/vibe_push_presentation.h` add
+actual output-epoch proof and paused displayed-video PTS, not a synthetic clock.
+An old decoder serial cannot prove a new epoch. Normal repeated-Pause Push/
+Fixed, held pause, resume and affected retained-file/native clock gates pass;
+compact EXT-013/016 results retain exact limits and native ABI/build hashes.
+Hardware/DVD/reverse are not qualified. EXT-010 cache seeking remains separate.
+
+EXT-018 adds default-off `hardware-step.patch`/`vibe-hardware-step` solely for
+an isolated nonpersistent commissioning trial. The native request additionally
+requires actual FFP_PROPV_DECODER_MEDIACODEC, rather than trusting a hardware
+preference. It reuses successful SDL output/serial/request proof; hardware must
+not enable `vibe-push-input` or pretend AVFrame A53 captions are available.
+Build/ABI output alone does not qualify hardware stepping or its bundled
+FRAME_STEP protocol contract. Existing software behavior remains independently
+qualified; physical hardware acceptance is tracked under EXT-018.
+
 Step 1 - Initialize the Sources
 ./init-sources.sh
 

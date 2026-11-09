@@ -15,6 +15,7 @@ import java.lang.ref.WeakReference;
 import opensagetv.vibe.miniclient.MediaCmd;
 import opensagetv.vibe.miniclient.MiniPlayerPlugin;
 import opensagetv.vibe.miniclient.video.DisplayRefreshRatePolicy;
+import opensagetv.vibe.miniclient.video.DisplayModeRestorePolicy;
 
 /** Applies only capability-proven, current-resolution display mode changes. */
 public final class DisplayRefreshController
@@ -23,7 +24,7 @@ public final class DisplayRefreshController
     public static final String SEAMLESS = "seamless";
     public static final String ALWAYS = "always";
 
-    private static volatile int restoreModeId;
+    private static final DisplayModeRestorePolicy MODE_RESTORE = new DisplayModeRestorePolicy();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static Runnable pendingRefresh;
     private static volatile long pendingRefreshDeadlineMs;
@@ -64,8 +65,13 @@ public final class DisplayRefreshController
         WindowManager.LayoutParams attrs = activity.getWindow().getAttributes();
         if (OFF.equals(policy))
         {
+            Integer restoreModeId = MODE_RESTORE.release(activity.getWindow(), attrs.preferredDisplayModeId);
+            if (restoreModeId == null)
+                return state.with(false, "no_owned_display_mode");
             attrs.preferredDisplayModeId = restoreModeId;
             activity.getWindow().setAttributes(attrs);
+            PlaybackDebugTrap.recordDetailed("display_refresh_restore", player,
+                    "preferredModeId=" + restoreModeId);
             return state.with(true, "restored_previous_mode",
                     restoreModeId != 0 && restoreModeId != state.currentModeId);
         }
@@ -98,10 +104,15 @@ public final class DisplayRefreshController
             return state.with(false, decision.reason);
         if (SEAMLESS.equals(policy) && !isSeamless(state.currentModeId, target, state.modes))
             return state.with(false, "seamless_switch_not_proven");
-        if (restoreModeId == 0)
-            restoreModeId = state.currentModeId;
+        // Already matching scanout needs no Window override. Capturing a
+        // physical mode here would turn the user's Auto (0) into a fixed mode.
+        if (!decision.changeRequired)
+            return state.with(false, decision.reason);
+        MODE_RESTORE.applying(activity.getWindow(), attrs.preferredDisplayModeId, target.getModeId());
         attrs.preferredDisplayModeId = target.getModeId();
         activity.getWindow().setAttributes(attrs);
+        PlaybackDebugTrap.recordDetailed("display_refresh_apply", player,
+                "preferredModeId=" + target.getModeId() + ";contentFps=" + state.contentFps);
         return new Result(true, decision.reason, state.contentFps,
                 target.getRefreshRate(), target.getModeId(), state.modes,
                 target.getModeId() != state.currentModeId);

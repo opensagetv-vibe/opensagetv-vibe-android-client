@@ -284,6 +284,11 @@ def _compact_state(state: dict) -> dict:
         "fixedCaptionAttached", "fixedCaptionForwarding",
         "fixedCaptionClockUpdateCount", "fixedCaptionEvidenceRefreshCount",
         "fixedCaptionEvidenceRefreshState", "pendingServerSubpictureCommand",
+        "pushPausedZeroWitness",
+        "pushDetailedBufferStats",
+        "nativeStepCompleted", "nativeStepPending", "nativeStepPositionMs",
+        "pushEffectiveServerAnchorMs", "pushNativeClock",
+        "pushWirePtsOriginMs", "pushLastWireMediaTimeMs", "pushForwardCacheState",
         "currentTeletextCueText",
         "teletextOverlayVisible",
         "subtitleCueUpdateCount", "subtitleNonEmptyCueCount", "subtitleBitmapCueCount",
@@ -3581,6 +3586,12 @@ def dev_set_active_player_overlay(visible: bool = True, mode: str = "") -> dict:
     shows the bounded 30-second detailed panel and visible=false hides it.
     """
     return adb.set_active_player_overlay(visible=visible, mode=mode)
+
+
+@mcp.tool()
+def dev_display_refresh(policy: str = "inspect") -> dict:
+    """Inspect/apply temporary display refresh policy; caller must restore with off."""
+    return adb.display_refresh(policy)
 
 
 @mcp.tool()

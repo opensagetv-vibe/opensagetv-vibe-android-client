@@ -55,6 +55,21 @@ public final class PlaybackRatePolicy
     }
 
     /**
+     * Stock OPENURL guesses active=true for every TS/MPG, including completed
+     * imports. That hint is not proof of a live source. Reuse the SAME loader's
+     * already-resolved finite/non-growing contract, never a second I/O probe on
+     * the GFX/UI thread. An explicit active declaration or circular buffer still
+     * forbids local rate ownership. Unknown/unopened sources fail closed.
+     */
+    public static boolean allowsLocalRate(boolean activeHint, boolean explicit,
+            long circularBufferSize, boolean resolvedFiniteNonGrowingSource)
+    {
+        if (circularBufferSize > 0L) return false;
+        if (!activeHint) return true;
+        return !explicit && resolvedFiniteNonGrowingSource;
+    }
+
+    /**
      * The decoder advances at 1x between scan ticks. Offset the next seek by
      * (rate - 1) * elapsed so the net media-clock movement approximates the
      * requested signed rate without pretending reverse decode is available.

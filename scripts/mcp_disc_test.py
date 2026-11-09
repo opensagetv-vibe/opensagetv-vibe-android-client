@@ -406,6 +406,8 @@ def main() -> int:
                         help="Fail unless final SageTV DVD media time is at most this value")
     parser.add_argument("--output", default="",
                         help="Optional JSON evidence path inside the project")
+    parser.add_argument("--capture-ready-file", type=Path,
+                        help="New active-task marker during a verified single-disc title hold")
     args = parser.parse_args()
     if not 0.0 <= args.visual_title_hold_s <= 60.0:
         parser.error("--visual-title-hold-s must be 0..60 seconds")
@@ -446,6 +448,11 @@ def main() -> int:
             "at least one --server-path, --paths-file, --media-name, or enabled --fixture-mode entry is required")
     require(not args.leave_playing or len(targets) == 1,
             "--leave-playing is valid only for a single disc")
+    if args.capture_ready_file:
+        ready = args.capture_ready_file.resolve()
+        require(ready.is_relative_to((Path(__file__).resolve().parents[1]/'artifacts/active').resolve())
+                and not ready.exists() and len(targets) == 1 and args.visual_title_hold_s >= 15,
+                'New owned active capture marker and single title hold >=15s required')
     args.timeout_s = max(15.0, min(float(args.timeout_s), 180.0))
     require(15.0 <= args.storage_warmup_timeout_s <= 300.0,
             "--storage-warmup-timeout-s must be between 15 and 300 seconds")
@@ -1050,6 +1057,19 @@ def main() -> int:
                         "before": compact_state(state),
                     }
                     print(f"VISUAL TITLE HOLD: {args.visual_title_hold_s:.1f}s", flush=True)
+                    if args.capture_ready_file:
+                        environment = load_test_environment()
+                        witness = call_dict(client, "dev_player_state")
+                        require(witness.get('clientId') == environment.device()['client_id']
+                                and witness.get('serverAddress') == args.server_address
+                                and witness.get('dvdSessionPending') is True
+                                and witness.get('dvdHighlightVisible') is False,
+                                'Exact client/server and actual DVD title required for HDMI marker')
+                        ready.parent.mkdir(parents=True, exist_ok=True)
+                        ready.write_text(json.dumps({'scopeVerified': True,
+                            'serial': environment.device_serial(), 'clientId': witness['clientId'],
+                            'server': args.server_address, 'disc': target_value,
+                            'expiresAtMs': int((time.time()+args.visual_title_hold_s)*1000)})+'\n')
                     hold_deadline = time.monotonic() + args.visual_title_hold_s
                     while time.monotonic() < hold_deadline:
                         time.sleep(min(1.0, hold_deadline - time.monotonic()))
@@ -1153,6 +1173,7 @@ def main() -> int:
         print(f"ANDROID REMOTE DVD MATRIX: FAIL\n{exc}", file=sys.stderr)
         return 1
     finally:
+        restore_failure = None
         if not args.leave_playing:
             try:
                 call_dict(client, "dev_exit_session", {"stop_app": True}, timeout=30.0)
@@ -1162,8 +1183,11 @@ def main() -> int:
             try:
                 call_dict(client, "dev_restore_settings", timeout=100.0)
             except Exception as restore_exc:
-                print(f"WARN: settings restoration failed: {restore_exc}", file=sys.stderr)
+                restore_failure = restore_exc
+                print(f"FAIL: settings restoration failed: {restore_exc}", file=sys.stderr)
         client.close()
+        if restore_failure is not None:
+            raise RuntimeError('DVD settings restoration failed; gate cannot PASS') from restore_failure
 
 
 if __name__ == "__main__":

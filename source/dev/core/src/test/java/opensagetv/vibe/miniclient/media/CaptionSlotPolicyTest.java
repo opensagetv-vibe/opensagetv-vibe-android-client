@@ -22,7 +22,7 @@ public class CaptionSlotPolicyTest
         // CEA-608 does not carry an authoritative language, so Auto prefers
         // the first language-described broadcast service (Teletext here).
         assertEquals(2, CaptionSlotPolicy.findTrack(tracks, 1, "auto", "").getIndex());
-        assertEquals(2, CaptionSlotPolicy.findTrack(tracks, 2, "auto", "").getIndex());
+        assertEquals(1, CaptionSlotPolicy.findTrack(tracks, 2, "auto", "").getIndex());
     }
 
     @Test public void explicitTypeAndLanguageAreAuthoritative()
@@ -78,5 +78,46 @@ public class CaptionSlotPolicyTest
                 tracks, 1, "dvb", "eng", true, false));
         assertEquals(3, CaptionSlotPolicy.findTrack(
                 tracks, 1, "dvb", "eng", true, true).getIndex());
+    }
+
+    @Test public void englishMovedAwayFromFirstCandidateCannotDuplicateSlotTwo()
+    {
+        SubtitleTrack[] tracks = {
+            track(1, SubtitleCodec.CEA608, "", 1),
+            track(2, SubtitleCodec.TELETEXT, "eng", -1)
+        };
+        assertEquals(2, CaptionSlotPolicy.findTrack(tracks, 1, "auto", "", true, false).getIndex());
+        assertEquals(1, CaptionSlotPolicy.findTrack(tracks, 2, "auto", "", true, false).getIndex());
+    }
+
+    @Test public void automaticSlotsPreferDescribedSecondaryLanguageOverUnknown()
+    {
+        SubtitleTrack[] tracks = {
+            track(1, SubtitleCodec.CEA608, "", 1),
+            track(2, SubtitleCodec.TELETEXT, "eng", -1),
+            track(3, SubtitleCodec.TELETEXT, "spa", -1)
+        };
+        assertEquals(2, CaptionSlotPolicy.findTrack(tracks, 1, "auto", "", true, false).getIndex());
+        assertEquals(3, CaptionSlotPolicy.findTrack(tracks, 2, "auto", "", true, false).getIndex());
+    }
+
+    @Test public void explicitLanguageMayIntentionallyMapBothSlotsToOneService()
+    {
+        SubtitleTrack[] tracks = {
+            track(1, SubtitleCodec.TELETEXT, "eng", -1),
+            track(2, SubtitleCodec.TELETEXT, "spa", -1)
+        };
+        assertEquals(1, CaptionSlotPolicy.findTrack(tracks, 1, "teletext", "eng").getIndex());
+        assertEquals(1, CaptionSlotPolicy.findTrack(tracks, 2, "teletext", "eng").getIndex());
+    }
+
+    @Test public void repeatedServiceEntryCannotCountAsASecondAutomaticService()
+    {
+        SubtitleTrack[] tracks = {
+            track(1, SubtitleCodec.CEA708, "eng", 1),
+            track(1, SubtitleCodec.CEA708, "eng", 1),
+            track(2, SubtitleCodec.TELETEXT, "eng", -1)
+        };
+        assertEquals(2, CaptionSlotPolicy.findTrack(tracks, 2, "auto", "").getIndex());
     }
 }

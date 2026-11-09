@@ -18,6 +18,19 @@ import static org.mockito.Mockito.mock;
 
 public class ConnectionEventRouterTest
 {
+    @Test public void fullFifoIsTypedBackpressureWithoutGrowthOrInputReplay()
+    {
+        ConnectionEventRouter router = new ConnectionEventRouter("full",
+                ConnectionLifecycleDiagnostics.begin("full"), () -> true, mock(ILogger.class));
+        Runnable first = () -> {};
+        router.enqueue(first);
+        for (int i=1; i<100; i++) router.enqueue(() -> {});
+        try { router.enqueue(() -> {}); org.junit.Assert.fail("Expected bounded backpressure"); }
+        catch (ConnectionEventBackpressureException expected) { }
+        assertEquals(100, router.queue.size());
+        org.junit.Assert.assertSame(first, router.queue.peek());
+    }
+
     @Test
     public void dispatchesOneBoundedFifoAndStopsOnInterrupt() throws Exception
     {

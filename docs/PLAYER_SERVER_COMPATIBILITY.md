@@ -28,6 +28,20 @@ control.
 
 ## Feature intent and test-only controls
 
+### Optional display matching (EXT-015, local114)
+
+Non-Pro/AFTMM/API25 on stock175: PAL25 selects actual50Hz from59.94, then
+restores exact preferred Auto0 and physical59.94; repeated Off stays0.
+Window-scoped restore does not reuse another Activity's physical mode or
+overwrite an external preference. Existing unchanged INTERLACE004..007 field/
+backend/GPU/native-fallback qualifications keep their original limits/provenance.
+
+FireOS emits MediaSession PAUSE during both HDMI transitions. Vibe honors it;
+explicit Play recovers output. This is not decoder corruption or seamless
+switching. No automatic Play/ignored user pause was introduced. Matching stays
+optional, default behavior and all existing deinterlace choices are preserved.
+Debug/MCP is test control only, never required for production mode matching.
+
 ### MiniMX Android6 device matrix (DEVICE-003, active2026-10-07)
 
 MINIMX model/AM2 Build.DEVICE/gxbaby board, Android6.0.1/API23 ARM32;
@@ -432,7 +446,99 @@ symbols, imports, properties, strings and call sites prove only that a path is
 present. They do not prove its complete runtime policy. No proprietary or vendor
 implementation is copied into Vibe.
 
-### EXT-004 completed evidence ledger
+### EXT-008 current HD300 behavioural gap inventory (113 candidate)
+
+Reviewed2026-11-08 against current Android source, not the old99 snapshot.
+User-authorized follow-up EXT-009..017 is server-connected playback only;
+TASKS.md4B owns implementation and gate status. Standalone shell/USB/CD/music
+features are explicitly excluded, not pending implementation requirements.
+This is a parity review, **not authority to implement or advertise every
+firmware feature**. The goal is equivalent SageTV behaviour on stock servers;
+literal Sigma API calls, decoder flags and hardware identities are not the goal.
+Every domain requested in EXT-004 is reconciled below. Unknown proprietary
+internals cannot be exhaustively proved from exported symbols: this inventory
+covers the observable protocol/property contract and available binary/source
+evidence, not a claim to have reconstructed every firmware routine.
+
+Evidence: `P` public source/protocol, `B` direct binary observation, `T` focused
+physical test, `I` inference requiring proof. "Partial" does not mean absent;
+"device-owned" does not mean impossible to emulate its user-visible result.
+Physical results belong to their named task/build, not every Android device.
+
+| Domain / HD300 behaviour | Evidence and current Vibe implementation | Remaining difference / disposition |
+|---|---|---|
+| Presentation clock/STC | B: beta Media_GetMediaTime0x42a090 calls getFixedTime0x429450; PLT4056a0/GOT4649bc resolves to DCCSTCGetTime, correction PLT404a10/GOT464698 to DCCSTCSetTime. P: Android uses backend presentation positions mapped by MediaCmd to server epochs. | **Proven gap corrected in scoped113 tests:** GROW-002 reproduced112's retained old clock; local epoch reset passes Media3/legacy/GSY on the original growing pair. IJK's independent presentation clock passes a completed adjacent-TV handoff and normal native seek. Not universal firmware parity: no synthetic free-running timer or guessed seek0, and long-run/other-device cases remain unverified. |
+| Seamless file switching | P: MiniPlayer.fastLoad replaces the reader without OPENURL/FLUSH. Android demuxers normally receive explicit boundaries. | 113 detects a substantial backwards data-bearing mux transition and clears local decoder/anchor state. This restores correctness, but a brief rebuffer is not proven frame-seamless HD300 output. Forward-only clock changes and all stream/format combinations remain unverified. |
+| Timestamp discontinuity, PTS wrap, A/V recovery | P/B: Core/native paths compensate PTS offsets/rollover and use decoder STC; Android has TS/PS timestamp handling, epoch calibration and scoped renderer recovery. | **Partial:** independent IJK counter behaviour differs; multi-hour/multiple-wrap/cross-codec handoffs are not universally qualified. Preserve audio-offset/pause/seek ownership; do not install another guessed server clock correction. |
+| Native buffering/underrun | B: HD300 has decoder/event waits and hardware queue control. P: Vibe has a4MiB Push ring, bounded128KiB ordinary wire credit, backend buffers and generation-owned recovery. | Different implementation, not an absent buffer. Exact Sigma queue thresholds/underrun timing are unknown and should not be copied. STALL-001/SEEK-002 field cases remain evidence-led, not blanket fixed by changing buffer sizes. |
+| Push payload sizing | P/B: HD300 advertises524288; stock Core clamps to131072. Vibe offers Auto/32768/65536/131072, measured by EXT-005. | **Intentional difference:** do not advertise512KiB when stock Core cannot use it. Physical ring size is separate from outstanding wire credit. |
+| In-buffer Push seeking | P: stock Core can send forward decoder-cache command29 independently of its stored capability flag. | **Backend-qualified, not universal:**114 keeps the general property false. Media3/legacy Exo and both GSY delegates use atomic forward selected queues in detailed ordinary Push; positive/negative/paused/track/caption/epoch gates pass on Non-Pro/stock175. Basic classic Fixed retains producer seeking. IJK/System cache targets remain unsupported; safe rejection is not target success. See compact EXT-010 result for bounds and alternatives. |
+| Bandwidth adaptation/transcoding | P: Core owns detailed-buffer throughput, free-space and server transcode decisions. Vibe returns detailed fields and negotiated formats; optional MIM owns its own stream. | HD300 hardware throughput is not Android throughput. No evidence for an unimplemented firmware algorithm that should be copied. Direct/Fixed/Pull/Push remain distinct; server/plugin availability cannot be presumed. |
+| Live/growing/circular files | P/T: Core reader ownership plus Android growing-file hints/range reads/seek bounds and Size retry exist. | **Partial:** post-start rewind passes do not certify first Watch or fast handoff. GROW-002 is the specific newly proven gap. Circular/segmented/cross-channel rollover combinations need their own evidence if changed. |
+| Skip, seek, resume and restart | P/T: shared seek bounds, pending startup target, retained Push restart, STV keys and stock reconnect are implemented. | Behavioural parity is the target, not exactly matching decoder preroll. Rare restart/seek field feedback remains open; no key remapping or hidden corrective target replaces the requested marker/bookmark. |
+| Smooth FF/REW and DVD scan | B/P/T: firmware processes Push flags/STC speed; Vibe uses supported forward playback rate plus scoped seek/scan and server DVD VOBU selection. | **Partial emulation:** sparse seek/scan is not Sigma hardware reverse playback or identical every-frame trick output. Actual engine/mode limits and SageMC timeline/rate UI are not universally equivalent. Existing approximate-DVD acceptance does not prove exact rate/cadence parity. |
+| Frame step | P/B: HD300 advertises FRAME_STEP and has Media_FrameStep. Vibe advertises bounded paused step only for supported random-access player/transports. | **Real missing scope:** no general Push/Fixed frame-step capability; unsupported engines must not advertise it. Implement/test client-side before enabling the property. |
+| Native DVD menus, SPU, STC, CLUT, audio and chapters | P/B: DVD commands32..37 and hardware SPU/decoder control. Vibe has independent VM-cell, palette/bitmap/highlight, stream selection and title/menu input handling. | **Partial/device-specific:** not every backend is authored-DVD ready. Native IJK/Android System and all discs are not qualified; telecine/presentation quality can differ. Normal playback must not acquire an MCP dependency. |
+| Blu-ray BDMV/M2TS | B/P/T: HD300 exports BD subtitle/timestamp handling. Vibe EXT-002 deframes192-byte M2TS on supported Push; generated BDMV tested on232. | **Stock gap:**175's directory-Pull limitation remains. Full HDMV/BD-J menus, encrypted/commercial-disc parity and every playlist/seamless branch are not established. Do not treat generated unencrypted playback as full Blu-ray support. |
+| Raw broadcast CEA callbacks | P/B/T: event225 returns raw caption records to stock STV. Media3/legacy/GSY extractor delegates implement it. | **Backend gap:** IJK lacks raw CEA extraction and uses explicit fallback/Teletext bridging; do not report a declared608 track as observed caption data. |
+| Teletext/DVB bitmap selection | P/B/T: HD300 local DVB surfaces use media command36/type1; Vibe decodes locally, preserves PIDs and bridges Teletext text for STV CC slots. | **Partial STV parity:** CC1/CC2 and DVB subtitle selection are different stock APIs. Stock standalone branches depend on UNIFIED graphics; optional Vibe unified surfaces now exist, but that is not proof every STV CC toggle selects DVB. Keep local selector/fail-safe fallback and verify exact STV/PID path. |
+| Subtitle timing/forced flags/palette | P/B: firmware has BD/DVB PTS offsets, forced state and SPU palette/surface paths; Android decoders have independent timing/track/forced-state handling. | **Partial:** all languages, forced tracks, authored navigation transitions and backend combinations are not exhaustively tested. A matching symbol name is not proof of identical subtitle timing policy. |
+| Hardware deinterlacing/telecine | P/B: HD300 exposes DEINTERLACE_CONTROL/ADVANCED_DEINTERLACING to its output hardware. Vibe has Auto/Off/Client/Client GPU/Fixed-MIM, observed interlace metadata and IJK filter choices. | **Device-owned/partial:** no universal Android equivalent to the Sigma algorithm or HDMI interlaced scanout. Client GPU is independently implemented, not a copied hardware flag. Native decoder/presentation quality and performance need per-device visual gates. |
+| HDMI mode/TV standard/refresh | P/B: GFX_HDMI_MODE, TV_STANDARD, digital/supported mode lists and Output_SetMode/UpdateHDMI. Android uses OS display modes/refresh controls rather than exposing the firmware's connector switches. | **Not full emulation:** raw mode enumeration, TV-standard switching and exact old output timing are not all exposed. Some behaviour may be implementable through supported Android display APIs; no new capability advertised on inference. |
+| Aspect, crop, zoom and overscan | P: GFX_ASPECT/VIDEO_ADVANCED_ASPECT; Android advancedAspects routes AspectModeManager and rectangle scaling. | **Implemented alternative, not absent:** Source/Fill/Zoom and per-viewport geometry exist. Exact Sigma clipping/nonlinear aspect/output processing remains unverified; don't propose a duplicate aspect feature from the old audit. |
+| HDMI/HBR/analog/digital audio routing | P/B: HD300 AUDIO_OUTPUTS includes HDMIHBR with native routing. Android offers decoded/passthrough playback according to backend, device and receiver. | **Device-owned/partial:** no identical Analog/Digital/HDMI/HBR connector menu or universal TrueHD/DTS-HD output. Existing physical passthrough-offset gates do not certify every HDMI route/format. |
+| A/V delay and audio reset | P/T: Vibe implements decoded/passthrough scheduling offsets, audio-output restart and internal/external sync controls; hardware STC on HD300 is different. | Already implemented behaviour, not a missing slider. Per-route receiver latency and native engine clocks remain distinct; never reset a user's stored offset to mask a stream epoch bug. |
+| Unified YUV/video-plane graphics | P/B: HD300 UNIFIED caches/video masks. Android now has opt-in UnifiedGraphicsCapability, format256, surfaces/video plane and GDX/OpenGL paths. | **Partial and opt-in:** old EXT-004 claim that this is entirely absent is obsolete. Default remains SEPARATE; exact hardware compositor/cache policy and every backend are not identical. Do not enable it merely to spoof HD300 identity. |
+| Texture batching/diffuse/negative scaling | P: HD300 advertises GFX_TEXTURE_BATCH_LIMIT8192, DIFFUSE_TEXTURES=ALPHA and NEGSCALING=VERTICAL. Current MiniClientConnection returns empty batching/diffuse/XFORMS; common.profile has no negative-scaling advertisement. | **Observable capability gaps:** native batched texture command, diffuse-alpha and advertised vertical negative scaling are not equivalent. Existing individual texture drawing may render the same STV without those optimizations. Any enablement requires matching GFX command implementation and renderer gates; HD3003D-transform support is not inferred. |
+| Dirty rectangles, blending, image formats and text | P: HD300 uses UPDATE/postmultiply and RAW8/32/JPG/PNG/SCALE/DIRECT; Vibe uses renderer-specific bitmap paths, FULLSCREEN profile, GPU surfaces and NONE text mode. | **Different rendering strategy:** compare the resulting STV first; not every native optimization/format is promised. None text mode is common, not a missing font engine. Current SageMC repaint/GFX regression gates are the relevant evidence. |
+| Cursor, IR/remote input and repeat timing | P/B: hardware has RC5/cursor properties; Android receives normalized KeyEvents, configurable DVD/TV mappings, touch/TV input and overlay focus navigation. | **Equivalent actions, different hardware path:** no raw RC5 IR stack; universal remotes/device repeat timing can differ. There is no basis to copy firmware debounce constants or mouse assumptions. |
+| Standby/wake/reconnect/power | P/B/T: firmware decoder/network/power services differ; Vibe has lifecycle-bound playback, stock reconnect and configured Home behaviour. | **Partial:** hardware standby/HDMI-CEC/IR power and Android background restrictions are not identical. Test real reconnect/watch-position/GFX restoration; do not emulate power by silently killing a session. |
+| Auth, crypto, filesystem and caches | P: Android implements negotiated auth cache/event encryption/offline images/compressed transfer and security-gated REMOTE_FS. HD300 mcprop actually advertises REMOTE_FS=FALSE. | **Not absent:** historical blanket "remote filesystem not advertised" was overbroad. Server-controlled access must remain security-gated; do not expose arbitrary files to mimic a device. Old RSA/Blowfish firmware support is not a reason to weaken modern transport policy. |
+| Standalone local-media shell, USB/discovery and music visualization | P/B: firmware has local services and MUSIC_VISUALISATION. Vibe has SMB configuration/browsing and server playback, not the complete HD300 standalone shell/USB/CD workflow or that visualization callback. | **Absent product scope/optional gap:** can be separately designed where useful; not needed to fix stock server playback. Raw device/connector services cannot be enabled with a capability string alone. |
+| Codec/container breadth | P/B: firmware enumerates its decoder formats; Vibe negotiates actual backend/device codecs with software/Fixed fallbacks where supported. | **Per-device, not identical:** WMV/VC1/Flash/MPEG/audio/HBR hardware coverage differs. No universal HD300 codec-parity claim; use actual decoder and transport evidence, not requested Hardware preference alone. |
+
+Priority is not "implement every row". First correct the reproduced clock/file
+handoff (GROW-002), then investigate demonstrated decoder/seek/render failures.
+Push frame-step, additional native graphics commands and bounded server-owned
+disc navigation are candidates only after a concrete use case and
+client-only design/affected stock-compatibility gates. Device-specific output
+controls need supported Android APIs and physical proof. No server Core,
+plugin, preference default or capability was changed by this inventory.
+
+114 follow-up (in progress, not a completed physical matrix): current backends
+no longer claim Push buffer seeking. IJK ignores it; a Media3 TS buffered-seek
+prototype actually adjusted53572->53605ms back to0. Core stores supportsPushBufferSeeking but the
+current MiniPlayer Fixed in-buffer branch does not consult it, so changing the
+flag alone is not an IJK Fixed-seek fix. The unsafe buffered-step prototype
+was withdrawn; EXT-016 now supplies real Software IJK forward stepping through
+the normal repeated-Pause route with output/clock/hold/resume proof. Hardware,
+DVD and reverse remain unsupported, and the bundled FRAME_STEP protocol flag
+stays false. Auto slot resolution
+now excludes the actual English-selected CC1 service when choosing CC2, rather
+than incorrectly assuming CC1 remained candidates[0]. This changes neither
+stock CC versus DVB selection ownership nor SRT/DVD subtitle semantics.
+
+Primary source pointers (repository-relative):
+
+- Android: [MediaCmd](../source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java),
+  [MiniClientConnection](../source/dev/core/src/main/java/opensagetv/vibe/miniclient/MiniClientConnection.java),
+  [common.profile](../source/dev/core/src/main/resources/common.profile),
+  [UnifiedGraphicsCapability](../source/dev/core/src/main/java/opensagetv/vibe/miniclient/graphics/UnifiedGraphicsCapability.java),
+  [AndroidMiniClientOptions](../source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/AndroidMiniClientOptions.java),
+  [IJKMediaPlayerImpl](../source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/video/ijkplayer/IJKMediaPlayerImpl.java).
+- Public Core: `native/elf/newminiclient/mcprop.h`, `STB/STBmedia.c`,
+  `java/sage/MiniPlayer.java` (fastLoad/getMediaTime/seek/pushBuffer0/getFlags),
+  `VideoFrame.java` (timeSelected/getMediaTimeMillis),
+  `MiniClientSageRenderer.java` (isStandaloneMediaPlayer/capabilities).
+- Firmware: EXT-004 verified images/versions/hashes below. The HD300 beta
+  symbol/call-site observations above are clean-room evidence only. HD200's
+  encoded FNIB image does not establish identical hidden implementation.
+
+### EXT-004 completed evidence ledger (historical99 snapshot)
+
+The following ledger records the2026-09-30 audit. It is not a current assertion
+that every implemented feature matches the HD300; EXT-008 above supersedes its
+old Android capability dispositions where the client has since changed.
 
 EXT-004 uses four evidence classes. `P` is a public protocol or surviving
 source path whose behavior can be followed end to end. `B` is a direct binary

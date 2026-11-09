@@ -214,11 +214,18 @@ def main() -> int:
         # form adds only negotiated DVD MIM transport identification and routes
         # its DVB subtitles through the ordinary player track selector.
         reviewed_digests = {
+            # EXT-010 real-transport command29 safety guard; physical19
+            # playing/paused rejection preserves time and zero-byte framing.
+            "0807272d6338a00436ad73b8aa202fb8c334f16750121cdd5fed9bcdc92d98a0",
             baseline_digest,
             # Reviewed STOP/FLUSH/PLAY video-surface restoration. Shared PLAY
             # restores only GONE (STOP), never background INVISIBLE, under a
             # current-session/state guard. No seek, decoder or clock change.
             "98db97f735656e7f41f012822f5d3eb472125e140619fdf2a802c0a91802470c",
+            # EXT-010 reviewed paused-zero acknowledgement, not a synthetic
+            # clock: current-period renderer time after the Push reset, no
+            # native progress, logical PAUSE and known zero anchor are required.
+            "84b809349b263a0a367f5b507e309a935f7f1d08ed69cc0bfbeb374efd58643b",
             "d270708006d02379b2ebcbc2ff5390a17d303ab22cf7072c31de9ab43adea3b4",
             "a4a2cd8ca0ffca84cc9b5dccb8681d5acabbdf3df7a8e3798e464d7d31e18494",
             "5697071e39aa4fa5366a8142609539b7fa1745968c597395ea7cb809d6d19b45",

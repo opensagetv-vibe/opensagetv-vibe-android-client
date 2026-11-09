@@ -297,6 +297,35 @@ final class DebugSessionCommands
                 : "op=active_player_overlay;requestedVisible=" + visible;
     }
 
+    /** One explicit debug request; no polling, saved preference or server mutation. */
+    static String displayRefresh(Context context, Intent intent)
+    {
+        String policy = clean(intent.getStringExtra("policy")).toLowerCase(java.util.Locale.US);
+        if (!"inspect".equals(policy) && !"off".equals(policy)
+                && !"seamless".equals(policy) && !"always".equals(policy))
+            throw new IllegalArgumentException("policy must be inspect, off, seamless or always");
+        Activity activity = UIActivityLifeCycleHandler.getResumedActivityForDebug();
+        if (activity == null || Looper.myLooper() != Looper.getMainLooper())
+            throw new IllegalStateException("resumed main-thread playback Activity required");
+        MiniClient client = requireConnectedClient(context);
+        opensagetv.vibe.miniclient.MiniPlayerPlugin active = client.getCurrentConnection()
+                .getMediaCmd().getPlaya();
+        if (active == null) throw new IllegalStateException("active player required");
+        int before = activity.getWindow().getAttributes().preferredDisplayModeId;
+        opensagetv.vibe.miniclient.android.video.DisplayRefreshController.Result result =
+                "inspect".equals(policy)
+                ? opensagetv.vibe.miniclient.android.video.DisplayRefreshController.inspect(activity, active)
+                : opensagetv.vibe.miniclient.android.video.DisplayRefreshController.apply(activity, active, policy);
+        opensagetv.vibe.miniclient.android.video.DisplayRefreshController.Result actual =
+                opensagetv.vibe.miniclient.android.video.DisplayRefreshController.inspect(activity, active);
+        return "op=display_refresh;policy=" + policy + ";previousPreferredModeId=" + before
+                + ";preferredModeId=" + activity.getWindow().getAttributes().preferredDisplayModeId
+                + ";currentModeId=" + actual.currentModeId + ";displayHz=" + actual.displayHz
+                + ";contentFps=" + actual.contentFps + ";applied=" + result.applied
+                + ";modeChanged=" + result.modeChanged + ";reason=" + result.reason
+                + ";summary=" + safe(actual.summary()) + ";savedPreferencesChanged=false";
+    }
+
     static String refreshVideoOutput(Context context)
     {
         MiniClient client = requireConnectedClient(context);

@@ -16,10 +16,20 @@ from mcp_caption_test import (
     require_mim_direct_ownership,
     stable_caption_time_ms,
     subtitle_track_codec,
+    require_same_live_process,
 )
 
 
 class SageTvCaptionAuthorityTests(unittest.TestCase):
+    def test_crash_checkpoint_preserves_history_but_rejects_new_crashes(self):
+        baseline = {'running': True, 'pids': ['5021'], 'signatureDetected': True,
+                    'signatureFingerprint': 'old-reproduced-crash'}
+        require_same_live_process(baseline, dict(baseline))
+        for changes in ({'signatureFingerprint': 'new-crash'}, {'running': False},
+                        {'pids': ['5022']}, {'signatureFingerprint': ''}):
+            with self.subTest(changes=changes), self.assertRaises(RuntimeError):
+                require_same_live_process(baseline, {**baseline, **changes})
+
     def test_late_cue_from_errored_or_stopped_player_is_not_recovery(self):
         samples = [
             ("DVB", {"subtitleCueUpdateCount": 4, "currentSubtitleCueCount": 1,
@@ -177,7 +187,9 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("postSubtitleInfo(long pts", connection)
         self.assertIn("CC_SUBTITLE = 0x10", bridge)
         self.assertIn("onCeaSample", bridge)
-        self.assertIn("sink.postSubtitleInfo", bridge)
+        self.assertIn("sink.tryPostSubtitleInfo", bridge)
+        self.assertIn("catch (ConnectionEventBackpressureException full)", bridge)
+        self.assertIn("postSubtitleInfo(pts, duration, data, flags)", bridge)
         self.assertIn('"gsyplayer"', policy)
         self.assertNotIn('|| "ijkplayer"', policy)
 

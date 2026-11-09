@@ -1144,8 +1144,12 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                     else if ("DETAILED_BUFFER_STATS".equals(propName))
                     {
-                        propVal = "TRUE";
-                        detailedBufferStats = true;
+                        detailedBufferStats = opensagetv.vibe.miniclient.video.PushBufferSeekPolicy
+                                .useDetailedBufferStats(client.properties().getStreamingMode(),
+                                        client.properties().getFixedEncodingPreference(),
+                                        client.properties().getFixedRemuxingPreference(),
+                                        isMimDirectTransportActive());
+                        propVal = detailedBufferStats ? "TRUE" : "FALSE";
                     }
                     else if ("PUSH_BUFFER_LIMIT".equals(propName))
                     {
@@ -1161,7 +1165,12 @@ public class MiniClientConnection implements SageTVInputCallback
                     }
                     else if ("PUSH_BUFFER_SEEKING".equals(propName))
                     {
-                        propVal = "TRUE";
+                        propVal = opensagetv.vibe.miniclient.video.PushBufferSeekPolicy
+                                .shouldAdvertise(client.properties().getString(
+                                        PrefStore.Keys.default_player, "exoplayer"),
+                                        client.properties().getString(
+                                                PrefStore.Keys.gsy_player_engine, "auto"))
+                                ? "TRUE" : "FALSE";
                     }
                     else if ("FRAME_STEP".equals(propName))
                     {
@@ -1183,7 +1192,9 @@ public class MiniClientConnection implements SageTVInputCallback
                     {
                         propVal = opensagetv.vibe.miniclient.video.LegacySubtitleCallbackPolicy
                                 .shouldAdvertise(client.properties().getString(
-                                        PrefStore.Keys.default_player, "exoplayer"))
+                                        PrefStore.Keys.default_player, "exoplayer"),
+                                        client.properties().getString(PrefStore.Keys.decoding_method, "hardware"),
+                                        System.getProperty("os.arch", ""))
                                 ? "TRUE" : "FALSE";
                     }
                     else if ("FORCED_MEDIA_RECONNECT".equals(propName))
@@ -2431,6 +2442,16 @@ public class MiniClientConnection implements SageTVInputCallback
     /** Whether SageTV accepted the negotiated legacy subtitle callback path. */
     public boolean isSubtitleCallbackEnabled() {
         return subSupport;
+    }
+
+    /** Read the already discovered immutable profile; never re-probe codecs. */
+    public String getDiscoveredCodecCapabilitiesForDebug() {
+        ConnectionCapabilityProfile profile = capabilityProfile;
+        if (profile == null) return "discoveredCapabilityProfileReady=false;";
+        return "discoveredCapabilityProfileReady=true;discoveredVideoCodecs=" + profile.videoCodecs()
+                + ";discoveredAudioCodecs=" + profile.audioCodecs()
+                + ";discoveredPushFormats=" + profile.pushFormats()
+                + ";discoveredPullFormats=" + profile.pullFormats() + ";";
     }
 
     /** Successfully flushed legacy subtitle callback events on the event channel. */

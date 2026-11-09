@@ -47,6 +47,19 @@ owned by existing plugins without duplicating their functionality in clients.
 
 ## Common interface and testing
 
+Update/install preservation must include active session overrides, not only
+the SharedPreferences checkpoint. Process replacement legitimately clears
+ActivePlayerSessionOverrides; the live audio offset can therefore differ from
+the saved device default. Capture the effective offset/output and original
+source/position before interruption. After guarded install, restore persisted
+settings, reconnect the same exact client/source, and reapply any captured
+session-only audio choice through existing `dev_set_active_audio` controls.
+Verify the effective result without saving over the device default. Refuse
+restoration over a newly selected source/value. GROW-002 caught/restored a
+Pro session-600ms versus saved-300ms difference; a249-key restore alone was
+not proof that the active listening state survived. Record the corrected
+restoration separately from the initial failed preservation check.
+
 This repository uses the same root interface as every OpenSageTV Vibe project:
 
 MCP ADB unit tests include executable POSIX mock scripts. Run that suite inside

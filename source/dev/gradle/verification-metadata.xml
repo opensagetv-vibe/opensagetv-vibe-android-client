@@ -19,14 +19,12 @@
       </component>
       <component group="" name="ijkplayer-arm64-0.8.8-SNAPSHOT" version="">
          <artifact name="ijkplayer-arm64-0.8.8-SNAPSHOT-.aar">
-            <sha256 value="37cec45af055fdf0d6f30735ab1234f2f4e9683c991a117d36430b5b7d911e86a" origin="Reviewed IJK k0.8.8 player-only deinterlace and Annex-B MediaCodec startup rebuild">
-               <also-trust value="37cec45af055fdf0d6f30735ab1234f2f4e9683c991a117d36430b5b7d91e86a"/>
-            </sha256>
+            <sha256 value="cd358f4b13307d600eb86355d01e1a967d7f9a3f0eeb66acbf9e0ef599d62ef4" origin="Reviewed k0.8.8 player-only isolated hardware-step trial; unchanged712/714 exports, dependencies and all non-player AAR entries; software FIFO flush unchanged"/>
          </artifact>
       </component>
       <component group="" name="ijkplayer-armv7a-0.8.8-SNAPSHOT" version="">
          <artifact name="ijkplayer-armv7a-0.8.8-SNAPSHOT-.aar">
-            <sha256 value="bc1498a45a842b82c0890074acf90cfcaa0a2c43e03e9fda496da44daedd3ab2" origin="Reviewed IJK k0.8.8 player-only deinterlace and Annex-B MediaCodec startup rebuild"/>
+            <sha256 value="54b4494000c4748f63a736c96f4eeb81e3421b1ec14ae3f260e6eb83ecb75422" origin="Reviewed k0.8.8 player-only isolated hardware-step trial; unchanged712/714 exports, dependencies and all non-player AAR entries; software FIFO flush unchanged"/>
          </artifact>
       </component>
       <component group="" name="ijkplayer-java-0.8.8-SNAPSHOT" version="">

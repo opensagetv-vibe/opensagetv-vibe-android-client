@@ -315,6 +315,14 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # their existing event and no decoder-clock polling is introduced.
         reviewed_plugin_watch_recovery_hash = "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367"
         self.assertIn(dev_hash, {
+            # EXT-010: reviewed actual-transport command29 guard + bounded
+            # feedback only; no seek/reload/keys/clock change. Physical19
+            # playing/paused injection rejects with zero bytes, no time reset.
+            "0807272d6338a00436ad73b8aa202fb8c334f16750121cdd5fed9bcdc92d98a0",
+            # EXT-010: accept only a current-period post-reset rendered paused
+            # zero. All unknown/playing/Pull/DVD/other backend guards remain;
+            # six witness/six continuity tests and stock175 physical04 qualify.
+            "84b809349b263a0a367f5b507e309a935f7f1d08ed69cc0bfbeb374efd58643b",
             # STOP-hidden output must return even when FLUSH prepared the
             # retained decoder before PLAY, so STATE_IDLE is already gone.
             "98db97f735656e7f41f012822f5d3eb472125e140619fdf2a802c0a91802470c",
@@ -488,7 +496,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.112")
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.114")
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -1453,6 +1461,17 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         player = (SHARED / "video/ijkplayer/IJKMediaPlayerImpl.java").read_text(encoding="utf-8")
         self.assertIn('return "Decoded PCM (IJK fixed output)";', player)
         self.assertIn("if (enabled)\n            return false;", player)
+
+    def test_stock_rate_eligibility_uses_same_resolved_loader_without_network_probe(self):
+        for path in ('media3/Media3MediaPlayerImpl.java', 'exoplayer2/Exo2MediaPlayerImpl.java'):
+            source = (SHARED / 'video' / path).read_text(encoding='utf-8')
+            method = source.split('public float setPlaybackRate(float rate)', 1)[1].split('@Override', 1)[0]
+            self.assertIn('getInitialReportedLength() > 0L', method)
+            self.assertIn('!pull.isEffectivelyGrowing()', method)
+            self.assertIn('PlaybackRatePolicy.allowsLocalRate', method)
+            self.assertIn('mediaContext.isMetadataExplicit()', method)
+            self.assertIn('pushMode || dvdPushMode || !playerReady || player == null', method)
+            self.assertNotIn('.open(', method)
 
     def test_audio_output_and_offset_are_exported_for_diagnostics(self):
         stats = (SHARED / "ActivePlayerStatsSnapshot.java").read_text(encoding="utf-8")

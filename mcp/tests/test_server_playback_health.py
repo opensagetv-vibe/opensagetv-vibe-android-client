@@ -6,6 +6,16 @@ from sagetv_dev_mcp import server
 
 
 class PlaybackHealthTest(unittest.TestCase):
+    def test_compact_state_retains_paused_zero_witness_without_private_fields(self):
+        fields = {'pushPausedZeroWitness': 'generation=2;confirmed=true;progress=false',
+                  'pushDetailedBufferStats': False,
+                  'pushEffectiveServerAnchorMs': 600000,
+                  'pushNativeClock': 'active=true,native=1033,presented=1033,fresh=false',
+                  'pushForwardCacheState': 'ready=true,positionUs=1033000,bufferedUs=3010000,seeks=0,rejects=0',
+                  'pushWirePtsOriginMs': 1400, 'pushLastWireMediaTimeMs': 2433,
+                  'nativeStepCompleted': 1, 'nativeStepPending': 0, 'nativeStepPositionMs': 1033}
+        self.assertEqual(fields, server._compact_state({**fields, 'privateToken': 'secret'}))
+
     def test_snapshot_length_witnesses_survive_compaction(self):
         fields = {'health_dataSourceInitialPhysicalSize':123456789,
                   'health_dataSourceInitialReportedLength':-1,

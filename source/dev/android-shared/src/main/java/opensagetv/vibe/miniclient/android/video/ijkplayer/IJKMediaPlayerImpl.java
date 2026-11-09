@@ -37,6 +37,8 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
 {
     private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     long resumeTimeOffset = -1;
+    private final opensagetv.vibe.miniclient.media.PushPresentationClock pushPresentationClock =
+            new opensagetv.vibe.miniclient.media.PushPresentationClock();
     boolean resumeMode = false;
     int initialAudioStreamPos = -1;
     int initialTextStreamPos = -1;
@@ -57,6 +59,39 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     private boolean growingPullSeekClockRelative;
     private volatile SurfaceHolder videoSurfaceHolder;
     private volatile SurfaceHolder.Callback videoSurfaceCallback;
+    private volatile IjkCaptionSession rawCaptionSession;
+    private final opensagetv.vibe.miniclient.video.NativePausedStepGate nativeStepGate =
+            new opensagetv.vibe.miniclient.video.NativePausedStepGate();
+    private volatile boolean nativeStepSupported;
+    private volatile boolean nativeFreshClockPending;
+    private final java.util.concurrent.atomic.AtomicInteger nativeOutputEpoch =
+            new java.util.concurrent.atomic.AtomicInteger();
+    private volatile boolean nativeOutputPresented;
+    public long getNativeStepCompletedForDebug() { return nativeStepGate.completed(); }
+    public int getNativeStepPendingForDebug() { return nativeStepGate.pending(); }
+    public long getNativeStepPositionForDebug() { return nativeStepGate.lastPresentedMs(); }
+    public String getPushNativeClockForDebug() { return pushPresentationClock.describe(); }
+
+    /** A native frame from this exact producer epoch, never just a zero query. */
+    @Override protected boolean hasConfirmedPausedZeroPosition()
+    {
+        return playerReady && nativeStepSupported && nativeOutputPresented && !seekPending;
+    }
+    @Override public String getPushPausedZeroWitnessForDebug()
+    {
+        return "nativeEpoch=" + nativeOutputEpoch.get() + ",presented=" + nativeOutputPresented
+                + ",eligible=" + nativeStepSupported + ",seekPending=" + seekPending;
+    }
+
+    private void armNativeOutputProof()
+    {
+        nativeOutputPresented = false;
+        int epoch = nativeOutputEpoch.incrementAndGet();
+        if (epoch > 0 && nativeStepSupported && player instanceof IjkMediaPlayer)
+            ((IjkMediaPlayer)player).setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,
+                    "vibe-output-epoch", epoch);
+    }
+    private int selectedNativeCaption = DISABLE_TRACK;
 
     public IJKMediaPlayerImpl(AndroidUIController activity)
     {
@@ -104,7 +139,13 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
         // IJK must do the same instead of crashing the complete connection.
         IMediaPlayer activePlayer = player;
         if (activePlayer == null) return 0L;
+        long clockGeneration = pushPresentationClock.generation();
+        long observedAtMs = android.os.SystemClock.elapsedRealtime();
         long time = activePlayer.getCurrentPosition();
+
+        if (pushMode && pushPresentationClock.isActive())
+            return pushPresentationClock.position(clockGeneration, time, serverStartTime,
+                    observedAtMs);
 
         if (pushMode)
         {
@@ -253,6 +294,45 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     public boolean frameStep(final int amount)
     {
         final IMediaPlayer stepPlayer = player;
+        if (pushMode)
+        {
+            final int request = nativeStepGate.request(amount, getState() == PAUSE_STATE,
+                    playerReady && stepPlayer instanceof IjkMediaPlayer,
+                    nativeStepSupported, stepPlayer == null ? -1L : stepPlayer.getCurrentPosition());
+            if (request == 0)
+            {
+                PlaybackDebugTrap.record("frame_step_unsupported", this);
+                return false;
+            }
+            final PlaybackSessionController.Token session = beginPlaybackOperation(
+                    PlaybackSessionController.Operation.FRAME_STEP);
+            context.runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    if (!isCurrentPlaybackSession(session) || player != stepPlayer
+                            || getState() != PAUSE_STATE || nativeStepGate.pending() != request)
+                    {
+                        nativeStepGate.cancel(request);
+                        return;
+                    }
+                    PlaybackDebugTrap.record("frame_step_invoke", IJKMediaPlayerImpl.this);
+                    ((IjkMediaPlayer)stepPlayer).setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,
+                            "vibe-paused-step", request);
+                    PlaybackDebugTrap.record("frame_step_return", IJKMediaPlayerImpl.this);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override public void run() {
+                            if (player == stepPlayer && isCurrentPlaybackSession(session)
+                                    && nativeStepGate.cancel(request))
+                            {
+                                ((IjkMediaPlayer)stepPlayer).setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,
+                                        "vibe-paused-step", 0L);
+                                PlaybackDebugTrap.record("frame_step_timeout", IJKMediaPlayerImpl.this);
+                            }
+                        }
+                    }, 2000L);
+                }
+            });
+            return true; // Admission only; actual native rendering completes separately.
+        }
         if (!PlaybackFrameStepPolicy.canStep(getState(), pushMode, playerReady,
                 stepPlayer != null, amount))
         {
@@ -287,6 +367,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public void play()
     {
+        nativeStepGate.cancel();
         boolean prepareAfterStop = stoppedForResume;
         super.play();
 
@@ -353,7 +434,19 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public void flush()
     {
+        nativeStepGate.cancel();
+        armNativeOutputProof();
+        if (playerReady) nativeFreshClockPending = false;
         PlaybackDebugTrap.record("flush_before", IJKMediaPlayerImpl.this);
+        if (pushMode && (lastUri == null || !lastUri.startsWith("push:dvd")))
+        {
+            // IJK's native counter/resume offset survives a flush. Establish
+            // a new presentation domain for both explicit server seeks and
+            // stock fast-load handoffs, without recreating native IJK or
+            // guessing the server target. New anchors remain server-owned.
+            pushPresentationClock.begin(player == null ? -1L : player.getCurrentPosition(),
+                    android.os.SystemClock.elapsedRealtime());
+        }
         super.flush();
 
         if (player != null)
@@ -384,6 +477,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     {
         log.debug("Creating Player");
 
+        pushPresentationClock.clear();
         resumeTimeOffset = -1;
         resumeMode = false;
         initialAudioStreamPos = -1;
@@ -416,6 +510,51 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
             PrefStore playerPrefs = MiniclientApplication.get().getClient().properties();
             DecodingMethod decodingMethod = IjkDecoderOptions.apply((IjkMediaPlayer) player, playerPrefs);
             log.info("IJKPlayer decoding method: {}", decodingMethod.displayName());
+            final boolean rawCeaSupported = opensagetv.vibe.miniclient.video.LegacySubtitleCallbackPolicy
+                    .shouldAdvertise("ijkplayer", decodingMethod.preferenceValue(),
+                            System.getProperty("os.arch", ""));
+            final boolean softwarePush = pushMode && rawCeaSupported
+                    && (lastUri == null || !lastUri.startsWith("push:dvd"));
+            final boolean hardwareStepTrial = opensagetv.vibe.miniclient.video.NativeHardwareStepTrial
+                    .eligible(pushMode, lastUri != null && lastUri.startsWith("push:dvd"),
+                            decodingMethod.preferenceValue(), System.getProperty("os.arch", ""));
+            nativeStepSupported = softwarePush || hardwareStepTrial;
+            nativeFreshClockPending = pushMode
+                    && (lastUri == null || !lastUri.startsWith("push:dvd"));
+            // Only this non-DVD software Push path has qualified FIFO flush
+            // and actual-output proof. Hardware/other ABIs/DVD stay native.
+            ((IjkMediaPlayer) player).setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,
+                    "vibe-push-input", softwarePush ? 1 : 0);
+            // Separate option: a hardware step must never opt into the qualified
+            // software-only FIFO flush or pretend opaque frames expose raw CEA.
+            ((IjkMediaPlayer) player).setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,
+                    "vibe-hardware-step", hardwareStepTrial ? 1 : 0);
+            armNativeOutputProof();
+            final IjkCaptionSession captionLease = !rawCeaSupported ? null : new IjkCaptionSession(
+                    MiniclientApplication.get().getClient().getBackgroundService(),
+                    new IjkCaptionSession.Clock() {
+                        @Override public boolean current() {
+                            return player == listenerPlayer && isCurrentPlaybackSession(listenerSession);
+                        }
+                        @Override public boolean playing() { return playerReady && listenerPlayer.isPlaying(); }
+                        @Override public long positionMs() { return listenerPlayer.getCurrentPosition(); }
+                    }, new opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge.Sink() {
+                        @Override public void postSubtitleInfo(long pts, long duration, byte[] data, int flags) {
+                            opensagetv.vibe.miniclient.MiniClientConnection connection =
+                                    MiniclientApplication.get().getClient().getCurrentConnection();
+                            if (connection != null) connection.postSubtitleInfo(pts, duration, data, flags);
+                        }
+                    });
+            rawCaptionSession = captionLease;
+            ((IjkMediaPlayer) player).setOnNativeInvokeListener(new IjkMediaPlayer.OnNativeInvokeListener() {
+                @Override public boolean onNativeInvoke(int what, android.os.Bundle args) {
+                    if (what != IjkCaptionSession.NATIVE_EVENT) return false;
+                    if (captionLease != null && rawCaptionSession == captionLease && player == listenerPlayer
+                            && isCurrentPlaybackSession(listenerSession) && captionLease.sample(args))
+                        onTeletextSubtitleTracksChanged();
+                    return true;
+                }
+            });
 
             player.setOnVideoSizeChangedListener(new IMediaPlayer.OnVideoSizeChangedListener()
             {
@@ -437,8 +576,44 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                 {
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer)
                         return false;
+                    if (what == 12065)
+                    {
+                        if (getState() == PAUSE_STATE && nativeStepGate.complete(extra,
+                                listenerPlayer.getCurrentPosition()))
+                            PlaybackDebugTrap.record("frame_step_presented", IJKMediaPlayerImpl.this);
+                        return true;
+                    }
+                    if (what == 12066)
+                    {
+                        if (nativeStepSupported && extra == nativeOutputEpoch.get())
+                        {
+                            nativeOutputPresented = true;
+                            // The hardware trial's classic Fixed/basic producer
+                            // really starts a new normalized stream. Keeping the
+                            // old unknown-counter offset under-reported the
+                            // burned target by ~2.4s after a retained seek.
+                            // Only current decoder-serial output, never PREPARED
+                            // or a seek acknowledgement, can supply this proof.
+                            if (opensagetv.vibe.miniclient.video.NativeHardwareStepTrial
+                                    .trustNormalizedEpoch(hardwareStepTrial,
+                                            opensagetv.vibe.miniclient.MiniClientConnection.detailedBufferStats,
+                                            true))
+                                pushPresentationClock.beginFreshNativeEpoch(
+                                        android.os.SystemClock.elapsedRealtime());
+                        }
+                        return true;
+                    }
                     if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START)
                     {
+                        if (nativeFreshClockPending)
+                        {
+                            // PREPARED may still report a provisional seek_pos
+                            // before the first real output clock. Only actual
+                            // first video output proves the fresh native origin.
+                            pushPresentationClock.beginFreshNativeEpoch(
+                                    android.os.SystemClock.elapsedRealtime());
+                            nativeFreshClockPending = false;
+                        }
                         firstVideoFrameRendered = true;
                         notifyPostSeekPushFirstFrame();
                         PlaybackDebugTrap.record("first_video_frame", IJKMediaPlayerImpl.this);
@@ -532,6 +707,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("seek_complete", IJKMediaPlayerImpl.this);
                     seekPending = false;
+                    if (captionLease != null) captionLease.completeSeek();
                     if(player != null)
                     {
                         updateMediaSessionPlaybackState(player.getCurrentPosition());
@@ -547,6 +723,10 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
                     if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
                     PlaybackDebugTrap.record("player_prepared", IJKMediaPlayerImpl.this);
                     playerReady = true;
+                    if (pushMode) seekPending = false; // Actual full prepare supersedes pre-prepare FLUSH.
+                    // Pre-prepare FLUSH has no old decoded epoch to fence and
+                    // native IJK rejects its seek without a completion event.
+                    if (captionLease != null) captionLease.completeSeek();
                     if (stoppedForResume || state == STOPPED_STATE)
                     {
                         PlaybackDebugTrap.record("player_prepared_while_stopped",
@@ -636,7 +816,14 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
 
     protected void seekToImpl(long timeInMillis)
     {
+        nativeStepGate.cancel();
         seekPending = true;
+        IjkCaptionSession captions = rawCaptionSession;
+        if (captions != null)
+        {
+            selectedNativeCaption = DISABLE_TRACK;
+            captions.beginSeek();
+        }
         if (!pushMode && timeInMillis != Long.MAX_VALUE
                 && dataSource instanceof IJKPullMediaSource
                 && ((IJKPullMediaSource) dataSource).isEffectivelyGrowing())
@@ -810,7 +997,7 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public int getSubtitleTrackCount()
     {
-        return teletextTrackCount();
+        return getSubtitleTracks().length;
     }
 
     @Override
@@ -836,14 +1023,40 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public SubtitleTrack[] getSubtitleTracks()
     {
-        return appendTeletextSubtitleTracks(new SubtitleTrack[0]);
+        java.util.ArrayList<SubtitleTrack> observed = new java.util.ArrayList<>();
+        IjkCaptionSession captions = rawCaptionSession;
+        if (captions != null && captions.observed608())
+            observed.add(new SubtitleTrack(captions.index608(),
+                    opensagetv.vibe.miniclient.media.SubtitleCodec.CEA608, "",
+                    "Observed native data; service not signalled", true));
+        if (captions != null && captions.observed708())
+            observed.add(new SubtitleTrack(captions.index708(),
+                    opensagetv.vibe.miniclient.media.SubtitleCodec.CEA708, "",
+                    "Observed native data; service not signalled", true));
+        java.util.Collections.sort(observed, new java.util.Comparator<SubtitleTrack>() {
+            @Override public int compare(SubtitleTrack left, SubtitleTrack right) {
+                return Integer.compare(left.getIndex(), right.getIndex());
+            }
+        });
+        return appendTeletextSubtitleTracks(observed.toArray(new SubtitleTrack[0]));
     }
 
     @Override
     public void setSubtitleTrack(int streamPos)
     {
+        selectedNativeCaption = DISABLE_TRACK;
         if (handleTeletextSubtitleSelection(streamPos))
             return;
+        SubtitleTrack[] observed = getSubtitleTracks();
+        if (streamPos >= 0 && streamPos < observed.length
+                && (observed[streamPos].getSubtitleCodec() == opensagetv.vibe.miniclient.media.SubtitleCodec.CEA608
+                    || observed[streamPos].getSubtitleCodec() == opensagetv.vibe.miniclient.media.SubtitleCodec.CEA708))
+        {
+            selectedNativeCaption = streamPos;
+            // SageTV owns CC1/CC2/service filtering and the STV renderer. Do
+            // not also decode/render these same raw bytes as Android text.
+            return;
+        }
         //Displaying subtitle/timedtext does not appear to be supported at this time.
         log.debug("TODO: setSubtitleTrack Called StreamPosition: {}", streamPos);
 
@@ -868,7 +1081,24 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
     @Override
     public int getSelectedSubtitleTrack()
     {
-        return selectedTeletextTrackOr(DISABLE_TRACK);
+        return selectedTeletextTrackOr(selectedNativeCaption);
+    }
+
+    @Override public boolean hasObservedCeaCaptionData() {
+        IjkCaptionSession captions = rawCaptionSession;
+        return captions != null && (captions.observed608() || captions.observed708());
+    }
+    public int getLegacyCaptionCallbackCountForDebug() {
+        IjkCaptionSession captions = rawCaptionSession;
+        return captions == null ? 0 : captions.forwardedSamples();
+    }
+    public long getLegacyCaptionCallbackBytesForDebug() {
+        IjkCaptionSession captions = rawCaptionSession;
+        return captions == null ? 0 : captions.forwardedBytes();
+    }
+    public boolean isLegacyCaptionCallbackActiveForDebug() {
+        IjkCaptionSession captions = rawCaptionSession;
+        return captions != null && captions.active();
     }
 
     private void bindVideoSurface(final SurfaceHolder holder,
@@ -941,6 +1171,15 @@ public class IJKMediaPlayerImpl extends BaseMediaPlayerImpl<IMediaPlayer, IMedia
 
     protected void releasePlayer()
     {
+        nativeOutputPresented = false;
+        nativeOutputEpoch.incrementAndGet();
+        nativeFreshClockPending = false;
+        nativeStepSupported = false;
+        nativeStepGate.cancel();
+        IjkCaptionSession captions = rawCaptionSession;
+        rawCaptionSession = null;
+        selectedNativeCaption = DISABLE_TRACK;
+        if (captions != null) captions.close();
         unbindVideoSurface();
         stoppedForResume = false;
         if(mediaSession != null)

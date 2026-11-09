@@ -185,6 +185,16 @@ public interface MiniPlayerPlugin extends Runnable
     void seek(long timeMS);
 
     /**
+     * Whether command29 can address the active decoder's timeline. This is not
+     * permission to restart/seek a Push producer. Preserve existing third-party
+     * implementations; Android overrides using its actual transport ownership.
+     */
+    default boolean canHandleServerSeek() { return true; }
+
+    /** Bounded local feedback; command29 itself has no wire acknowledgement. */
+    default void onUnsupportedServerSeek(long requestedMs) { }
+
+    /**
      * Requests a signed number of video frames while paused. Implementations
      * return false when the current backend/transport cannot step safely.
      */

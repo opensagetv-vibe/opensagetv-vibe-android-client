@@ -38,7 +38,9 @@ final class ConnectionEventRouter extends Thread
 
     void enqueue(Runnable event)
     {
-        queue.add(event);
+        // Do not grow the FIFO, block the UI, drop/replay input, or conceal a
+        // full queue. Caption sinks can distinguish and retain this condition.
+        if (!queue.offer(event)) throw new ConnectionEventBackpressureException();
         diagnostics.eventQueued(queue.size());
     }
 

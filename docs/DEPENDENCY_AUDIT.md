@@ -8,6 +8,40 @@ the release-root `THIRD_PARTY_NOTICES.md`.
 
 ## Reproducible evidence
 
+EXT-018's default-off hardware trial rebuilds only pinned k0.8.8 player glue:
+ARMv7 AAR54b4494000c4748f63a736c96f4eeb81e3421b1ec14ae3f260e6eb83ecb75422,
+ARM64cd358f4b13307d600eb86355d01e1a967d7f9a3f0eeb66acbf9e0ef599d62ef4.
+Exports712/714, dependencies and every non-player entry match the prior ARM
+artifacts. Exact hardware-step patch/helper source is in the existing LGPL
+offer. No Maven, FFmpeg/SDL/Java dependency or license change. ARM32 physical
+trial/normalized Fixed correction pass; ARM64 is build/ABI only. Trial remains
+off pending further lifecycle/backend/full-protocol work; no broad parity claim.
+
+EXT-010 uses a separate detailed-ordinary-Push implementation with distinctly
+named VibeForwardPushMediaPeriod/Source copies of public Apache Media3 1.11.0
+source. Original source SHA256 respectively6c94579591091bbf00e2571a5163ae197bf30ef99e012e488f98fb68a6347257
+and7e54939633b1b98864fd2032c0b00df3072fb9168582f1dd4a89737d5c504dd8;
+original copyright/license retained. No Maven/AAR version or native dependency
+changes. Only actual selected queues may seek, with atomic AV rollback; byte
+SeekMap, FIFO reopening and synthetic clocks are not introduced. Basic Push,
+Pull/Direct and authored DVD retain existing sources. Protocol capability stays
+conservative: forward queues do not imply general random access or raw-PTS
+decode-to. Caption/epoch prototype gates pass; final default/track/negative
+qualification is recorded under EXT-010, not claimed from compilation. Record
+future maintenance against this exact version rather than tracking latest.
+
+Legacy Exo uses its own public2.18.1 adaptation in com/google/android/exoplayer2/
+source, not Media3 binary types. Exact upstream ProgressiveMediaPeriod SHA256
+3aee2b9d38d5be4e41153082e12a3c96ea8c79d75e1f94ea7b871f40705fe1a3 and Source
+52f388b53ffd9e3ce10bac62ea3af1dc31879007bed1398754189010bd78693c, from the
+official google/ExoPlayer r2.18.1 tag. Original2016 Apache headers retained;
+obsolete compile-only compatqual.NullableType uses existing qual.Nullable.
+No new dependency, native relink, annotation stub or verification bypass.
+Physical legacy37/39/40/corrected41 and final basic42 qualification now passes;
+Media3 default34/35/36 and earlier CEA/DVB rows pass independently. Exact scope
+and unsupported IJK/System cache targets remain in compact EXT-010 result.
+No general protocol capability or all-device hardware equivalence is claimed.
+
 DIAG-012 adds only pinned com.google.zxing:core:3.5.3 for offline QR encoding.
 The new release runtime report selects123 coordinates; inventory/notice updated,
 only one entry added to each Android lockfile and no existing versions changed.
@@ -44,7 +78,7 @@ are updated. An empty OSV result is not proof that a dependency is safe.
 | Application event dispatch | Project-owned typed `VibeEventBus` | Apache-2.0 project code; Square Otto removed | Preserve synchronous posting-thread and registration-order behavior documented in `EVENT_OWNERSHIP.md` |
 | Glide | 3.8.0 | BSD-3-Clause plus its bundled Apache/MIT/other retained sections; recorded without flattening to one license | Update separately from TV artwork lifecycle changes |
 | SLF4J / Logback Android | SLF4J 1.7.6; Logback Android 1.1.1-6 | SLF4J MIT; Logback Android EPL-1.0 or LGPL-2.1; published metadata recorded | Logging and exported-file acceptance required |
-| IJK / bundled FFmpeg AARs | checked-in 0.8.8-era artifacts | IJK LGPL-2.1-or-later and upstream component notices recorded; embedded FFmpeg has `--disable-gpl --disable-nonfree` | Do not replace while legacy IJK remains a tested backend |
+| IJK / bundled FFmpeg AARs | pinned k0.8.8 ARM player glue; baseline FFmpeg/SDL/Java | IJK LGPL-2.1-or-later and upstream component notices recorded; embedded FFmpeg has `--disable-gpl --disable-nonfree` | Narrow reviewed player-only deinterlace/Annex-B/A53/FIFO-flush/paused-step/output-clock patches reconstruct through scripts/build_ijk_deinterlace.py; every other AAR entry stays byte-identical. scripts/verify_ijk_native_candidate.py checks export/dependency ABI and unchanged entries before strict hash review. Software ARM normal-Pause Push/Fixed and affected native clock gates pass; hardware/DVD/reverse unsupported, no bulk runtime upgrade |
 | FFmpeg Exo audio extensions | checked-in legacy Exo 2.18.0 and Media3 1.11.0 artifacts | Exo/Media3 wrappers Apache-2.0; pinned decoder-only FFmpeg configurations retain LGPL obligations and enable neither GPL nor nonfree code | Audio fallback only; MediaCodec/passthrough remain first, experimental Media3 FFmpeg video is disabled, and distinct JNI library names prevent cross-generation binding |
 | Core utilities | jzlib 1.1.3 and NanoHTTPD 2.2.0 | JZlib BSD-style and NanoHTTPD BSD-3-Clause; each recorded explicitly | The GPL-2.0 Ostermiller circular buffer was replaced by the project's Apache-2.0 implementation; Core protocol and physical Push tests are required |
 | SMBJ | 0.13.0, Android-safe dependency subset | Apache-2.0; upstream license reviewed | SMB2/SMB3 only; desktop SPNEGO authenticator excluded, NTLM/guest retained, credentials kept out of profiles and telemetry |

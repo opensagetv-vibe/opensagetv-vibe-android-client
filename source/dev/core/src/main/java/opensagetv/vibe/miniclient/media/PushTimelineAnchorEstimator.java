@@ -99,6 +99,8 @@ public final class PushTimelineAnchorEstimator
         return ptsCount;
     }
 
+    public long getFirstPts90Khz() { return firstPts90Khz; }
+
     private static int findPacketStart(byte[] bytes, int start)
     {
         int limit = bytes.length - TS_PACKET_BYTES;

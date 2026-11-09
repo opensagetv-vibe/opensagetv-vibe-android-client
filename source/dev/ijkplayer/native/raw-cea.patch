@@ -1,0 +1,118 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -583,2 +583,3 @@
+     int audio_disable;
++    int vibe_raw_cea;
+     int vibe_software_deinterlace;
+--- a/ijkmedia/ijkplayer/ff_ffplay_options.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_options.h
+@@ -58,2 +58,4 @@
++    { "vibe-raw-cea", "forward real software-decoder A53 side data",
++        OPTION_OFFSET(vibe_raw_cea), OPTION_INT(0, 0, 1) },
+     { "an",                             "disable audio",
+         OPTION_OFFSET(audio_disable),   OPTION_INT(0, 0, 1) },
+--- a/ijkmedia/ijkplayer/ff_ffplay.c
++++ b/ijkmedia/ijkplayer/ff_ffplay.c
+@@ -107,2 +107,3 @@
+ #include "ff_ffplay_options.h"
++#include "vibe_cea_packet.h"
+ #include "vibe_deinterlace.h"
+@@ -1694,2 +1695,46 @@
++/* Read real decoded metadata BEFORE frame dropping/filtering. MediaCodec does
++ * not enter this function: do not claim its opaque output contains A53 data.
++ * The queue is bounded and abort/OOM paths own/free every allocation. */
++static void vibe_queue_raw_cea(FFPlayer *ffp, const AVFrame *frame)
++{
++    VideoState *is = ffp->is;
++    AVFrameSideData *sd;
++    AVMessage message;
++    VibeCeaPacket *packet;
++    int64_t time_us, start_us;
++    int has_valid = 0;
++    if (!ffp->vibe_raw_cea || !is || frame->pts == AV_NOPTS_VALUE)
++        return;
++    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_A53_CC);
++    if (!sd || sd->size < 3 || sd->size > VIBE_CEA_MAX_BYTES || sd->size % 3)
++        return;
++    for (int i = 0; i < sd->size; i += 3)
++        has_valid |= (sd->data[i] & 4) != 0;
++    if (!has_valid) return;
++    time_us = av_rescale_q(frame->pts, is->video_st->time_base, AV_TIME_BASE_Q);
++    start_us = is->ic->start_time;
++    if (!ffp->no_time_adjust && start_us > 0 && start_us != AV_NOPTS_VALUE)
++        time_us -= start_us;
++    if (time_us < 0) return;
++    SDL_LockMutex(ffp->msg_queue.mutex);
++    if (ffp->msg_queue.abort_request || ffp->msg_queue.nb_messages >= 128) {
++        SDL_UnlockMutex(ffp->msg_queue.mutex);
++        return;
++    }
++    packet = av_mallocz(sizeof(*packet));
++    if (!packet) { SDL_UnlockMutex(ffp->msg_queue.mutex); return; }
++    packet->serial = is->viddec.pkt_serial;
++    packet->time_us = time_us;
++    packet->size = sd->size;
++    memcpy(packet->bytes, sd->data, sd->size);
++    msg_init_msg(&message);
++    message.what = VIBE_CEA_MESSAGE;
++    message.obj = packet;
++    message.free_l = msg_obj_free_l;
++    if (msg_queue_put_private(&ffp->msg_queue, &message) < 0)
++        msg_free_res(&message);
++    SDL_UnlockMutex(ffp->msg_queue.mutex);
++}
++
+ static int get_video_frame(FFPlayer *ffp, AVFrame *frame)
+ {
+@@ -1704,2 +1749,3 @@
+     if (got_picture) {
++        vibe_queue_raw_cea(ffp, frame);
+         double dpts = NAN;
+@@ -4921,2 +4967,4 @@
+     switch (id) {
++        case VIBE_CEA_SERIAL_PROPERTY:
++            return ffp && ffp->is ? ffp->is->videoq.serial : default_value;
+         case FFP_PROP_INT64_SELECTED_VIDEO_STREAM:
+--- a/ijkmedia/ijkplayer/android/ijkplayer_jni.c
++++ b/ijkmedia/ijkplayer/android/ijkplayer_jni.c
+@@ -38,2 +38,4 @@
+ #include "ijkplayer_android.h"
++#include "../vibe_cea_packet.h"
++#include "vibe_cea_jni.h"
+ #include "ijksdl/android/ijksdl_android_jni.h"
+@@ -940,2 +941,35 @@
++        case VIBE_CEA_MESSAGE: {
++            VibeCeaPacket *packet = (VibeCeaPacket *) msg.obj;
++            jobject bundle = NULL;
++            jbyteArray bytes = NULL;
++            jclass bundle_class = NULL;
++            jstring key = NULL;
++            if (!packet || packet->serial != ijkmp_get_property_int64(mp,
++                    VIBE_CEA_SERIAL_PROPERTY, -1)) break;
++            bundle = J4AC_Bundle__Bundle__catchAll(env);
++            if (!bundle) break;
++            bytes = (*env)->NewByteArray(env, packet->size);
++            bundle_class = (*env)->GetObjectClass(env, bundle);
++            key = (*env)->NewStringUTF(env, "cc_data");
++            if (bytes && bundle_class && key && !(*env)->ExceptionCheck(env)) {
++                jmethodID put = (*env)->GetMethodID(env, bundle_class,
++                        "putByteArray", "(Ljava/lang/String;[B)V");
++                if (put && !(*env)->ExceptionCheck(env)) {
++                    (*env)->SetByteArrayRegion(env, bytes, 0, packet->size, (jbyte *) packet->bytes);
++                    (*env)->CallVoidMethod(env, bundle, put, key, bytes);
++                    J4AC_Bundle__putInt__withCString__catchAll(env, bundle, "version", 1);
++                    J4AC_Bundle__putInt__withCString__catchAll(env, bundle, "serial", packet->serial);
++                    J4AC_Bundle__putLong__withCString__catchAll(env, bundle, "time_us", packet->time_us);
++                    if (!(*env)->ExceptionCheck(env))
++                        vibe_deliver_raw_caption(env, weak_thiz, bundle);
++                }
++            }
++            J4A_ExceptionCheck__catchAll(env);
++            if (key) (*env)->DeleteLocalRef(env, key);
++            if (bundle_class) (*env)->DeleteLocalRef(env, bundle_class);
++            if (bytes) (*env)->DeleteLocalRef(env, bytes);
++            (*env)->DeleteLocalRef(env, bundle);
++            break;
++        }
+         case FFP_MSG_VIDEO_RENDERING_START:
+             MPTRACE("FFP_MSG_VIDEO_RENDERING_START:\n");

@@ -81,11 +81,15 @@ class PushEpochTimeoutTests(unittest.TestCase):
         source = (JAVA / "Media3MediaPlayerImpl.java").read_text(encoding="utf-8")
         flush = source.split('record("flush_reprepare_before"', 1)[1].split(
             'record("flush_reprepare_after"', 1)[0]
-        self.assertIn("mediaSource = new ProgressiveMediaSource.Factory(", flush)
+        self.assertIn("mediaSource = createOrdinaryPushSource(", flush)
+        factory = source.split('private MediaSource createOrdinaryPushSource(', 1)[1].split('@Override', 1)[0]
+        self.assertIn('new VibeForwardPushMediaSource.Factory(', factory)
+        self.assertIn('new ProgressiveMediaSource.Factory(', factory)
+        self.assertIn('return factory.createMediaSource(item);', factory)
         self.assertIn("final Media3PushDataSource pushSource = (Media3PushDataSource) dataSource;", flush)
         self.assertIn("return pushSource;", flush)
         self.assertIn("withPassthroughOffset(createCaptionAwareExtractorsFactory(false))", flush)
-        self.assertIn(".createMediaSource(mediaSource.getMediaItem())", flush)
+        self.assertIn("mediaSource.getMediaItem());", flush)
         self.assertNotIn("new Media3PushDataSource", flush)
         self.assertNotIn("seekTo(", flush)
 

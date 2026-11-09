@@ -39,6 +39,7 @@ public class MediaSessionCallbackHandler extends MediaSessionCompat.Callback
     public void onPlay()
     {
         super.onPlay();
+        PlaybackDebugTrap.record("media_session_play", player);
         EventRouter.postCommand(client, SageCommand.PLAY);
     }
 
@@ -46,6 +47,7 @@ public class MediaSessionCallbackHandler extends MediaSessionCompat.Callback
     public void onPause()
     {
         super.onPause();
+        PlaybackDebugTrap.record("media_session_pause", player);
         if (backgroundOwnerWillOwnMediaSessionPause())
             return;
         EventRouter.postCommand(client, SageCommand.PAUSE);

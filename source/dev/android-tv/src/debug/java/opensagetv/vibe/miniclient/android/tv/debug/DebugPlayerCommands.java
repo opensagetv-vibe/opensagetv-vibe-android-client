@@ -277,6 +277,20 @@ final class DebugPlayerCommands
             throw new IllegalArgumentException("target_ms must be >= 0");
         long beforePlayerMs = currentPlayerPositionMs(mediaCmd, player);
         long beforeTimelineMs = currentSageTimelineMs(mediaCmd, player);
+        // The existing ADB receiver interface sends extras as --es strings.
+        if (Boolean.parseBoolean(clean(intent.getStringExtra("wire_command29"))))
+        {
+            byte[] command = new byte[8];
+            byte[] reply = new byte[8];
+            MediaCmd.writeInt((int)(targetMs >>> 32), command, 0);
+            MediaCmd.writeInt((int)targetMs, command, 4);
+            boolean supported = player.canHandleServerSeek();
+            int length = mediaCmd.ExecuteMediaCommand(MediaCmd.MEDIACMD_SEEK,
+                    command.length, command, reply);
+            return "op=" + safe(operation) + ";accepted=" + supported
+                    + ";replyLength=" + length + ";targetMs=" + targetMs
+                    + ";inputPath=android_debug_media_command_29";
+        }
         boolean queued = dispatchSeek(context, player, targetMs);
         return "op=" + safe(operation)
                 + ";targetMs=" + targetMs

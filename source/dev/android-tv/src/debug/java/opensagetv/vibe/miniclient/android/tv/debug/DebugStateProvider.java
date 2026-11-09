@@ -364,6 +364,9 @@ final class DebugStateProvider
         out.append(";textSubtitleStyle=").append(safe(player.getTextSubtitleStyle()));
         out.append(";timelineSource=MEDIACMD_GETMEDIATIME");
         out.append(";serverAnchorMs=").append(mediaCmd.getLastServerStartPosition());
+        out.append(";pushEffectiveServerAnchorMs=").append(mediaCmd.getEffectiveServerStartPositionForDebug());
+        out.append(";pushWirePtsOriginMs=").append(mediaCmd.getBasicPushPtsOriginMs());
+        out.append(";pushLastWireMediaTimeMs=").append(mediaCmd.getLastWireMediaTimeMs());
         out.append(";serverRequestedSeekMs=").append(mediaCmd.getLastServerRequestedSeekMs());
         out.append(";serverSeekSequence=").append(mediaCmd.getLastServerSeekSequence());
         out.append(";serverSeekMonotonicMs=").append(serverSeekMonotonicMs);
@@ -763,12 +766,15 @@ final class DebugStateProvider
                         .append(base.getFixedCaptionEvidenceRefreshCountForDebug());
                 out.append(";fixedCaptionEvidenceRefreshState=")
                         .append(safe(base.getFixedCaptionEvidenceRefreshStateForDebug()));
+                out.append(";pushPausedZeroWitness=").append(safe(base.getPushPausedZeroWitnessForDebug()));
+                out.append(";pushDetailedBufferStats=").append(opensagetv.vibe.miniclient.MiniClientConnection.detailedBufferStats);
                 out.append(";pendingServerSubpictureCommand=")
                         .append(base.getPendingServerSubpictureCommandForDebug());
             }
             if (telemetryPlayer instanceof Media3MediaPlayerImpl)
             {
                 Media3MediaPlayerImpl media3 = (Media3MediaPlayerImpl) telemetryPlayer;
+                out.append(";pushForwardCacheState=").append(safe(media3.getForwardCacheStateForDebug()));
                 out.append(";subtitleCueUpdateCount=").append(media3.getSubtitleCueUpdateCountForDebug());
                 out.append(";subtitleNonEmptyCueCount=").append(media3.getSubtitleNonEmptyCueCountForDebug());
                 out.append(";subtitleBitmapCueCount=").append(media3.getSubtitleBitmapCueCountForDebug());
@@ -783,6 +789,7 @@ final class DebugStateProvider
             else if (telemetryPlayer instanceof Exo2MediaPlayerImpl)
             {
                 Exo2MediaPlayerImpl exo2 = (Exo2MediaPlayerImpl) telemetryPlayer;
+                out.append(";pushForwardCacheState=").append(safe(exo2.getForwardCacheStateForDebug()));
                 out.append(";subtitleCueUpdateCount=").append(exo2.getSubtitleCueUpdateCountForDebug());
                 out.append(";subtitleNonEmptyCueCount=").append(exo2.getSubtitleNonEmptyCueCountForDebug());
                 out.append(";subtitleBitmapCueCount=").append(exo2.getSubtitleBitmapCueCountForDebug());
@@ -793,6 +800,21 @@ final class DebugStateProvider
                 out.append(";legacyCaptionCallbackActive=").append(exo2.isLegacyCaptionCallbackActiveForDebug());
                 out.append(";legacyCaptionCallbackCount=").append(exo2.getLegacyCaptionCallbackCountForDebug());
                 out.append(";legacyCaptionCallbackBytes=").append(exo2.getLegacyCaptionCallbackBytesForDebug());
+            }
+            else if (telemetryPlayer instanceof opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl)
+            {
+                opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl ijk =
+                        (opensagetv.vibe.miniclient.android.video.ijkplayer.IJKMediaPlayerImpl) telemetryPlayer;
+                // IJK sends raw native data to SageTV; it has no local CEA
+                // text renderer or Exo cue counter to fabricate here.
+                out.append(";subtitleOverlayAttached=false");
+                out.append(";legacyCaptionCallbackActive=").append(ijk.isLegacyCaptionCallbackActiveForDebug());
+                out.append(";legacyCaptionCallbackCount=").append(ijk.getLegacyCaptionCallbackCountForDebug());
+                out.append(";legacyCaptionCallbackBytes=").append(ijk.getLegacyCaptionCallbackBytesForDebug());
+                out.append(";nativeStepCompleted=").append(ijk.getNativeStepCompletedForDebug());
+                out.append(";nativeStepPending=").append(ijk.getNativeStepPendingForDebug());
+                out.append(";nativeStepPositionMs=").append(ijk.getNativeStepPositionForDebug());
+                out.append(";pushNativeClock=").append(safe(ijk.getPushNativeClockForDebug()));
             }
         }
         catch (Throwable t)

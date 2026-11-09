@@ -212,6 +212,10 @@ public final class DevTestReceiver extends BroadcastReceiver
             {
                 ok(DebugSessionCommands.refreshVideoOutput(context));
             }
+            else if ("display_refresh".equals(op))
+            {
+                ok(DebugSessionCommands.displayRefresh(context, intent));
+            }
             else if ("gfx_read_fault".equals(op))
             {
                 ok(DebugSessionCommands.forceGfxReadFault(context, intent));
@@ -235,6 +239,18 @@ public final class DevTestReceiver extends BroadcastReceiver
             else if ("ime_suppress".equals(op))
             {
                 ok(DebugSessionCommands.setImeSuppression(intent));
+            }
+            else if ("hardware_step_trial".equals(op))
+            {
+                boolean enabled = Boolean.parseBoolean(clean(intent.getStringExtra("enabled")));
+                opensagetv.vibe.miniclient.video.NativeHardwareStepTrial.setEnabled(enabled);
+                ok("op=hardware_step_trial;enabled=" + enabled + ";persisted=false");
+            }
+            else if ("push_cache_trial".equals(op))
+            {
+                boolean enabled = Boolean.parseBoolean(clean(intent.getStringExtra("enabled")));
+                opensagetv.vibe.miniclient.video.PushBufferSeekPolicy.setDebugForwardCacheTrial(enabled);
+                ok("op=push_cache_trial;enabled=" + enabled + ";persisted=false");
             }
             else if ("player_control".equals(op))
             {

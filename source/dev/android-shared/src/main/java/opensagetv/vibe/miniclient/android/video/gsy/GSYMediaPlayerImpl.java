@@ -195,6 +195,8 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
         if (timeMS >= 0L) lastRequestedSeekMs = timeMS;
         if (d() != null) d().seek(timeMS);
     }
+    @Override public boolean canHandleServerSeek() { return d() != null && d().canHandleServerSeek(); }
+    @Override public void onUnsupportedServerSeek(long requestedMs) { if (d() != null) d().onUnsupportedServerSeek(requestedMs); }
     @Override public float setPlaybackRate(float rate) { return d() == null ? 1.0f : d().setPlaybackRate(rate); }
     @Override public float getPlaybackRate() { return d() == null ? 1.0f : d().getPlaybackRate(); }
     @Override public boolean hasRenderedFirstVideoFrame() { return d() != null && d().hasRenderedFirstVideoFrame(); }

@@ -56,7 +56,12 @@ def main():
     if build == Path('/tmp') or Path('/tmp') not in build.parents or build.is_symlink():
         raise RuntimeError('An owned child of /tmp is required; never the temp root')
     build.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir.resolve(); output.mkdir(parents=True, exist_ok=True)
+    output = args.output_dir.resolve()
+    if not output.is_relative_to((ROOT / 'artifacts/active').resolve()):
+        raise RuntimeError('Native candidates belong under artifacts/active, never authoritative libs')
+    if any((output / f'ijkplayer-{abi}-0.8.8-SNAPSHOT.aar').exists() for abi in ('armv7a', 'arm64')):
+        raise RuntimeError('Use a new native candidate output; never overwrite earlier evidence')
+    output.mkdir(parents=True, exist_ok=True)
     player, ffmpeg, soundtouch = (source(name, build) for name in SOURCES)
     shutil.copytree(soundtouch, player / 'ijkmedia/ijksoundtouch', dirs_exist_ok=True)
     patch = ROOT / 'source/dev/ijkplayer/native/software-deinterlace.patch'
@@ -65,6 +70,24 @@ def main():
     run(['patch', '-p1', '--fuzz=0', '-i', patch], player)
     shutil.copyfile(ROOT / 'source/dev/ijkplayer/native/vibe_deinterlace.h',
                     player / 'ijkmedia/ijkplayer/vibe_deinterlace.h')
+    run(['patch', '-p1', '--fuzz=0', '-i',
+         ROOT / 'source/dev/ijkplayer/native/raw-cea.patch'], player)
+    shutil.copyfile(ROOT / 'source/dev/ijkplayer/native/vibe_cea_packet.h',
+                    player / 'ijkmedia/ijkplayer/vibe_cea_packet.h')
+    shutil.copyfile(ROOT / 'source/dev/ijkplayer/native/vibe_cea_jni.h',
+                    player / 'ijkmedia/ijkplayer/android/vibe_cea_jni.h')
+    run(['patch', '-p1', '--fuzz=0', '-i',
+         ROOT / 'source/dev/ijkplayer/native/push-flush.patch'], player)
+    run(['patch', '-p1', '--fuzz=0', '-i',
+         ROOT / 'source/dev/ijkplayer/native/paused-step.patch'], player)
+    shutil.copyfile(ROOT / 'source/dev/ijkplayer/native/vibe_paused_step.h',
+                    player / 'ijkmedia/ijkplayer/vibe_paused_step.h')
+    run(['patch', '-p1', '--fuzz=0', '-i',
+         ROOT / 'source/dev/ijkplayer/native/presentation-clock.patch'], player)
+    shutil.copyfile(ROOT / 'source/dev/ijkplayer/native/vibe_push_presentation.h',
+                    player / 'ijkmedia/ijkplayer/vibe_push_presentation.h')
+    run(['patch', '-p1', '--fuzz=0', '-i',
+         ROOT / 'source/dev/ijkplayer/native/hardware-step.patch'], player)
     ndk = Path(os.environ.get('ANDROID_NDK_HOME', '/opt/android-sdk/ndk/21.0.6113669'))
     toolchain = ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin'
     records = []
@@ -122,7 +145,16 @@ APP_LDFLAGS := -Wl,-z,max-page-size=16384
         records.append({'abi': abi, 'baseline': digest(original), 'candidate': digest(candidate),
                         'player': digest(library), 'ffmpeg': digest(target / 'libijkffmpeg.so'),
                         'sdl': digest(target / 'libijksdl.so')})
-    (output / 'native-build.json').write_text(json.dumps({'sources': SOURCES, 'artifacts': records}, indent=2) + '\n')
+    native = ROOT / 'source/dev/ijkplayer/native'
+    reviewed = ('software-deinterlace.patch', 'vibe_deinterlace.h', 'raw-cea.patch',
+                'vibe_cea_packet.h', 'vibe_cea_jni.h', 'push-flush.patch',
+                'paused-step.patch', 'vibe_paused_step.h',
+                'presentation-clock.patch', 'vibe_push_presentation.h', 'hardware-step.patch')
+    (output / 'native-build.json').write_text(json.dumps({
+        'sources': SOURCES, 'patches': {name: digest(native/name) for name in reviewed},
+        'ndk': str(ndk), 'platform': 'android-23', 'artifacts': records,
+        'javaAarSha256': digest(ROOT/'source/dev/libs/ijkplayer-java-0.8.8-SNAPSHOT.aar'),
+    }, indent=2) + '\n')
 
 if __name__ == '__main__':
     main()

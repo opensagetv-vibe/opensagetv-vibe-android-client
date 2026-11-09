@@ -52,12 +52,6 @@ public final class Media3FfmpegAudioSupport
      */
     static String canonicalMimeType(String mimeType)
     {
-        if (mimeType == null)
-            return null;
-        if ("audio/mpeg-l1".equalsIgnoreCase(mimeType))
-            return "audio/mpeg-L1";
-        if ("audio/mpeg-l2".equalsIgnoreCase(mimeType))
-            return "audio/mpeg-L2";
-        return mimeType;
+        return opensagetv.vibe.miniclient.video.FfmpegAudioMimePolicy.canonicalMimeType(mimeType);
     }
 }

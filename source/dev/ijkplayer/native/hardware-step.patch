@@ -1,0 +1,13 @@
+--- a/ijkmedia/ijkplayer/ff_ffplay_def.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_def.h
+@@ -595,2 +595,3 @@
+     int vibe_output_epoch;
++    int vibe_hardware_step;
+     int vibe_raw_cea;
+--- a/ijkmedia/ijkplayer/ff_ffplay_options.h
++++ b/ijkmedia/ijkplayer/ff_ffplay_options.h
+@@ -67,2 +67,4 @@
++    { "vibe-hardware-step", "isolated actual MediaCodec forward-frame trial",
++        OPTION_OFFSET(vibe_hardware_step), OPTION_INT(0, 0, 1) },
+     { "vibe-output-epoch", "client generation for actual Push video output proof",
+         OPTION_OFFSET(vibe_output_epoch), OPTION_INT(0, 0, INT_MAX) },

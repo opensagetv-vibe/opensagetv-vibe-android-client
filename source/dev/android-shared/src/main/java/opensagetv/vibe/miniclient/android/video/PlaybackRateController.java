@@ -10,6 +10,12 @@ import opensagetv.vibe.miniclient.video.PlaybackRatePolicy;
  */
 public final class PlaybackRateController
 {
+    interface Scheduler
+    {
+        void post(Runnable work);
+        void postDelayed(Runnable work, long delayMs);
+        void remove(Runnable work);
+    }
     public interface Driver
     {
         boolean isAvailable();
@@ -20,40 +26,89 @@ public final class PlaybackRateController
         void seekTo(long positionMs);
     }
 
-    private final Handler handler;
+    private final Scheduler scheduler;
     private volatile float requestedRate = 1.0f;
     private PlaybackRatePolicy.Mode mode = PlaybackRatePolicy.Mode.NORMAL;
     private Driver driver;
-
-    private final Runnable scanTick = new Runnable()
-    {
-        @Override
-        public void run()
-        {
-            Driver active;
-            float rate;
-            synchronized (PlaybackRateController.this)
-            {
-                if (mode != PlaybackRatePolicy.Mode.SEEK_SCAN || driver == null) return;
-                active = driver;
-                rate = requestedRate;
-            }
-            if (!active.isAvailable()) return;
-            if (active.isPlaying())
-            {
-                long target = PlaybackRatePolicy.seekScanTargetMs(
-                        active.getPositionMs(), PlaybackRatePolicy.SCAN_INTERVAL_MS,
-                        rate, active.getDurationMs());
-                active.seekTo(target);
-            }
-            handler.postDelayed(this, PlaybackRatePolicy.SCAN_INTERVAL_MS);
-        }
-    };
+    private long generation;
+    private Runnable scanTick;
 
     public PlaybackRateController(Handler handler)
     {
+        this(handlerScheduler(handler));
+    }
+
+    PlaybackRateController(Scheduler scheduler)
+    {
+        if (scheduler == null) throw new IllegalArgumentException("scheduler must not be null");
+        this.scheduler = scheduler;
+    }
+
+    private static Scheduler handlerScheduler(final Handler handler)
+    {
         if (handler == null) throw new IllegalArgumentException("handler must not be null");
-        this.handler = handler;
+        return new Scheduler()
+        {
+            @Override public void post(Runnable work) { handler.post(work); }
+            @Override public void postDelayed(Runnable work, long delayMs)
+            { handler.postDelayed(work, delayMs); }
+            @Override public void remove(Runnable work) { handler.removeCallbacks(work); }
+        };
+    }
+
+    private void cancelQueuedScan()
+    {
+        generation++;
+        if (scanTick != null) scheduler.remove(scanTick);
+        scanTick = null;
+    }
+
+    private synchronized boolean isCurrent(long expected, Driver active)
+    {
+        return generation == expected && driver == active;
+    }
+
+    private void postNativeRate(final Driver active, final float rate)
+    {
+        final long expected = generation;
+        scheduler.post(new Runnable()
+        {
+            @Override public void run()
+            {
+                if (isCurrent(expected, active) && active.isAvailable())
+                    active.setNativeRate(rate);
+            }
+        });
+    }
+
+    private void scheduleScan()
+    {
+        final long expected = generation;
+        final Driver active = driver;
+        final float rate = requestedRate;
+        scanTick = new Runnable()
+        {
+            @Override public void run()
+            {
+                if (!isCurrent(expected, active) || !active.isAvailable()) return;
+                if (active.isPlaying())
+                {
+                    long position = active.getPositionMs();
+                    long target = PlaybackRatePolicy.seekScanTargetMs(position,
+                            PlaybackRatePolicy.SCAN_INTERVAL_MS, rate, active.getDurationMs());
+                    // A callback already dequeued by Handler can survive
+                    // removeCallbacks. Never let it seek a replacement session.
+                    if (!isCurrent(expected, active)) return;
+                    if (target != position) active.seekTo(target);
+                }
+                synchronized (PlaybackRateController.this)
+                {
+                    if (isCurrent(expected, active))
+                        scheduler.postDelayed(this, PlaybackRatePolicy.SCAN_INTERVAL_MS);
+                }
+            }
+        };
+        scheduler.postDelayed(scanTick, PlaybackRatePolicy.SCAN_INTERVAL_MS);
     }
 
     /** Returns the accepted rate, or retains the prior rate if unsupported. */
@@ -63,23 +118,16 @@ public final class PlaybackRateController
         if (selected == PlaybackRatePolicy.Mode.UNSUPPORTED || newDriver == null)
             return requestedRate;
 
-        handler.removeCallbacks(scanTick);
+        cancelQueuedScan();
         requestedRate = requested;
         mode = selected;
         driver = newDriver;
         final Driver active = newDriver;
         final float nativeRate = selected == PlaybackRatePolicy.Mode.NATIVE
                 ? requested : 1.0f;
-        handler.post(new Runnable()
-        {
-            @Override
-            public void run()
-            {
-                if (active.isAvailable()) active.setNativeRate(nativeRate);
-            }
-        });
+        postNativeRate(active, nativeRate);
         if (selected == PlaybackRatePolicy.Mode.SEEK_SCAN)
-            handler.postDelayed(scanTick, PlaybackRatePolicy.SCAN_INTERVAL_MS);
+            scheduleScan();
         return requestedRate;
     }
 
@@ -91,46 +139,40 @@ public final class PlaybackRateController
     public synchronized void onPlay()
     {
         if (driver == null) return;
+        cancelQueuedScan();
         if (mode == PlaybackRatePolicy.Mode.SEEK_SCAN)
         {
-            handler.removeCallbacks(scanTick);
-            handler.postDelayed(scanTick, PlaybackRatePolicy.SCAN_INTERVAL_MS);
+            postNativeRate(driver, 1.0f);
+            scheduleScan();
         }
         else
         {
-            final Driver active = driver;
-            final float rate = requestedRate;
-            handler.post(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    if (active.isAvailable()) active.setNativeRate(rate);
-                }
-            });
+            postNativeRate(driver, requestedRate);
         }
     }
 
     public synchronized void onPause()
     {
-        handler.removeCallbacks(scanTick);
+        cancelQueuedScan();
     }
 
     public synchronized void reset()
     {
-        handler.removeCallbacks(scanTick);
+        cancelQueuedScan();
         final Driver active = driver;
+        final long expected = generation;
         requestedRate = 1.0f;
         mode = PlaybackRatePolicy.Mode.NORMAL;
         driver = null;
         if (active != null)
         {
-            handler.post(new Runnable()
+            scheduler.post(new Runnable()
             {
                 @Override
                 public void run()
                 {
-                    if (active.isAvailable()) active.setNativeRate(1.0f);
+                    if (isCurrent(expected, null) && active.isAvailable())
+                        active.setNativeRate(1.0f);
                 }
             });
         }

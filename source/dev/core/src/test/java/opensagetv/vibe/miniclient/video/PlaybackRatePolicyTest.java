@@ -37,6 +37,17 @@ public class PlaybackRatePolicyTest
     }
 
     @Test
+    public void stockCompletedTsUsesResolvedLoaderContractNotExtensionGuess()
+    {
+        assertTrue(PlaybackRatePolicy.allowsLocalRate(true, false, 0L, true));
+        assertFalse(PlaybackRatePolicy.allowsLocalRate(true, false, 0L, false));
+        assertFalse(PlaybackRatePolicy.allowsLocalRate(true, true, 0L, true));
+        assertFalse(PlaybackRatePolicy.allowsLocalRate(false, true, 1024L, true));
+        assertFalse(PlaybackRatePolicy.allowsLocalRate(true, false, 1024L, true));
+        assertTrue(PlaybackRatePolicy.allowsLocalRate(false, true, 0L, false));
+    }
+
+    @Test
     public void calculatesSignedSeekScanTargetsAndBounds()
     {
         assertEquals(3250L, PlaybackRatePolicy.seekScanTargetMs(1000L, 750L, 4.0f, 10000L));

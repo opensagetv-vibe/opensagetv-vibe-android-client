@@ -1,5 +1,162 @@
 # Android playback diagnostic standard
 
+## Server-connected parity follow-ups (EXT-009..017)
+
+EXT-018..022 are separate, user-authorized attempts to implement the remaining
+disabled paths, not a retroactive claim that009..017 implemented all hardware
+features. The first IJK hardware-step trial uses a nonpersistent debug receiver
+switch, separate native option and actual MediaCodec decoder-type guard. It
+must not enable software-only FIFO flush or software AVFrame CEA extraction.
+Default-off build/ABI success is not physical step success. Measure exactly one
+new visible frame, held pause/audio, source serial/clock and clean A/V resume;
+keep general FRAME_STEP/cache flags false until the complete contracts qualify.
+The replacement test must distinguish native and rebased clock origins. With
+an unknown retained origin, verify equal step deltas, then independently check
+burned file time against stock UI; passing deltas alone can hide a timeline
+offset. EXT-01806 exposed~2.4s undercount despite successful steps. Corrected02
+trusts normalized native time only for hardware trial/basic/current-serial
+output proof, never detailed originals or PREPARED.07 passes; retain38ms native
+versus burn and441ms stock UI lag rather than calling server time frame-exact.
+Fallback/format/track and other renderer paths remain unqualified/default off.
+
+TASKS.md4B is authoritative. No standalone media shell is being implemented.
+114's native-clock arithmetic rejects backwards monotonic samples, bounds
+counter discontinuities and saturates additions; actual native progress still
+owns time. Regression tests cover pause/unknown/epoch/reset/long-running input
+and 33-bit MPEG PTS wrap. Do not infer all-device physical qualification from
+these deterministic tests or replay GROW-002's completed matrix unnecessarily.
+
+`PUSH_BUFFER_SEEKING` describes command29 inside a decoder cache, not server
+FLUSH seeking or the4MiB ring.114 withdraws the claim for all current backends:
+IJK ignores command29; Media3 accepted53572->53605ms but its TS period then
+adjusted the position to0 (EXT-016 probe03), despite105344ms buffered. Stock
+MiniPlayer's Fixed in-buffer seek branch does
+not consult the stored flag, so false advertisement and runtime compatibility
+are different gates. Record actual transport and target coordinate explicitly.
+
+114's buffered-seek step prototype was withdrawn after that actual failure.
+EXT-016 now supplies real ARM Software IJK forward stepping through normal
+repeated Pause, verified with actual displayed frame IDs/clock, pause holds
+and A/V resume in Push and Fixed. Hardware/DVD/reverse remain unavailable.
+Pull retains its existing path and can use already parsed MPEG source FPS.
+Enqueued acceptance is not completed-frame proof. FRAME_STEP stays false for
+Push because stock Core bundles an additional unqualified raw-PTS decode-to
+command29 requirement. Do not fake a seek map or conflate local normal-Pause
+support with that bundled negotiation. Probe02's passed=true
+was a helper bug after a late assertion: it is FAIL, not physical acceptance.
+The helper now clears provisional success on every exception; the raw original
+and corrected verdict remain distinguishable in the task record.
+
+Classic Fixed/Always/remuxOff/DirectOff alone negotiates basic buffer replies:
+this avoids stock Core's transcoder cache branch and leaves producer seeks to
+Core. Basic GETMEDIATIME is raw MPEG PTS; restore the first actual received PES
+origin to the normalized decoder clock. Detailed mode retains calibrated file
+anchors. DVD VM timing is exempt; unknown origin has no guessed constant.
+`pushWirePtsOriginMs` and `pushLastWireMediaTimeMs` distinguish raw wire from
+local `mediaTimeMs`; Core mediaTime minus seekStart is a third, file-relative
+coordinate. Do not compare a transcode epoch directly with the recording target.
+
+WhenNeeded/copy/unknown retain detailed stats to preserve source/fast-load
+anchors. Stock Core may ignore PUSH_BUFFER_SEEKING there. Android guards actual
+ordinary Push command29 instead of seeking an unseekable period back to zero;
+Detailed ordinary Push in Media3 and legacy Exo (including both GSY delegates)
+uses separate pinned selected-queue sources, not upstream unseekable file-period
+seeks. Forward targets inside the real A/V queue window move atomically, keeping
+the FIFO/loader and caption read-ahead. Failed transactions restore read indices;
+sparse text cannot rewind silently and loader EOF retains unread samples.
+Default source, track, caption, negative and epoch gates are complete in
+EXT-010's compact result. Basic/classic Fixed keeps producer fallback.
+This is not general backward seeking or FRAME_STEP raw-PTS decode-to; broader
+protocol capabilities remain false. IJK/System keep safe unsupported handling;
+their WhenNeeded cache target limitation is not a passed seek. Pull/Direct/DVD
+retain existing paths. Legacy MP2 MIME canonicalization fixes missing incoming
+Teletext/extra audio before seeking, not a new decoder or server dependency.
+Unsupported requests produce
+`server_seek_unsupported` and bounded local feedback, no automatic replay,
+transport change or fake target. Command29 returns ZERO bytes: stock Core reads
+no status, so a four-byte rejection corrupts subsequent protocol framing.
+Safe rejection is not proof the desired target landed. That remaining stock
+cache-branch limitation on unsupported backends must stay explicit in EXT-010
+qualification. `pushForwardCacheState` reports actual ready/position/buffer/
+transaction count/last target on demand; a zero producer-FLUSH delta and an
+exact queue transaction distinguish a cache seek from normal producer seeking.
+Physical debug input is labelled explicitly, never claimed as Core choosing
+the cache branch. Preserve old crash logs and compare a run's PID/signature
+checkpoint; do not fail a healthy new run solely on the old reproduced crash.
+
+Rate callbacks now carry a local generation. Reset/pause/new rate invalidate
+dequeued scan/native-rate callbacks as well as removing pending Handler work.
+Test replacement driver, opposite direction, endpoint, pause/resume and return
+to1x. This controller is shared by extractor-backed players, not the separate
+DVD remote-gesture controller; DVD defaults/keys are unchanged.
+
+Stock OPENURL's extension-based active hint is not authoritative live proof.
+For extractor rate ownership reuse only the SAME opened loader's finite/non-
+growing contract. Explicit active/circular/unresolved sources and Push/DVD
+remain protected; do not issue an extra UI-thread network probe. EXT-011's
+Media3/legacy positive rate gates and growing negative close at revision420.
+A finite preparation snapshot is not a stopped-writer witness. Negative tests
+must independently observe writer byte growth and distinguish an old completed
+segment of a recording-in-progress from its current writer. Test preparation
+can use one public media-relative seek derived from the current extent; normal
+production must never depend on that MCP seek. Source-oracle mistakes and
+their corrected verdicts are retained in the compact EXT-011 result.
+
+Optional refresh matching owns the Window preference, not the active physical
+mode. Preserve Auto0 and the exact prior preference; repeated Off, new Activity
+or an external preference change must not restore a stale global mode. The
+debug-only dev_display_refresh tool is an explicit one-shot inspect/off/
+seamless/always action on the resumed Activity, never a saved setting, background
+poller or server control. Its caller restores Off before session teardown.
+
+## Ordinary Push recording handoff (GROW-002)
+
+Stock MiniPlayer may fast-load a new file without OPENURL or FLUSH. Android
+must not retain the old file's epoch anchor/decoder position when the incoming
+detailed mux clock changes to the new file's timeline. An implausibly large
+client clock can be clamped to live/file-end by Core, corrupting STV position
+and the next skip even while new recording bytes begin near zero.
+
+113 detects a data-bearing ordinary-Push mux regression of at least10seconds
+without an explicit boundary and flushes only the local player before admitting
+that packet. It rebuilds the anchor from supplied mux/PES timestamps, never a
+guessed target or extra server seek. Explicit FLUSH/OPENURL resets the observer;
+DVD, empty/EOS packets, trick playback and small timestamp jitter are excluded.
+The bounded `push_stream_handoff` event records previous/replacement mux clocks;
+do not misreport it as an incoming `server_flush_command` or reconnect.
+IJK separately maps its retained native presentation counter into each new
+Push epoch. Native counter jumps reset the origin, not the server target;
+observed native progress advances time and a paused counter stays frozen.
+Wall time is only a discontinuity plausibility bound, never simulated playback.
+
+`scripts/mcp_push_handoff_test.py` requires the idle non-Pro25/stock175,
+explicit existing old/new MediaFile IDs and a seed position in the OLD file.
+It uses normal Watch for the new recording with no STOP or follow-up seek,
+then checks the actual Push clock and advancing A/V. Settings, CC and temporary
+power controls restore. Never retune, alter watched history or force seek0 to
+manufacture a handoff pass. Test initial Watch separately from later rewinds.
+Core's fastLoad requires contiguous TV recordings on the same station/capture
+device, not arbitrary imported fixtures. Validate the time-pair first and
+require no post-Watch OPENURL plus exactly one local handoff event. A full
+reload correctly resuming a nonzero fixture bookmark is not this reproduction.
+IJK has no Exo renderer counters: use its native playing/render-start/FPS
+and independent HDMI picture/audio, not unsupported health_isPlaying=false
+as a stalled decoder verdict. Original growing CBS/Face the Nation rows pass
+Media3/legacy/GSY; IJK's remaining fast-load row used completed adjacent PBS TV
+after the original destination disappeared. No broad firmware/device matrix
+or 24-hour rollover claim follows from these bounded gates.
+
+HD300 reference: archived beta Media_GetMediaTime at0x42a090 calls getFixedTime
+at0x429450. Its PLT call0x4056a0 loads GOT0x4649bc, resolved by readelf's PLT-GOT
+table to DCCSTCGetTime; the correction call0x404a10/GOT0x464698 resolves to
+DCCSTCSetTime. Thus the hardware-STC clock read is direct binary evidence,
+not merely a guessed association of imported names. The surviving older Apache STB clock reads
+decoder PTS rather than adding an Android-relative position to a file anchor.
+These observations corroborate distinct hardware-clock ownership, not an
+exact HD300 discontinuity algorithm. HD200's encoded payload does not permit
+that binary claim. See the EXT-004 evidence ledger in PLAYER_SERVER_COMPATIBILITY.
+No vendor implementation is copied or new extender identity advertised.
+
 ## Growing recording cannot rewind from live edge (GROW-001)
 
 Community356 is not a confirmed instance of RESUME-001 or RESTART-001. The

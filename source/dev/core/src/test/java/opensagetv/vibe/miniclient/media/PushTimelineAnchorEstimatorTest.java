@@ -53,6 +53,29 @@ public class PushTimelineAnchorEstimatorTest
         assertEquals(-1L, estimator.estimateStartMs(50_000L));
     }
 
+    @Test
+    public void ptsRolloverRetainsAShortPositiveEpochSpan()
+    {
+        PushTimelineAnchorEstimator estimator = new PushTimelineAnchorEstimator();
+        estimator.observe(packetWithPts((1L << 33) - 45000), 0, 188);
+        estimator.observe(packetWithPts(45000), 0, 188);
+        assertEquals(1000, estimator.getPtsSpanMs());
+        assertEquals(19000, estimator.estimateStartMs(20000));
+    }
+
+    @Test
+    public void unrelatedTimestampJumpCannotProduceAnEpochAnchor()
+    {
+        PushTimelineAnchorEstimator estimator = new PushTimelineAnchorEstimator();
+        estimator.observe(packetWithPts(90000), 0, 188);
+        estimator.observe(packetWithPts(18000000), 0, 188);
+        assertEquals(-1, estimator.estimateStartMs(300000));
+        estimator.reset();
+        estimator.observe(packetWithPts(450000), 0, 188);
+        estimator.observe(packetWithPts(540000), 0, 188);
+        assertEquals(9000, estimator.estimateStartMs(10000));
+    }
+
     private static byte[] packetWithPts(long pts)
     {
         byte[] packet = new byte[188];
