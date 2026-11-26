@@ -181,6 +181,11 @@ public final class TrackPreferencePolicy
     private static String primaryLanguage(String language)
     {
         int separator = language.indexOf('-');
-        return separator < 0 ? language : language.substring(0, separator);
+        String primary = separator < 0 ? language : language.substring(0, separator);
+        // Broadcast descriptors use ISO-639-2 (eng), whereas Android's
+        // extractors commonly publish ISO-639-1 (en). Compare their ISO3
+        // identities without rewriting saved preferences or displayed tags.
+        try { return new Locale(primary).getISO3Language(); }
+        catch (java.util.MissingResourceException unknown) { return primary; }
     }
 }

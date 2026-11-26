@@ -56,10 +56,30 @@ class AuthoredDvdFixtureTests(unittest.TestCase):
         self.assertIn('text_y = button.rect.y0 + 4', self.source)
 
     def test_cached_assets_are_configuration_checked(self):
-        self.assertIn('WORK_ASSET_SCHEMA_VERSION = 3', self.source)
+        self.assertIn('WORK_ASSET_SCHEMA_VERSION = 4', self.source)
         self.assertIn('"--reuse-work"', self.source)
         self.assertIn('"--reuse-titles"', self.source)
         self.assertIn('cached_config != work_config', self.source)
+
+    def test_pal_changes_frame_field_canvas_and_spu_contract_together(self):
+        generator = runpy.run_path(str(GENERATOR))
+        configure = generator["configure_standard"]
+        configure("pal")
+        values = configure.__globals__
+        self.assertEqual((576, 25, 1, "50/1"),
+                         tuple(values[key] for key in ("HEIGHT", "FPS_NUM", "FPS_DEN", "SOURCE_FPS")))
+        xml = generator["textsub_xml"](Path("cue.srt"), Path("font.ttf"),
+                                       generator["SUBTITLE_STREAMS"][0])
+        self.assertIn('format="PAL"', xml)
+        self.assertIn('movie-height="576"', xml)
+        self.assertIn('movie-fps="25.00000000"', xml)
+        self.assertIn('"videoStandard": STANDARD', self.source)
+        self.assertIn('"videoSystem": STANDARD.upper()', self.source)
+        configure("ntsc")
+        self.assertEqual((480, 30_000, 1_001, "60000/1001"),
+                         tuple(values[key] for key in ("HEIGHT", "FPS_NUM", "FPS_DEN", "SOURCE_FPS")))
+        with self.assertRaises(ValueError):
+            configure("invalid")
 
     def test_fixture_keeps_full_validation_contract(self):
         for value in (

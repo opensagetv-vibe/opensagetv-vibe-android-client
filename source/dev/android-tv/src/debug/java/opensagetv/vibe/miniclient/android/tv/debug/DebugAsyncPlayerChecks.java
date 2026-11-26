@@ -138,6 +138,8 @@ final class DebugAsyncPlayerChecks
                     PlaybackHealthProbe.Snapshot audioRecoveryBaseline =
                             healthPostCommand.audioTrackPresent || healthPostCommand.audioRendered >= 0
                                     ? healthPostCommand : healthBefore;
+                    PlaybackHealthProbe.Snapshot videoRecoveryBaseline =
+                            PlaybackHealthProbe.videoRecoveryBaseline(healthBefore, healthPostCommand);
                     boolean bufferingSeen = PlaybackHealthProbe.isBuffering(healthPostCommand);
                     boolean loadingSeen = healthPostCommand.isLoading;
                     int healthPollCount = 0;
@@ -189,7 +191,7 @@ final class DebugAsyncPlayerChecks
                             }
 
                             videoRecovered = !videoExpected
-                                    || PlaybackHealthProbe.videoOutputAdvanced(healthPostCommand, latestHealth);
+                                    || PlaybackHealthProbe.videoOutputAdvanced(videoRecoveryBaseline, latestHealth);
                             audioRecovered = !audioExpected
                                     || PlaybackHealthProbe.audioOutputAdvanced(audioRecoveryBaseline, latestHealth);
                             stateRecovered = PlaybackHealthProbe.readyAndPlaying(latestHealth);
@@ -322,7 +324,7 @@ final class DebugAsyncPlayerChecks
                             ? timelineDeltaMs - elapsedMs
                             : timelineDeltaMs;
 
-                    long videoRecoveryFrames = countDelta(healthPostCommand.videoRendered,
+                    long videoRecoveryFrames = countDelta(videoRecoveryBaseline.videoRendered,
                             recovered == null ? healthFinal.videoRendered : recovered.videoRendered);
                     long videoVerifyFrames = recovered == null ? -1
                             : countDelta(recovered.videoRendered, healthFinal.videoRendered);

@@ -174,6 +174,40 @@ public class AndroidPrefStore implements PrefStore
     public AndroidPrefStore(SharedPreferences prefs)
     {
         this.prefs = prefs;
+        migrateMenuDefaults(prefs);
+        migrateTransportSelection(prefs);
+    }
+
+    public static void migrateMenuDefaults(SharedPreferences saved) {
+        String marker="settings/menu_defaults_revision";
+        Map<String,?> existing=saved.getAll();
+        if(existing.containsKey(marker)&&existing.containsKey(PrefStore.Keys.use_opengl_ui)
+                &&existing.containsKey(PrefStore.Keys.unified_graphics_surfaces))return;
+        SharedPreferences.Editor edit=saved.edit();
+        // Preserve every explicit saved choice. Missing keys, including on an
+        // upgrade, use the user-approved current defaults.
+        if(!existing.containsKey(PrefStore.Keys.use_opengl_ui))edit.putBoolean(PrefStore.Keys.use_opengl_ui,true);
+        if(!existing.containsKey(PrefStore.Keys.unified_graphics_surfaces))edit.putBoolean(PrefStore.Keys.unified_graphics_surfaces,true);
+        edit.putInt(marker,1).apply();
+    }
+
+    public static void migrateTransportSelection(SharedPreferences saved) {
+        // The removed list entry becomes Fixed plus its existing adjustment
+        // flags. Never overwrite Push (dynamic), processing, bounds or secrets.
+        if ("fixed_adjusted".equals(saved.getString(STREAMING_MODE, STREAMING_MODE_DEFAULT)))
+            saved.edit().putString(STREAMING_MODE, "fixed")
+                    .putBoolean(PrefStore.Keys.mim_direct_adaptive_quality, true).apply();
+    }
+
+    public static String adjustmentMethod(SharedPreferences saved) {
+        return FixedAdjustmentPolicy.selection(saved.getBoolean(PrefStore.Keys.mim_direct_adaptive_quality, false),
+                saved.getBoolean(PrefStore.Keys.mim_direct_runtime_rate, false));
+    }
+
+    public static void setAdjustmentMethod(SharedPreferences saved, String method) {
+        if (!FixedAdjustmentPolicy.valid(method)) throw new IllegalArgumentException("Unknown adjustment method");
+        saved.edit().putBoolean(PrefStore.Keys.mim_direct_adaptive_quality, FixedAdjustmentPolicy.adaptive(method))
+                .putBoolean(PrefStore.Keys.mim_direct_runtime_rate, FixedAdjustmentPolicy.inPlace(method)).apply();
     }
 
     //<editor-fold name="Preference Getter/Setter Methods">
@@ -337,7 +371,9 @@ public class AndroidPrefStore implements PrefStore
     @Override
     public String getStreamingMode()
     {
-        return prefs.getString(AndroidPrefStore.STREAMING_MODE, AndroidPrefStore.STREAMING_MODE_DEFAULT);
+        String selected=prefs.getString(AndroidPrefStore.STREAMING_MODE, AndroidPrefStore.STREAMING_MODE_DEFAULT);
+        // UI-only distinction: stock protocol must still receive ordinary Fixed.
+        return "fixed_adjusted".equals(selected)?"fixed":selected;
     }
 
     @Override

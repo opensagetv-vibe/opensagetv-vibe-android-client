@@ -24,6 +24,8 @@ public class PlaybackTrackSettingsFragment extends PreferenceFragmentCompat
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.playback_track_prefs, rootKey);
+        PlaybackSettingPreferences.append(getPreferenceScreen(),"audio","Audio Settings");
+        PlaybackSettingPreferences.append(getPreferenceScreen(),"captions","Subtitle Appearance and Offset");
 
         EditTextPreference audioLanguage = findPreference(PrefStore.Keys.preferred_audio_language);
         EditTextPreference subtitleLanguage = findPreference(PrefStore.Keys.preferred_subtitle_language);

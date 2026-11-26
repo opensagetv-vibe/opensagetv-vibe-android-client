@@ -6,6 +6,8 @@ public final class MimDirectTransportPolicy
     public static final String OFF = "";
     public static final String COPY = "copy";
     public static final String TRANSCODE = "transcode";
+    /** User-facing HLS selection; wire requests retain the existing transcode contract. */
+    public static final String HLS = "hls";
 
     private MimDirectTransportPolicy() { }
 
@@ -15,6 +17,7 @@ public final class MimDirectTransportPolicy
         if (!capabilityAvailable || !"fixed".equalsIgnoreCase(clean(streamingMode)))
             return OFF;
         String mode = clean(requestedMode).toLowerCase(java.util.Locale.US);
+        if (HLS.equals(mode)) return TRANSCODE;
         return COPY.equals(mode) || TRANSCODE.equals(mode) ? mode : OFF;
     }
 

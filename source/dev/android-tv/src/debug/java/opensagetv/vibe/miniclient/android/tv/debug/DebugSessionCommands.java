@@ -205,8 +205,12 @@ final class DebugSessionCommands
         return "op=command;command=" + safe(command.getKey()) + ";eventCode=" + command.getEventCode();
     }
 
-    static String showActivePlayerAdjustments(Context context)
+    static String showActivePlayerAdjustments(Context context,Intent intent)
     {
+        String requested=intent.getStringExtra("panel");
+        final String panel=requested==null||requested.isEmpty()?"video":requested;
+        if(!java.util.Arrays.asList("video","hub","audio","captions","transport","diagnostics","recovery","navigation").contains(panel))
+            throw new IllegalArgumentException("unsupported settings panel");
         final android.app.Activity activity =
                 UIActivityLifeCycleHandler.getResumedActivityForDebug();
         if (activity == null)
@@ -215,7 +219,7 @@ final class DebugSessionCommands
         {
             @Override public void run()
             {
-                ActivePlayerAdjustmentsDialog.show(activity);
+                ActivePlayerAdjustmentsDialog.showSection(activity,panel);
             }
         });
         return "op=active_player_adjustments;shown=true";
@@ -277,8 +281,8 @@ final class DebugSessionCommands
         final boolean explicitMode = !requestedMode.isEmpty();
         if (explicitMode && !"toggle".equals(requestedMode) && !"off".equals(requestedMode)
                 && !"compact".equals(requestedMode) && !"detailed".equals(requestedMode)
-                && !"detailed_30s".equals(requestedMode))
-            throw new IllegalArgumentException("mode must be toggle, off, compact, detailed, or detailed_30s");
+                && !"detailed_30s".equals(requestedMode) && !"graphs".equals(requestedMode) && !"info".equals(requestedMode))
+            throw new IllegalArgumentException("mode must be toggle, off, graphs, compact, detailed, or detailed_30s");
         final boolean visible = parseBoolean(intent.getStringExtra("visible"), true);
         activity.runOnUiThread(new Runnable()
         {

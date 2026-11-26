@@ -137,6 +137,10 @@ public class NavigationDialog extends Dialog
         });
 
         View activePlayerAdjustments = navView.findViewById(R.id.nav_active_player_adjustments);
+        View playbackSettings=navView.findViewById(R.id.nav_playback_settings);
+        if(playbackSettings!=null)playbackSettings.setOnClickListener(view->{
+            dismiss();ActivePlayerAdjustmentsDialog.showHub(activity);
+        });
         if (activePlayerAdjustments != null)
             activePlayerAdjustments.setOnClickListener(new View.OnClickListener()
                 {
@@ -168,13 +172,26 @@ public class NavigationDialog extends Dialog
                         MediaCmd currentMedia = client == null
                                 || client.getCurrentConnection() == null ? null
                                 : client.getCurrentConnection().getMediaCmd();
-                        dismiss();
-                        ActivePlayerProcessOverlay.setMode(activity, currentMedia, "toggle");
+                        ActivePlayerProcessOverlay.toggleGraphs(activity, currentMedia);
+                        updatePlaybackStatsToggle();
+                        updatePlaybackInfoToggle();
                     }
                 });
         }
 
         View exportDiagnostics = navView.findViewById(R.id.nav_export_diagnostics);
+        View playbackInfo = navView.findViewById(R.id.nav_playback_details);
+        if (playbackInfo != null)
+        {
+            updatePlaybackInfoToggle();
+            playbackInfo.setOnClickListener(v -> {
+                MediaCmd currentMedia = client == null || client.getCurrentConnection() == null
+                        ? null : client.getCurrentConnection().getMediaCmd();
+                ActivePlayerProcessOverlay.toggleInfo(activity,currentMedia);
+                updatePlaybackStatsToggle();
+                updatePlaybackInfoToggle();
+            });
+        }
         if (exportDiagnostics != null)
             exportDiagnostics.setOnClickListener(new View.OnClickListener()
             {
@@ -385,12 +402,20 @@ public class NavigationDialog extends Dialog
     private void updatePlaybackStatsToggle()
     {
         if (navPlaybackStats == null) return;
-        boolean visible = ActivePlayerProcessOverlay.isVisible();
+        boolean visible = ActivePlayerProcessOverlay.graphsVisible();
         navPlaybackStats.setImageResource(visible
                 ? R.drawable.ic_equalizer_green_24dp
                 : R.drawable.ic_equalizer_white_24dp);
         navPlaybackStats.setContentDescription(visible
-                ? "Hide Playback Stats" : "Show Playback Stats");
+                ? "Hide Playback Graphs" : "Show Playback Graphs");
+    }
+
+    private void updatePlaybackInfoToggle() {
+        ImageView info=navView.findViewById(R.id.nav_playback_details);
+        if(info==null)return;
+        boolean visible=ActivePlayerProcessOverlay.infoVisible();
+        info.setColorFilter(visible ? 0xFF00FF00 : 0xFFFFFFFF);
+        info.setContentDescription(visible ? "Hide Playback Information" : "Show Playback Information");
     }
 
 

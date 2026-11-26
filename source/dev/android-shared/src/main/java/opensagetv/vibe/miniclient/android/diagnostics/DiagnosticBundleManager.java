@@ -57,6 +57,7 @@ public final class DiagnosticBundleManager
 
         List<Entry> entries = new ArrayList<Entry>();
         entries.add(new Entry("device.txt", metadata(app)));
+        entries.add(new Entry("server-output.txt", utf8(serverOutput()+"\n")));
         if (activePlayerText != null && !activePlayerText.trim().isEmpty())
             entries.add(new Entry("active-player.txt", utf8(DiagnosticRedactor.redact(activePlayerText) + "\n")));
         addLogs(app, entries);
@@ -86,6 +87,14 @@ public final class DiagnosticBundleManager
         return new Result(output, sha256(output), output.length());
     }
 
+    /** Closed, cached observation shared by exports; never polls a player/server. */
+    static String serverOutput() {
+        opensagetv.vibe.miniclient.android.MiniclientApplication application=
+                opensagetv.vibe.miniclient.android.MiniclientApplication.get();
+        return application==null ? "Server video encoding: Unknown" :
+                application.getMimDirectSession().serverOutputForDiagnostics();
+    }
+
     /** Builds the bounded redacted text used by Always-mode durable spooling. */
     static byte[] createSessionLog(Context context, String reason) throws Exception
     {
@@ -93,6 +102,7 @@ public final class DiagnosticBundleManager
         output.write(utf8("# OpenSageTV Vibe diagnostic session\nreason="
                 + DiagnosticRedactor.redact(reason) + "\n\n"));
         output.write(metadata(context.getApplicationContext()));
+        output.write(utf8("\n"+serverOutput()+"\n"));
         File[] files = AppUtil.getLogDir(context).listFiles();
         if (files != null)
         {

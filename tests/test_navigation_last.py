@@ -25,10 +25,15 @@ class LastChannelMenuTests(unittest.TestCase):
                     self.assertEqual(a.get(ANDROID + "layout_column"), b.get(ANDROID + "layout_column"))
                 columns = [int(node.get(ANDROID + "layout_column")) for node in bottom]
                 self.assertEqual(list(range(columns[0], columns[0] + 4)), columns)
-                # Touch has a dedicated four-column grid. The TV notouch
+                details = icons["@+id/nav_playback_details"]
+                self.assertIs(parent[top[-1]],parent[details])
+                self.assertEqual(top[-1].get(ANDROID + "layout_row"),details.get(ANDROID + "layout_row"))
+                self.assertEqual(int(top[-1].get(ANDROID + "layout_column"))+1,int(details.get(ANDROID + "layout_column")))
+                # Touch now has five columns: independent info follows graphs.
+                # The TV notouch
                 # layout shares its larger grid with other remote controls.
                 if "layout-notouch" not in relative:
-                    self.assertEqual(columns[-1] + 1, int(parent[top[0]].get(ANDROID + "columnCount")))
+                    self.assertEqual(columns[-1] + 2, int(parent[top[0]].get(ANDROID + "columnCount")))
                 for row in (top, bottom):
                     self.assertEqual(1, len({node.get(ANDROID + "layout_row") for node in row}))
 

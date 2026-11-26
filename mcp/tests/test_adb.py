@@ -12,6 +12,18 @@ from sagetv_dev_mcp.adb import AdbClient, parse_broadcast_result, parse_telemetr
 
 class AdbSafetyTests(unittest.TestCase):
 
+    def test_playback_settings_routes_are_closed_and_keep_default_wire_call(self):
+        client=AdbClient('1.2.3.4:5555','opensagetv.vibe.miniclient.debug')
+        with patch.object(client,'dev_control',return_value={'shown':True}) as command:
+            client.show_active_player_adjustments()
+            command.assert_called_once_with('active_player_adjustments')
+            for panel in ['hub','audio','captions','transport','diagnostics','recovery','navigation']:
+                client.show_active_player_adjustments(panel)
+                command.assert_called_with('active_player_adjustments',panel=panel)
+            before=command.call_count
+            with self.assertRaises(ValueError):client.show_active_player_adjustments('arbitrary-activity')
+            self.assertEqual(command.call_count,before)
+
     def test_authorization_only_timeout_has_one_bounded_idempotent_retry(self):
         c=AdbClient('1.2.3.4:5555','opensagetv.vibe.miniclient.debug')
         failure=subprocess.TimeoutExpired(['adb','shell','settings get'],15)
@@ -1153,6 +1165,13 @@ finally:
         self.assertIn("--es action restart_audio", shell.call_args.args[0])
         with self.assertRaises(ValueError):
             c.player_control("restart_server")
+
+    def test_push_parser_fault_is_an_explicit_debug_player_action(self):
+        c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")
+        reply = 'Broadcast completed: result=1, data="ok=true;op=player_control;action=inject_push_parser_error;accepted=true"\n'
+        with patch.object(c, "shell", return_value=reply) as shell:
+            self.assertTrue(c.player_control("inject_push_parser_error")["accepted"])
+        self.assertIn("--es action inject_push_parser_error", shell.call_args.args[0])
 
     def test_frame_step_rejects_zero_before_broadcast(self):
         c = AdbClient("1.2.3.4:5555", "opensagetv.vibe.miniclient.debug")

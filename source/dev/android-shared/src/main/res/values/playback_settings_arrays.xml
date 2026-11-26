@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="entries_hardware_encoder"><item>Auto (Server Default)</item><item>Intel Quick Sync (QSV)</item><item>NVIDIA NVENC</item><item>VAAPI (Linux)</item><item>AMD AMF (Windows)</item><item>Apple VideoToolbox (macOS)</item></string-array>
+    <string-array name="values_hardware_encoder"><item>auto</item><item>qsv</item><item>nvenc</item><item>vaapi</item><item>amf</item><item>videotoolbox</item></string-array>
+    <string-array name="entries_transcode_encoder"><item>Use Server Default</item><item>Prefer Hardware (Software fallback allowed)</item><item>Software Only</item><item>Hardware Only (No Software fallback)</item></string-array>
+    <string-array name="values_transcode_encoder"><item>server</item><item>prefer_hardware</item><item>software</item><item>hardware_only</item></string-array>
+    <string-array name="entries_transcode_video_codec"><item>Auto (H.264 compatible)</item><item>H.264</item><item>HEVC</item></string-array>
+    <string-array name="values_transcode_video_codec"><item>auto</item><item>h264</item><item>hevc</item></string-array>
+    <string-array name="entries_transcode_audio_codec"><item>Use Source</item><item>AAC</item><item>AC3</item><item>MP2</item></string-array>
+    <string-array name="values_transcode_audio_codec"><item>source</item><item>aac</item><item>ac3</item><item>mp2</item></string-array>
+    <string-array name="entries_transcode_audio_bitrate"><item>Use Source</item><item>96 kbps</item><item>112 kbps</item><item>128 kbps</item><item>160 kbps</item><item>192 kbps</item></string-array>
+    <string-array name="values_transcode_audio_bitrate"><item>source</item><item>96</item><item>112</item><item>128</item><item>160</item><item>192</item></string-array>
+    <string-array name="entries_playback_boolean"><item>Off</item><item>On</item></string-array>
+    <string-array name="values_playback_boolean"><item>false</item><item>true</item></string-array>
+    <string-array name="entries_playback_buffer_preset"><item>Low latency</item><item>Balanced</item><item>Resilient</item></string-array>
+    <string-array name="values_playback_buffer_preset"><item>low_latency</item><item>balanced</item><item>resilient</item></string-array>
+    <string-array name="entries_playback_ijk_filter"><item>Auto (fast HD / YADIF SD)</item><item>Fast (lower vertical detail)</item><item>YADIF (temporal; HD may be slow)</item></string-array>
+    <string-array name="values_playback_ijk_filter"><item>auto</item><item>fast</item><item>yadif</item></string-array>
+    <string-array name="entries_playback_gpu_filter"><item>Fast (field interpolation)</item><item>Motion-adaptive (preserve static detail)</item></string-array>
+    <string-array name="values_playback_gpu_filter"><item>fast</item><item>motion</item></string-array>
+    <string-array name="entries_playback_gpu_order"><item>Auto (source metadata)</item><item>Top field first</item><item>Bottom field first</item></string-array>
+    <string-array name="values_playback_gpu_order"><item>auto</item><item>top</item><item>bottom</item></string-array>
+    <string-array name="entries_playback_gpu_rate"><item>Frame rate (25/29.97)</item><item>Field rate (50/59.94; supported output only)</item></string-array>
+    <string-array name="values_playback_gpu_rate"><item>frame</item><item>field</item></string-array>
+    <string-array name="entries_playback_refresh"><item>Off</item><item>Seamless only</item><item>Always (current resolution)</item></string-array>
+    <string-array name="values_playback_refresh"><item>off</item><item>seamless</item><item>always</item></string-array>
+    <string-array name="entries_playback_settle"><item>Off</item><item>250 ms</item><item>500 ms</item><item>1000 ms</item><item>1500 ms</item></string-array>
+    <string-array name="values_playback_settle"><item>0</item><item>250</item><item>500</item><item>1000</item><item>1500</item></string-array>
+    <string-array name="entries_playback_audio_output"><item>Decoded PCM stereo</item><item>Encoded passthrough</item></string-array>
+    <string-array name="values_playback_audio_output"><item>true</item><item>false</item></string-array>
+    <string-array name="entries_playback_subtitle_style"><item>Android system caption style</item><item>White outline</item><item>White on black box</item></string-array>
+    <string-array name="values_playback_subtitle_style"><item>system</item><item>outline</item><item>black_box</item></string-array>
+</resources>

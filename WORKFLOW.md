@@ -1,5 +1,267 @@
 # Common project workflow
 
+HLS-007 uses the same exact Non-Pro/stock232 gate with --task-id HLS-007,
+--phase fixed-routes --route-set hls-stats and the reported completed source.
+It selects only the four affected HLS delegates, retaining actual output/seek/
+pause checks, verifies adjacent icon bounds and independent toggles, then
+observes28s of advancing playback/refill after near-target warmup. Require at
+least14s actual reserve for the20s ceiling, not a spoofed full bar or an average
+that hides depletion. This is a focused LAN gate, not remote/WAN certification.
+Respect its independent server-idle guard; do not interrupt another client's
+playback to bypass it. Completed HLS classification requires positive provider
+burst evidence, exact ownership and current responsive negotiation. Core's
+timeshifted bit also describes Fixed for completed files, so never reapply that
+ambiguous hint after the provider independently proves isRecording=false.
+Live/unknown cases report no burst and remain unchanged. Save actual refill
+sample arrays before assertions, including on failure, not just startup state.
+Raw Exo position/duration are relative to the sliding playlist window. Preserve
+those raw observations, but verify progression with actual file-clock plus
+decoded audio/video counters and real media bytes. A180s moving window is not
+recording EOF. Both delegates use observed position-in-period for owned HLS
+playback/caption clocks and matching buffer coordinates; no guessed epoch or
+wall-clock correction. Include rollover in affected qualification; do not
+mislabel a healthy constant window-relative position as frozen video.
+
+HLS-006 qualification uses the exact Non-Pro/stock232 settings gate with
+`--task-id HLS-006 --phase fixed-routes --route-set hls-stats` and the supported
+completed reported source. Test Direct control plus Media3/legacy and both GSY
+HLS delegates, actual HTTP counters, reserve, independent graph/info icons,
+pause/resume, confirmed file-clock seeks and a bounded repeated-remote-skip
+sequence. The compact MCP state omits overlay visibility: use the existing raw
+on-device snapshot for that field. A focused navigation dialog also hides the
+Activity overlay from accessibility dumps. Verify live toggle/icon state and
+inspect screenshots for all display modes, not absent accessibility text.
+Debug-created navigation is not the Activity's retained instance: event-only
+Hide does not dismiss that test instance, and Back is an STV event. Exit through
+its existing Playback Settings button (explicit self-dismiss), then close that
+hub. Never treat a visible overlay as absent because a projection or focused
+window omitted it. Preserve all preferences/CC/power.
+Do not label a session exit a process crash without crash-buffer/PID evidence,
+or claim a GFX socket root cause from a successful seek test alone.
+For owned HLS only, a slow ADB poll can miss a short seek-landing window after
+successful playback resumes. The existing verifier may use a fresh server-Seek
+and identity-fenced Direct first-frame event plus the actually observed file/
+decoder clocks (at most10s old), then still requires recovered advancing A/V.
+It does not use the requested target as an anchor, widen tolerance, replay Seek,
+alter a clock, or apply this witness to stock/basic Fixed, Push, DVD, stale
+events, a pending seek, changed connection or a new OPENURL. Retain its
+landingWitness fields so an oracle correction is auditable.
+
+SETTINGS-005 Hardware Encoder qualification uses the shared settings catalog,
+not a second player-specific preference or a global server backend edit.
+Run focused output/catalog/revision/status JVM and source-contract tests, then
+the exact Non-Pro/stock232 `mcp_playback_settings_gate.py` transcoding phase and
+fixed-routes `--task-id SETTINGS-005 --route-set encoder-pair` with the exact
+reported source and `--hardware-encoder qsv|vaapi --policy hardware_only`.
+Require observed matching server encoding, actual decoded output and file-
+relative seeks; a Web GPU pass or an Android hardware decoder is not that proof.
+The last row checks a next-default Auto change does not mutate the current
+session or its subsequent seek. Use `hardware-unavailable --hardware-encoder amf`
+for the bounded Linux negative case. All calls checkpoint/restore preferences,
+captions and power. Auto remains compatible with old/missing providers, while
+explicit pins require exact hardwareBackendRevision1 at connection and next
+source boundaries. No original-Pull masking, Core/INI edits or matrix replay.
+
+FIXED-002 uses the existing settings gate on exact Non-Pro25/stock232 with
+--phase fixed-routes --task-id FIXED-002 --reported-source
+/var/media/tv/FacetheNation-66420956-0.ts --seek-target-ms 153090
+--seek-target-ms 419527 --seek-target-ms 30000 --route-set vaapi-seek
+--reuse-installed --capture-hold. This selects four delegates in Direct/HLS
+plus Stock/Copy controls, and holds only the last post-seek row for HDMI.
+It does not clear a real recording's watch history, invent six source channels,
+replace the APK, or treat normal clock advance as a successful remote FF skip.
+Preserve the canonical-fixture matrix: reported-source acceptance is separate.
+Stock Fixed also maps to VAAPI on232; follow the ten-row Exo/GSY batch with
+the affected --route stock-ijkplayer-auto and its independent HDMI hold. IJK's
+Copy/native MPEG-2 row is unchanged and does not need another replay.
+
+For FIXED-001 use the commissioned Non-Pro/stock232 runner's fixed-routes,
+fixed-failure, fixed-edges, inline and affected hls phases. Record requested
+processing, actual transport, actual server encoder and Android decoder
+separately. Stock FFmpeg is legacy/software-only; modern MIM Legacy Transcode
+is a different route. Do not demand unsupported hardware/features from stock
+FFmpeg, infer encoder execution from client hardware decoding, or identify the
+original stock executable solely from stock-protocol Fixed when a shared MIM
+launcher exists. The explicit Effective Transcoding Output observation proves
+only the owned provider session; unavailable observation stays Unknown.
+For AAC config0 regressions retain Source channels and preroll/seek tests with
+original complete pinned audio AARs. Do not mask errors with Stereo or an
+unrequested decoder-library fork. The public extractor boundary must preserve
+actual configuration before the queue can discard negative-time samples.
+IJK does not expose Exo rendered-buffer counters or Exo playWhenReady. Use its
+existing native first-frame/FPS/basic-playing/clock observations and actual
+decoder name, then require independent post-seek HDMI motion and audio proof.
+Run its exact Stock/Copy rows with --capture-hold; do not change production
+playback or rerun already passed Exo rows to correct an oracle mismatch.
+Positive fixed-edges fallback checks require --policy server. A strict
+Hardware Only/output request must refuse an absent/unsupported provider;
+expecting ordinary Stock fallback in that configuration is a test error, not
+a reason to weaken the production policy. Check explicit strict failures
+separately and always restore the user's original saved encoder selection.
+
+For SETTINGS-003 / DIAG-014, use the final candidate and exact non_pro/vibe
+aliases with `scripts/mcp_playback_settings_gate.py --phase transcoding
+--task-id SETTINGS-003`, then `--phase output --task-id SETTINGS-003`.
+Run only one device actor at a time.
+Use `/opt/opensagetv-vibe/android-python/bin/python3` inside the reusable dev
+container for these phases; Web Python lacks the MCP server dependency. The
+runner checks it before mutating a device, rather than failing after install.
+The first phase verifies shared options,
+mode availability, typed policy/Source storage and confirmed reset; the second
+verifies actual owned software/QSV output, advancing A/V, status and stale-data
+clearing on native Pull. Both checkpoint/restore preferences/power and verify
+installed bytes plus independent server idle. Provider actual-output proof is
+separate: FFmpeg Plugin's commission-output-settings.py and real CPU test.
+Never substitute a requested bitrate/encoder for observed output, or change
+the legacy global launcher to satisfy a per-client stock-routing checkbox.
+
+For HLS-005 automatic buffer-policy qualification, run the host-owned
+scripts/direct_network_reverse_gate.py --run-non-pro-stock232 --hls
+--buffer-adaptive --player media3 (or another supported delegate), with the
+explicit /workspace/android-client/source/dev/android-tv/build/outputs/apk/debug/android-tv-debug.apk
+candidate. The actor must pass that Linux container path as a string, not a
+Windows Path. It owns/restores the exact232 namespace's temporary31911 listener;
+only Non-Pro25 media bodies are constrained. The child uses shared MIM min/max/
+buffer reports, never the manual override, and verifies actual-frame down/up,
+seek/pause/resume and settings/power/zero-session restoration. Preserve captured
+child failures in its bounded report instead of silently filtering tracebacks.
+
+For HLS-005 bounded MIM target testing use the reusable container, exact
+non_pro/vibe aliases and `mcp_direct_quality_gate.py --hls
+--mim-test-override --candidate-apk /workspace/android-client/source/dev/android-tv/build/outputs/apk/debug/android-tv-debug.apk`,
+with artifacts/active/HLS-005. The gate propagates mcp/src to its real stdio
+child, verifies installed APK bytes/model and checkpoints settings/power.
+Debug config supports typed adaptive opt-in and a minimum within the saved
+Fixed maximum. Exact-session/revision/lease MIM control retains real encoder
+cooldown/recovery limits. Clear/restore and verify zero owned sessions in
+finally; no host adb, arbitrary preference edit or stock Core mutation.
+Add `--runtime-rate` only to REQUIRE in-place control; a handoff must never be
+counted as passing that row. Without it the two-change/cooldown handoff path is
+tested explicitly. Unknown/unsupported runtime readiness remains a separate row.
+
+## Shared buffer adaptation (HLS-005)
+
+Do not reintroduce client bitrate advisors or measured-bandwidth prerequisites.
+MIM ADAPT-001 owns the policy. Clients send min/max at source start, then scoped
+reserve/buffering/eligibility reports from existing callbacks (one pending,
+at most once per3s, no extra player getter/timer/probe). Pause/seek/source change
+retire stale advice; lost responses hold the stream. Preserve native Fixed,
+Copy/DVD refusal and the existing actual-frame handoff/in-place custody.
+Use focused provider HTTP/policy, Android quality/session/transport and build
+gates, then affected stock232/Non-Pro rows. Never call a manual reduction a
+buffer-policy or physical WAN pass. Dynamic remains Push.
+
+Serialize Gradle build/clean/test operations against the same source tree.
+Do not launch focused Gradle tests while `dev.cmd build`/`dev.sh build` is
+still running: its deterministic clean can remove another task's outputs,
+even when both use the same Gradle cache. Wait for actual completion, then
+run focused tests. Use the wrapper's JDK17, persistent Android/signing home
+and Gradle cache; a bare DEV-container Java11 command is not the Android build
+workflow. Keep independent server/browser read-only work separate.
+
+## Stock232 qualification and tooling
+
+EXPERIENCE-003 reuses mcp_direct_quality_gate.py --preview-only with output
+artifacts/active/EXPERIENCE-003. This drives the actual optional Video menu,
+compares reported source buckets, checks continuing A/V/one playback producer,
+then verifies public seek invalidates the old dialog and reopening captures
+current custody. Source previews title is NOT a position label: require
+`Source <minutes>:<seconds>`. Android Button labels may be transformed uppercase;
+match their case-insensitive exact labels, never bypass the real menu with a
+test-only callback/image/ACK. Preserve the existing installed-byte witness,
+preferences/CC/power finally and independent final activity proof. Device
+screenshots are not HDMI/audible-sync certification. Preview use is explicit
+and optional, not a dependency for normal playback/quality adaptation.
+
+For authorized BaseMediaPlayerImpl changes, review the bounded playback diff
+and focused lifecycle/transport tests, then add its exact namespace-normalized
+whole-file digest to BOTH validate_project.py and test_player_backends.py.
+Never remove/relax that characterization guard to make a build pass. A stale
+reviewed pin is not a missing SDK/container problem. Version-consistency tests
+compare VERSION/release.properties, not a stale hardcoded released-version
+literal. Build approval remains distinct from physical playback qualification.
+
+EXPERIENCE-002 uses scripts/mcp_direct_quality_gate.py with exact Non-Pro25/
+stock232 aliases and artifacts/active/EXPERIENCE-002. Existing MCP/Public Watch/
+Seek plus the production Video->Direct quality UI supply the stimulus; no fake
+frame ACK, raw-token report or new private Core control. Preserve its preference
+checkpoint/automated awake lease/finally restoration. Generic UIAutomator dumps
+use uniquely owned /data/local/tmp XML removed in finally. Installed APK Success
+and actual optional qualitySeekRevision1 must precede device mutation/gates.
+The gate also reads the exact installed development package's pm path and
+SHA256 before checkpoint/mutation: matching DEV version text alone cannot
+distinguish iterative builds with the same version. Refuse a canonical-vs-
+installed mismatch; never silently attribute an old APK to a newly built file.
+The Direct producer intentionally uses real-time pacing. Its quality consumer
+prepares ahead, waits until the actual old clock reaches candidate start, then
+requires published reserve and exact current-renderer presentation. Never
+"fix" readiness by treating prepare200 as a frame, skipping to a future point,
+changing Core, or disabling pacing globally. Closed diagnostic failure stage
+identifies preparation/publication/render/commit without leaking lease URLs.
+
+For measured-network qualification use scripts/direct_network_reverse_gate.py
+--run-non-pro-stock232. It verifies the exact idle stock232 container, executes
+the existing Unraid Python interpreter in that container's network namespace
+only, and temporarily forwards source25-only port31911 to127.0.0.1:31910.
+Only published TS bodies are shaped; APIs/captions retain normal delivery.
+The owning driver uses the production Automatic quality UI and restores app
+preferences, selected API port, captions and power in finally. The forwarder
+has stdin shutdown and420s expiry; verify listener retirement, unchanged qdisc
+and all20 protected stock hashes. Never install packages, load host kernel
+modules, alter global firewall policy or log session handles/URLs. Fire OS
+ignored the former Windows/global-http_proxy experiment (zero requests); do
+not reuse that as a network test. The host lacks sch_prio: do not retry tc or
+load modules. Shaped LAN is NOT physical cellular/VPN evidence. The longer
+canonical VibeSeekTest fixture avoids90s EOF during cooldown qualification.
+Before attributing a shaped-network failure to production playback, compare
+--healthy-only with native delivery and the external forwarder, with no
+intermediate snapshots. The former HTTP1.0/nonreused test path itself caused
+starvation (3.5s/14.7s versus native13.5s/14.8s); known-length HTTP1.1 reuse
+restores13.6s/14.9s. Preserve that delimiter/reuse behavior, bound unknown-length
+replies by connection close, and retain closed route timing counters. Never
+weaken playback/recovery thresholds to accommodate a broken test transport.
+The parent qualification budget is360s plus bounded55s cleanup, within420s
+remote expiry. An owned cancellation must enter the driver's settings/power
+finally; never kill the shared ADB server or another client's process.
+Never edit a running harness file; finish/cancel its owned session first so
+traceback line references remain trustworthy. Normal playback never needs this
+external test helper, MCP, or a device proxy setting.
+
+STARTUP-001's bounded driver uses existing public nonblocking Watch and optional
+callback-ring reads, never a production polling loop or a server Core change.
+Forward SAGETV_MCP_CONFIG=/workspace/android-client/config/firetv.toml and
+PYTHONPATH=/workspace/android-client/mcp/src together with workspace/aliases
+for direct in-container invocation. Its exact Non-Pro25/stock232/output-directory
+guard aborts sanitized/missing-config defaults before mutation. Keep its own
+preference checkpoint/automated awake lease/finally restoration, not a second
+nested lease. Preserve default buffering unless callback-level comparison
+demonstrates a benefit; broad helper prompt/fullscreen waits are not player
+startup. Current measured250ms trial gave no benefit over500ms. See owning
+results/STARTUP-001/RESULT.md; no need to rerun unrelated matrices.
+
+`.232` now uses protected official stock Core. Historical non-stock/Core-change
+exceptions below do not apply. All server fixes use container OS/launcher or
+real SageTV plugins; client-first fixes remain highest priority.
+
+Launch MCP Python helpers through `dev.cmd`/the canonical entrypoint using
+`/opt/opensagetv-vibe/android-python/bin/python3`, not an unqualified base Python
+whose subprocess may lack MCP. Preserve paired working directory/workspace,
+device/server aliases and private commissioning configuration. For HDMI capture
+pass an absolute owning-project `artifacts/active/<ID>/` output path: relative
+paths resolve against the Android project, not the workspace root. Run device-
+mutating gates serially through restoration; build/source tests may overlap.
+An exec session ID is not operation completion: poll it through its final exit
+and inspect install Success before starting connect/navigation or another
+device mutation. After connect completes, separately verify the exact server
+UI context exists before Watch; connected=true alone can precede UI readiness.
+
+For power-lease inspection/restoration, use `dev.cmd test-awake status` and
+`dev.cmd test-awake end --scope automated` (Linux: `./dev.sh`), with the same
+device/server alias overrides as the test. Do not invoke the helper from a
+bare container Python: it needs the wrapper's MCP configuration, package path,
+SDK PATH and exact commissioned serial. Restore captured values, even when
+those originals already keep the device awake; never substitute sleep defaults.
+
 ## Task fix and server-boundary policy
 
 Apply this policy to every task workflow, including dependency fixes across
@@ -264,6 +526,12 @@ or by replaying ordered commands. Keep pipe/PTY, timeout, closure and concurrent
 serialization tests together. Use the established Android Python environment,
 explicit `SAGETV_MCP_CONFIG` and `PYTHONPATH=mcp/src` for MCP tests; config
 fixtures isolate ambient device/server aliases without altering live settings.
+This also applies to one-shot android_test_keep_awake.py invocations outside
+the entrypoint: use the Android Python environment, PYTHONPATH pointing to
+/workspace/android-client/mcp/src and the explicit commissioned config. A bare
+docker-exec Python omits the entrypoint exports and cannot restore the lease.
+Verify end --scope automated reports restored and status reports active=false;
+never mistake an import failure for restored device power settings.
 For debug broadcasts use `-f 0x10000000` for Intent.FLAG_RECEIVER_FOREGROUND:
 Android6's Am CLI rejects the newer `--receiver-foreground` option. Preserve
 the same foreground semantics without probing/replaying a runtime command.
@@ -373,6 +641,54 @@ an isolated system-temporary test environment when needed, preserving the SDK
 Python/key state; direct CI-equivalent tests install those exact requirements.
 The GitHub sideload APK continues the existing Dev package/signing identity;
 it is not a production-store release or a new upload key.
+
+### Startup settings changes and upgrade preservation
+
+Keep existing preference keys and explicitly saved values when reorganizing
+menus. A missing value on an upgrade uses the current declared default, just
+as on a fresh install; do not interpret an absent boolean as an explicit Off.
+The approved OpenGL UI and Unified HD Graphics defaults are both On. Their
+idempotent missing-key migration must preserve an explicitly saved Off or On.
+Keep `docs/SETTINGS_MENU_DEFAULTS.txt` synchronized with runtime defaults;
+stars describe code defaults, not the commissioned device's saved choices.
+
+Run the affected settings source contracts and `FixedAdjustmentPolicyTest`,
+then build with the normal wrapper. For physical menu changes, run
+`scripts/mcp_settings_menu_gate.py` inside the reusable dev container with the
+commissioned Non-Pro/server overrides. It verifies installed APK bytes,
+preservation, remote focus/expansion, selected-player routes, applicability,
+adjustment mappings and Cancel/confirmed reset using a private on-device
+checkpoint. `--reuse-installed` requires the same candidate byte witness; it
+does not waive any UI gate. `--reset-only` reruns just reset/default acceptance
+after the other rows already passed on that exact APK; record both reports,
+never label the narrower report as a full navigation rerun. Restore all
+original preferences and power settings
+in `finally`; never export credentials or clear app data to test defaults.
+Reset must be confirmed with Cancel initially focused, and reset only its
+allowlisted settings while retaining identity, credentials, SMB profiles,
+files and persistent authorization keys. No server update is required.
+
+For shared startup/long-press changes, use `PlaybackSettingCatalog` and its
+typed startup binder rather than duplicating labels, keys or defaults. Route
+gear and direct icons through the same runtime panels. Preserve navigation
+focus/expansion independently of saved playback values. Session changes must
+not persist unless explicitly saved; next-playback-only Fixed settings must
+not claim an immediate application. Keep unavailable rows explained and gray.
+See `docs/PLAYBACK_SETTINGS.md` and update the editable defaults text together.
+
+Run the shared catalog JVM tests, affected source contracts and normal build,
+then `scripts/mcp_playback_settings_gate.py --phase main|runtime|hls` on the
+exact commissioned Non-Pro/stock232. A phase split permits affected-only reruns;
+`--reuse-installed` still requires a byte-identical APK. Check actual A/V,
+session/default isolation and complete restoration, not only API acceptance.
+Fire TV's numeric IME can overlay an AndroidX dialog while its underlying
+buttons remain in the accessibility tree: explicitly hide the keyboard and
+allow its close animation before activating OK/Cancel. Never weaken the
+saved-value/cancellation assertions to hide a test-driver failure.
+Use its `recovery` and `reset` phases when session restoration, return routes or
+the shared reset allowlist changes. Touch-focusable runtime rows acquire focus
+on pointer DOWN so the first UP clicks once; do not work around a first-tap
+application defect by silently double-tapping every test action.
 
 `TASKS.md` is the authoritative Android backlog. Its **Suggested execution
 order** must be reviewed whenever a task is added, completed, removed, deferred,

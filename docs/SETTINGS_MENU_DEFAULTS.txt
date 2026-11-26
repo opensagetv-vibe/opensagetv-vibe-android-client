@@ -1,0 +1,229 @@
+ANDROID SETTINGS MENU - EDITABLE DEFAULTS REVIEW
+
+* marks the current code default, NOT the device's saved choice.
+Move the * to the option you want, or edit a starred numeric value.
+These proposed defaults are not applied merely by editing this file.
+User-approved change: OpenGL UI and Unified HD Graphics default On. Upgrades
+preserve explicitly saved values; absent settings use current defaults too.
+Existing submenus retain their options; their internal defaults are not
+changed by this menu reorganization.
+
+All six top-level headings are light blue and collapsible.
+Expansion: * Expanded initially; remembered independently after use.
+Internal headings are labels, not additional pages.
+
+SETTINGS-003 DEVELOPMENT
+  Startup and long-press Fixed panels share the choices below. Existing saved
+  values survive updates; only absent keys use defaults. Explicit unsupported
+  combinations refuse with a reason. MIM currently requires MPEG-TS delivery;
+  MKV/DVD MIM output and true per-client original-stock routing remain pending.
+  Preserve existing legacy clients; do not globally redirect their launcher.
+
+Playback Settings
+
+  Default Player
+    * ExoPlayer Legacy
+      Media3 ExoPlayer
+      IJKPlayer
+      GSYVideoPlayer
+
+  Selected Player Settings [submenu for the selected engine]
+
+  Decoding Method
+    * Hardware
+      Software
+      Fallback
+
+  Player Deinterlace
+    * Auto
+      Off
+      Player
+      Player GPU
+      MIM [existing compatibility selection when Fixed is selected]
+
+  Use OpenGL UI: * On / Off
+  Use Native Resolution: * On / Off
+  Wait for Playback Before First OSD: On / * Off
+
+  Audio, Broadcast CC, and Subtitle Settings [existing submenu]
+    Audio Output: * Decoded PCM stereo / Encoded passthrough
+    Passthrough Offset: On / * Off
+    Audio Offset: * 0 ms
+    Subtitle Offset: * 0 ms
+    Bottom Safe Area: * 18 percent
+    Text Size: * 100 percent
+    Subtitle Style: * System / Outline / Black box
+
+  Video Filters and Display Settings [submenu]
+    Software Deinterlace Filter: * Auto / Fast / YADIF [IJK only]
+    GPU Filter: * Fast / Motion adaptive [supported Player GPU path]
+    Field Order: * Auto / Top first / Bottom first
+    Output Rate: Frame / * Field
+    Refresh-rate Matching: * Off / Seamless only / Always
+    HDMI Settle: * 0 / 250 / 500 / 1000 / 1500 ms
+
+  Disc and DVD Playback Settings [existing submenu]
+
+Transport Settings
+
+  Transport Method
+    * Push
+      Pull
+      Fixed
+      SMB Direct
+      SMB Direct (Auto fallback)
+
+  Push Settings [submenu]
+    Push Buffer Write Limit
+      * Auto (stock 32 KiB)
+        32 KiB
+        64 KiB
+        128 KiB
+
+  Fixed Playback Settings [submenu]
+
+    Processing Method [Reconnect required]
+      * Stock SageTV Pipeline
+        Direct Copy (No Re-encoding)
+        Transcode (Legacy)
+        Transcode Low Latency (HLS)
+
+    Automatic Bitrate Adjustment
+      * Off
+        Stream Switching
+        Prefer In-place (Fallback to Switching)
+
+    Output and Remuxing [heading]
+
+      Transcoding Preference
+        * When Needed
+          Always
+
+      Transcoding Container Format
+          Matroska (MKV)
+          DVD (MPEG-PS)
+        * MPEG-TS
+
+      Remuxing Method
+        * When Needed
+          Always (New Remux Container)
+          Off
+
+      Remux Container Format
+        * Matroska (MKV)
+          DVD (MPEG-PS)
+          MPEG-TS
+
+    Video Settings [heading]
+      Video Encoder [Transcode / HLS only; Next playback]
+        * Use Server Default
+          Prefer Hardware (software fallback allowed)
+          Software Only
+          Hardware Only (refuse if unavailable; no software/stock fallback)
+      Hardware Encoder [MIM Transcode / HLS only; Next playback]
+        * Auto (Server Default)
+          Intel Quick Sync (QSV)
+          NVIDIA NVENC
+          VAAPI (Linux)
+          AMD AMF (Windows)
+          Apple VideoToolbox (macOS)
+        Explicit selection is strict; compatible provider required.
+        Software Only ignores this choice without deleting its saved value.
+      Video Codec [Transcode / HLS only; Next playback]
+        * Auto
+          H.264
+          HEVC
+      Minimum Video Bitrate: * 250 kbps [adjustment only]
+      Maximum Video Bitrate
+          1000 / 2000 / 3000 / * 4000 / 5000 / 6000 /
+          7000 / 8000 / 9000 / 10000 kbps
+      Resolution
+        * Use Source
+          CIF (352x240/288)
+          D1 (720x480/576)
+          720p (1280x720)
+          1080 (1920x1080)
+      Frame Rate
+        * Use Source
+          24 / 29.97 / 59.94 fps
+      Server Deinterlace
+        * Auto
+          On
+          Off
+
+    Audio Settings [heading]
+      Audio Codec: Use Source / * AAC / AC3 / MP2
+      Audio Bitrate: Use Source / 96 / 112 / * 128 / 160 / 192 kbps
+      Audio Channels: * Use Source / Mono / Stereo / 5.1
+      Source audio requires negotiated MIM; unknown rate uses encoder default,
+      unknown codec refuses. Direct Copy does not use these encode controls.
+
+    Broadcast Caption Preservation [heading]
+      Preserve Broadcast Captions: On / * Off
+      Caption API Port: * 31910
+
+    Reset Transcoding Settings Only [confirmed; * Cancel / Reset]
+      Preserve identity, credentials and all unrelated settings.
+
+  SMB Direct Settings [existing submenu]
+    Playback Mappings [no configured mapping by default]
+    Credentials [never replaced by reset]
+    Read-ahead [existing default retained]
+    Shared Configuration Profiles [preserved by reset]
+
+  Source Buffering: Low latency / * Balanced / Resilient [Pull / SMB Exo]
+
+  Advanced Compatibility [heading, NOT a submenu]
+    Codec and Container Settings [existing submenu; Automatic defaults]
+    Use Unified HD Media-player Graphics: * On / Off [experimental]
+
+Mappings
+  Media Key Mappings [existing submenu/default mappings retained]
+  Touch Mappings [existing submenu/default mappings retained]
+
+General
+  Auto Connect: On / * Off
+  Auto Connect Delay: 1 / 2 / 5 / 8 / * 10 seconds
+  Exit App When on Standby: * On / Off
+  Home and Background Recovery [existing submenu]
+    Keep Session in Background: On / * Off
+    Resume Background Playback: * On / Off
+    Background Timeout: * 5 minutes
+  Always Keep Screen On: * On / Off
+  Use TV Server Browser: On / * Off
+  Memory Image Cache: * 128 MB
+  Disk Cache for Images: * 512 MB
+  Reset Settings to Defaults [action; confirmation required]
+    Preserve server entries, credentials, client ID, SMB mappings/profiles,
+    saved reports, files, caches and authorization keys.
+
+Diagnostics
+  Diagnostics Settings [existing submenu/defaults retained]
+  Diagnostic Web Server: On / * Off
+  Client Diagnostic Web Port: * 8272
+  Diagnostic Web Address [read-only]
+  Send Diagnostic Logs to Server: On / * Off
+  Server Diagnostic Upload Port: * 8272
+  Upload Diagnostic Report Now [action]
+
+About
+  Version [read-only]
+  Version Code (Build Number) [read-only]
+  Client ID [preserved by reset]
+  Device IP Address [read-only]
+  Native UI Resolution [read-only]
+  Application Available Memory [read-only]
+
+Applicability and navigation
+  Gray out unavailable controls with an explanation; preserve saved values.
+  No repeated "Next playback" labels in startup settings.
+  Existing in-playback controls explain deferred changes when applicable.
+  Long-press gear and Video/Audio/Captions shortcuts use the same definitions.
+  Runtime defaults to this session; saving device defaults is explicit.
+  Fixed processing/limits changed there are confirmed Next playback defaults;
+  the separate Current-session Bitrate action never saves the device limit.
+  Restore Saved Playback Defaults clears session overrides, not saved settings.
+  Summaries distinguish configured choices from actual active transport.
+  No active session: "Not connected" or "Connected - no active playback".
+  Center/Enter/tap toggles a heading; focus remains on that heading.
+  Return from a submenu restores the previous selection.

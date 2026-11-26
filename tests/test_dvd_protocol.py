@@ -38,6 +38,36 @@ ACTIVE_STATS_SNAPSHOT = ROOT / "source/dev/android-shared/src/main/java/opensage
 
 
 class DvdProtocolTests(unittest.TestCase):
+    def test_dvd_metadata_and_subtitles_preserve_server_preview_viewport(self):
+        base = BASE.read_text(encoding="utf-8")
+        rects = base.split("public void setVideoRectangles(", 1)[1].split("// we are using", 1)[0]
+        self.assertNotIn("if (debug_ar)", rects)
+        self.assertIn("lastVidDest = destRect.copy()", rects)
+        metadata = base.split("public void updatePlayerView()", 1)[1].split("Dimension screen", 1)[0]
+        self.assertIn('lastUri.startsWith("push:dvd")', metadata)
+        self.assertIn("setVideoRectangles(lastVidSrc, lastVidDest, true)", metadata)
+        for path in (MEDIA3, LEGACY_EXO):
+            self.assertIn("alignDvdSubtitleViewport(subView)", path.read_text(encoding="utf-8"))
+
+    def test_transformed_dvd_spu_ordinals_do_not_select_synthesized_cea(self):
+        base = BASE.read_text(encoding="utf-8")
+        policy = (DVD_SPU_CORE.parent / "DvdTransformedSubpicturePolicy.java").read_text(encoding="utf-8")
+        self.assertIn("track.getSubtitleCodec() != SubtitleCodec.DVB", policy)
+        self.assertIn("pendingDvdSubpictureCommand = streamPosition", base)
+        self.assertIn("DvdTransformedSubpicturePolicy.resolve", base)
+        for player_file in (MEDIA3, LEGACY_EXO):
+            selection = player_file.read_text(encoding="utf-8").split(
+                "private boolean applyPublishedSubtitleSelection()", 1)[1]
+            self.assertLess(selection.index("applyPendingDvdSubpictureStream()"),
+                            selection.index("requestedSubtitleTrack"))
+
+    def test_dvd_palette_survives_representation_openurl_but_not_new_session(self):
+        media = MEDIA.read_text(encoding="utf-8")
+        self.assertIn("if (payloadSize == 64) retainedDvdClut = payload.clone()", media)
+        selection = media.split("private void applyRetainedDvdStreamSelections()", 1)[1]
+        self.assertIn("playa.dvdSetClut(retainedDvdClut.length, retainedDvdClut.clone())", selection)
+        self.assertIn("retainedDvdClut = null", media)
+
     def test_sparse_native_scan_skips_muted_audio_before_pts_and_queue(self):
         text = DVD_PS.read_text(encoding="utf-8")
         pes = text.split("private static final class PesReader", 1)[1].split("private static final class DvdPrivateStreamPesReader", 1)[0]
@@ -137,7 +167,7 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("Show detailed until turned off", dialog)
         self.assertIn("Show detailed for 30 seconds", dialog)
         self.assertIn("Export redacted detailed snapshot", dialog)
-        self.assertIn('setMode(activity, currentMedia, "toggle")', navigation)
+        self.assertIn('toggleGraphs(activity, currentMedia)', navigation)
         self.assertIn("updatePlaybackStatsToggle", navigation)
         self.assertIn("activePlayerProcessOverlayVisible", debug_state)
         self.assertGreaterEqual(lifecycle.count("ActivePlayerProcessOverlay.hide();"), 2)
@@ -148,7 +178,7 @@ class DvdProtocolTests(unittest.TestCase):
         for label in ("Media network activity", "Buffer health", "CPU usage"):
             self.assertIn(label, overlay)
         self.assertNotIn("CONNECTION_GRAPH_REFERENCE_KBPS", overlay)
-        self.assertIn("resizeToContent(body)", overlay)
+        self.assertIn('resizeToContent(graphsOnly ? "" : body)', overlay)
         self.assertIn("details.getPaint().measureText(line)", overlay)
         self.assertIn("if (desired <= widestContentPx) return", overlay)
         self.assertIn('"  |  peak "', overlay)
@@ -188,11 +218,11 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn('"toggle".equals(mode)', overlay)
         self.assertIn('"detailed_30s".equals(mode)', overlay)
         self.assertIn('intent.getStringExtra("mode")', (ROOT / "source/dev/android-tv/src/debug/java/opensagetv/vibe/miniclient/android/tv/debug/DebugSessionCommands.java").read_text(encoding="utf-8"))
-        self.assertIn('{"toggle", "off", "compact", "detailed", "detailed_30s"}', adb)
+        self.assertIn('{"toggle", "off", "compact", "detailed", "detailed_30s", "graphs", "info"}', adb)
         navigation = (ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/NavigationDialog.java").read_text(encoding="utf-8")
         notouch = (ROOT / "source/dev/android-tv/src/main/res/layout-notouch/navigation.xml").read_text(encoding="utf-8")
         self.assertIn("nav_playback_stats", navigation)
-        self.assertIn('setMode(activity, currentMedia, "toggle")', navigation)
+        self.assertIn('toggleGraphs(activity, currentMedia)', navigation)
         self.assertIn('@+id/nav_playback_stats', notouch)
         self.assertIn('@drawable/ic_equalizer_white_24dp', notouch)
         self.assertIn('new FileReader("/proc/stat")', overlay)
@@ -585,10 +615,25 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertNotIn("subpicturesDisabled || substreamId", decoder)
         self.assertIn("playa.dvdSetStream(streamType, streamPos)", media)
         self.assertIn("dvdSubpictureDecoder.setSubpictureStream(streamPosition)", base)
+        self.assertIn('else if ("copy".equals(dvdOwnedTransportMode))', base)
+        self.assertIn('DvdTransformedSubpicturePolicy.copyCommand(', base)
         self.assertIn("dvdLastStreamPosition = streamPos", media)
         self.assertIn("dvdLastSubtitleStreamPosition = streamPos", media)
         self.assertIn("dvdLastStreamPosition", DEBUG_STATE.read_text(encoding="utf-8"))
         self.assertIn("dvdLastSubtitleStreamPosition", DEBUG_STATE.read_text(encoding="utf-8"))
+
+    def test_dvd_viewport_custody_survives_only_same_wire_session(self):
+        media = (ROOT / 'source/dev/core/src/main/java/opensagetv/vibe/miniclient/MediaCmd.java').read_text()
+        self.assertIn('if (dvdSessionPending) dvdViewport.set(source, destination);', media)
+        self.assertIn('retainDvdViewport(srcRect, destRect);', media)
+        gfx = (ROOT / 'source/dev/core/src/main/java/opensagetv/vibe/miniclient/GfxSurfaceVideoCommands.java').read_text()
+        self.assertLess(gfx.index('media.retainDvdViewport(source, destination);'),
+                        gfx.index('player.setVideoRectangles(source, destination, false);'))
+        self.assertIn('if (!dvdSessionPending) dvdViewport.clear();', media)
+        self.assertIn('Rectangle[] viewport = dvdViewport.snapshot();', media)
+        self.assertIn('playa.setVideoRectangles(viewport[0], viewport[1], false);', media)
+        self.assertIn('playa != expected', media)
+        self.assertIn('getMediaCmd().restoreDvdViewport(this)', MEDIA3.read_text(encoding='utf-8'))
 
     def test_buffered_dvd_spu_events_share_the_selected_stream_generation(self):
         decoder = DVD_SPU.read_text(encoding="utf-8")
@@ -1134,6 +1179,19 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("capture_hdmi_validation.py", wrapper)
         self.assertNotIn("powershell", wrapper.lower())
 
+    def test_dvd_pes_packet_limit_guards_video_and_private_payload_before_read(self):
+        source = (ROOT / (
+            "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/"
+            "android/video/media3/DvdPsExtractor.java"
+        )).read_text(encoding="utf-8")
+        for name in ("PesReader", "DvdPrivateStreamPesReader"):
+            reader = source.split("class " + name, 1)[1]
+            consume = reader.split("public void consume(ParsableByteArray data)", 1)[1]
+            guard = "hasCompletePesPayload(data.getData(), data.getPosition(), data.limit())"
+            self.assertLess(consume.index(guard), consume.index("data.readBytes(scratch.data"))
+        self.assertIn("headerLength < limit - position - 3", source)
+        self.assertIn("headerLength >= timestampBytes", source)
+
     def test_dvd_output_refresh_keeps_transport_and_server_position_unchanged(self):
         media = MEDIA.read_text(encoding="utf-8")
         plugin = PLUGIN.read_text(encoding="utf-8")
@@ -1189,7 +1247,7 @@ class DvdProtocolTests(unittest.TestCase):
         self.assertIn("getCurrentTracks().getGroups()", media3)
         self.assertIn("Passthrough cannot be changed safely", dialog)
         self.assertIn("no output mode was changed", dialog)
-        self.assertIn('rowList.add("Available broadcast CC")', dialog)
+        self.assertIn('broadcast.add("available","Available Broadcast CC",', dialog)
         self.assertIn("addAvailableCaptionRows", dialog)
         self.assertIn("captionSlotDetected", dialog)
         self.assertIn("chooseCaptionType", dialog)
@@ -1206,7 +1264,7 @@ class DvdProtocolTests(unittest.TestCase):
         )).read_text(encoding="utf-8")
         self.assertIn("supportsAudioOutputRestart", plugin)
         self.assertIn("restartAudioOutput", plugin)
-        self.assertIn('audioSettingRow("Restart audio output"', dialog)
+        self.assertIn('.add("restart","Restart Audio Output",', dialog)
         self.assertIn("Keep current settings", dialog)
         self.assertIn('requestAudioOutputRebuild("manual-audio-reset")', media3)
         self.assertIn('requestAudioOutputRebuild("manual-audio-reset")', exo2)

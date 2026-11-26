@@ -30,6 +30,7 @@ public class ExoPlayerSettingsFragment extends PreferenceFragmentCompat
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.exoplayer_prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
 
         final Preference exodecoders = findPreference("show_exo_decoders");
         exodecoders.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()

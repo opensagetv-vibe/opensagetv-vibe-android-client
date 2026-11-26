@@ -1378,6 +1378,24 @@ final class DvdPsExtractor implements Extractor
         }
     }
 
+    // Reusable buffer capacity is not the current PES limit. An incomplete
+    // optional header must not copy stale bytes and leave H262Reader with a
+    // negative payload length (NalUnitUtil.findNalUnit then throws). Discard
+    // only that packet before touching decoder state; do not suppress arbitrary
+    // decoder errors or manufacture timestamps at navigation boundaries.
+    static boolean hasCompletePesPayload(byte[] bytes, int position, int limit)
+    {
+        if (position < 0 || limit > bytes.length || limit - position < 3)
+            return false;
+        if ((bytes[position] & 0xC0) != 0x80)
+            return false; // Authored DVD uses MPEG-2 PES header syntax.
+        int flags = (bytes[position + 1] >>> 6) & 3;
+        int headerLength = bytes[position + 2] & 0xFF;
+        int timestampBytes = flags == 3 ? 10 : (flags == 2 ? 5 : 0);
+        return flags != 1 && headerLength >= timestampBytes
+                && headerLength < limit - position - 3;
+    }
+
     private static final class PesReader implements PacketReader
     {
         private final ElementaryStreamReader payloadReader;
@@ -1399,6 +1417,7 @@ final class DvdPsExtractor implements Extractor
         private long timeUs;
         private long observedCellGeneration = Long.MIN_VALUE;
         private boolean inputFinalized;
+        private boolean warnedIncompletePes;
         @Nullable private final StillFrameRepeater stillFrameRepeater;
 
         PesReader(ElementaryStreamReader payloadReader, TimestampAdjuster timestampAdjuster,
@@ -1432,6 +1451,17 @@ final class DvdPsExtractor implements Extractor
         @Override
         public void consume(ParsableByteArray data) throws ParserException
         {
+            if (!hasCompletePesPayload(data.getData(), data.getPosition(), data.limit()))
+            {
+                if (!warnedIncompletePes)
+                {
+                    Log.w(TAG, "Ignoring incomplete/empty DVD PES: video=" + video
+                            + " bytesLeft=" + data.bytesLeft());
+                    warnedIncompletePes = true;
+                }
+                data.setPosition(data.limit());
+                return;
+            }
             if (!video && !timestampState.shouldParseAudioPes())
             {
                 data.skipBytes(data.bytesLeft());
@@ -1594,6 +1624,11 @@ final class DvdPsExtractor implements Extractor
         @Override
         public void consume(ParsableByteArray data) throws ParserException
         {
+            if (!hasCompletePesPayload(data.getData(), data.getPosition(), data.limit()))
+            {
+                data.setPosition(data.limit());
+                return;
+            }
             long cellGeneration = timestampState.getCellGeneration();
             if (cellGeneration != observedCellGeneration)
             {

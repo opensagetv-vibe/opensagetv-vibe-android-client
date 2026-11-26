@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--ready-file',type=Path,
                         help='Optional live-stage identity/expiry marker from the affected test driver')
     parser.add_argument('--ready-timeout',type=int,default=60,
-                        help='Bounded background wait for that marker (seconds, 1..180)')
+                        help='Bounded background wait for that marker (seconds, 1..600; default unchanged)')
     parser.add_argument('--capture-mode',choices=('1080p30','720p60'),default='1080p30',
                         help='720p60 is an explicit capture-rate qualification mode; frame count alone is not scanout proof')
     return parser.parse_args()
@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
 
 def wait_for_live_stage(path: Path, duration: int, timeout: int) -> dict:
     """Do not turn a late Home/menu recording into playback evidence."""
-    if not 1 <= timeout <= 180: raise ValueError('ready-timeout must be 1..180')
+    if not 1 <= timeout <= 600: raise ValueError('ready-timeout must be 1..600')
     deadline=time.monotonic()+timeout
     while time.monotonic()<deadline:
         if path.exists():

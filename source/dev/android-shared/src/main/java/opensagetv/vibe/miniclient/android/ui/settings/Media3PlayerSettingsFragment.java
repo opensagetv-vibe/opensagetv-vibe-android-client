@@ -26,6 +26,7 @@ public class Media3PlayerSettingsFragment extends PreferenceFragmentCompat
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.media3player_prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
 
         Preference decoders = findPreference("show_media3_decoders");
         decoders.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()

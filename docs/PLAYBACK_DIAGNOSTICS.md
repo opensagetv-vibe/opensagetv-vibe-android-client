@@ -1,5 +1,87 @@
 # Android playback diagnostic standard
 
+DIAG-014: Server video encoding and Server decoding describe only the exact
+owned MIM producer, not the Android decoder or selected preference. Effective
+Transcoding Output uses observed stream metadata; absent declared bitrate is
+Unknown, never the requested target. Source/stop/reconnect retire observations.
+Use the explicit bounded status refresh or source-commit callback; do not add
+diagnostic polling. Stock/native paths remain Unknown unless they report their
+own actual execution. Do not claim original stock FFmpeg merely from the
+Stock SageTV Pipeline selection when a legacy MIM launcher is installed.
+
+HLS-005 supersedes the measured-delivery decision policy below. The current
+client supplies min/max at start and reports current owned buffer reserve from
+existing affinity-thread progress callbacks at most once per3s. Shared MIM
+ADAPT-001 owns hysteresis/cooldown/producer checks and bitrate decisions. No
+bandwidth estimate or diagnostic polling is required. Reports/late advice are
+owner/generation/eligibility guarded; losses hold bitrate and do not replay
+mutations. Current on-demand quality observation names MIM's closed reason.
+Fixed (Adjusted) is UI-only: stock protocol still receives Fixed. Plain Fixed
+uses Maximum; unsupported providers preserve the stock path.
+
+EXPERIENCE-002 development exposes closed directQualityState/target-kbps fields
+through existing on-demand diagnostics; never tokens/URLs. Handoff preparation,
+frame proof and commit are distinct. commit_unconfirmed means a reply was lost:
+do not blindly roll back to an old producer that may already be retired. Native
+seek/commit lineage must resolve atomically in the negotiated provider before
+device qualification. Existing Push/Pull/Copy/DVD remain outside adaptation.
+Default-off segment observations exclude HTTP open/first read and consumer gaps,
+require EOF/minimum bytes/read time and recent buffering; they do not measure
+WAN speed by sending test streams. Manual reductions are not bandwidth evidence.
+
+Development0.5.115 exposes `playbackExperience` through the existing on-demand
+client diagnostic snapshot. Common player lifecycle callbacks record bounded
+source/operation generations, requested/local acceptance and a prepared Direct
+producer's actual offset. Renderer first-frame callbacks lacking tagged source
+PTS are explicitly unattributed: `presentedPositionMs` and stock UI processing
+time remain null. Sampled decoder position is still separate, not landing proof.
+There is no new timer, network request, player getter or clock/key/buffer change.
+GSY reports its actual delegate's trace. Free/source replacement retires custody;
+ordinary Pause/Play does not invent a successful seek. EXPERIENCE-001 owns
+focused test/build/device qualification, not a blanket completed matrix claim.
+
+## Bounded ordinary-Push parser recovery (ISSUE-004)
+
+The per-source Exo/Media3 factory remembers a TS/PS container only after a
+successful sniff. A fatal retry may recreate that reader at the current FIFO
+packet boundary without requiring the consumed file header. Native packet
+validation, retry limits and session guards remain active. Unknown formats,
+DVD and Pull/Direct/HLS keep their separate recovery policies.
+
+A new decoder starts at zero; `PushRecoveryClock` retains only observed elapsed
+decoder epochs within the same Push stream. Stock SageTV still owns the file
+offset. Real FLUSH/OPENURL reset the epoch sum; no wall-clock extrapolation,
+guessed file target, private command or server plugin is involved. This preserves
+the displayed clock, not proof of frame-exact content continuity after discarded
+decoder read-ahead. Pending CEA text is cleared for the new extractor epoch.
+The same-stream cached-seek target is translated back to the active decoder
+epoch; a target before that epoch is refused, never clamped into an unrelated
+buffer location. The physical runner's optional `--forward-cache` seam check
+is distinct from its subsequent stock public seek/FLUSH acceptance.
+
+`scripts/mcp_push_parser_recovery_test.py` uses an explicit debug-only
+`dev_player_control(inject_push_parser_error)` action on the playback thread.
+It refuses DVD and non-Push players and never runs automatically. Qualify
+actual A/V, no server FLUSH, server-visible clock continuity, pause intent,
+subsequent public seek/FLUSH and a Pull control. Distinguish this synthetic
+fatal-error regression from the unavailable reporter recording/timestamp
+trigger; a passing injected error is not confirmation that issue4 is solved.
+
+## Focused startup profiling (STARTUP-001)
+
+Use scripts/mcp_startup_profile.py only with exact Non-Pro25/stock232 and owned
+artifacts/active/STARTUP-001 output. It checkpoints/restores preferences and an
+automated awake lease in finally; no APK defaults or Core change. Forward the
+full direct-Python environment documented in TEST_ENVIRONMENT.md. Normal mode
+compares actual selected/negotiated Push, Pull and MIM Direct separately; the
+events mode reads existing callback traps after a bounded run, not background
+production instrumentation. State-snapshot RPC can itself take~2s: distinguish
+first observed output from exact callback time and from broad helper prompt/
+fullscreen/verification waits. Current OPENURL-to-frame control1339ms Push,
+2663ms Pull versus2691ms250ms Pull trial does not justify cutting buffering.
+Keep500ms startup/1000ms rebuffer and existing forward reserve. No frame-exact
+HDMI, audible-sync or universal-device claim from this generated fixture test.
+
 ## Server-connected parity follow-ups (EXT-009..017)
 
 EXT-018..022 are separate, user-authorized attempts to implement the remaining
@@ -1239,12 +1321,28 @@ no additional permission or service. CPU
 sampling starts and stops with the overlay. Preserve the normal MCP/server
 evidence as well when a root-cause claim depends on another process.
 
-The long-press navigation panel's bar-chart icon, the submenu's checked/unchecked
-row, and MCP use the same overlay controller. The icon is white while disabled
-and green while enabled. Use
+The long-press navigation panel's existing bar-chart icon toggles graphs; its
+separate information icon toggles detailed text. Both are independent: graphs
+only is a narrow three-bar view, information only hides the bars, and enabling
+both restores full statistics. Neither toggle dismisses the navigation menu.
+Each icon is white while disabled and green while enabled. These controls,
+the submenu and MCP share one overlay controller. Use
 `dev_set_active_player_overlay(mode="toggle")` for an interactive toggle, or select
-`off`, `compact`, `detailed`, or `detailed_30s` when a test needs deterministic state.
+`off`, `graphs`, `info`, `compact`, `detailed`, or `detailed_30s` when a test needs deterministic state.
 The legacy MCP `visible` Boolean remains supported for existing automation.
+
+Owned Fixed HTTP/HLS counts actual media-body bytes across segment datasource
+instances; playlist requests are excluded. This is media transfer activity, not
+available network bandwidth. The buffer bar scales against the active player's
+configured maximum. Loading ahead is not labeled as a playback stall. Its video
+target/adjustment label reports the producer's current encoding target, not a
+measurement of buffered frames (which can still have the preceding bitrate).
+An optional negotiated provider can produce a bounded completed-file reserve;
+live/unknown-writer pacing remains unchanged. During an owned Direct seek the
+client pauses old output, retains only the last confirmed file clock, and
+replaces/releases the old player when the current response is ready. Repeated
+seeks keep one active HTTP request and the latest pending intent, never an
+unbounded worker per key. This does not prove a separate GFX socket error fixed.
 
 The panel is a troubleshooting view, not a copy of YouTube's consumer-facing
 "Stats for nerds" display. It deliberately excludes video/session IDs,

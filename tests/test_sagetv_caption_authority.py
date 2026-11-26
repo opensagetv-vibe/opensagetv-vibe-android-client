@@ -321,30 +321,30 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
             / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ActivePlayerAdjustmentsDialog.java"
         ).read_text(encoding="utf-8")
         self.assertIn('"Broadcast CC: " + captionModeLabel', dialog)
-        self.assertIn('"CC1 Type: "', dialog)
-        self.assertIn('"CC1 Language: "', dialog)
-        self.assertIn('"CC2 Type: "', dialog)
-        self.assertIn('"CC2 Language: "', dialog)
-        self.assertIn('rowList.add("Available broadcast CC")', dialog)
-        self.assertIn('" (DVB selected)" : " (select DVB)"', dialog)
-        self.assertIn('rowList.add("Subtitle stream: " + subtitleTrackValue', dialog)
-        self.assertIn('rowList.add("Subtitle appearance: " + subtitleAppearanceValue', dialog)
+        self.assertIn('for(int channel=1;channel<=2;channel++)', dialog)
+        self.assertIn('"CC"+slot+" Type"', dialog)
+        self.assertIn('"CC"+slot+" Language"', dialog)
+        self.assertIn('broadcast.add("available","Available Broadcast CC",', dialog)
+        self.assertIn('row.append(" (DVB selected)")', dialog)
+        self.assertIn('CaptionSlotPolicy.TYPE_DVB', dialog)
+        self.assertIn('subtitles.add("stream","Subtitle Stream",subtitleTrackValue', dialog)
+        self.assertIn('subtitles.add("appearance","Subtitle Appearance",subtitleAppearanceValue', dialog)
         self.assertIn("addAvailableCaptionRows", dialog)
         self.assertIn('row.append(" (CC1)")', dialog)
         self.assertIn('row.append(" (CC2)")', dialog)
         self.assertIn("hasObservedCeaCaptionData", dialog)
-        self.assertIn("final int readOnlyRows = rowList.size()", dialog)
-        self.assertIn("showCaptionPanel", dialog)
+        self.assertIn('false,null);', dialog)
+        self.assertIn('showPanel("captions","Captions / Subtitles"', dialog)
         self.assertIn("Window.FEATURE_NO_TITLE", dialog)
         self.assertIn("CaptionSlotPolicy.findTrack", dialog)
         self.assertIn("DVB bitmap - ", dialog)
         self.assertIn("reliableLanguage(track)", dialog)
         chooser = dialog.split("private void chooseCaptionType", 1)[1]
         chooser = chooser.split("private static void addCaptionType", 1)[0]
-        self.assertNotIn("CaptionSlotPolicy.TYPE_DVB", chooser)
+        self.assertIn("CaptionSlotPolicy.TYPE_DVB", chooser)
         detected = dialog.split("private String captionSlotDetected", 1)[1]
         detected = detected.split("private static String compactCaptionTrackLabel", 1)[0]
-        self.assertIn("true, false", detected)
+        self.assertIn("true, true", detected)
 
     def test_teletext_mappings_use_pid_and_accept_legacy_values(self):
         base = (
@@ -381,8 +381,9 @@ class SageTvCaptionAuthorityTests(unittest.TestCase):
         self.assertIn("setSubtitleTrack(track.getIndex())", apply_slot)
         resolver = base.split("private SubtitleTrack resolveCaptionSlotTrack", 1)[1]
         resolver = resolver.split("public boolean applyDvbCaptionTrack", 1)[0]
-        self.assertIn("true, false", resolver)
-        self.assertIn("false, false", resolver)
+        self.assertIn("true, true", resolver)
+        self.assertIn("false, true", resolver)
+        self.assertNotIn("? CaptionSlotPolicy.TYPE_AUTO : type", resolver)
 
     def test_stock_extender_subpicture_command_selects_local_broadcast_pid(self):
         base = (

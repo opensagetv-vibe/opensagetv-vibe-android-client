@@ -7,6 +7,14 @@ import static org.junit.Assert.assertNull;
 
 public class CaptionSlotPolicyTest
 {
+    @Test public void broadcastIsoLanguagePreferenceResolvesAndroidDvbAndTeletext()
+    {
+        SubtitleTrack[] tracks = {track(2, SubtitleCodec.DVB, "en", -1),
+                track(3, SubtitleCodec.TELETEXT, "en", -1)};
+        assertEquals(2, CaptionSlotPolicy.findTrack(tracks,2,"dvb","eng").getIndex());
+        assertEquals(3, CaptionSlotPolicy.findTrack(tracks,1,"teletext","eng").getIndex());
+        assertNull(CaptionSlotPolicy.findTrack(tracks,2,"dvb","spa"));
+    }
     private static SubtitleTrack track(int id, SubtitleCodec codec, String language, int service)
     {
         return new SubtitleTrack(id, codec, language, "", true, service);

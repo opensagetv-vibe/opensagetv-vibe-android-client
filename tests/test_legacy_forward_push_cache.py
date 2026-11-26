@@ -50,7 +50,10 @@ class LegacyForwardCacheTests(unittest.TestCase):
 
     def test_backend_fences_ordinary_push_and_preserves_basic_dvd_sources(self):
         backend = BACKEND.read_text()
-        self.assertIn('if (!dvdPushMode && mediaSource instanceof VibeForwardPushMediaSource)', backend)
+        flush = backend[backend.index('public synchronized void flush()'):]
+        self.assertIn('if (!dvdPushMode)', flush)
+        self.assertNotIn('if (!dvdPushMode && mediaSource instanceof VibeForwardPushMediaSource)', flush)
+        self.assertIn('"push_flush_fresh_source"', flush)
         self.assertIn('MiniClientConnection.detailedBufferStats', backend)
         self.assertIn('mediaSource = dvdPushMode', backend)
         branch = backend.split('public void seek(long timeInMS)',1)[1].split('if (mimDirectController()',1)[0]

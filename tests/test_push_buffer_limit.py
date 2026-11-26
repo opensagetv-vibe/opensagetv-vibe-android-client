@@ -13,7 +13,11 @@ class PushBufferLimitSourceContractTests(unittest.TestCase):
         for value in ("auto", "32768", "65536", "131072"):
             self.assertIn(f"<item>{value}</item>", push_values)
         self.assertNotIn("<item>524288</item>", push_values)
-        self.assertIn('android:key="push_buffer_limit"', prefs)
+        self.assertIn('android:key="push_settings"', prefs)
+        push_prefs=(ROOT / "source/dev/android-shared/src/main/res/xml/push_prefs.xml").read_text(encoding="utf-8")
+        self.assertIn('android:key="push_buffer_limit"', push_prefs)
+        fragment=(ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings/PushSettingsFragment.java").read_text(encoding="utf-8")
+        self.assertIn('findPreference("push_buffer_limit")',fragment)
 
     def test_property_is_negotiated_without_changing_internal_ring_capacity(self):
         connection = (ROOT / "source/dev/core/src/main/java/opensagetv/vibe/miniclient/MiniClientConnection.java").read_text(encoding="utf-8")

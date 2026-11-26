@@ -46,10 +46,10 @@ class IjkDeinterlaceTests(unittest.TestCase):
 
     def test_filter_menu_is_capability_scoped_and_returns_to_its_parent(self):
         text = (JAVA / 'ActivePlayerAdjustmentsDialog.java').read_text(encoding='utf-8')
-        self.assertIn('"Video filters", videoFilterValue()', text)
+        self.assertIn('"Video Filters",videoFilterValue()', text)
         self.assertIn('hasClientFilterChoice()', text)
-        self.assertIn('this backend does not expose algorithm selection', text)
-        self.assertIn('HD may be slow', text)
+        self.assertIn('IJK software interlaced frames only; device/server filtering is read-only', text)
+        self.assertIn('PlaybackSettingCatalog.IJK_FILTER', text)
         self.assertIn('setIjkDeinterlaceFilter(value)', text)
         self.assertIn('showVideoFilters();', text)
         decoder = (JAVA / 'video/ijkplayer/IjkDecoderOptions.java').read_text(encoding='utf-8')
@@ -120,12 +120,13 @@ int main(void) {
     def test_menu_does_not_claim_mim_on_for_native_pull(self):
         text = (JAVA / 'ActivePlayerAdjustmentsDialog.java').read_text(encoding='utf-8')
         self.assertNotIn('"MIM deinterlace"', text)
-        self.assertIn('new String[] { "Auto", "Off", "Client", "Client GPU", "MIM" }', text)
-        self.assertIn('new String[] { "Auto", "Off", "Client", "Client GPU" }', text)
+        self.assertIn('final String[] base=PlaybackSettingCatalog.DEINTERLACE.labels(activity)', text)
+        self.assertIn('fixed ? new String[] { base[0],base[1],base[2],base[3],"MIM" } : base', text)
+        self.assertIn('new String[] { "auto", "off", "client", "client_gpu" }', text)
         self.assertIn('"fixed".equals(client.properties().getStreamingMode())', text)
         self.assertIn('ClientDeinterlaceStatus.implementation(', text)
         self.assertIn('ClientDeinterlaceStatus.current(', text)
-        self.assertIn('"IJKPlayer (next: "', text)
+        self.assertIn('actual==backend?label:label+" (next: "+requested+")"', text)
 
     def test_each_hardware_engine_honors_client_without_changing_audio(self):
         for relative in ('video/media3/Media3CodecSelector.java',

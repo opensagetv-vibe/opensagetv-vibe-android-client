@@ -51,7 +51,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertGreaterEqual(exo.count("mimDirectDiagnosticDataSource = null;"), 2)
         self.assertIn("TeletextSubtitleEngine.observe(SOURCE, -1L", observer)
         self.assertIn('value.endsWith(".ts")', observer)
-        self.assertIn("return delegate.open(dataSpec);", observer)
+        # Preserve the delegate's exact length/exception semantics while using
+        # that length as the completed-body witness for optional measurements.
+        self.assertIn("long expected=delegate.open(dataSpec);", observer)
+        self.assertIn("return expected;", observer)
 
     def test_rejected_owned_restart_cannot_seek_the_old_hls_epoch(self):
         base = (SHARED / "video/BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
@@ -60,8 +63,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn("mimDirectController().owns(this)", failed)
         self.assertIn("seekPending = false;", failed)
         self.assertIn("msg_mim_direct_seek_retained", failed)
-        self.assertIn("return true;", failed)
-        self.assertIn("return false;", failed)
+        request=body.split("private void completeMimDirectSeek",1)[0]
+        self.assertIn("mimDirectSeekWork.submit(",request)
+        self.assertIn("return true;",request)
+        self.assertIn("suspendMimDirectSeekOutput(false);",failed)
+        self.assertIn("return;",failed)
         self.assertNotIn("seekToImpl(", failed)
 
     def test_owned_direct_http_seek_precedes_ui_position_lock(self):
@@ -315,6 +321,18 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # their existing event and no decoder-clock polling is introduced.
         reviewed_plugin_watch_recovery_hash = "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367"
         self.assertIn(dev_hash, {
+            # HLS-006/007 asynchronous seek/presentation and observed file-clock
+            # mapping: four real Non-Pro delegates qualified; pin, not bypass.
+            "2ca61fe9f4a8493d60c6388491b0eaf34406d9c27401fefb311d8e2ce46641dd",
+            # SETTINGS-003 reviewed explicit-output refusal, no decoder rewrite.
+    "fc6b21938286a6e62473a7ceaac1b814a638754cdbf777e8b10a296099420c8c",
+            # EXPERIENCE-001/002 exact reviewed development form; optional
+            # Direct quality only, not device certification or a relaxed pin.
+            "23e6f24b66723215dff135db2746cbad57827d35bdfbf7f3800fa9eeb6ff354d",
+            # VCE-016: reviewed virtual DVB slot/Subtitle-off authority and
+            # post-setup stale-session guards. Stock232/Non-Pro Media3 and
+            # legacy Exo caption/seek gates, plus focused failure tests.
+            "1dbb7f14138ae860d4705a285b1dc061a4fe13b7c6da00448a7fbbf1102aa0a0",
             # EXT-010: reviewed actual-transport command29 guard + bounded
             # feedback only; no seek/reload/keys/clock change. Physical19
             # playing/paused injection rejects with zero bytes, no time reset.
@@ -368,6 +386,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             reviewed_direct_caption_refresh_diagnostics_hash,
             reviewed_direct_stv_single_renderer_hash,
             reviewed_mim_direct_stock_fixed_reconnect_hash,
+            # HLS-005 shared MIM buffer reporting, reviewed with validator pin.
+            "566b0deca012e49844e0ba1be5ebf48bf2cbf9abd6bd93f0acfc4cf748eeb264",
             reviewed_mim_direct_segment_observer_hash,
             reviewed_mim_direct_live_edge_hash,
             reviewed_mim_direct_growing_recovery_hash,
@@ -496,7 +516,11 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertNotIn("getTrackGroups(trackType)", player)
 
     def test_project_version_is_current(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.5.114")
+        # Cross-check authoritative metadata, not yesterday's released literal.
+        version=(ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertRegex(version,r"^[0-9]+\.[0-9]+\.[0-9]+$")
+        metadata=(ROOT / "release.properties").read_text(encoding="utf-8").splitlines()
+        self.assertEqual([line for line in metadata if line.startswith('VERSION=')],['VERSION='+version])
 
     def test_gsy_does_not_merge_unused_cast_or_media_session_surface(self):
         gradle = (DEV / "android-shared/build.gradle").read_text(encoding="utf-8")
@@ -546,9 +570,15 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         # During both load paths, however, the old player is released after the
         # new OPENURL session exists. The owning transition token must suppress
         # that stale EOS and make concurrent GETMEDIATIME return zero.
-        self.assertEqual(load.count("releasePlayer();"), 2)
+        # A rejected explicit MIM output has its own bounded old-player release;
+        # it must also close this generation's transition without loading stock.
+        self.assertEqual(load.count("releasePlayer();"), 3)
+        rejection = load.split('if(directUrl==null&&!outputFailure.isEmpty())', 1)[1].split('if (directUrl != null)', 1)[0]
+        self.assertIn('if(!playbackSessions.isCurrentSession(loadSession))return;', rejection)
+        self.assertIn('finally { finishLoadTransition(loadSession); }', rejection)
+        self.assertIn('state=STOPPED_STATE;', rejection)
         self.assertEqual(load.count("loadTransitionToken = loadSession;"), 1)
-        self.assertEqual(load.count("finishLoadTransition(loadSession);"), 2)
+        self.assertEqual(load.count("finishLoadTransition(loadSession);"), 3)
         self.assertEqual(load.count("eos = false;"), 3)
         self.assertIn("if (loadTransitionToken != null)\n            return 0;", media_time)
         self.assertIn("if (loadTransitionToken == null)", release)
@@ -598,8 +628,8 @@ class PlayerBackendRefactorTests(unittest.TestCase):
 
             discontinuity = text.split("public void onPositionDiscontinuity", 1)[1].split("public void onVideoSizeChanged", 1)[0]
             self.assertIn("case Player.DISCONTINUITY_REASON_SEEK:", discontinuity, rel)
-            self.assertIn("setPlaybackPosition(newPosition.positionMs);", discontinuity, rel)
-            self.assertIn("updateMediaSessionPlaybackState(newPosition.positionMs);", discontinuity, rel)
+            self.assertIn("setPlaybackPosition(directHlsPeriodPosition(listenerPlayer, newPosition.positionMs));", discontinuity, rel)
+            self.assertIn("updateMediaSessionPlaybackState(getPlaybackPosition());", discontinuity, rel)
             self.assertIn("seekPending = false;", discontinuity, rel)
 
 
@@ -910,8 +940,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         for value in ("exoplayer", "media3", "ijkplayer", "gsyplayer"):
             self.assertIn(f"<item>{value}</item>", arrays)
         self.assertIn('android:defaultValue="exoplayer"', prefs)
-        for key in ("exoplayer_settings", "media3_settings", "ijkplayer_settings", "gsyplayer_settings"):
-            self.assertIn(f'android:key="{key}"', prefs)
+        self.assertIn('android:key="selected_player_settings"', prefs)
+        settings = (SHARED / "ui/settings/SettingsFragment.java").read_text(encoding="utf-8")
+        for screen in ("ExoPlayerSettingsActivity", "Media3PlayerSettingsActivity", "IJKPlayerSettingsActivity", "GSYPlayerSettingsActivity"):
+            self.assertIn(screen, settings)
 
     def test_fixed_transcoding_offers_mpegts_for_embedded_cea_captions(self):
         arrays = (RES / "values/arrays.xml").read_text(encoding="utf-8")
@@ -1084,14 +1116,13 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn('android:id="@+id/nav_audio_output"', layout)
         self.assertIn('android:id="@+id/nav_audio_output"', tv_layout)
         self.assertIn("ActivePlayerAdjustmentsDialog.showAudio(activity)", navigation)
-        self.assertIn('heading.setText("Audio settings")', dialog)
-        self.assertIn('audioSettingRow("Audio output"', dialog)
-        self.assertIn('audioSettingRow("Passthrough offset"', dialog)
-        self.assertIn('audioSettingRow("Audio offset"', dialog)
-        self.assertIn('audioSettingRow("A/V sync test"', dialog)
-        self.assertIn('audioSettingRow("Audio stream"', dialog)
-        self.assertIn('audioSettingRow("Set as default for all media"', dialog)
-        self.assertIn("metrics.widthPixels * 0.66f", dialog)
+        self.assertIn('showPanel("audio","Audio Settings"', dialog)
+        for setting in ('AUDIO_OUTPUT','PASSTHROUGH_OFFSET','AUDIO_OFFSET'):
+            self.assertIn('addSetting(audio,PlaybackSettingCatalog.'+setting, dialog)
+        self.assertIn('"A/V Sync Test"', dialog)
+        self.assertIn('"Audio Stream"', dialog)
+        self.assertIn('confirm("Save audio defaults?"', dialog)
+        self.assertIn('"Save as Device Defaults"', dialog)
         self.assertIn("chooseAudioChoice(", dialog)
         self.assertIn('captionButton("Back")', dialog)
         self.assertIn("setOnCancelListener", dialog)
@@ -1117,12 +1148,12 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         )
         shared_layout = (RES / "layout/navigation.xml").read_text(encoding="utf-8")
         video_menu = dialog.split("private void showMain()", 1)[1].split(
-            "private void addVideoRow", 1
+            "private void showHubMenu", 1
         )[0]
         for label in (
-            '"Player"', '"Decoding"', '"Codec Queueing"',
-            '"Source buffering"', '"Display"', '"DVD playback"',
-            '"Restart video decoder"', '"Reset video overrides"',
+            'PlaybackSettingCatalog.PLAYER', 'PlaybackSettingCatalog.DECODING',
+            'PlaybackSettingCatalog.DEINTERLACE', 'queueDefinition()',
+            '"Display Settings"', '"DVD Settings"', '"Advanced Compatibility"',
         ):
             self.assertIn(label, video_menu)
         for removed in (
@@ -1131,7 +1162,7 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             "Broadcast captions / CC",
         ):
             self.assertNotIn(removed, video_menu)
-        self.assertIn('showSettingsPanel("Video settings"', video_menu)
+        self.assertIn('showPanel("video","Video Settings"', video_menu)
         self.assertNotIn('captionRow(status(media)', video_menu)
         for group in ("showVideoDisplayMenu", "showVideoDvdMenu"):
             self.assertIn(group, dialog)
@@ -1140,12 +1171,10 @@ class PlayerBackendRefactorTests(unittest.TestCase):
             self.assertIn(setting, dialog)
         self.assertIn("chooseVideoChoice", dialog)
         self.assertIn("reopenVideoMenu", dialog)
-        self.assertIn("resetVideo()", video_menu)
-        for gsy_choice in (
-            'GSYPlayerEngine.AUTO', 'GSYPlayerEngine.MEDIA3',
-            'GSYPlayerEngine.SYSTEM', 'GSYPlayerEngine.LEGACY_EXO',
-        ):
-            self.assertIn(gsy_choice, dialog)
+        self.assertIn("ActivePlayerSessionOverrides.reset()", dialog)
+        self.assertIn('showRecoveryMenu()', dialog)
+        self.assertIn('PlaybackSettingCatalog.GSY_ENGINE.values(activity)', dialog)
+        self.assertIn('GSYPlayerEngine.fromPreference(chosen)', dialog)
         self.assertIn('backend.displayName() + " ("', dialog)
         self.assertIn("ActivePlayerSessionOverrides.setGsyEngine", dialog)
         self.assertIn("PrefStore.Keys.gsy_player_engine", dialog)
@@ -1188,9 +1217,9 @@ class PlayerBackendRefactorTests(unittest.TestCase):
         self.assertIn('android:paddingBottom="2dp"', video_layout)
         self.assertIn('android:id="@+id/vib_export"', video_layout)
         self.assertIn('android:layout_height="match_parent"', video_layout)
-        self.assertIn('showCaptionPanel("Subtitles / broadcast CC"', dialog)
-        self.assertIn('"Subtitle stream: " + subtitleTrackValue', dialog)
-        self.assertIn('"Subtitle appearance: " + subtitleAppearanceValue', dialog)
+        self.assertIn('showPanel("captions","Captions / Subtitles"', dialog)
+        self.assertIn('"Subtitle Stream",subtitleTrackValue', dialog)
+        self.assertIn('"Subtitle Appearance",subtitleAppearanceValue', dialog)
         self.assertIn('chooseCaptionChoice("Subtitle stream (SRT/PGS/DVD)"', dialog)
         self.assertNotIn('"Subtitle offset: "', dialog)
         self.assertIn("metrics.widthPixels * 0.42f", dialog)

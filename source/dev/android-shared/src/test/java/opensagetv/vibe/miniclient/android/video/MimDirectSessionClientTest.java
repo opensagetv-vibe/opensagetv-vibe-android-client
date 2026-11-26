@@ -8,6 +8,107 @@ import static org.junit.Assert.assertTrue;
 
 public class MimDirectSessionClientTest
 {
+    @org.junit.Test public void explicitTranscodeFailureDoesNotBecomeOriginalFilePull(){
+        org.junit.Assert.assertTrue(MimDirectSessionClient.blocksOriginalPullAfterStartFailure("transcode",false));
+        org.junit.Assert.assertTrue(MimDirectSessionClient.blocksOriginalPullAfterStartFailure("transcode",true));
+        org.junit.Assert.assertFalse(MimDirectSessionClient.blocksOriginalPullAfterStartFailure("copy",false));
+        org.junit.Assert.assertTrue(MimDirectSessionClient.blocksOriginalPullAfterStartFailure("copy",true));
+        org.junit.Assert.assertFalse(MimDirectSessionClient.blocksOriginalPullAfterStartFailure("",false));
+    }
+    @Test public void outputAndEncoderRevisionsAreExactScopedAndClosed(){
+        for(String field:new String[]{"outputSettingsRevision","encoderPolicyRevision","hardwareBackendRevision","hlsBufferRevision"}){
+            assertTrue(MimDirectSessionClient.supportsOutputRevision("{\"mimDirect\":{\""+field+"\":1}}",field));
+            for(String invalid:new String[]{"0","2","10","1.5","\"1\"","null"})assertFalse(MimDirectSessionClient.supportsOutputRevision("{\"mimDirect\":{\""+field+"\":"+invalid+"}}",field));
+            assertFalse(MimDirectSessionClient.supportsOutputRevision("{\"mimDirect\":{},\""+field+"\":1}",field));
+        }
+        assertFalse(MimDirectSessionClient.supportsOutputRevision("{}","invalid"));
+    }
+    @Test public void idleDiagnosticUsesTheConnectedServerWithoutAPlaybackLease(){
+        opensagetv.vibe.miniclient.prefs.PrefStore prefs=(opensagetv.vibe.miniclient.prefs.PrefStore)java.lang.reflect.Proxy.newProxyInstance(
+            getClass().getClassLoader(),new Class[]{opensagetv.vibe.miniclient.prefs.PrefStore.class},
+            (proxy,method,args)->method.getName().equals("getString")?"31910":null);
+        opensagetv.vibe.miniclient.ServerInfo server=new opensagetv.vibe.miniclient.ServerInfo();server.address="192.168.10.232";
+        assertEquals("http://192.168.10.232:31910",MimDirectSessionClient.diagnosticBase(server,prefs));
+        server.address="2001:db8::1";
+        assertEquals("http://[2001:db8::1]:31910",MimDirectSessionClient.diagnosticBase(server,prefs));
+        assertEquals("",MimDirectSessionClient.diagnosticBase(null,prefs));
+        assertEquals("",MimDirectSessionClient.diagnosticBase(server,null));
+    }
+    @Test public void runtimeBitrateRevisionIsExactAndScoped(){
+        assertTrue(MimDirectSessionClient.supportsRuntimeBitrate("{\"mimDirect\":{\"runtimeBitrateControlRevision\":1}}"));
+        for(String revision:new String[]{"0","2","10","1.5","\"1\"","null"})
+            assertFalse(MimDirectSessionClient.supportsRuntimeBitrate("{\"mimDirect\":{\"runtimeBitrateControlRevision\":"+revision+"}}"));
+        assertFalse(MimDirectSessionClient.supportsRuntimeBitrate("{\"mimDirect\":{},\"runtimeBitrateControlRevision\":1}"));
+    }
+    @Test public void responsiveHlsIsScopedVersionedAndMustBeConfirmed() {
+        String base="{\"mimDirect\":{\"contractVersion\":1,\"available\":true,\"modes\":[\"copy\",\"transcode\"],\"container\":\"hls-mpegts\"";
+        assertFalse(MimDirectSessionClient.supportsResponsiveHls(base+"}}"));
+        assertTrue(MimDirectSessionClient.supportsResponsiveHls(base+",\"responsiveHlsRevision\":1}}"));
+        assertFalse(MimDirectSessionClient.supportsResponsiveHls(base+",\"responsiveHlsRevision\":10}}"));
+        assertFalse(MimDirectSessionClient.supportsResponsiveHls(base+",\"responsiveHlsRevision\":1.5}}"));
+        assertFalse(MimDirectSessionClient.supportsResponsiveHls(base+"},\"responsiveHlsRevision\":1}"));
+        String accepted="{\"hlsProfile\":\"responsive\",\"segmentTargetMs\":1000,\"startupBurstSeconds\":6}";
+        assertTrue(MimDirectSessionClient.acceptedResponsiveHls(accepted));
+        assertTrue(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":6",":0")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":6",":60")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":6",":6.5")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":1000",":1000.5")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":1000",":2000")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace("responsive","legacy")));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls("{}"));
+    }
+    @Test public void responsiveReserveConfirmsExactBoundedRequestedPolicy() {
+        String accepted="{\"hlsProfile\":\"responsive\",\"segmentTargetMs\":1000,\"startupBurstSeconds\":23,\"bufferAheadTargetMs\":20000}";
+        assertTrue(MimDirectSessionClient.acceptedResponsiveHls(accepted,20000));
+        assertTrue(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":23",":0"),20000));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted,10000));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted,20001));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted,-1));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":23",":24"),20000));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(":23",":23.5"),20000));
+        assertFalse(MimDirectSessionClient.acceptedResponsiveHls(accepted.replace(",\"bufferAheadTargetMs\":20000",""),20000));
+        String small=accepted.replace(":23",":6").replace(":20000",":1000");
+        assertTrue(MimDirectSessionClient.acceptedResponsiveHls(small,1000));
+    }
+    @Test public void hlsRequiresScopedExactProviderContract() {
+        String direct = "\"contractVersion\":1,\"available\":true,\"modes\":[\"copy\",\"transcode\"],\"container\":\"hls-mpegts\"";
+        assertTrue(MimDirectSessionClient.supportsHls("{\"mimDirect\":{" + direct + "}}"));
+        assertFalse(MimDirectSessionClient.supportsHls(null));
+        assertFalse(MimDirectSessionClient.supportsHls("{" + direct + "}"));
+        assertFalse(MimDirectSessionClient.supportsHls("{\"other\":{" + direct + "}}"));
+        for (String invalid : new String[] {
+                direct.replace("hls-mpegts", "mpegts"),
+                direct.replace("\"container\":\"hls-mpegts\"", "\"other\":\"hls-mpegts\""),
+                direct.replace("Version\":1", "Version\":10"),
+                direct.replace("true", "false"),
+                direct.replace("\"copy\",\"transcode\"", "\"copy\"") })
+            assertFalse(MimDirectSessionClient.supportsHls("{\"mimDirect\":{" + invalid + "}}"));
+    }
+
+    @Test public void hlsLabelRequiresTheCurrentOwnedSessionAndClearsOnFallback() throws Exception {
+        MimDirectSessionClient client = new MimDirectSessionClient(); Object owner = new Object();
+        assertFalse(client.ownsHls(owner));
+        for (String name : new String[] { "owner", "sessionToken", "hlsSelected" }) {
+            java.lang.reflect.Field field = MimDirectSessionClient.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(client, "owner".equals(name) ? owner : "sessionToken".equals(name) ? "owned" : true);
+        }
+        assertTrue(client.ownsHls(owner));
+        assertFalse(client.ownsHls(new Object()));
+        client.useInPlaceStockFixedReconnect();
+        assertFalse(client.ownsHls(owner));
+    }
+    @Test public void qualityBindingHoldsSourceClockUntilExactNewRenderer()throws Exception{
+        MimDirectSessionClient client=new MimDirectSessionClient();Object owner=new Object();
+        java.lang.reflect.Field identity=MimDirectSessionClient.class.getDeclaredField("owner");identity.setAccessible(true);identity.set(client,owner);
+        java.lang.reflect.Field offset=MimDirectSessionClient.class.getDeclaredField("startOffsetMs");offset.setAccessible(true);offset.set(client,4000L);
+        java.lang.reflect.Field hold=MimDirectSessionClient.class.getDeclaredField("qualityClockHoldMs");hold.setAccessible(true);hold.set(client,6250L);
+        assertEquals(6250L,client.adjustPosition(owner,40000L));
+        assertEquals(500L,client.adjustPosition(new Object(),500L));
+        client.qualityRendererRestored(owner,1000L);assertEquals(6250L,client.adjustPosition(owner,40000L));
+        client.qualityRendererRestored(owner,2251L);assertEquals(6251L,client.adjustPosition(owner,2251L));
+    }
     @Test public void mediaHttpErrorsDoNotExposeResponseBodySecrets()
     {
         assertEquals("http_404_media_not_ready", MimDirectSessionClient.mediaResponseTagForDiagnostics(

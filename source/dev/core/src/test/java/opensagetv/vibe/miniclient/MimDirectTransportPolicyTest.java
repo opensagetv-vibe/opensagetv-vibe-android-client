@@ -8,6 +8,13 @@ import static org.junit.Assert.assertTrue;
 
 public class MimDirectTransportPolicyTest
 {
+    @Test public void hlsUsesExistingTranscodeContractOnlyForOptedInFixed() {
+        assertEquals("transcode", MimDirectTransportPolicy.activeMode("fixed", " HLS ", true));
+        assertEquals("", MimDirectTransportPolicy.activeMode("fixed", "hls", false));
+        assertEquals("", MimDirectTransportPolicy.activeMode("dynamic", "hls", true));
+        assertEquals("", MimDirectTransportPolicy.activeMode("pull", "hls", true));
+        assertEquals("", MimDirectTransportPolicy.activeMode(null, "hls", true));
+    }
     @org.junit.Test public void hostedInputAcceptanceNeverChangesUnnegotiatedNativeInventory() {
         String nativeOnly="H.264,HEVC";
         org.junit.Assert.assertEquals(nativeOnly,MimDirectTransportPolicy.sourceVideoCapabilities(nativeOnly,"transcode",false));

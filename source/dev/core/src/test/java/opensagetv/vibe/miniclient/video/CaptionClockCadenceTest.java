@@ -21,7 +21,7 @@ public class CaptionClockCadenceTest {
     @Test public void captionTickDoesNotReleaseAWhole500msLineInOneBurst() {
         final AtomicInteger delivered = new AtomicInteger();
         LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge(
-                (pts, duration, payload, flags) -> delivered.incrementAndGet());
+                (pts, duration, payload, flags) -> delivered.addAndGet(payload.length / 8));
         // The fixture has14 control/text pairs per line, one per29.97fps
         // picture. This test exercises real bridge delivery, not only a delay.
         for (int i = 0; i < 14; i++)
@@ -40,7 +40,9 @@ public class CaptionClockCadenceTest {
     @Test public void oldTimelineTickBatchesTheWholeCaptionLine() {
         final AtomicInteger delivered = new AtomicInteger();
         LegacyExtenderCaptionBridge bridge = new LegacyExtenderCaptionBridge(
-                (pts, duration, payload, flags) -> delivered.incrementAndGet());
+                // The bridge batches complete eight-byte records into one
+                // event. Count caption records, not network callbacks.
+                (pts, duration, payload, flags) -> delivered.addAndGet(payload.length / 8));
         for (int i = 0; i < 14; i++)
             bridge.onCeaSample(i * 1_001_000L / 30L,
                     new byte[]{(byte)0xfc, (byte)0x80, (byte)0x80});

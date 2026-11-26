@@ -110,6 +110,12 @@ public class MediaCmdDvdProtocolTest
         assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_DVD_STREAMS,
                 subtitle.length, subtitle, response));
 
+        byte[] palette = new byte[68];
+        MediaCmd.writeInt(64, palette, 0);
+        palette[4] = 7;
+        command.ExecuteMediaCommand(MediaCmd.MEDIACMD_DVD_CLUT,
+                palette.length, palette, response);
+
         byte[] open = openUrl("push:dvd?disc_transport=dvd_mim_copy_v1&format=mpegps");
         assertEquals(4, command.ExecuteMediaCommand(MediaCmd.MEDIACMD_OPENURL,
                 open.length, open, response));
@@ -117,6 +123,9 @@ public class MediaCmdDvdProtocolTest
         verify(menuPlayer).free();
         verify(titlePlayer).setAudioTrack(0xBD81);
         verify(titlePlayer).dvdSetStream(MediaCmd.STREAM_TYPE_SUBTITLE, 65);
+        byte[] expectedPalette = new byte[64];
+        expectedPalette[0] = 7;
+        verify(titlePlayer).dvdSetClut(64, expectedPalette);
     }
 
     @Test

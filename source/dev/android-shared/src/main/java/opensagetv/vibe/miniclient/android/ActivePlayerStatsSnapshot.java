@@ -46,6 +46,9 @@ final class ActivePlayerStatsSnapshot
     long positionMs = -1L;
     long durationMs = -1L;
     long bufferedAheadMs = -1L;
+    long bufferTargetMs = -1L;
+    int videoTargetKbps;
+    String qualityState = "";
     long bufferBytes = -1L;
     long mediaBytes = -1L;
     long readCount = -1L;
@@ -64,6 +67,7 @@ final class ActivePlayerStatsSnapshot
     String videoCodec = "";
     String videoDecoder = "";
     String videoDecoderKind = "";
+    String serverOutput="";
     String deinterlace = "Inactive";
     String deinterlaceImplementation = "Unknown";
     String deinterlaceFilter = "";
@@ -163,6 +167,9 @@ final class ActivePlayerStatsSnapshot
         }
 
         out.active = true;
+        out.serverOutput=MiniclientApplication.get().getMimDirectSession().serverOutputForDiagnostics();
+        out.videoTargetKbps=MiniclientApplication.get().getMimDirectSession().qualityVideoTargetForDiagnostics();
+        out.qualityState=MiniclientApplication.get().getMimDirectSession().qualityStateForDiagnostics();
         out.deinterlaceFilter = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.filter(top);
         out.gpuReason = opensagetv.vibe.miniclient.android.video.ClientDeinterlaceStatus.gpuReason(top);
         opensagetv.vibe.miniclient.android.video.GpuVideoOutputOwner gpuOwner =
@@ -214,6 +221,15 @@ final class ActivePlayerStatsSnapshot
         }
 
         capturePlayer(backendPlayer, out);
+        out.bufferTargetMs = invokeLongOptional(effective, "getBufferTargetMillis", -1L);
+        if (MiniclientApplication.get().getMimDirectSession().owns(effective))
+        {
+            // HLS backend time is local to its replacement/sliding window;
+            // never display it as the SageTV file-relative timeline.
+            out.positionMs = media.getMediaTimeMillis();
+            out.durationMs = -1L;
+            out.bufferBytes = -1L; // getBufferLeft is protocol capacity, not HTTP media bytes.
+        }
         captureDecoderTelemetry(effective, out);
         captureDataSource(dataSource, out);
         captureSurface(effective, out);
@@ -231,6 +247,8 @@ final class ActivePlayerStatsSnapshot
                     : dvdTransformedTransport ? "Push (DVD transformed)" : "Push (DVD native)";
         else if (out.smb)
             out.transport = "Direct (SMB)";
+        else if (MiniclientApplication.get().getMimDirectSession().ownsHls(effective))
+            out.transport = "HLS";
         else
             out.transport = PlaybackDisplayLabels.transport(MiniclientApplication.get()
                     .getMimDirectSession().owns(effective), out.push, configured);
@@ -290,6 +308,7 @@ final class ActivePlayerStatsSnapshot
         line(text, "Video  " + videoSummary());
         line(text, "Decoder  " + value(videoDecoder, "unavailable")
                 + (videoDecoderKind.length() == 0 ? "" : " (" + PlaybackDisplayLabels.decoderKind(videoDecoderKind) + ")"));
+        if(!serverOutput.isEmpty())line(text,serverOutput);
         line(text, "Deinterlace  " + deinterlace + " (" + deinterlaceImplementation + ")"
                 + (deinterlaceFilter.isEmpty() ? "" : " / " + deinterlaceFilter));
         if (!gpuReason.isEmpty()) line(text,"GPU output  " + gpuReason + " / input " + gpuInputFrames
@@ -432,7 +451,8 @@ final class ActivePlayerStatsSnapshot
     private String stateLabel()
     {
         StringBuilder value = new StringBuilder(state);
-        if (loading) value.append(" / BUFFERING");
+        if (backendPlaybackState == 2) value.append(" / BUFFERING");
+        else if (loading) value.append(" / Loading ahead");
         if (seekPending) value.append(" / SEEKING");
         return value.toString();
     }

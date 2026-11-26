@@ -211,6 +211,7 @@ public final class ClientDiagnosticWebService implements Application.ActivityLif
         MiniPlayerPlugin player = current == null || current.getMediaCmd() == null ? null : current.getMediaCmd().getPlaya();
         if (player != null) text.append("\nbackend=").append(player.getClass().getSimpleName())
                 .append("\nstate=").append(player.getState());
+        text.append("\n").append(DiagnosticBundleManager.serverOutput());
         text.append("\nDetailed playback/codec/test statistics: see Logs or download ZIP.\n")
                 .append("File logging must be enabled separately to collect app logs.\n");
         return DiagnosticRedactor.redact(text.toString());

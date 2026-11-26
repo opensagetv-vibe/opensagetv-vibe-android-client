@@ -3,8 +3,8 @@
     <string-array name="entries_video_deinterlace_mode">
         <item>Auto</item>
         <item>Off</item>
-        <item>Client</item>
-        <item>Client GPU</item>
+        <item>Player</item>
+        <item>Player GPU</item>
     </string-array>
     <string-array name="entryvalues_video_deinterlace_mode">
         <item>auto</item>
@@ -147,14 +147,16 @@
         <item>MPEG Transport Stream (MPEG-TS)</item>
     </string-array>
     <string-array name="entries_mim_direct_mode">
-        <item>Off (ordinary SageTV Fixed)</item>
-        <item>Direct Copy (no decode or encode)</item>
-        <item>Direct Transcode</item>
+        <item>Stock SageTV Pipeline</item>
+        <item>Direct Copy (No Re-encoding)</item>
+        <item>Transcode (Legacy)</item>
+        <item>Transcode Low Latency (HLS)</item>
     </string-array>
     <string-array name="entryvalues_mim_direct_mode">
         <item>off</item>
         <item>copy</item>
         <item>transcode</item>
+        <item>hls</item>
     </string-array>
     <string-array name="entries_mim_direct_deinterlace">
         <item>Auto (server chooses)</item>
@@ -434,4 +436,12 @@
         <item>off</item>
     </string-array>
 
+    <string-array name="entries_fixed_adjustment_method">
+        <item>Off</item>
+        <item>Stream Switching</item>
+        <item>Prefer In-place (Fallback to Switching)</item>
+    </string-array>
+    <string-array name="entryvalues_fixed_adjustment_method">
+        <item>off</item><item>switch</item><item>in_place</item>
+    </string-array>
 </resources>

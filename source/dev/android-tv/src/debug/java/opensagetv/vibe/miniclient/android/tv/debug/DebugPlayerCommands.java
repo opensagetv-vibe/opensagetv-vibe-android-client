@@ -51,6 +51,8 @@ final class DebugPlayerCommands
             player.pause();
         else if ("stop".equals(action))
             player.stop();
+        else if ("inject_push_parser_error".equals(action))
+            PushParserRecoveryFault.inject(player);
         else if ("restart_audio".equals(action))
         {
             // Exercise the existing production menu operation without changing
@@ -59,7 +61,7 @@ final class DebugPlayerCommands
                 throw new IllegalStateException("active backend rejected audio-output restart");
         }
         else
-            throw new IllegalArgumentException("action must be play, pause, stop, or restart_audio");
+            throw new IllegalArgumentException("action must be play, pause, stop, restart_audio, or inject_push_parser_error");
         return "op=player_control;action=" + safe(action)
                 + ";beforeState=" + beforeState
                 + ";accepted=true;inputPath=android_debug_direct_player_api";

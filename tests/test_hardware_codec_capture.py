@@ -30,6 +30,11 @@ class HardwareCodecCaptureTests(unittest.TestCase):
             path.write_text(json.dumps({'scopeVerified':False,'expiresAtMs':int((time.time()+40)*1000)}),encoding='utf-8')
             with self.assertRaisesRegex(ValueError,'unverified'):
                 module.wait_for_live_stage(path,8,1)
+            path.write_text(json.dumps({'scopeVerified':True,'expiresAtMs':int((time.time()+40)*1000)}),encoding='utf-8')
+            self.assertTrue(module.wait_for_live_stage(path,8,300)['scopeVerified'])
+            for budget in (0,601):
+                with self.assertRaisesRegex(ValueError,'1..600'):
+                    module.wait_for_live_stage(path,8,budget)
 
     def test_capture_is_opt_in_and_does_not_claim_visual_pass(self):
         text = (ROOT / "scripts/mcp_hardware_codec_matrix.py").read_text()

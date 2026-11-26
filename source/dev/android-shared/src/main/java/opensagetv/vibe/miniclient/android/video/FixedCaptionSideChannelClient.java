@@ -378,13 +378,21 @@ public final class FixedCaptionSideChannelClient
                         return;
                     }
                     String token = token(reserved.body, "reservationToken");
+                    boolean staleReservation;
                     synchronized (lock)
                     {
-                        if (generation != expectedGeneration) return;
-                        reservationToken = token;
-                        reservationStartedMs = now;
+                        staleReservation = generation != expectedGeneration;
+                        if (!staleReservation) {
+                            reservationToken = token;
+                            reservationStartedMs = now;
+                            state = "reserved";
+                        }
                     }
-                    state = "reserved";
+                    // STOP/startClaimed can retire this generation while its
+                    // HTTP reserve is in flight. stop() cannot release a token
+                    // it has not received yet. Retire only this stale reply's
+                    // reservation, outside the lock, not the new caption owner.
+                    if (staleReservation) { teardown(activeBase, token); return; }
                     return;
                 }
 

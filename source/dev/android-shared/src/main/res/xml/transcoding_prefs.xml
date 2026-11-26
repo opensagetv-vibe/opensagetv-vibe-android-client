@@ -1,111 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <PreferenceCategory android:title="General Settings">
-
-        <ListPreference
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<ListPreference
             android:defaultValue="off"
-            android:dialogTitle="MIM Direct media policy"
+            android:dialogTitle="Processing Method"
             android:entries="@array/entries_mim_direct_mode"
             android:entryValues="@array/entryvalues_mim_direct_mode"
             android:key="mim_direct/mode"
-            android:summary="Optional FFmpeg-plugin-owned media stream. Off preserves ordinary SageTV Fixed behavior."
-            android:title="MIM Direct media"/>
-
-        <ListPreference
-            android:defaultValue="auto"
-            android:dialogTitle="Fixed/MIM deinterlace"
-            android:entries="@array/entries_mim_direct_deinterlace"
-            android:entryValues="@array/entryvalues_mim_direct_deinterlace"
-            android:key="mim_direct/deinterlace"
-            android:title="Deinterlace"/>
-
-        <SwitchPreferenceCompat
-            android:defaultValue="false"
-            android:key="fixed_caption_side_channel/enabled"
-            android:summary="Preserve CEA-608/708 before server GPU decoding when the separately installed Vibe FFmpeg plugin is available. Missing or failed service keeps ordinary Fixed playback."
-            android:title="Preserve broadcast captions"/>
-
-        <EditTextPreference
-            android:defaultValue="31910"
-            android:dialogTitle="Caption API port"
-            android:inputType="number"
-            android:key="fixed_caption_side_channel/port"
-            android:summary="Standard FFmpeg plugin caption API port (default 31910)"
-            android:title="Caption API port"/>
-
-        <ListPreference
+            android:summary="Optional FFmpeg/MIM-owned stream, including HLS Transcode. Off or unavailable support preserves ordinary SageTV Fixed playback. No Web Client plugin is required."
+            android:title="Processing Method"/>
+<ListPreference android:key="mim_direct/adjustment_method" android:persistent="false" android:defaultValue="off" android:title="Automatic Bitrate Adjustment" android:entries="@array/entries_fixed_adjustment_method" android:entryValues="@array/entryvalues_fixed_adjustment_method" android:summary="Shared MIM uses buffer fill and trend between Minimum and Maximum. Resolution stays fixed. Requires a compatible provider; ordinary Fixed remains available."/>
+<ListPreference android:key="mim_direct/encoder_policy" android:defaultValue="server" android:title="Video Encoder" android:entries="@array/entries_transcode_encoder" android:entryValues="@array/values_transcode_encoder"/>
+<ListPreference android:key="mim_direct/hardware_backend" android:defaultValue="auto" android:title="Hardware Encoder" android:entries="@array/entries_hardware_encoder" android:entryValues="@array/values_hardware_encoder"/>
+<ListPreference android:key="fixed_encoding/video_codec" android:defaultValue="auto" android:title="Video Codec" android:entries="@array/entries_transcode_video_codec" android:entryValues="@array/values_transcode_video_codec"/>
+<PreferenceCategory android:key="fixed/standard" android:title="Output and Remuxing">
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_transcoding_setting_preference"
             android:entries="@array/entries_list_transcoding_setting_preference"
             android:entryValues="@array/entryvalues_list_transcoding_setting_preference"
             android:key="fixed_encoding/preference"
             android:summary="@string/summary_list_transcoding_setting_preference"
-            android:title="@string/title_list_transcoding_setting_preference"/>
-
-        <ListPreference
+            android:title="@string/title_list_transcoding_setting_preference"/><ListPreference
             android:dialogTitle="@string/dialog_title_list_transcoding_format_preference"
             android:entries="@array/entries_list_transcoding_formats_preference"
             android:entryValues="@array/entryvalues_list_transcoding_formats_preference"
             android:key="fixed_encoding/format"
             android:summary="@string/summary_list_transcoding_formats_preference"
             android:title="@string/title_list_transcoding_formats_preference"/>
-
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="Video Settings">
-
-        <ListPreference
+<ListPreference android:key="fixed_remuxing/preference" android:defaultValue="needed" android:title="Remuxing Method" android:entries="@array/entries_list_remuxing_setting_preference" android:entryValues="@array/entryvalues_list_remuxing_setting_preference"/>
+<ListPreference android:key="fixed_remuxing/format" android:title="Remux Container Format" android:entries="@array/entries_list_remuxing_formats_preference" android:entryValues="@array/entryvalues_list_remuxing_formats_preference"/>
+</PreferenceCategory>
+<PreferenceCategory android:title="Video Settings">
+<EditTextPreference
+            android:defaultValue="250"
+            android:inputType="number"
+            android:key="mim_direct/minimum_kbps"
+            android:title="Minimum video bitrate (kbps)"
+            android:summary="Adjusted mode only. Lowest allowed target; must not exceed Maximum video bitrate."/>
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_video_bitrate_preference"
             android:entries="@array/entries_list_video_bitrate_preference"
             android:entryValues="@array/entryvalues_list_video_bitrate_preference"
             android:key="fixed_encoding/video_bitrate_kbps"
             android:summary="@string/summary_list_video_bitrate_preference"
-            android:title="@string/title_list_video_bitrate_preference"/>
-
-        <ListPreference
-            android:dialogTitle="@string/dialog_title_list_video_fps_preference"
-            android:entries="@array/entries_list_video_fps_preference"
-            android:entryValues="@array/entryvalues_list_video_fps_preference"
-            android:key="fixed_encoding/video_fps"
-            android:summary="@string/summary_list_video_fps_preference"
-            android:title="@string/title_list_video_fps_preference"/>
-
-        <ListPreference
+            android:title="Maximum video bitrate (kbps)"/>
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_video_resolution_preference"
             android:entries="@array/entries_list_video_resolution_preference"
             android:entryValues="@array/entryvalues_list_video_resolution_preference"
             android:key="fixed_encoding/video_resolution"
             android:summary="@string/summary_list_video_resolution_preference"
             android:title="@string/title_list_video_resolution_preference"/>
-
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="Audio Settings">
-
-        <ListPreference
+<ListPreference
+            android:dialogTitle="@string/dialog_title_list_video_fps_preference"
+            android:entries="@array/entries_list_video_fps_preference"
+            android:entryValues="@array/entryvalues_list_video_fps_preference"
+            android:key="fixed_encoding/video_fps"
+            android:summary="@string/summary_list_video_fps_preference"
+            android:title="@string/title_list_video_fps_preference"/><ListPreference
+            android:defaultValue="auto"
+            android:dialogTitle="Server Deinterlace"
+            android:entries="@array/entries_mim_direct_deinterlace"
+            android:entryValues="@array/entryvalues_mim_direct_deinterlace"
+            android:key="mim_direct/deinterlace"
+            android:title="Server Deinterlace"/></PreferenceCategory>
+<PreferenceCategory android:title="Audio Settings">
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_audio_codec_preference"
             android:entries="@array/entries_list_audio_codec_preference"
             android:entryValues="@array/entryvalues_list_audio_codec_preference"
             android:key="fixed_encoding/audio_codec"
             android:summary="@string/summary_list_audio_codec_preference"
             android:title="@string/title_list_audio_codec_preference"/>
-
-        <ListPreference
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_audio_bitrate_preference"
             android:entries="@array/entries_list_audio_bitrate_preference"
             android:entryValues="@array/entryvalues_list_audio_bitrate_preference"
             android:key="fixed_encoding/audio_bitrate_kbps"
             android:summary="@string/summary_list_audio_bitrate_preference"
             android:title="@string/title_list_audio_bitrate_preference"/>
-
-        <ListPreference
+<ListPreference
             android:dialogTitle="@string/dialog_title_list_audio_channels_preference"
             android:entries="@array/entries_list_audio_channels_preference"
             android:entryValues="@array/entryvalues_list_audio_channels_preference"
             android:key="fixed_encoding/audio_channels"
             android:summary="@string/summary_list_audio_channels_preference"
-            android:title="@string/title_list_audio_channels_preference"/>
-
-    </PreferenceCategory>
-
-</androidx.preference.PreferenceScreen>
+            android:title="@string/title_list_audio_channels_preference"/></PreferenceCategory>
+<PreferenceCategory android:title="Broadcast Caption Preservation">
+<SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="fixed_caption_side_channel/enabled"
+            android:summary="Preserve CEA-608/708 before server GPU decoding when the separately installed Vibe FFmpeg plugin is available. Missing or failed service keeps ordinary Fixed playback."
+            android:title="Preserve broadcast captions"/><EditTextPreference
+            android:defaultValue="31910"
+            android:dialogTitle="Caption API port"
+            android:inputType="number"
+            android:key="fixed_caption_side_channel/port"
+            android:summary="Standard FFmpeg plugin caption API port (default 31910)"
+            android:title="Caption API port"/></PreferenceCategory>
+<Preference android:key="fixed/reset_transcoding" android:title="Reset Transcoding Settings Only" android:summary="Confirmed reset for next playback. Connections, credentials and unrelated preferences are preserved."/>
+</PreferenceScreen>

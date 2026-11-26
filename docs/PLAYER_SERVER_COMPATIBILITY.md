@@ -28,6 +28,79 @@ control.
 
 ## Feature intent and test-only controls
 
+### Explicit HLS selection (HLS-001, development115)
+
+Fixed -> MIM transport -> HLS Transcode (MIM) uses the existing owned HLS
+MPEG-TS service, with a separately enabled Adaptive HLS/Direct quality switch.
+The `hls` preference becomes wire `transcode` only after the scoped provider
+advertises contract1/available/HLS. Existing source, caption and quality
+ownership is shared, not duplicated. Actual stats/menu show HLS only while
+the current renderer owns that session; fallback remains Fixed/Pull/Push as
+actually negotiated, never relabeled HLS. Missing/old service or unsupported
+IJK Transcode retains ordinary Fixed and gives bounded connection feedback.
+
+Adaptation is bitrate-only, bounded by the saved Fixed bitrate, existing60s
+cooldown and two-change budget; resolution remains fixed. It does not build
+a permanent multi-stream rendition ladder. Development HLS-002 additionally
+negotiates `responsiveHlsRevision=1` from FFmpeg0.1.28/MIM0.4.15. Only this
+explicit mode uses one-second subtitle-preserving segments, actual-QSV IDRs,
+a six-second completed-source initial read burst followed by steady pacing,
+bounded20ms startup readiness checks and a native startup reserve of at most
+250ms. Real/unknown writers stay paced, the published time window is preserved,
+and seek/quality candidates inherit policy. Android starts at representation0
+unless an existing adaptive join is pending, never the library's default live
+edge. Missing support keeps legacy HLS and ordinary transports unchanged;
+`mimHlsProfile` distinguishes accepted responsive/legacy/off diagnostics.
+This is applicable startup parity, not identical browser timing or transplanted
+Safari/MSE workarounds. Media3/legacy Exo and their GSY delegates
+retain their existing independently qualified transport paths. New selector
+physical acceptance is SKIPPED by user direction2026-11-21; existing results
+remain evidence only for their original builds/settings, not this APK.
+
+### Shared Web/Android experience audit (EXPERIENCE-004/005)
+
+These are SageTV-server playback paths, not standalone Android features.
+The Android client never needs the Web Client plugin. Stock Core stays intact;
+shared producer features belong to FFmpeg/MIM and optional DVD navigation to
+Client Extension. Client-only clocks, reconnect and input remain client-owned.
+
+| Web work | Android applicability and current boundary |
+| --- | --- |
+|043 QSV IDRs|HLS-002 responsive profile now requests forced1s keyframes and lets MIM add forced_idr only for actual H.264 QSV segment/M3U8 encoding. Scoped mapping/negative tests pass; physical QSV output is not certified. Legacy Direct/Fixed/Copy/other GPU options stay unchanged.|
+|044 short HLS segments|Negotiated responsive profile uses1s MPEG-TS segments and180entries, preserving the old nominal180s window and optional DVB/Teletext/A53 paths. Actual local CPU first segment2.007s→1.006s independently decodes H.264/AC3. Physical/caption presentation remains skipped; legacy2s path unchanged.|
+|045 completed-source probe reuse|Manager23 reuses only strict public completed-writer/source-and-tool identity matches. Real miss/hit/clamp/zero API and affected Non-Pro Media3/legacy seek/content/caption gates PASS (REMOTE-002). Unknown/live/identity-less inputs retain bounded probing; no client duration substitution.|
+|046 readiness overhead|Responsive readiness polls20ms for at most2s then50ms, still requires playable segments. Proven completed sources get6s read burst then1x pacing; real/unknown writers stay1x. Native startup reserve capped250ms only after accepted profile; explicit0/join prevents live-edge skipping. Legacy and rebuffer/buffer bounds stay unchanged.|
+|047 RAM staging|The measured Web comparison found no first-file benefit. Do not add tmpfs or a second Android cache merely for parity; new Direct measurements would be needed to justify it.|
+|048/049 STV cursor|Existing Android native STV input/graphics and source clocks stay authoritative. Web local marker handling is not permission to fabricate or overlay Android server positions.|
+|050/051 state/timeline|Reuse public stock navigation and negotiated producer state. Requested/accepted/rendered positions remain separate; unknown stock processing timestamps stay unknown. No Web/MCP production dependency.|
+|052 quality|Provider22/23 negotiates start/ceiling/recovery, one temporary candidate, exact frame commit, atomic seek, cooldown/budget and original-stream rollback. Non-Pro Media3/legacy measured constrained down/up and both GSY manual recovery, captions/failures/supersession/native/Copy checks PASS to recorded scope. Physical WAN remains separate; this is bitrate-only, not dynamic resolution. Copy/DVD/stock Push/Pull unchanged.|
+|053 previews/markers|Optional FFmpeg24 source previews and Android115/8f integration pass affected Non-Pro/Linux Media3/legacy/Copy/GSY/native-off rows. Existing Time Scroll/Comskip/chapter navigation remains authority; image browsing never seeks or starts another playback stream. Web has its own optional consumer; physical remote/device qualification remains distinct.|
+|054 diagnostics|Extend existing bounded callback reports, not a background player poll. The Direct replacement seek guard defect was proven from current frames plus existing health_seekPending; a rebuilt player does not emit seekTo completion.|
+|055 DVD|Client Extension remains optional with established native fallback. Reuse its existing owned navigator/MIM producer; browser-facing participant changes do not replace Android DVD controls or certify all discs.|
+
+Provider22 adds `qualityStartRevision=1` and `qualityRecoveryRevision=1` to
+the existing handoff1/qualitySeek1 contract. Opting-in start requests specify
+`videoKbps`; that value is the immutable per-source ceiling. Recovery prepare
+adds `recovery=true`, at most25% above current and never above initial ceiling.
+Both directions share60s cooldown/two attempts. Old callers retain6000 and
+legacy reduction-only behavior. Failed/missing/old/off/Copy support must preserve
+the established stock path. See the owning FFmpeg README for exact endpoints.
+
+The legacy Direct producer is real-time paced. Responsive HLS adds a bounded
+completed-source6s initial read burst, not unlimited run-ahead, then returns to
+the same steady pacing. The legacy steady observed reserve can be
+~1.1s, unlike burst-generated browser HLS. Candidate automatic recovery therefore
+requires a fresh published reserve of1s, ten spaced healthy reads and80%
+throughput headroom on the higher target, plus the independent cooldown/budget.
+This is implementation policy, not measured WAN acceptance; results remain in
+the owning EXPERIENCE-002 compact report with exact installed builds.
+
+Safari native-HLS/MSE one-picture/EOF recovery, autoplay/inline/fullscreen and
+browser graphics acknowledgements stay browser-specific. Android's own codec,
+caption, EOF/live-continuation and STV paths remain native; copying JavaScript
+would not qualify them. HLS-002's available host/CPU work does not claim all-
+format DVD, Windows/GPU/device or WAN certification.
+
 ### Optional display matching (EXT-015, local114)
 
 Non-Pro/AFTMM/API25 on stock175: PAL25 selects actual50Hz from59.94, then
@@ -688,7 +761,7 @@ stock-server gate.
 | Ubuntu 26 modern Fixed codec mapping | No | No | Yes | Maps obsolete requests such as `libfaac` and selects modern encoders/mux options. |
 | Intel QSV / AMD VAAPI / NVIDIA NVENC selection and fallback | No | No | Yes | Intel VAAPI is commissioned. Intel QSV is reproducibly unstable on this host; AMD/NVIDIA remain SKIPPED without hardware. |
 | Fixed-output CEA-608/708 retention | Not established | No | Yes | PASS with MIM 0.4.7 `-a53cc 1`, software MPEG-2 decode, Intel VAAPI H.264 encode, and the safe 512 KiB/500 ms warm-probe policy. |
-| SageTV STV caption-state authority | Yes for CEA and bridged Teletext; DVB uses the separate STV Subtitles command when Core sends it | Optional | No | Standard `GFX_SUBTITLES` + event 225 works with stock SageTV for extractor-backed CEA and independently decoded DVB Teletext. Explicit local CC1/CC2 (CEA/Teletext) or DVB mode suppresses and flushes that callback before Android renders a track. A Vibe `VIDEO_CC_STATE` extension can publish the STV state to text-caption slots. Raw CEA on IJK uses explicit client fallback. |
+| SageTV STV caption-state authority | Stock callback works; exact local CC1/CC2 state is available through optional Client Extension | No | No | Standard event225 remains stock. Extension's default-off per-load public-API relay lets STV CC1/CC2 select actual local CEA/Teletext/DVB bitmap tracks; independent STV Subtitles-Off cannot erase a relayed CC slot. Missing/old/disabled service leaves stock/local captions usable. DVB remains a bitmap, not text/event225. IJK native DVB track interface remains unavailable. See Extension VCE-016 evidence. |
 | Exact server-file/channel automation (**TEST ONLY**) | Yes with optional stock plugin | No | No | Public SageTV API control; normal UI playback does not require it. |
 | MIM active-backend status query (**Diagnostic**) | No | No | Yes | `ffmpeg --mim-status` returns machine-readable job status. |
 

@@ -31,17 +31,27 @@ final class Media3MimDirectHttpDataSource implements DataSource
     interface CreationListener
     {
         void onCreated(DataSource dataSource);
+        default void onBodyTransfer(String uri,long bytes,long readMs){}
+        default long bufferingStamp(){return 0;}
+        default void onBodyTransfer(String uri,long bytes,long readMs,long stamp){onBodyTransfer(uri,bytes,readMs);}
+        default boolean measureBody(){return false;}
     }
 
     private static final String SOURCE = "mim-direct-http";
 
     private final DataSource delegate;
+    private final opensagetv.vibe.miniclient.android.video.HttpMediaCounters counters;
     private boolean observeTransportStream;
     private volatile String lastRequestedUri = "";
+    private CreationListener observer;
+    private opensagetv.vibe.miniclient.android.video.DirectSegmentDelivery delivery;
+    private long bufferingStamp;
 
-    private Media3MimDirectHttpDataSource(DataSource delegate)
+    private Media3MimDirectHttpDataSource(DataSource delegate,
+            opensagetv.vibe.miniclient.android.video.HttpMediaCounters counters)
     {
         this.delegate = delegate;
+        this.counters = counters;
     }
 
     static DataSource.Factory factory()
@@ -53,12 +63,15 @@ final class Media3MimDirectHttpDataSource implements DataSource
     {
         final DataSource.Factory upstream = new DefaultHttpDataSource.Factory()
                 .setUserAgent("OpenSageTV-Vibe");
+        final opensagetv.vibe.miniclient.android.video.HttpMediaCounters counters =
+                new opensagetv.vibe.miniclient.android.video.HttpMediaCounters();
         return new DataSource.Factory()
         {
             @Override public DataSource createDataSource()
             {
                 DataSource created = new Media3MimDirectHttpDataSource(
-                        upstream.createDataSource());
+                        upstream.createDataSource(), counters);
+                ((Media3MimDirectHttpDataSource)created).observer=listener;
                 if (listener != null) listener.onCreated(created);
                 return created;
             }
@@ -70,7 +83,13 @@ final class Media3MimDirectHttpDataSource implements DataSource
         lastRequestedUri = dataSpec == null || dataSpec.uri == null
                 ? "" : dataSpec.uri.toString();
         observeTransportStream = shouldObserve(dataSpec == null ? null : dataSpec.uri);
-        return delegate.open(dataSpec);
+        delivery=null;
+
+        boolean measure=observeTransportStream&&observer!=null&&observer.measureBody();
+        if(measure)bufferingStamp=observer.bufferingStamp();
+        long expected=delegate.open(dataSpec);
+        if(measure)delivery=new opensagetv.vibe.miniclient.android.video.DirectSegmentDelivery(expected);
+        return expected;
     }
 
     /** Consumed internally by the debug probe; never exported as a raw URL. */
@@ -78,7 +97,11 @@ final class Media3MimDirectHttpDataSource implements DataSource
 
     @Override public int read(byte[] buffer, int offset, int length) throws IOException
     {
+        long began=delivery!=null?System.nanoTime():0;
         int read = delegate.read(buffer, offset, length);
+        counters.read(observeTransportStream, read);
+
+        if(delivery!=null)delivery.read(read,System.nanoTime()-began);
         if (observeTransportStream && read > 0)
         {
             TeletextPesProbe.observe(SOURCE, -1L, buffer, offset, read);
@@ -86,6 +109,11 @@ final class Media3MimDirectHttpDataSource implements DataSource
         }
         return read;
     }
+
+    public long getBytesRead() { return counters.bytes(); }
+    public long getReadCount() { return counters.reads(); }
+    public long getNetworkReadBytes() { return counters.bytes(); }
+    public long getNetworkReadCount() { return counters.reads(); }
 
     @Override public Uri getUri()
     {
@@ -99,6 +127,8 @@ final class Media3MimDirectHttpDataSource implements DataSource
 
     @Override public void close() throws IOException
     {
+        if(delivery!=null&&delivery.measured())observer.onBodyTransfer(lastRequestedUri,delivery.bytes(),delivery.readMs(),bufferingStamp);
+        delivery=null;
         observeTransportStream = false;
         delegate.close();
     }

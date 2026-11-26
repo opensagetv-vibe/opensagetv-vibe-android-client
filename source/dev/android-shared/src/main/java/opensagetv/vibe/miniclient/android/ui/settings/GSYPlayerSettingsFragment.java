@@ -17,6 +17,7 @@ public class GSYPlayerSettingsFragment extends PreferenceFragmentCompat
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.gsyplayer_prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
 
         Preference version = findPreference("gsy_version");
         if (version != null) version.setSummary(PlayerBackend.GSY_VERSION);

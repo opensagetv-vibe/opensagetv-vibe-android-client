@@ -328,7 +328,7 @@
                 <GridLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:columnCount="4"
+                    android:columnCount="5"
                     android:rowCount="2">
 
                     <ImageView
@@ -374,6 +374,15 @@
                         android:contentDescription="Show Playback Stats"
                         android:src="@drawable/ic_equalizer_white_24dp"
                         android:tag="playback_stats"/>
+
+                    <ImageView
+                        android:id="@+id/nav_playback_details"
+                        style="@style/NavIconButton"
+                        android:layout_column="4"
+                        android:layout_row="0"
+                        android:contentDescription="Show Playback Information"
+                        android:src="@drawable/ic_playback_info_white_24dp"
+                        android:tag="playback_details"/>
 
                     <ImageView
                         android:id="@+id/nav_closed_captions"

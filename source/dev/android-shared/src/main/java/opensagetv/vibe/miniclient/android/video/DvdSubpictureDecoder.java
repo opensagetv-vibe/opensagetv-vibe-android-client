@@ -113,6 +113,7 @@ public final class DvdSubpictureDecoder
     public synchronized void setSubpictureStream(int streamPosition)
     {
         int previousStream = selectedSubstreamId;
+        boolean previousDisabled = subpicturesDisabled;
         if (streamPosition == 62)
         {
             // Legacy PS_SUBPIC_DISABLE_STREAM. Retain the last physical stream
@@ -127,6 +128,12 @@ public final class DvdSubpictureDecoder
                     || (streamPosition & 0x40) == 0;
             selectedSubstreamId = 0x20 | (streamPosition & 0x1f);
         }
+        // Repeated VM state is not a stream transition. Buffered cues retain
+        // their generation, bitmap and assembly until a real selection/off
+        // change or reset/FLUSH. Otherwise reapplying the same stream clears
+        // the current subtitle and makes queued events stale before their PTS.
+        if (selectedSubstreamId == previousStream && subpicturesDisabled == previousDisabled)
+            return;
         if (selectedSubstreamId != previousStream)
             assembler.reset();
         visibleFrame = null;

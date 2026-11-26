@@ -6,6 +6,90 @@ from sagetv_dev_mcp import server
 
 
 class PlaybackHealthTest(unittest.TestCase):
+    @staticmethod
+    def hls_landing_fixture():
+        before={'trapSequence':10,'connectionGeneration':3}
+        current={'mimHlsOwned':True,'health_playbackSource':'MIM_DIRECT',
+                 'health_seekPending':False,'mimDirectSessionState':'active_transcode',
+                 'connectionGeneration':3,'health_playerPositionMs':2605,
+                 'sageTimelineMs':422132,'health_capturedMonotonicMs':5000,'trapRecent':'fixture'}
+        events=[{'sequence':11,'event':'server_seek_command'},
+                {'sequence':12,'event':'direct_seek_first_frame_complete','videoRendered':1,
+                 'surfaceValid':True,'playerPositionMs':0,'monotonicMs':2000}]
+        return before,current,events
+
+    def test_owned_hls_observes_first_frame_without_requested_target_or_wider_tolerance(self):
+        before,current,events=self.hls_landing_fixture()
+        with mock.patch.object(server,'_parse_trap_recent',return_value=events):
+            witness=server._owned_hls_seek_landing(before,current)
+            self.assertEqual(419527,witness['filePositionMs'])
+            self.assertEqual(2605,witness['observedPlayerClockMs'])
+            current['sageTimelineMs']=302605
+            self.assertEqual(300000,server._owned_hls_seek_landing(before,current)['filePositionMs'])
+
+    def test_owned_hls_first_frame_rejects_other_paths_pending_and_changed_connection(self):
+        before,current,events=self.hls_landing_fixture()
+        for change in ({'mimHlsOwned':False},{'health_playbackSource':'SAGETV_PUSH'},
+                       {'health_seekPending':True},{'mimDirectSessionState':'off'},
+                       {'connectionGeneration':4}):
+            with self.subTest(change=change),mock.patch.object(server,'_parse_trap_recent',return_value=events):
+                self.assertIsNone(server._owned_hls_seek_landing(before,{**current,**change}))
+
+    def test_owned_hls_first_frame_rejects_old_missing_unrendered_or_other_source_events(self):
+        before,current,events=self.hls_landing_fixture()
+        for invalid in ([],events[:1],events[1:],[{**events[0],'sequence':9},events[1]],
+                        [events[0],{**events[1],'videoRendered':0}],
+                        [events[0],{**events[1],'surfaceValid':False}],
+                        [events[0],{**events[1],'monotonicMs':-20000}],
+                        events+[{'sequence':13,'event':'server_openurl_command'}]):
+            with self.subTest(events=invalid),mock.patch.object(server,'_parse_trap_recent',return_value=invalid):
+                self.assertIsNone(server._owned_hls_seek_landing(before,current))
+
+    def test_observed_decoder_channels_are_separate_from_input_format(self):
+        fields={'health_audioChannels':0,'health_audioOutputChannels':6}
+        self.assertEqual(fields,server._compact_state({**fields,'privateToken':'secret'}))
+
+    def test_bounded_codec_failure_detail_survives_closed_snapshot(self):
+        fields={'health_playerError':'ERROR_CODE_DECODER_INIT_FAILED',
+                'health_playerErrorDetail':'ExoPlaybackException > DecoderInitializationException mimeType=audio/mp4a-latm'}
+        self.assertEqual(fields,server._compact_state({**fields,'privateToken':'secret','errorStackTrace':'private URL'}))
+
+    def test_saved_default_ownership_retains_only_safe_override_witnesses(self):
+        fields={'audioOffsetMs':0,'audioOffsetSessionOverrideMs':'default',
+                'audioPassthroughSessionOverride':'default'}
+        self.assertEqual(fields,server._compact_state({**fields,'privateToken':'secret'}))
+
+    def test_direct_quality_retains_only_closed_state_and_target(self):
+        fields={'mimDirectQualityState':'waiting_for_frame','mimDirectVideoTargetKbps':4200,
+                'mimDirectQualityFailure':'published_reserve_IOException',
+                'mimDirectQualityObservation':'samples=3,kbps=2400,low=2,high=0,reserveMs=900'}
+        self.assertEqual(fields,server._compact_state({**fields,'privateToken':'secret','replacementToken':'secret'}))
+
+    def test_basic_fixed_uses_same_media_server_clock_and_real_seek_start(self):
+        state = {'media': {'mediaFileId': 42}, 'mediaTimeMs': 1700000120500,
+                 'seekStartMs': 1700000000000}
+        self.assertEqual(120500, server._server_file_relative_time(state, 42))
+        self.assertEqual(30500, server._server_file_relative_time(
+            {'media': {'mediaFileId': 42}, 'mediaTimeMs': 30500, 'seekStartMs': 0}, 42))
+
+    def test_basic_fixed_rejects_missing_clock_changed_file_and_negative_origin(self):
+        for state in ({'media': {'mediaFileId': 43}, 'mediaTimeMs': 120000, 'seekStartMs': 0},
+                      {'media': {'mediaFileId': 42}},
+                      {'media': {'mediaFileId': 42}, 'mediaTimeMs': 50, 'seekStartMs': 100},
+                      {'media': {'mediaFileId': 42}, 'mediaTimeMs': 50, 'seekStartMs': -1},
+                      {'media': {'mediaFileId': 42}, 'mediaTimeMs': True, 'seekStartMs': 0}):
+            with self.subTest(state=state), self.assertRaises(RuntimeError):
+                server._server_file_relative_time(state, 42)
+
+    def test_single_and_final_seek_receive_the_requested_observation_budget(self):
+        self.assertEqual(30.0, server._server_seek_observation_window(30.0, 1))
+        self.assertEqual(18.0, server._server_seek_observation_window(18.0, 1))
+        self.assertEqual(0.0, server._server_seek_observation_window(-1.0, 1))
+
+    def test_dvd_retry_keeps_its_bounded_split_without_issuing_extra_requests(self):
+        self.assertEqual(10.0, server._server_seek_observation_window(45.0, 3))
+        self.assertEqual(6.0, server._server_seek_observation_window(12.0, 2))
+
     def test_compact_state_retains_paused_zero_witness_without_private_fields(self):
         fields = {'pushPausedZeroWitness': 'generation=2;confirmed=true;progress=false',
                   'pushDetailedBufferStats': False,

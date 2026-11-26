@@ -44,6 +44,14 @@ class MCPPlayerMatrixTests(unittest.TestCase):
         self.assertIn('active_config = call_dict(client, "dev_player_state")', script)
         self.assertIn("active player configuration did not apply after retry", script)
 
+    def test_activation_uses_persisted_push_spelling_not_a_false_mismatch(self):
+        import inspect
+        source = inspect.getsource(module.start_case)
+        active = source.split('active_expected = {', 1)[1].split('activation_mismatches', 1)[0]
+        self.assertIn('"streaming": streaming_preference(case.streaming)', active)
+        self.assertEqual(module.streaming_preference('push'), 'dynamic')
+        self.assertNotEqual(module.streaming_preference('pull'), 'dynamic')
+
     def test_full_matrix_expands_to_105_configuration_cases(self):
         cases = module.build_cases(
             list(module.PLAYERS),

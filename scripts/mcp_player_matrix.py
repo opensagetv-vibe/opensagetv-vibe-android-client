@@ -754,7 +754,10 @@ def start_case(
         active_config = call_dict(client, "dev_player_state")
         active_expected = {
             "player": case.player,
-            "streaming": case.streaming,
+            # The persisted Android spelling dynamic is the Push selection,
+            # not a different transport. Compare preference spellings here;
+            # runtime health_pushMode remains an independent physical gate.
+            "streaming": streaming_preference(case.streaming),
             "decoding": case.decoder,
             "gsyEngine": case.gsy_engine,
         }

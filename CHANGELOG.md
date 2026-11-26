@@ -1,6 +1,420 @@
 # Changelog
 
+## 0.5.115 release preparation (2026-11-26)
+
+- Publish the qualified client-side recovery, Fixed/HLS seeking, shared buffer
+  adaptation, settings organization and independent statistics controls below.
+- Restore the information icon in the TV touch navigation layout. Release
+  e5969a5d has identical DEX/native/resource-table bytes to physically qualified
+  Non-Pro e8f7ec12; only that layout and signing metadata differ.
+- Full source preflight:1107 tests/five explicit skips; wrapper/JDK17 APK build
+  and strict package inspection pass. Cadence unit tests count caption records,
+  not batched callbacks. No new Pro/Windows or all-device qualification claim.
+- Original ONN Pro issue4 trigger and isolated HLS-007 drain remain unproven.
+  Ordinary stock playback does not require MCP or Client Extension.
+
+## HLS-007 refill and statistics layout (unreleased development)
+
+- Refill confirmed completed responsive HLS near80% of its existing maximum in
+  Media3/legacy Exo and their GSY delegates. Preserve higher configured minimums,
+  startup/rebuffer limits, live/growing/unknown paths and saved settings.
+- Put information directly right of the statistics graph icon on the same row
+  in touch/TV layouts, retaining independent toggles. Remove Graphs only labels.
+- Keep network activity truthful: actual delivery can remain bursty; the change
+  does not invent a steady speed or guarantee fullness on an insufficient link.
+  Focused qualification is tracked in TASKS.md; not yet a published release.
+- Use independently confirmed provider completed-file evidence, not Core's
+  ambiguous timeshifted/Fixed hint, when enabling the earlier refill threshold.
+- Map owned responsive HLS sliding-window positions through observed timeline
+  metadata before reporting recording/caption clocks; retain matching buffer
+  coordinates and the separate Direct seek epoch. No guessed time progression.
+- Final115/e8f7ec12 passes four Non-Pro HLS delegates, near-full reserve,
+  observed file-clock/decoded output, pause/resume, seeking and remote FF on
+  stock232; configuration/CC/power restored. An earlier isolated actual drain
+  remains unproven, not claimed fixed. No Pro update or public release.
+
+## HLS-006 statistics and seek recovery (unreleased development)
+
+- Independent graphs/information/both toggles keep the playback menu open.
+  Passive media HTTP counters, active buffer scale, encoding-target/adjustment
+  labels and loading-ahead state replace missing or misleading values.
+- Bounded asynchronous owned Direct seek preparation suspends old output,
+  retains only the confirmed clock and discards stale work/callbacks. Optional
+  completed-file reserve preserves old providers; exact negotiated23s response
+  confirmation is validated at startup and after seek.
+- Development115/515609fb passes clean build/strict APK/31JVM/49host/129MCP and affected
+  Non-Pro Direct+four HLS routes/ten seeks/remote inputs/HDMI. Reserve reaches
+  19.806s; all210prefs/CC/power restored, protected stock20 unchanged. Compact
+  HLS-006 results retain scope. User-authorized Pro deployment now passes exact
+  installed-byte verification,263preferences retained and foreground startup;
+  no Pro playback matrix is inferred. Original GFX session-exit cause remains
+  unproven. No175/Core/publication or matrix replay.
+
+## SETTINGS-005 Hardware Encoder (unreleased development)
+
+- Add shared main/long-press Auto, QSV, NVENC, VAAPI, AMF and VideoToolbox
+  selection, matching named Web accelerators. Keep Video Codec and Software
+  Only distinct; Copy/Stock/Software ignore retained hardware choice. Auto
+  remains the default; reset/upgrades preserve the established preference rules.
+- Negotiate optional per-session backend support, retain it through seek/quality
+  and distinguish requested from actual encoding. Strict unsupported pins stop
+  rather than play original Pull. No shared INI, stock Core or decoder changes.
+- Development115/e0d85ea1 passes clean build/strict APK/45JVM/40host and Non-Pro
+  four QSV/VAAPI Direct/HLS routes/eight seeks/two FF,2AMF refusals, next-default
+  separation and independent HDMI.210prefs/CC/power restored; final activity/
+  provider0. Provider12real output/seek/quality rows and native guards pass;
+  stock20/INI/engines unchanged. Compact results/cleanup own exact limits.
+  No Pro/175/Windows/vendor-wide/publication claim or unrelated matrix replay.
+
+## FIXED-002 reported recording seeks (unreleased dependency correction)
+
+- Reproduce the reported pre-publication VAAPI caption-header failure outside
+  Android; optional MIM now repacks caption tuples without changing hardware
+  pixels/cadence, engines, INI or stock Core. Client115/92df378a is unchanged.
+- Normal-manager232 installation and Non-Pro11routes/33real-source seeks plus
+  remote FF pass, with independent HLS caption/motion/audio and IJK motion/audio
+  HDMI. All210prefs/CC/power restored, final activity/provider0; compact results
+  and cleanup manifest under artifacts/results/FIXED-002. No Pro/Windows physical
+  or instant-seek claim; no publication. Web's native QSV path is unchanged.
+
+## FIXED-001 / SETTINGS-004 (unreleased development)
+
+- Inline Transport, Diagnostics and Recovery entries below the long-press
+  blue headings; share builders with direct shortcuts and retain typed saved
+  keys, scope dialogs, applicability and Cancel-first reset/recovery.
+- Do not silently substitute original-file Pull after a negotiated explicit
+  Transcode/HLS startup failure. Retain optional-provider stock negotiation
+  and non-strict Copy compatibility. Build/strict APK/64JVM/42MCP/133host
+  (1 expected skip) pass. Final115/92df378a passes18Non-Pro/stock232 processing
+  routes, two explicit startup failures and seven compatibility checks.
+- The existing runtime's short TS discovery budget is independently proven
+  to misread cadence and fail VAAPI. MIM-PROBE-001 fixes that separate plugin
+  defect through the normal plugin manager; no protected stock/Core changes.
+- Complete incomplete AAC-LC/PCE initialization from actual access units in
+  both client HLS extractor adapters before negative preroll can be discarded.
+  Retain bounded configuration only inside the current playback across
+  extractor rebuilds. Original entire audio AARs/native libraries/public ABI
+  remain unchanged. Source6 startup/seek and HLS bitrate-handoff acceptance pass.
+- Start every owned MIM producer at its local origin (or explicit quality join),
+  not a default EVENT live edge that skips initial configuration. Classify audio
+  decoder failures separately from hardware video quarantine in both Exo paths.
+  Failed-before recovery regression and affected physical qualification pass.
+- Distinguish stock FFmpeg's legacy/software-only capability limits from MIM
+  Legacy Transcode. Exact Non-Pro legacy Source6 QSV Hardware Only and libx264
+  Software Only startup/Pause/Play/seek pass with original audio extensions and
+  no decoder errors. IJK uses actual native first-frame/FPS/clock plus reviewed
+  post-seek HDMI motion/audio, never fabricated Exo counters. Inline blue-menu
+  and HLS4M/current2.8M/next-default3M separation pass.210preferences/power/CC
+  restored, sessions/activity0, stock20unchanged. No Pro/Windows/publication.
+
+## SETTINGS-003 / DIAG-014 output controls (unreleased development)
+
+- Share Video Encoder, Video Codec, output size/FPS/audio/container/remux
+  controls across startup and long-press Fixed settings. Add Source audio
+  choices and confirmed transcoding-only reset, retaining defaults/saved keys.
+- Negotiate optional output/policy revision1; capture immutable output and
+  bitrate intent per source. Preserve it across seek/quality replacement,
+  refuse explicit unsupported choices and keep ordinary native playback optional.
+- Display owned actual server encode/decode and observed output separately
+  from client decoding and requested targets. Bounded explicit/callback reads
+  clear on source/stop; no polling/INI/Core edits.
+- Preserve existing legacy launcher clients by user choice. Per-client true
+  original-stock routing stays pending; TS-only MIM refuses MKV/DVD explicitly.
+  Final115/05697001 passes build/strict APK/40JVM/104host and affected Non-Pro
+  shared UI/reset, H.264 software/QSV, HEVC/status/export/native-Pull gates with
+  all203preferences restored. Initial HEVC freeze and provider502 do not repeat
+  in bounded comparisons; causes remain unproven, not claimed fixed. No
+  speculative decoder/GOP patch, publication or unrelated matrix replay.
+
+## SETTINGS-002 shared playback settings (unreleased development)
+
+- Add a long-press Playback Settings gear while retaining direct Video, Audio,
+  Captions and diagnostics shortcuts. Use collapsible light-blue Playback,
+  Transport, Diagnostics and Recovery panels with remote focus restoration.
+- Share25setting definitions, labels, resource choices, typed keys/defaults,
+  timing and availability across main/runtime menus. Add saved audio/caption,
+  filter/display/buffering defaults; both Exo pages share PCM/passthrough choices.
+- Keep session changes temporary unless explicitly saved. Confirm next-playback
+  Fixed defaults without changing the active stream; retain separate existing
+  MIM session-rate actions. Recovery clears overrides after applying defaults,
+  retaining saved settings and paused intent. Fix first-tap focus consumption.
+- Qualify affected main/runtime/Pull/HLS/reset/recovery rows on Non-Pro25/stock232
+  with189preferences/power/CC restored.114host/19JVM/124Linux MCP checks and normal
+  build pass. Final115/22763ef7 installed; RESULT records candidate-specific
+  affected-only evidence and honest unsupported CEA offsets. No server change,
+  publication, Pro install or unrelated matrix replay.
+
+## SETTINGS-001 menu reorganization (unreleased development)
+
+- Group startup settings into collapsible light-blue Playback, Transport,
+  Mappings, General, Diagnostics and About sections; preserve independent
+  expansion and restore submenu focus. Selected Player Settings follows the
+  configured backend; distinguish configured choices from active transport.
+- Combine remux and processing options under Fixed Playback, remove duplicate
+  Adjusted/in-place switches and user-facing bitrate self-test buttons. Keep
+  stock controls and saved values; explain disabled/inapplicable options.
+- Preserve saved preferences on update; map legacy fixed_adjusted to Fixed plus
+  its existing adjustment flags. Missing options use current defaults. User
+  approves OpenGL UI and Unified HD Graphics On defaults; explicit Off survives.
+- Add confirmed allowlisted default reset (Cancel focused), preserving client
+  identity, server entries, credentials, SMB profiles/mappings and files/keys.
+  Editable starred defaults are docs/SETTINGS_MENU_DEFAULTS.txt. No server change,
+  new public release or unrelated playback matrix claim.
+- Qualify the final local build on Non-Pro25: update preserves all183 saved
+  preferences; Cancel/confirmed reset (including generated codec/container
+  options) passes, then preferences/power restore exactly.106host/12JVM checks
+  and affected navigation/applicability gates pass; no publication.
+
+## HLS-005 automatic buffer-policy qualification (development)
+
+- Qualify the unchangeda913c66a APK on Non-Pro25/stock232 for all four supported
+  HLS delegates: automatic4000→3000→3750 frame handoffs,42s seek/Pause/Play,
+  resumed A/V and139preferences/power/CC/zero-session restoration.
+- Shared MIM, not Android playback code, corrects proven recovery being blocked
+  by refill jitter and an unreachable8s floor on paced6s HLS. Producer burst,
+  stock Core/native files and the APK remain unchanged.
+- Harden the bounded external test actor's Windows container-path handling,
+  redacted actual-buffer receipts and failure/cleanup exit status.14consumer/
+  11proxy tests and task-order518 pass. Retain the GSY startup outlier as
+  unproven; strict repeat passes without speculative playback changes.
+- No new Android QSV in-place, IJK-HLS, physical WAN/phone/Windows or Pro claim;
+  no publication or replay of unrelated completed matrices.
+
+## Unreleased - HLS-005 shared MIM adjustment
+
+- Add Fixed (Adjusted) with adjacent Minimum/Maximum bitrate controls. Fixed
+  uses Maximum; Adjusted starts at Maximum and stays within the range.
+- Send limits at source start and bounded buffer/eligibility reports thereafter.
+  Shared MIM owns decisions; HTTP transfer timing is not an adaptation input.
+- Preserve stock Fixed fallback, existing in-place/frame-confirmed handoff,
+  source/seek/pause ownership and saved defaults. No Core/native runtime change.
+
+## Unreleased - ISSUE-004 bounded MPEG Push recovery
+
+- Legacy Exo and Media3 (including GSY delegates) retain a successfully
+  identified MPEG container for a same-source fatal retry. Recreated readers
+  resynchronize on packets instead of requiring an already-consumed header.
+- Preserve observed decoder-epoch elapsed time when recovery restarts the
+  decoder at zero; real server FLUSH/new source resets it. Clear stale CEA text
+  and retain pause intent and existing retry/session bounds. No server change.
+- Translate cached forward-seek targets into the restarted decoder epoch.
+  Final42c7e031 passes four Non-Pro25/stock232 Push delegates, playing/paused
+  faults, no-FLUSH cached seeking, stock seek and pause/resume. Unchanged
+  Legacy/Media3 Pull controls pass; all139 preferences/power restored.
+- 33 focused JVM/136 source/83 Linux ADB tests and APK/source checks pass.
+  The reporter's original audio discontinuity trigger is unproven;
+  this is not a claimed cure for every MPEG-2 jitter/AC-3 issue or a release.
+
+## Unreleased - HLS-004 late caption reservation cleanup
+
+- Release a reservation returned after its client generation was stopped or
+  superseded. The old token must not occupy a caption slot until its60s expiry
+  and make a subsequent Direct/HLS seek retain the preceding producer.
+- A delayed-response loopback test fails before the fix and passes afterward;
+ 46 focused caption/Direct/quality tests and the canonical APK build pass.
+  APK9046f04e is installed on Non-Pro25 with settings preserved. All four
+  supported HLS delegates pass Windows185 startup/seek/pause/cleanup; Media3
+  also passes repeated seeks, advancing captions and decoder EOF. No server
+  protocol, ordered-input replay, Pro update or publication is included.
+- HLS-004 closes at checklist512 after Windows growing HLS/Copy/Direct/classic
+  controls and restoration of136original preferences/awake settings. Owning
+  runtime records independent Portmaster/raw-QSV caveats; no speculative
+  decoder/clock fix or unrelated matrix replay.
+
+## Unreleased - MIM-QSV-001 affected qualification (no APK change)
+
+- Independently traced ordinary Fixed rc139 to Intel's async H.264 worker;
+  owning MIM0.4.17/FFmpeg0.1.32 supplies the caption-safe GPU queue correction.
+- Existing APK291eee40 passes Non-Pro Media3/Legacy Exo sustained/repeated
+  seek, pause/resume, actual EOF and teardown with HDMI captions/picture.
+  Add a scoped physical-test profile/ready marker and12 focused source guards;
+  no client clock, buffer, decoder, defaults or packaged input changed.
+
+## Unreleased — Non-Pro HLS and optional in-place rate control
+
+- Physical Non-Pro25/stock232 responsive HLS now passes Media3, legacy Exo
+  and both supported GSY delegates: startup, quality,42s seek, pause/resume,
+  captions and teardown. Media3 decoder EOF reaches ENDED without replay.
+- Optional FFmpeg0.1.30/MIM0.4.16 Linux-QSV control retains the same encoder
+  and player, with default-off site/client switches, bounded absolute targets,
+  measured bandwidth/reserve policy and gradual recovery. Ambiguous commands
+  hold adaptation instead of replaying a relative mutation. Shared settings
+  diagnostic measures actual output, not command acceptance alone.
+- Fix runtime diagnostics to report the active advisor instead of stale
+  handoff-advisor counters; no playback policy change. Runtime request toast
+  correctly says the current encoder is retained. Preserve API23 compatibility.
+- Local development only; publication held. Bitrate-only, not adaptive
+  resolution. IJK HLS Transcode, Windows/NVENC and physical WAN not certified.
+
+## Unreleased — responsive HLS startup parity
+
+- Consume the optional FFmpeg0.1.28/MIM0.4.15 responsive HLS profile and verify
+  accepted cadence/burst. Missing capability retains legacy HLS; old/Copy/
+  ordinary Push/Pull/Fixed defaults are unchanged. No Web plugin dependency.
+- Media3/legacy Exo and their GSY delegates use a shorter negotiated startup
+  reserve while preserving configured buffer bounds. Explicit representation
+  origin prevents read-ahead from skipping the scheduled/bookmarked beginning;
+  adaptive quality join positions remain authoritative.
+- Server-owned one-second subtitle-preserving segments, bounded six-second
+  completed-file read burst, QSV IDR and faster readiness stay in FFmpeg/MIM.
+  Browser-only Safari/MSE workarounds are not transplanted into native players.
+  Bitrate-only adaptation and its safety budget remain unchanged. The original
+  device skip was superseded by the2026-11-24 affected physical gates above.
+
+## Unreleased — Android HLS selection
+
+- Add an explicit HLS Transcode (MIM) option under Fixed settings, reusing
+  existing MIM HLS and opt-in adaptive bitrate handoffs. No Web Client/MCP
+  playback dependency, rendition ladder, automatic resolution changes or
+  default preference changes. Actual owned HLS is labeled separately in stats.
+- Require the scoped HLS provider contract and retain ordinary Fixed when
+  unavailable/unsupported. Media3/legacy Exo and their GSY delegates retain
+  existing ownership, seek, captions and producer cleanup paths; IJK Transcode
+  remains fail-safe. HLS-001:57 JVM/69 host checks, final APK build and signed
+  debug-package inspection PASS. The original physical skip is superseded by
+  the affected supported-delegate checks above; no publication/all-backend claim.
+
+## Unreleased — diagnostic seek-health baseline
+
+- Debug-only recovery checks reuse a real pre-command video counter when
+  renderer reprepare temporarily reports unavailable counters. This fixes a
+  proven false30s failure without changing playback or weakening the later
+  A/V/surface/sustained-output gates. Non-Pro/stock232 classic Fixed FF/REW/
+  pause pass on byte-verified9364be19;136prefs/power restored. No production
+  player behavior change or full unrelated matrix replay.
+
 ## Unreleased
+
+- Add optional, explicit Source previews to the long-press Video menu for a
+  negotiated MIM Direct provider. One bounded read-only JPEG request at a time;
+  no background thumbnails, independent seek or extra playback stream. Source
+  changes reject stale images and unsupported providers retain native controls.
+  Previews are navigation aids, not a playback-speed or adaptation requirement.
+
+- Retain adaptive-quality cooldown and total launch budget through a verified
+  same-source Direct seek; only a genuine new load resets them. Unexpected
+  owner/ceiling changes disable adaptation instead of reopening its budget.
+
+- Preserve actual buffering intervals across complete Direct segment reads,
+  including READY-at-completion, and retain consecutive slow-read evidence
+  without weakening healthy-upshift requirements. A measured constrained
+  downshift warms the current position instead of an unreachable future point.
+  Default off; network/device qualification remains in progress.
+
+- Tolerate transient idempotent Direct publication-read failures inside the
+  existing readiness deadline. Never replay prepare/seek or extend the lease;
+  persistent failure keeps original playback. Regression tests cover bounded
+  retry and redacted failure. Automatic recovery uses actual real-time Direct
+  buffer requirements, not browser burst-HLS reserve assumptions.
+
+- Fix a Direct replacement seek leaving its pending guard set despite actual
+  rendered output. Replacement attachment/first-frame generation now completes
+  its own seek, rather than waiting for a seekTo discontinuity that rebuilding
+  Exo does not emit. Stale/source-changed callbacks cannot clear a later seek.
+  This restores eligibility for subsequent optional quality actions/adaptation;
+  stock Push/Pull seek handling is unchanged. Affected device retest underway.
+
+- Develop negotiated Direct initial bitrate matching saved Fixed quality and
+  ceiling-bounded recovery: at most25% per step, ten spaced high-headroom
+  segment samples and fresh buffered reserve for automatic increases.
+  Existing backend progress callbacks supply the short-lived reserve cache;
+  no extra polling or rendition ladder. Manual recovery is in Direct quality.
+  Legacy providers keep their prior behavior. Candidate tests/build and
+  affected physical acceptance continue; not a published release.
+
+- Develop optional Direct session quality handoff for Media3/legacy Exo and
+  GSY delegates: default-off measured reductions, explicit Video->Direct quality
+  action, old producer retained until current renderer frame, bounded rollback,
+  clock custody and lost-commit reconciliation. Negotiated atomic seek/commit
+  provider seam is loaded/qualified API-only on stock232. Non-Pro production
+  menu testing found the real-time candidate could not catch old playback plus
+  reserve; bounded client ahead-preroll correction/physical qualification are
+  in progress. Closed failure-stage diagnostics avoid exporting private URLs.
+  Not released; original playback is retained on preparation failure.
+- Qualify completed-file bounded replacement on Non-Pro25/stock232 with
+  manager21 in Media3, legacy Exo and both GSY delegates: real renderer ACK,
+  independent content/CEA, retained4200kbps after42s seek and pause/resume.
+  Correct stale active hints using the existing provider's public writer truth;
+  no Core/INI/engine change. Live/writer, WAN/two-way and remaining failure gates
+  are separate; no all-device/seamless claim or public release.
+
+- Begin shared Web/Android playback-experience work: bounded callback-only seek
+  phase records in existing diagnostics, distinguishing local acceptance from
+  prepared Direct output and unattributed renderer callbacks. Unknown displayed
+  timestamps remain unknown; no new playback clock, key, buffer or polling loop.
+  Shared Direct quality and additional consumers remain under qualification.
+
+- Add a focused stock232/Non-Pro startup profiler using nonblocking public
+  Watch, actual A/V output and optional existing callback-ring timing. Correct
+  matrix activation to recognize stored dynamic as Push. Preserve Android
+  playback buffers: a250ms trial did not improve the measured first-frame result.
+
+- Add on-demand stock-server playback observations in Video settings, without
+  changing the renderer clock or background polling. Add optional current-owned
+  DVD start/save/resume/clear controls; missing/off/stale services fail safely.
+- Complete their stock232/Non-Pro Linux gates with Native/Copy/full_gpu DVD
+  controls and exact settings/power/bookmark restoration. Windows remains
+  deferred; no Core change or private hardware-clock parity is claimed.
+
+- Stock-plugin STV caption relay now supports virtual DVB slots alongside CEA
+  and Teletext. Keep the actual DVB bitmap renderer separate from event225 text;
+  STV Subtitles Off must not erase an enabled non-DVD CC slot. Match ISO639
+  two/three-letter language identities (en/eng) without changing saved values.
+- Forward virtual slot selection through both GSY delegates. Mapping edits
+  refresh selection without falsely claiming a native VIDEO_CC_STATE update.
+- Fix Android ICU JSON-pattern initialization and contain optional bridge
+  linkage errors. A retired load's missing datasource no longer crashes the
+  Activity; a real current-load failure uses the existing bounded failure path.
+
+- Add optional per-load stock Client Extension caption-state discovery and
+  exact-player/generation-bound Off/CC1/CC2 application. Missing/old/disabled
+  services retain local/stock behavior without playback reconnect. Worker
+  sockets/threads are bounded and stop on Stop/DEINIT/close; native wire state
+  has priority and DVD uses its separate existing subtitle path.
+
+- Complete STOCKDVD-002 extended Linux acceptance: PAL, sparse-SPU selection,
+  genuine three-angle picture selection and measured directional scan/recovery.
+  Preserve both stock video-layout command routes across DVD decoder rebuilds;
+  align native/converted bitmap subtitles to the actual preview. Map sparse
+  Copy SPU selectors using negotiated source identity, keeping Native unchanged.
+  Focused non-Pro/stock232 gates pass; Windows DVD remains deferred.
+
+- Reject incomplete/empty DVD PES headers before video or private AC-3/SPU
+  parsing. Fix the reproduced H262Reader/NalUnitUtil source exception when a
+  transformed title returns to its native menu. Six boundary regressions and
+  physical natural-end/menu checks pass on Non-Pro/official stock232.
+
+- Preserve the server's DVD preview rectangle across format metadata updates;
+  size DVD subtitle overlays to that viewport instead of the entire STV.
+- Require an actual DVD menu highlight for the static-menu test exception;
+  a frozen title carrying a subtitle must still prove advancing A/V.
+
+- Preserve the64byte DVD palette across representation replacement and map
+  converted DVD bitmap ordinals independently of synthesized CEA entries.
+  Native/Copy/Transcode scoped subtitle gates pass with the matching provider
+  ordering correction; broader backend/lifecycle acceptance remains open.
+
+- Retain Media3/legacy Exo video surfaces until their captured codec is released;
+  avoid detaching a replacement player's surface. Non-Pro stock232 fallback
+  and affected ordinary Push checks pass without changing Core.
+- Make repeated unchanged DVD subpicture stream state idempotent so it does
+  not invalidate buffered cues. First-failing focused tests pass after the
+  correction; physical title-subtitle acceptance is still open.
+
+- Add optional stock-companion DVD representation acknowledgement and explicit
+  source-NAV/rendered-epoch clock for owned Copy/Transcode. Missing/disabled/old
+  companion retains Native; normal playback never requires MCP. Targeted
+  forward-seek correction has Non-Pro/stock232 HDMI proof; full DVD acceptance
+  remains open. Published0.5.114 is unchanged.
+
+- Recreate legacy Exo's ordinary Push source after server FLUSH, retaining its
+  existing FIFO and DVD contract; fix a reproduced reverse-seek stall on stock
+  Core without changing server files or remote commands.
+- Honor the requested observation timeout for single/final MCP server seeks;
+  retain bounded earlier DVD correction windows and unchanged A/V assertions.
+- Observe basic Fixed seeks in the public server's same-MediaFile-relative
+  coordinate, requiring new FLUSH and advancing A/V. Keep the zero-based
+  decoder clock separate; this is test tooling, not a production clock change.
 
 - Correct a diagnostics-harness CI race by waiting briefly for the independent
   stderr collector's flushed sentinel; protocol replies remain nonblocking.

@@ -888,7 +888,7 @@ class MCPPlaybackAutomationTests(unittest.TestCase):
         self.assertIn('continue', server)
         self.assertNotIn('if use_vibe_event:', server)
         self.assertIn('reached_ms = _snapshot_media_time(last)', server)
-        self.assertIn('def dev_show_active_player_adjustments()', server)
+        self.assertIn('def dev_show_active_player_adjustments(panel: str = "video")', server)
         self.assertIn('def dev_show_av_sync_test()', server)
         self.assertIn('adb.show_av_sync_test()', server)
         self.assertIn('def show_av_sync_test(self)', adb)

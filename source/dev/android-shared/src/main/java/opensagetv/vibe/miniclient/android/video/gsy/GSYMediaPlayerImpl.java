@@ -25,6 +25,12 @@ import opensagetv.vibe.miniclient.uibridge.Rectangle;
  */
 public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPushSegmentPlayer
 {
+    /** On-demand delegate diagnostics only; no player commands or polling. */
+    public java.util.Map<String,Object> playbackExperienceSnapshot(){
+        MiniPlayerPlugin current=delegate;
+        return current instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl
+            ? ((opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl<?,?>)current).playbackExperienceSnapshot():null;
+    }
     private final AndroidUIController context;
     private MiniPlayerPlugin delegate;
     private boolean pushMode;
@@ -145,6 +151,13 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
         return delegate;
     }
 
+    /** Adapter-owned live quality action; no caller reaches into the delegate. */
+    public boolean requestMimDirectQualityReduction(int kbps){
+        MiniPlayerPlugin current=delegate;
+        return current instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl
+            &&((opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl<?,?>)current).requestMimDirectQualityReduction(kbps);
+    }
+
     /** Identity-only recovery guard; callers still control this adapter, not its delegate. */
     public boolean isPlaybackOwner(Object candidate)
     {
@@ -240,6 +253,9 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public boolean suspendAudioForExclusiveDiagnostic() { return d() != null && d().suspendAudioForExclusiveDiagnostic(); }
     @Override public void resumeAudioAfterExclusiveDiagnostic() { if (d() != null) d().resumeAudioAfterExclusiveDiagnostic(); }
     @Override public void setSubtitleTrack(int streamPos) { if (d() != null) d().setSubtitleTrack(streamPos); }
+    @Override public boolean applyClosedCaptionSlot(int channel, String type, String language) {
+        return d() != null && d().applyClosedCaptionSlot(channel, type, language);
+    }
     @Override public boolean applyDvbCaptionTrack() { return d() != null && d().applyDvbCaptionTrack(); }
     @Override public void setPreferredSubtitleTrack() { if (d() != null) d().setPreferredSubtitleTrack(); }
     @Override public int getSelectedSubtitleTrack() { return d() == null ? DISABLE_TRACK : d().getSelectedSubtitleTrack(); }
@@ -273,6 +289,12 @@ public final class GSYMediaPlayerImpl implements MiniPlayerPlugin, TransientPush
     @Override public void dvdSetSpuControl(int payloadSize, byte[] payload) { if (d() != null) d().dvdSetSpuControl(payloadSize, payload); }
     @Override public boolean isDvdMenuNavigationActive() { return d() != null && d().isDvdMenuNavigationActive(); }
     @Override public void dvdSetStc(int stc) { if (d() != null) d().dvdSetStc(stc); }
+    @Override public boolean supportsOwnedDvdPresentationClock() {
+        return d() != null && d().supportsOwnedDvdPresentationClock();
+    }
+    @Override public long getOwnedDvdPresentedPositionMillis() {
+        return d() == null ? -1L : d().getOwnedDvdPresentedPositionMillis();
+    }
     @Override public void dvdSetFormat(int format) { if (d() != null) d().dvdSetFormat(format); }
     @Override public void dvdSetStream(int streamType, int streamPosition) { if (d() != null) d().dvdSetStream(streamType, streamPosition); }
     @Override public void run() { if (d() != null) d().run(); }

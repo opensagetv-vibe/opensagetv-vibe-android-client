@@ -116,6 +116,10 @@
             android:exported="false"
             android:label="@string/app_name"
             android:theme="@style/Theme.PhoneTheme"></activity>
+        <activity android:name=".ui.settings.PushSettingsActivity" android:exported="false"
+            android:label="Push Settings" android:theme="@style/Theme.PhoneTheme" />
+        <activity android:name=".ui.settings.PlaybackDefaultsActivity" android:exported="false"
+            android:label="Video Filters and Display Settings" android:theme="@style/Theme.PhoneTheme" />
         <activity
             android:name=".ui.settings.FixedTranscodingActivity"
             android:label="@string/app_name"

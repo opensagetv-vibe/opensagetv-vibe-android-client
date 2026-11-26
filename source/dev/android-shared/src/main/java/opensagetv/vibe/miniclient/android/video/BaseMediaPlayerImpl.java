@@ -50,6 +50,7 @@ import opensagetv.vibe.miniclient.video.TeletextCea608Bridge;
 import opensagetv.vibe.miniclient.video.FullscreenPlaybackPolicy;
 import opensagetv.vibe.miniclient.video.LegacyExtenderCaptionBridge;
 import opensagetv.vibe.miniclient.video.PlaybackSessionController;
+import opensagetv.vibe.miniclient.video.PlaybackExperienceTrace;
 import opensagetv.vibe.miniclient.video.PostSeekPushRecoveryController;
 import opensagetv.vibe.miniclient.video.PushBufferSeekPolicy;
 import opensagetv.vibe.miniclient.video.VideoInfoResponse;
@@ -80,10 +81,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     protected String lastUri;
     /** Server DVD VM is pushing a MIM-produced MPEG-TS representation. */
     protected boolean dvdTransformedTransport;
+    private int[] dvdTransformedSpuIds;
     /** Explicit MIM ownership selected for the server-owned DVD title stream. */
     protected String dvdOwnedTransportMode = "";
     private static final int NO_SERVER_SUBPICTURE_COMMAND = Integer.MIN_VALUE;
     private volatile int pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
+    private volatile int pendingDvdSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
     protected long lastMediaTime = -1;
     /** True only after the active backend has returned a real media time. */
     protected boolean hasStableMediaTime = false;
@@ -238,6 +241,14 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
      * that committed rebind; a newer seek or playback session must.
      */
     private volatile long mimDirectRebindGeneration;
+    private final DirectSeekPresentationGate mimDirectSeekPresentation=new DirectSeekPresentationGate();
+    private final LatestSeekWork mimDirectSeekWork;
+    protected void suspendMimDirectSeekOutput(boolean suspended) { }
+    private volatile MimDirectQualityClient.Lease mimQualityLease;
+    private final DirectBufferingWitness mimQualityBuffering=new DirectBufferingWitness();
+    private volatile boolean mimQualityHasFrame;
+    private volatile long mimQualityPosition=-1;
+    private volatile long mimQualityReserveMs=-1,mimQualityReserveAt;
     private final TeletextSubtitleEngine.Listener teletextListener =
             new TeletextSubtitleEngine.Listener()
             {
@@ -270,6 +281,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     public BaseMediaPlayerImpl(AndroidUIController activity, boolean createPlayerOnUI, boolean waitForPlayer)
     {
         this.context = activity;
+        mimDirectSeekWork=new LatestSeekWork(task -> context.getClient().getBackgroundService().execute(task));
         this.pushStallDiagnostics = new PushStallDiagnosticRecorder(
                 activity.getContext(), this);
         fixedCaptionBridge = new LegacyExtenderCaptionBridge(
@@ -375,10 +387,14 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         resetPostSeekPushRecovery();
         mimDirectController().release(this);
         mimDirectMediaUrlActive = false;
+        mimQualityLease=null;mimQualityHasFrame=false;mimQualityBuffering.reset();
+        mimDirectSeekPresentation.cancel();
+        mimDirectSeekWork.cancelPending();
+        ++mimDirectRebindGeneration;
         fixedCaptionController().detach(this, true);
         fixedCaptionAttached = false;
         loadTransitionToken = null;
-        playbackSessions.endSession(PlaybackSessionController.Operation.FREE);
+        playbackExperience.operation(playbackSessions.endSession(PlaybackSessionController.Operation.FREE));
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
             log.info("Freeing Media Player");
@@ -399,6 +415,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         pushStallDiagnostics.resetSession();
         resetPostSeekPushRecovery();
         final PlaybackSessionController.Token loadSession = playbackSessions.beginSession();
+        playbackExperience.begin(loadSession);
         loadTransitionToken = loadSession;
         fixedCaptionAttached = fixedCaptionController().attach(this, fixedCaptionBridge);
         if (fixedCaptionAttached)
@@ -446,6 +463,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 // Receive-only compatibility with already deployed Vibe Core.
                 || urlString.contains("vibe_transport=mim_ts_v1"));
         pendingServerSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
+        pendingDvdSubpictureCommand = NO_SERVER_SUBPICTURE_COMMAND;
+        dvdTransformedSpuIds = opensagetv.vibe.miniclient.dvd.DvdTransformedSubpicturePolicy.physicalIds(urlString);
         lastMediaTime = -1;
         hasStableMediaTime = false;
         pushTimelineHoldReported = false;
@@ -455,11 +474,28 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
         String effectiveUrl = urlString;
         mimDirectMediaUrlActive = false;
+        mimQualityLease=null;mimQualityHasFrame=false;mimQualityBuffering.reset();
+        mimQualityPosition=-1;
+        mimDirectSeekPresentation.cancel();mimQualityReserveMs=-1;mimQualityReserveAt=0;
+        mimDirectSeekWork.cancelPending();++mimDirectRebindGeneration;
         // Preserve Core's active/growing declaration at the server-owned
         // transport boundary. MIM uses it for follow/probe/live decode policy;
         // omitting it can let a newly tuned TS hit its current edge during GPU
         // startup and expose a short undecodable segment.
         String directUrl = mimDirectController().open(this, urlString, timeshifted);
+        String outputFailure=mimDirectController().blockingOutputFailure();
+        if(directUrl==null&&!outputFailure.isEmpty()){
+            fixedCaptionController().detach(this,true);fixedCaptionAttached=false;
+            state=STOPPED_STATE;
+            context.runOnUiThread(()->{
+                if(!playbackSessions.isCurrentSession(loadSession))return;
+                try {
+                    releasePlayer();state=STOPPED_STATE;
+                    android.widget.Toast.makeText(context.getContext(),outputFailure,android.widget.Toast.LENGTH_LONG).show();
+                } finally { finishLoadTransition(loadSession); }
+            });
+            return;
+        }
         if (directUrl != null)
         {
             effectiveUrl = directUrl;
@@ -516,6 +552,10 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                         state = LOADED_STATE;
                         context.setupVideoFrame();
                         setupPlayer(finalUrl);
+                        // The media thread can FREE this load while UI setup
+                        // is running. Its datasource retirement is expected,
+                        // not an invariant failure in the Activity's Looper.
+                        if (!playbackSessions.isCurrentSession(loadSession)) return;
                         // Some backends release an asynchronously-owned prior
                         // player once more during setup. Activate only after
                         // that replacement step so the new subtitle session
@@ -534,7 +574,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                             if (requestStockFixedReconnectForMimPullFailure(
                                     "setup_datasource_unavailable"))
                                 return;
-                            throw new RuntimeException("setupPlayer must create a datasource");
+                            log.warn("Current load has no datasource; failing this player, not Android");
+                            playerFailed();
+                            return;
                         }
                     }
                     finally
@@ -561,6 +603,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 state = LOADED_STATE;
                 log.debug("JVL - Creating player on thread ->", Thread.currentThread().getName());
                 setupPlayer(finalUrl);
+                if (!playbackSessions.isCurrentSession(loadSession)) return;
                 startTeletextSession();
 
                 if (dataSource == null && !httpls)
@@ -568,7 +611,9 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                     if (requestStockFixedReconnectForMimPullFailure(
                             "setup_datasource_unavailable"))
                         return;
-                    throw new RuntimeException("setupPlayer must create a datasource");
+                    log.warn("Current load has no datasource; failing this player, not Android");
+                    playerFailed();
+                    return;
                 }
             }
             finally
@@ -713,6 +758,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         if (!isExplicitLocalCaptionAuthority(connection)
                 && connection != null && connection.isSubtitleCallbackEnabled()
                 && fixedCaptionAttached
+                && track.getSubtitleCodec() != SubtitleCodec.DVB
                 && fixedCaptionBridge.isForwardingCurrentStream())
         {
             /*
@@ -763,14 +809,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     private SubtitleTrack resolveCaptionSlotTrack(int channel, String type, String language)
     {
         SubtitleTrack[] tracks = getSubtitleTracks();
-        String slotType = CaptionSlotPolicy.TYPE_DVB.equals(
-                CaptionSlotPolicy.normalizeType(type))
-                ? CaptionSlotPolicy.TYPE_AUTO : type;
-        // CC1/CC2 are text-caption callback slots. DVB bitmap selection is a
-        // separate top-level mode, matching the original extender's separate
-        // STV Subtitles command rather than pretending DVB is a CC channel.
+        String slotType = type;
+        // The slot is a selection profile, not the event-225 wire format.
+        // DVB remains a local bitmap renderer; never convert it to fake text.
+        // STV mode only invokes this after actual state relay; without that
+        // optional service, the existing top-level DVB mode remains usable.
         SubtitleTrack track = CaptionSlotPolicy.findTrack(
-                tracks, channel, slotType, language, true, false);
+                tracks, channel, slotType, language, true, true);
         if (track != null && CaptionSlotPolicy.TYPE_AUTO.equals(
                 CaptionSlotPolicy.normalizeType(slotType))
                 && !hasObservedCeaCaptionData()
@@ -779,7 +824,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 || track.getSubtitleCodec() == SubtitleCodec.CEA708))
         {
             SubtitleTrack broadcastFallback = CaptionSlotPolicy.findTrack(
-                    tracks, channel, slotType, language, false, false);
+                    tracks, channel, slotType, language, false, true);
             if (broadcastFallback != null)
                 track = broadcastFallback;
         }
@@ -881,18 +926,26 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
      */
     protected boolean applyPendingServerSubpictureStream()
     {
+        if (applyPendingDvdSubpictureStream()) return true;
         MiniClientConnection connection = context.getClient().getCurrentConnection();
         if (connection != null && connection.getMediaCmd() != null)
         {
             String captionMode = connection.getMediaCmd().getLegacyServerCaptionMode();
+            boolean stvBroadcastCaption = "stv".equals(captionMode)
+                    && connection.getMediaCmd().hasSageTvClosedCaptionState()
+                    && (connection.getMediaCmd().getSageTvClosedCaptionState() == 1
+                    || connection.getMediaCmd().getSageTvClosedCaptionState() == 2)
+                    && (lastUri == null || !lastUri.startsWith("push:dvd"));
             if ("cc1".equals(captionMode) || "cc2".equals(captionMode)
-                    || "dvb".equals(captionMode))
+                    || "dvb".equals(captionMode) || stvBroadcastCaption)
             {
                 // CC1/CC2/DVB are explicit Android-local modes on a stock
                 // server. Do not let SageTV's independent Subtitles-off
                 // command (normally 0x2000) erase that local virtual-slot
-                // choice when tracks are published asynchronously. STV mode
-                // still follows the original HD200/HD300 subpicture command.
+                // choice when tracks are published asynchronously. A relayed
+                // STV CC slot has the same authority for non-DVD broadcasts;
+                // otherwise the independent Subtitles-off PID erased DVB CC.
+                // With CC Off/unknown, ordinary STV Subtitles still owns it.
                 return false;
             }
         }
@@ -909,6 +962,22 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         log.warn("No local subtitle track matches server subpicture PID/index {}",
                 LegacyExtenderSubpictureCommand.sourcePid(command));
         setSubtitleTrack(DISABLE_TRACK);
+        return true;
+    }
+
+    /** DVD SPU ordinals are independent of synthesized CEA text-track entries. */
+    protected boolean applyPendingDvdSubpictureStream()
+    {
+        int command = pendingDvdSubpictureCommand;
+        if (!dvdTransformedTransport || command == NO_SERVER_SUBPICTURE_COMMAND)
+            return false;
+        int track = opensagetv.vibe.miniclient.dvd.DvdTransformedSubpicturePolicy.resolve(
+                command, getSubtitleTracks(), dvdTransformedSpuIds);
+        // Keep an unresolved request through asynchronous track publication.
+        // Never substitute track zero: it may be a discovered CEA service.
+        if (track == opensagetv.vibe.miniclient.dvd.DvdTransformedSubpicturePolicy.NO_MATCH)
+            track = DISABLE_TRACK;
+        if (getSelectedSubtitleTrack() != track) setSubtitleTrack(track);
         return true;
     }
 
@@ -1232,6 +1301,11 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public long getMediaTimeMillis(long lastServerTime)
     {
+        // An owned same-source replacement has no presented new clock yet.
+        // Hold only a previously confirmed position, never the requested seek.
+        // OPENURL/free cancel this gate before a different source is exposed.
+        long heldDirectPosition = mimDirectSeekPresentation.heldPosition();
+        if (heldDirectPosition >= 0L) return heldDirectPosition;
         if (lastServerTime >= 0L)
             teletextClockServerBaseMs = lastServerTime;
         // OPENURL owns a new logical playback session before its UI-thread
@@ -1287,6 +1361,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
         long mt = mimDirectController().adjustPosition(
                 this, getPlayerMediaTimeMillis(lastServerTime));
+        if(isMimDirectMediaUrlActive()&&mt>=0)mimQualityPosition=mt;
         boolean confirmedPausedZero = PushTimelineContinuity.acceptsPausedZero(pushMode,
                 lastUri != null && lastUri.startsWith("push:dvd"), state == PAUSE_STATE,
                 lastServerTime, mt, hasConfirmedPausedZeroPosition());
@@ -1353,6 +1428,8 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     @Override
     public void stop()
     {
+        mimDirectSeekWork.cancelPending();++mimDirectRebindGeneration;
+        mimDirectSeekPresentation.cancel();
         resetPostSeekPushRecovery();
         DiagnosticSessionSpool.checkpoint("playback-stop");
         loadTransitionToken = null;
@@ -1393,6 +1470,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         mimDirectController().recordRecoveryPlaying(this,false);
         beginPlaybackOperation(PlaybackSessionController.Operation.PAUSE);
         state = PAUSE_STATE;
+        mimDirectController().suspendQualityBuffer(this);
         fixedCaptionController().setPaused(this, true);
         if (VerboseLogging.DETAILED_PLAYER_LOGGING)
         {
@@ -1461,6 +1539,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         mimDirectController().recordRecoveryPosition(this,timeInMS,state !=PAUSE_STATE);
         final PlaybackSessionController.Token seekOperation = beginPlaybackOperation(
                 PlaybackSessionController.Operation.SEEK);
+        playbackExperience.requested(seekOperation,timeInMS);
         TeletextSubtitleEngine.setPlaybackAnchor(timeInMS);
         teletextLegacyBridge.clearPending();
         postTeletextFlush();
@@ -1470,6 +1549,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             log.debug("SEEK: {}", timeInMS);
         }
         seekPending = true;
+        mimDirectSeekPresentation.cancel();
         mimDirectSeekHandled = rebindMimDirectForSeek(timeInMS, seekOperation);
     }
 
@@ -1484,8 +1564,32 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             final PlaybackSessionController.Token seekOperation)
     {
         if (mimDirectController().consumeRedundantStartupSeek(this, timeInMS))
+        {
+            seekPending=false; // No new producer/seek was requested.
             return true;
-        final String replacementUrl = mimDirectController().restart(this, timeInMS);
+        }
+        if(!mimDirectController().owns(this))return false;
+        final long requestGeneration=++mimDirectRebindGeneration;
+        mimDirectSeekPresentation.holdConfirmedPosition(hasStableMediaTime ? lastMediaTime : -1L);
+        context.runOnUiThread(() -> {
+            if(isCurrentPlaybackSession(seekOperation)&&requestGeneration==mimDirectRebindGeneration)
+                suspendMimDirectSeekOutput(true);
+        });
+        mimDirectSeekWork.submit(() -> {
+            if(!isCurrentPlaybackSession(seekOperation)||requestGeneration!=mimDirectRebindGeneration)return;
+            final String replacementUrl=mimDirectController().restart(this,timeInMS);
+            context.runOnUiThread(() -> {
+                if(!isCurrentPlaybackSession(seekOperation)||requestGeneration!=mimDirectRebindGeneration
+                        ||state==STOPPED_STATE||state==EOS_STATE)return;
+                completeMimDirectSeek(replacementUrl,requestGeneration,seekOperation);
+            });
+        });
+        return true;
+    }
+
+    private void completeMimDirectSeek(final String replacementUrl,final long rebindGeneration,
+            final PlaybackSessionController.Token seekOperation)
+    {
         if (replacementUrl == null)
         {
             if (mimDirectController().owns(this))
@@ -1498,14 +1602,16 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 // retain the real current clock and report failure; do not
                 // replay a network-ambiguous seek or claim it landed correctly.
                 seekPending = false;
+                mimDirectSeekPresentation.cancel();
+                suspendMimDirectSeekOutput(false);
                 message(context.getContext().getString(R.string.msg_mim_direct_seek_retained));
-                return true;
+                return;
             }
-            return false; // Ordinary stock transports retain their seek path.
+            return;
         }
         if (mimDirectController().lastRestartWasClamped(this))
             PlaybackDebugTrap.record("seek_clamped_live_edge", this);
-        final long rebindGeneration = ++mimDirectRebindGeneration;
+        playbackExperience.producerPrepared(seekOperation,mimDirectController().adjustPosition(this,0L));
         fixedCaptionAttached = fixedCaptionController().attach(
                 this, fixedCaptionBridge);
         loadTransitionToken = seekOperation;
@@ -1525,17 +1631,18 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                     // plugin prepared the replacement representation.
                     final int requestedState = state;
                     releasePlayer();
+                    suspendMimDirectSeekOutput(false);
                     eos = false;
                     state = requestedState;
                     playerReady = false;
                     context.setupVideoFrame();
+                    mimDirectSeekPresentation.arm(rebindGeneration);
                     setupPlayer(replacementUrl);
                     startTeletextSession();
                 }
                 finally { finishLoadTransition(seekOperation); }
             }
         });
-        return true;
     }
 
     @Override
@@ -1586,11 +1693,11 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             log.debug("setVideoRectangles: SRC: {}, DEST: {}", srcRect, destRect);
         if (srcRect == null || destRect == null) return;
 
-        if (debug_ar)
-        {
-            lastVidSrc = srcRect.copy();
-            lastVidDest = destRect.copy();
-        }
+        // Metadata/representation changes must retain the server's current
+        // preview viewport. Replacing it with full-screen geometry leaves
+        // video cropped by SageTV's small GFX hole and SPUs over the whole UI.
+        lastVidSrc = srcRect.copy();
+        lastVidDest = destRect.copy();
 
         // we are using our our aspect modes
         if (srcRect.width == 0)
@@ -1739,6 +1846,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** Backend callback: the current post-FLUSH epoch rendered video. */
     protected final void notifyPostSeekPushFirstFrame()
     {
+        mimQualityHasFrame=true;
+        if(isMimDirectMediaUrlActive()&&mimDirectController().owns(this)
+                &&mimDirectSeekPresentation.presented(mimDirectRebindGeneration)){
+            seekPending=false;
+            PlaybackDebugTrap.record("direct_seek_first_frame_complete",this);
+        }
         mimDirectController().onRecoveryVideoFrame(this,context.getClient().getCurrentConnection());
         postSeekPushRecovery.onFirstFrame(SystemClock.elapsedRealtime());
         schedulePostSeekPushRecoveryCheck();
@@ -1747,6 +1860,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     /** Backend callback: decoder input entered or left buffering. */
     protected final void notifyPostSeekPushBuffering(boolean buffering)
     {
+        mimQualityBuffering.observe(buffering,SystemClock.elapsedRealtime());
         PushBufferDataSource pushSource = dataSource instanceof PushBufferDataSource
                 ? (PushBufferDataSource) dataSource : null;
         pushStallDiagnostics.onBufferingChanged(buffering, pushSource,
@@ -1754,6 +1868,89 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
         postSeekPushRecovery.onBufferingChanged(
                 buffering, SystemClock.elapsedRealtime());
         schedulePostSeekPushRecoveryCheck();
+    }
+
+    /** Loader callback only; no player getter or extra polling. Measure time
+     * inside actual published-segment read calls, excluding open/first-byte
+     * discovery and decoder/consumer time between calls. Default off. */
+    protected final long mimDirectBufferingStamp(){return mimQualityBuffering.stamp();}
+    protected final void onMimDirectBodyTransfer(String uri,long bytes,long readMs,long bufferingStamp){
+        if(!isMimDirectMediaUrlActive()||!mimQualityHasFrame||seekPending||state!=PLAY_STATE||mimQualityPosition<0
+            ||!context.getClient().properties().getBoolean(PrefStore.Keys.mim_direct_adaptive_quality,false))return;
+        boolean recent=mimQualityBuffering.during(bufferingStamp)||mimQualityBuffering.recent(SystemClock.elapsedRealtime());
+        long reserve=SystemClock.elapsedRealtime()-mimQualityReserveAt<=1500?mimQualityReserveMs:-1;
+        mimDirectController().observeQualityTransfer(this,uri,bytes,readMs,mimQualityPosition,recent,reserve,qualityRenderer());
+    }
+    /** Called only by the backend's existing affinity-thread progress callback.
+     * Loader callbacks consume a short-lived cache, never call player getters
+     * off-thread or infer buffered reserve from fast network reads. */
+    protected final void recordMimDirectBufferReserve(long position,long buffered){
+        if(!isMimDirectAdaptiveQualityEnabled())return;
+        mimQualityReserveMs=position>=0&&buffered>=position?buffered-position:-1;
+        mimQualityReserveAt=SystemClock.elapsedRealtime();
+        if(!mimQualityHasFrame||seekPending||state!=PLAY_STATE||mimQualityPosition<0){mimDirectController().suspendQualityBuffer(this);return;}
+        int minimum=250;
+        try{minimum=Integer.parseInt(context.getClient().properties().getString(PrefStore.Keys.mim_direct_minimum_kbps,"250"));}
+        catch(NumberFormatException ignored){}
+        mimDirectController().observeQualityBuffer(this,mimQualityPosition,
+            mimQualityBuffering.recent(SystemClock.elapsedRealtime()),mimQualityReserveMs,minimum,qualityRenderer());
+    }
+    /** Explicit user action uses the same bounded owner as adaptation, without
+     * pretending a manual reduction is evidence of measured WAN limitation. */
+    public final boolean requestMimDirectQualityReduction(int kbps){
+        if(!isMimDirectMediaUrlActive()||!mimQualityHasFrame||seekPending||state!=PLAY_STATE||mimQualityPosition<0)return false;
+        return mimDirectController().requestQuality(this,mimQualityPosition,kbps,qualityRenderer());
+    }
+    private MimDirectQualityClient.Renderer qualityRenderer(){
+        final PlaybackSessionController.Token session=currentPlaybackSession();
+        final long expectedRebind=mimDirectRebindGeneration;
+        return new MimDirectQualityClient.Renderer(){
+            public boolean eligible(){return state==PLAY_STATE&&!seekPending&&isCurrentPlaybackSession(session)&&expectedRebind==mimDirectRebindGeneration;}
+            public long position(){return mimQualityPosition;}
+            public boolean stalled(){return mimQualityBuffering.buffering();}
+            public void ready(MimDirectQualityClient.Lease lease){context.runOnUiThread(()->{
+                if(!isCurrentPlaybackSession(session)||expectedRebind!=mimDirectRebindGeneration||state!=PLAY_STATE){mimDirectController().qualityFailed(lease);return;}
+                if(!mimDirectController().bindQuality(BaseMediaPlayerImpl.this,lease,Math.max(lease.target,mimQualityPosition)))return;
+                if(!isCurrentPlaybackSession(session)||expectedRebind!=mimDirectRebindGeneration)return;
+                mimQualityLease=lease;rebuildQualityPlayer(lease.candidate.media,lease.join);
+            });}
+            public void rollback(MimDirectQualityClient.Lease lease){
+                final long rollbackRebind=++mimDirectRebindGeneration;
+                context.runOnUiThread(()->{
+                    if(!isCurrentPlaybackSession(session)||rollbackRebind!=mimDirectRebindGeneration)return;
+                    mimQualityLease=null;rebuildQualityPlayer(lease.original.media,lease.join);
+                });
+            }
+            public void committed(MimDirectQualityClient.Lease lease){if(mimQualityLease==lease)mimQualityLease=null;}
+        };
+    }
+    protected final boolean isMimDirectAdaptiveQualityEnabled(){return isMimDirectMediaUrlActive()
+        &&mimDirectController().qualityAvailable(this)
+        &&context.getClient().properties().getBoolean(PrefStore.Keys.mim_direct_adaptive_quality,false);}
+    private void rebuildQualityPlayer(String media,long anchor){
+        PlaybackSessionController.Token operation=beginPlaybackOperation(PlaybackSessionController.Operation.RECOVERY);
+        loadTransitionToken=operation;
+        int requestedState=state;
+        try{
+            mimQualityHasFrame=false;mimQualityPosition=anchor;mimQualityReserveMs=-1;mimQualityReserveAt=0;
+            TeletextSubtitleEngine.setPlaybackAnchor(anchor);teletextLegacyBridge.clearPending();postTeletextFlush();resetFixedCaptionForDiscontinuity();
+            releasePlayer();eos=false;state=requestedState;playerReady=false;
+            context.setupVideoFrame();setupPlayer(media);startTeletextSession();
+        }catch(RuntimeException failure){
+            log.warn("Direct quality renderer setup failed ({})",failure.getClass().getSimpleName());
+            if(!abortMimDirectQuality())message("Stream quality recovery failed; select the recording again.");
+        }
+        finally{finishLoadTransition(operation);}
+    }
+    protected final boolean hasMimDirectQualityFramePending(){return mimQualityLease!=null&&mimDirectController().qualityPending(this)||mimDirectController().qualityClockHeld(this);}
+    protected final void notifyMimDirectQualityFrame(long localPosition){
+        MimDirectQualityClient.Lease lease=mimQualityLease;
+        if(lease!=null)mimDirectController().qualityPresented(lease,localPosition);
+        else mimDirectController().qualityRendererRestored(this,localPosition);
+    }
+    protected final boolean abortMimDirectQuality(){
+        MimDirectQualityClient.Lease lease=mimQualityLease;if(lease==null)return false;
+        return mimDirectController().qualityFailed(lease);
     }
 
     private boolean isPushStallDiagnosticEligible()
@@ -1828,6 +2025,12 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
     protected void releasePlayer()
     {
+        releasePlayer(true);
+    }
+
+    /** A backend may retain its Surface until its captured codec is released. */
+    protected void releasePlayer(boolean detachVideo)
+    {
         pushStallDiagnostics.resetSession();
         resetPostSeekPushRecovery();
         log.debug("Releasing Player");
@@ -1854,7 +2057,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
             eos = true;
         }
         uiAspectChanged = true;
-        context.removeVideoFrame();
+        if (detachVideo) context.removeVideoFrame();
     }
 
     private void postTeletextFlush()
@@ -2115,8 +2318,14 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 applyPendingServerSubpictureStream();
             }
             else if (dvdTransformedTransport)
-                setSubtitleTrack(streamPosition == 62 || (streamPosition & 0x80) != 0
-                        ? DISABLE_TRACK : (streamPosition & 0x1f));
+            {
+                pendingDvdSubpictureCommand = streamPosition;
+                applyPendingDvdSubpictureStream();
+            }
+            else if ("copy".equals(dvdOwnedTransportMode))
+                dvdSubpictureDecoder.setSubpictureStream(
+                        opensagetv.vibe.miniclient.dvd.DvdTransformedSubpicturePolicy.copyCommand(
+                                streamPosition, dvdTransformedSpuIds));
             else
                 dvdSubpictureDecoder.setSubpictureStream(streamPosition);
         }
@@ -2144,6 +2353,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
 
     public void updatePlayerView()
     {
+        if (lastUri != null && lastUri.startsWith("push:dvd")
+                && lastVidSrc != null && lastVidDest != null)
+        {
+            uiAspectChanged = true;
+            setVideoRectangles(lastVidSrc, lastVidDest, true);
+            return;
+        }
         Dimension screen = context.getClient().getUIRenderer().getMaxScreenSize();
         Rectangle rect = aspectModeManager.doMeasure(videoInfo, new RectangleF(0, 0, screen.width, screen.height), context.getClient().getUIRenderer().getUIAspectRatio()).asIntRect();
 
@@ -2177,6 +2393,7 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 context.getVideoView().requestLayout();
                 if (dvdHighlightOverlay != null)
                     dvdHighlightOverlay.matchVideoView(context.getVideoView());
+                onVideoViewportChanged();
 
                 scheduleFullscreenPromotionCheck();
 
@@ -2186,6 +2403,21 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
                 }
             }
         });
+    }
+
+    /** UI-thread callback; ordinary TV text keeps its established safe area. */
+    protected void onVideoViewportChanged() { }
+
+    protected final void alignDvdSubtitleViewport(View overlay)
+    {
+        if (overlay == null || lastUri == null || !lastUri.startsWith("push:dvd")) return;
+        View video = context.getVideoView();
+        if (!(video.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams source = (FrameLayout.LayoutParams) video.getLayoutParams();
+        FrameLayout.LayoutParams target = new FrameLayout.LayoutParams(source.width, source.height);
+        target.leftMargin = source.leftMargin;
+        target.topMargin = source.topMargin;
+        overlay.setLayoutParams(target);
     }
 
     /**
@@ -2361,8 +2593,13 @@ public abstract class BaseMediaPlayerImpl<TPlayer, TDataSource> implements MiniP
     {
         PlaybackSessionController.Token token = playbackSessions.beginOperation(operation);
         lastPlaybackOperation = token;
+        playbackExperience.operation(token);
         return token;
     }
+
+    private final PlaybackExperienceTrace playbackExperience=new PlaybackExperienceTrace();
+    public final java.util.Map<String,Object> playbackExperienceSnapshot(){return playbackExperience.snapshot();}
+    final void notePlaybackExperienceRendererCallback(){playbackExperience.rendererCallback();}
 
     protected final boolean isCurrentPlaybackSession(PlaybackSessionController.Token token)
     {

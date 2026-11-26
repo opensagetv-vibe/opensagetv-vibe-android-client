@@ -11,6 +11,7 @@ public class IJKPlayerSettingsFragment extends PreferenceFragmentCompat
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.ijkplayer_prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
 
         final Preference decoders = findPreference("decoders");
         decoders.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()

@@ -1,5 +1,16 @@
 # OpenSageTV Vibe Android Client contributor rules
 
+## Superseding stock-server rule (2026-11-09)
+
+`.232` now runs official stock SageTV, as do `.175` and Windows `.185`.
+Preserve Sage.jar, bundled Core native libraries and stock FFmpeg unchanged.
+Older non-stock232/Core exceptions below are historical and no longer apply.
+Use client fixes first, then supported plugins or container OS/loader fixes;
+document unavailable private capabilities rather than replacing Core. MCP is
+optional testing infrastructure, never required for normal playback. Existing
+restart authority, recording/client activity guards and settings preservation
+remain in force.
+
 ## Task fix and server-boundary policy
 
 Apply this policy to every task workflow, including dependency fixes across
@@ -268,6 +279,11 @@ Record skipped device tests as SKIPPED, never PASS.
 - Legacy ExoPlayer remains the default until physical commissioning says
   otherwise.
 - Preserve Push/Pull/Fixed behavior and do not merge their ownership semantics.
+- Basic Fixed uses a decoder-relative transcode epoch; stock Core owns its
+  file offset and can send FLUSH without a client-visible SEEK target. Reuse
+  MCP `dev_server_seek_time` (one ordered seek) to verify the owned server
+  file-relative clock, a new FLUSH and recovered A/V. Never add a guessed
+  client offset or claim a known requested/presented trace from FLUSH alone.
 - The saved streaming value `dynamic` means **Push**, not Pull or Auto. Always
   distinguish selected mode from runtime-negotiated transport in diagnostics,
   tests and user updates. If selected Push actually negotiates Pull, describe
@@ -290,6 +306,12 @@ Record skipped device tests as SKIPPED, never PASS.
 
 ## Change discipline
 
+- Startup and long-press playback settings share `PlaybackSettingCatalog` and
+  its typed binder/runtime panels. Keep labels, choices, keys, defaults,
+  capability reasons and apply timing synchronized; do not create duplicate
+  preference keys or independent shortcut menus. Session changes persist only
+  through an explicit save; next-playback defaults must not change the active
+  producer. Follow `docs/PLAYBACK_SETTINGS.md` and the focused settings gates.
 - Preserve behavior first; split/refactor giant classes before redesigning them.
 - Keep preference keys/defaults and JNI/native ABI stable unless a documented
   compatibility change is required.

@@ -214,6 +214,25 @@ def main() -> int:
         # form adds only negotiated DVD MIM transport identification and routes
         # its DVB subtitles through the ordinary player track selector.
         reviewed_digests = {
+            # HLS-006: bounded latest-intent Direct HTTP seek off the protocol
+            # thread, old-output suspension, confirmed-clock hold until the
+            # identity-fenced replacement frame. Load/Stop/free cancel pending
+            # work; original audio/native libraries remain unchanged.
+            "2ca61fe9f4a8493d60c6388491b0eaf34406d9c27401fefb311d8e2ce46641dd",
+            # SETTINGS-003: refuse an explicit encoder/output failure before
+            # any native fallback can violate Hardware Only / Software Only.
+        "fc6b21938286a6e62473a7ceaac1b814a638754cdbf777e8b10a296099420c8c",
+            # EXPERIENCE-001/002 reviewed development candidate: bounded trace,
+            # opt-in Direct quality custody/rebind/clock hold and current-player
+            # frame ACK. Existing stock transport/key behavior is unchanged.
+            # Exact pin permits build, NOT a claim of physical qualification.
+            # Adds only a fresh reserve cache from existing backend progress
+            # callbacks for ceiling-bounded quality recovery; no new polling.
+            # Current Direct replacement frame also clears its own seek guard;
+            # a rebuild does not emit Exo's seekTo discontinuity callback.
+            # Preserve continuously buffering state for opt-in measurements;
+            # stalled quality warmup may start at its current, not future, clock.
+            "23e6f24b66723215dff135db2746cbad57827d35bdfbf7f3800fa9eeb6ff354d",
             # EXT-010 real-transport command29 safety guard; physical19
             # playing/paused rejection preserves time and zero-byte framing.
             "0807272d6338a00436ad73b8aa202fb8c334f16750121cdd5fed9bcdc92d98a0",
@@ -419,6 +438,9 @@ def main() -> int:
             # pre-first-frame failure, requests one stock-compatible reconnect,
             # and suppresses Direct for only that replacement connection.
             "395593645c2a5a8bacb151853cf98e45196cc71a14e7e8d6535ed58a2fb6a7f9",
+            # HLS-005: existing affinity-thread reserve callback reports to
+            # shared MIM policy; pause/seek/session guards, no local bitrate policy.
+            "566b0deca012e49844e0ba1be5ebf48bf2cbf9abd6bd93f0acfc4cf748eeb264",
             # Reviewed Direct MIM segment observation. Playback source state
             # is explicit and only plugin-owned MPEG-TS segment bytes enter
             # the existing Teletext bridge; unrelated HTTP media is ignored.
@@ -479,6 +501,13 @@ def main() -> int:
             # intent and actual new-decoder video, then worker-captured custody
             # authorizes one fresh Activity. Ordinary stock paths unchanged.
             "d476abd9eee605c906047cc1a84551a841353d48c775c214b9c8238bf0932367",
+            # Reviewed STOCKDVD-001/002 and VCE-016 migration: current-load
+            # datasource retirement containment, negotiated physical DVD SPU
+            # ordinals/viewport custody, deferred Surface detach until codec
+            # release, and separate local DVB bitmap/STV caption authority.
+            # Compact VCE-003/014/016 results retain physical scope; this exact
+            # pin does not relax the baseline or accept arbitrary player edits.
+            "1dbb7f14138ae860d4705a285b1dc061a4fe13b7c6da00448a7fbbf1102aa0a0",
         }
         if src_digest not in reviewed_digests:
             fail(f"known-good legacy playback runtime changed: {rel}")
@@ -717,9 +746,12 @@ def main() -> int:
     for value in ("exoplayer", "media3", "ijkplayer", "gsyplayer"):
         if f">{value}<" not in arrays_xml:
             fail(f"player preference value missing: {value}")
-    for settings_key in ("media3_settings", "ijkplayer_settings", "gsyplayer_settings"):
-        if f'android:key="{settings_key}"' not in prefs_xml:
-            fail(f"player settings entry missing: {settings_key}")
+    if 'android:key="selected_player_settings"' not in prefs_xml:
+        fail("selected-player settings entry missing")
+    settings_router = (SRC / "android-shared/src/main/java/opensagetv/vibe/miniclient/android/ui/settings/SettingsFragment.java").read_text(encoding="utf-8")
+    for screen in ("ExoPlayerSettingsActivity", "Media3PlayerSettingsActivity", "IJKPlayerSettingsActivity", "GSYPlayerSettingsActivity"):
+        if screen not in settings_router:
+            fail(f"selected-player settings route missing: {screen}")
     if 'android:key="decoding_method"' not in prefs_xml or 'android:defaultValue="hardware"' not in prefs_xml:
         fail("global Decoding Method preference is missing or not Hardware-default")
     for settings_xml in ("exoplayer_prefs.xml", "media3player_prefs.xml", "ijkplayer_prefs.xml", "gsyplayer_prefs.xml"):

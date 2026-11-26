@@ -185,7 +185,7 @@ public final class DevTestReceiver extends BroadcastReceiver
             }
             else if ("active_player_adjustments".equals(op))
             {
-                ok(DebugSessionCommands.showActivePlayerAdjustments(context));
+                ok(DebugSessionCommands.showActivePlayerAdjustments(context,intent));
             }
             else if ("test_current_video".equals(op))
             {

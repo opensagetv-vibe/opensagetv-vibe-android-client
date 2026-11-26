@@ -173,7 +173,7 @@ class PlayerRuntimeTuningTests(unittest.TestCase):
         self.assertIn('android:defaultValue="auto"', prefs)
         self.assertIn('@array/entries_mim_direct_deinterlace', prefs)
         self.assertIn('<item>Off (preserve interlacing)</item>', arrays)
-        self.assertIn('PrefStore.Keys.mim_direct_deinterlace), "auto"', fragment)
+        self.assertIn('{PrefStore.Keys.mim_direct_deinterlace,"auto"}', fragment)
         self.assertIn('ListPreference.SimpleSummaryProvider.getInstance()', fragment)
         self.assertIn('resolveMimDirectDeinterlace(String persisted)', session)
         self.assertIn('PrefStore.Keys.mim_direct_deinterlace, "auto"', direct)

@@ -8,6 +8,16 @@ import static org.junit.Assert.assertTrue;
 
 public class TrackPreferencePolicyTest
 {
+    @Test public void isoTwoAndThreeLetterPreferencesIdentifyTheSameLanguage()
+    {
+        assertTrue(TrackPreferencePolicy.languageMatches("eng", "en"));
+        assertTrue(TrackPreferencePolicy.languageMatches("en-US", "eng"));
+        assertTrue(TrackPreferencePolicy.languageMatches("spa", "es-MX"));
+        assertTrue(TrackPreferencePolicy.languageMatches("fr", "fra"));
+        assertFalse(TrackPreferencePolicy.languageMatches("eng", "deu"));
+        assertFalse(TrackPreferencePolicy.languageMatches("xyz", "en"));
+        assertEquals("eng", TrackPreferencePolicy.normalizeLanguage("eng"));
+    }
     @Test
     public void normalizesAndMatchesBcp47LanguageTags()
     {

@@ -43,12 +43,16 @@ import opensagetv.vibe.miniclient.util.Utils;
 public class SettingsFragment extends PreferenceFragmentCompat
 {
     PrefStore prefs;
+    private String returnFocusKey;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener serverDiagnosticListener =
             (shared, key) -> {
                 if (AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED.equals(key)
                         || AndroidPrefStore.SERVER_DIAGNOSTICS_STATUS.equals(key)
                         || AndroidPrefStore.CLIENT_WEB_ENABLED.equals(key)
-                        || AndroidPrefStore.CLIENT_WEB_STATUS.equals(key)) refreshServerDiagnosticPreferences();
+                        || AndroidPrefStore.CLIENT_WEB_STATUS.equals(key)) {
+                    refreshServerDiagnosticPreferences();
+                    refreshSections();
+                }
             };
 
 
@@ -59,7 +63,13 @@ public class SettingsFragment extends PreferenceFragmentCompat
 
 
 
+        AndroidPrefStore.migrateTransportSelection(PreferenceManager.getDefaultSharedPreferences(requireContext()));
         setPreferencesFromResource(R.xml.prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
+        findPreference("playback_defaults_settings").setOnPreferenceClickListener(preference->{
+            startActivity(new Intent(requireContext(),PlaybackDefaultsActivity.class));return true;
+        });
+        if(savedInstanceState!=null)returnFocusKey=savedInstanceState.getString("settings_return_focus");
 
         try
         {
@@ -236,6 +246,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 public boolean onPreferenceChange(Preference preference, Object newValue)
                 {
                     updateListSummary(defaultPlayer, R.string.summary_list_default_player, newValue);
+                    refreshSections(String.valueOf(newValue), null);
                     return true;
                 }
             });
@@ -246,12 +257,13 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 public boolean onPreferenceChange(Preference preference, Object newValue)
                 {
                     updateListSummary(decodingMethod, R.string.summary_list_decoding_method, newValue);
+                    getListView().post(() -> refreshSections());
                     return true;
                 }
             });
 
             final Preference fixedTranscoding = this.findPreference("fixed_transcoding");
-            final Preference fixedRemuxing = this.findPreference("fixed_remuxing");
+
             final ListPreference streammode = (ListPreference) findPreference(AndroidPrefStore.STREAMING_MODE);
             final ListPreference pushBufferLimit = (ListPreference) findPreference(Keys.push_buffer_limit);
             fixedTranscoding.setEnabled(prefs.getStreamingMode().equals("fixed"));
@@ -264,9 +276,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 {
                     updateListSummary(streammode, R.string.summary_list_streaming_mode_preference, newValue);
                     configureDeinterlacePreference(String.valueOf(newValue));
-
-                    fixedTranscoding.setEnabled(newValue.equals("fixed"));
-                    fixedRemuxing.setEnabled(newValue.equals("fixed"));
+                    refreshSections(null, String.valueOf(newValue));
 
                     return true;
                 }
@@ -296,18 +306,6 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 }
             });
 
-            fixedRemuxing.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    Intent i = new Intent(SettingsFragment.this.getActivity(), FixedRemuxingActivity.class);
-                    startActivity(i);
-
-                    return true;
-                }
-            });
-
             final Preference containerCodec = this.findPreference("container_codec_settings");
 
             containerCodec.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
@@ -322,60 +320,20 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 }
             });
 
-            Preference exoplayerSettingsPref = this.findPreference("exoplayer_settings");
-
-            exoplayerSettingsPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    Intent i = new Intent(SettingsFragment.this.getActivity(), ExoPlayerSettingsActivity.class);
-                    startActivity(i);
-
-                    return true;
-                }
+            findPreference("push_settings").setOnPreferenceClickListener(preference -> {
+                startActivity(new Intent(requireContext(), PushSettingsActivity.class)); return true;
             });
-
-            Preference media3SettingsPref = this.findPreference("media3_settings");
-
-            media3SettingsPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    Intent i = new Intent(SettingsFragment.this.getActivity(), Media3PlayerSettingsActivity.class);
-                    startActivity(i);
-
-                    return true;
+            findPreference("selected_player_settings").setOnPreferenceClickListener(preference -> {
+                opensagetv.vibe.miniclient.android.video.PlayerBackend backend =
+                    opensagetv.vibe.miniclient.android.video.PlayerBackend.fromPreference(prefs.getString(Keys.default_player,"exoplayer"));
+                Class<?> screen;
+                switch (backend) {
+                    case MEDIA3: screen=Media3PlayerSettingsActivity.class; break;
+                    case IJKPLAYER: screen=IJKPlayerSettingsActivity.class; break;
+                    case GSYPLAYER: screen=GSYPlayerSettingsActivity.class; break;
+                    default: screen=ExoPlayerSettingsActivity.class;
                 }
-            });
-
-            Preference ijkplayerSettingsPref = this.findPreference("ijkplayer_settings");
-
-            ijkplayerSettingsPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    Intent i = new Intent(SettingsFragment.this.getActivity(), IJKPlayerSettingsActivity.class);
-                    startActivity(i);
-
-                    return true;
-                }
-            });
-
-            Preference gsyplayerSettingsPref = this.findPreference("gsyplayer_settings");
-
-            gsyplayerSettingsPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener()
-            {
-                @Override
-                public boolean onPreferenceClick(Preference preference)
-                {
-                    Intent i = new Intent(SettingsFragment.this.getActivity(), GSYPlayerSettingsActivity.class);
-                    startActivity(i);
-
-                    return true;
-                }
+                startActivity(new Intent(requireContext(),screen)); return true;
             });
 
             final Preference memCache = findPreference(Keys.image_cache_size_mb);
@@ -411,7 +369,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
                     prefs.getString(Keys.default_player, "exoplayer"));
             updateListSummary(decodingMethod, R.string.summary_list_decoding_method,
                     prefs.getString(Keys.decoding_method, "hardware"));
-            updateListSummary(streammode, R.string.summary_list_streaming_mode_preference, prefs.getStreamingMode());
+            updateListSummary(streammode, R.string.summary_list_streaming_mode_preference, prefs.getString(AndroidPrefStore.STREAMING_MODE,AndroidPrefStore.STREAMING_MODE_DEFAULT));
             
             final Preference version = findPreference("version");
             //version.setSummary(Version.VERSION);
@@ -496,7 +454,7 @@ public class SettingsFragment extends PreferenceFragmentCompat
                 R.string.summary_list_decoding_method,
                 prefs.getString(Keys.decoding_method, "hardware"));
         updateListSummary((ListPreference) findPreference(AndroidPrefStore.STREAMING_MODE),
-                R.string.summary_list_streaming_mode_preference, prefs.getStreamingMode());
+                R.string.summary_list_streaming_mode_preference, prefs.getString(AndroidPrefStore.STREAMING_MODE,AndroidPrefStore.STREAMING_MODE_DEFAULT));
         updateListSummary((ListPreference) findPreference(Keys.push_buffer_limit),
                 R.string.push_buffer_limit_summary,
                 prefs.getString(Keys.push_buffer_limit, "auto"));
@@ -510,13 +468,33 @@ public class SettingsFragment extends PreferenceFragmentCompat
         PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .registerOnSharedPreferenceChangeListener(serverDiagnosticListener);
         refreshServerDiagnosticPreferences();
+        refreshSections();
+        if(returnFocusKey!=null)getListView().post(()->{
+            androidx.recyclerview.widget.RecyclerView.Adapter<?> adapter=getListView().getAdapter();
+            if(!(adapter instanceof androidx.preference.PreferenceGroupAdapter))return;
+            int position=((androidx.preference.PreferenceGroupAdapter)adapter).getPreferenceAdapterPosition(returnFocusKey);
+            if(position<0)return;
+            getListView().scrollToPosition(position);
+            getListView().post(()->{
+                androidx.recyclerview.widget.RecyclerView.ViewHolder holder=getListView().findViewHolderForAdapterPosition(position);
+                if(holder!=null)holder.itemView.requestFocus();
+            });
+        });
     }
 
     @Override public void onPause() {
+        android.view.View focused=getListView().findFocus();
+        androidx.recyclerview.widget.RecyclerView.ViewHolder holder=focused==null?null:getListView().findContainingViewHolder(focused);
+        if(holder!=null&&getListView().getAdapter() instanceof androidx.preference.PreferenceGroupAdapter){
+            int position=holder.getBindingAdapterPosition();
+            if(position>=0){Preference item=((androidx.preference.PreferenceGroupAdapter)getListView().getAdapter()).getItem(position);if(item!=null)returnFocusKey=item.getKey();}
+        }
         PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .unregisterOnSharedPreferenceChangeListener(serverDiagnosticListener);
         super.onPause();
     }
+
+    @Override public void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("settings_return_focus",returnFocusKey);}
 
     private void refreshServerDiagnosticPreferences() {
         if (!isAdded()) return;
@@ -618,13 +596,82 @@ public class SettingsFragment extends PreferenceFragmentCompat
             String saved=choice.getValue();
             CharSequence entry=choice.getEntry();
             return ("mim".equals(saved) && !fixed ? "Auto (MIM requires Fixed)"
-                    : entry==null ? "Auto" : entry)+" · applies on next playback";
+                    : entry==null ? "Auto" : entry);
         });
+    }
+
+    private void refreshSections() { refreshSections(null, null); }
+
+    private void refreshSections(String playerOverride, String transportOverride) {
+        if (prefs == null) return;
+        String player=playerOverride == null ? prefs.getString(Keys.default_player,"exoplayer") : playerOverride;
+        String transport=transportOverride == null ? prefs.getStreamingMode() : transportOverride;
+        String playerName=opensagetv.vibe.miniclient.android.video.PlayerBackend.fromPreference(player).displayName();
+        Preference selected=findPreference("selected_player_settings");
+        if (selected != null) selected.setSummary(playerName + " settings and information");
+        for (int i=0;i<getPreferenceScreen().getPreferenceCount();i++) {
+            Preference item=getPreferenceScreen().getPreference(i);
+            if (item instanceof CollapsiblePreferenceCategory) ((CollapsiblePreferenceCategory)item).restoreExpansion();
+        }
+        setSectionSummary("playback", playerName+" · "+entryLabel(Keys.decoding_method,prefs.getString(Keys.decoding_method,"hardware")));
+        String configured=entryLabel(AndroidPrefStore.STREAMING_MODE,transport);
+        if ("fixed".equals(transport)) {
+            String processing=prefs.getString(Keys.mim_direct_mode,"off");
+            String method=AndroidPrefStore.adjustmentMethod(PreferenceManager.getDefaultSharedPreferences(requireContext()));
+            configured+=" · "+("hls".equals(processing)?"HLS":"transcode".equals(processing)?"Legacy":"copy".equals(processing)?"Copy":"Stock")
+                +" · "+("in_place".equals(method)?"In-place preferred":"switch".equals(method)?"Switching":"Adjustment Off");
+        }
+        opensagetv.vibe.miniclient.MiniClientConnection connection=MiniclientApplication.get().getClient().getCurrentConnection();
+        String actual="Not connected";
+        if (connection != null) {
+            java.util.Map<String,Object> snapshot=opensagetv.vibe.miniclient.android.ClientDiagnosticSnapshot.capture(requireActivity(),MiniclientApplication.get().getClient(),connection);
+            Object value=snapshot.get("playback");
+            if (value instanceof java.util.Map && Boolean.TRUE.equals(((java.util.Map<?,?>)value).get("active")))
+                actual="Active: "+String.valueOf(((java.util.Map<?,?>)value).get("transport"));
+            else actual="Connected · no active playback";
+        }
+        setSectionSummary("transport","Configured: "+configured+" · "+actual);
+        setSectionSummary("diagnostics","Web server "+(prefs.getBoolean(AndroidPrefStore.CLIENT_WEB_ENABLED,false)?"On":"Off")
+                +" · Server upload "+(prefs.getBoolean(AndroidPrefStore.SERVER_DIAGNOSTICS_ENABLED,false)?"On":"Off"));
+        setSectionSummary("about",MiniclientApplication.get().getVersionName());
+        Preference fixed=findPreference("fixed_transcoding");
+        Preference buffering=findPreference(Keys.playback_buffer_preset);
+        String bufferReason=PlaybackSettingCatalog.defaultUnavailable(PlaybackSettingCatalog.BUFFER,player);
+        if(buffering!=null){buffering.setEnabled(bufferReason==null);
+            buffering.setSummary(bufferReason==null?PlaybackSettingCatalog.BUFFER.display(requireContext(),prefs.getString(Keys.playback_buffer_preset,"balanced"))+" · Pull / SMB only":bufferReason);}
+        fixed.setEnabled("fixed".equals(transport));
+        fixed.setSummary("fixed".equals(transport)?"Processing, bitrate adjustment and stock remux options":"Select Fixed as Transport Method to configure this route");
+        Preference push=findPreference("push_settings");
+        push.setEnabled("dynamic".equals(transport));
+        push.setSummary("dynamic".equals(transport)?"Legacy Push write capacity":"Select Push as Transport Method to configure this route");
+    }
+    private void setSectionSummary(String key,String value) {
+        Preference section=findPreference("settings/section/"+key); if(section!=null)section.setSummary(value);
+    }
+    private String entryLabel(String key,String value) {
+        ListPreference choice=findPreference(key); if(choice==null)return value;
+        int index=choice.findIndexOfValue(value);return index<0?value:choice.getEntries()[index].toString();
+    }
+    private String entryLabelFromArray(int labels,int values,String value) {
+        String[] options=getResources().getStringArray(values), names=getResources().getStringArray(labels);
+        for(int i=0;i<options.length;i++)if(options[i].equals(value))return names[i];return value;
     }
 
     void clearAllPreferences()
     {
-        PreferenceManager.getDefaultSharedPreferences(getActivity()).edit().clear().apply();
-        Toast.makeText(getActivity(), "Preferences have been reset to defaults", Toast.LENGTH_LONG).show();
+        androidx.appcompat.app.AlertDialog dialog=new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Reset settings to defaults?")
+            .setMessage("Restore displayed playback, transport, mapping, general and diagnostic options. Server entries, credentials, client ID, SMB mappings/profiles, files and authorization keys are preserved.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Reset",(unused,which)->{
+                SettingsDefaults.restore(requireContext(),PreferenceManager.getDefaultSharedPreferences(requireContext()));
+                Toast.makeText(requireContext(),"Settings restored; connections and credentials preserved",Toast.LENGTH_LONG).show();
+                requireActivity().recreate();
+            }).create();
+        dialog.setOnShowListener(unused->{
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setFocusableInTouchMode(true);
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).requestFocus();
+        });
+        dialog.show();
     }
 }

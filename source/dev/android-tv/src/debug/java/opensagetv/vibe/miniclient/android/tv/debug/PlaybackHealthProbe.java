@@ -407,6 +407,7 @@ final class PlaybackHealthProbe
         {
             Object codeName = invokeOptional(playerError, "getErrorCodeName");
             out.playerError = codeName == null ? playerError.toString() : String.valueOf(codeName);
+            out.playerErrorDetail = opensagetv.vibe.miniclient.android.video.CodecFailureDetail.describe(playerError);
         }
 
         Object videoFormat = invokeOptional(exo, "getVideoFormat");
@@ -487,7 +488,11 @@ final class PlaybackHealthProbe
             // selected implementation without adding continuous telemetry.
             Object decoder = readField(renderer, "decoder");
             if (decoder != null)
+            {
                 decoderName = decoder.getClass().getName();
+                if (!video && decoderName.endsWith(".FfmpegAudioDecoder"))
+                    out.audioOutputChannels = readIntField(decoder, "channelCount", -1);
+            }
         }
         Object counters = readField(renderer, "decoderCounters");
         if (counters != null)
@@ -614,6 +619,16 @@ final class PlaybackHealthProbe
     static boolean videoOutputAdvanced(Snapshot before, Snapshot after)
     {
         return counterAdvanced(before.videoRendered, after.videoRendered);
+    }
+
+    static Snapshot videoRecoveryBaseline(Snapshot before, Snapshot postCommand)
+    {
+        // During reprepare DecoderCounters can be temporarily unavailable.
+        // Comparing every future sample to -1 can never prove progress.
+        // Keep the last real counter; counterAdvanced handles decoder reset.
+        // READY/surface/audio and a second sustained-output sample still gate
+        // success. No guessed frame or production player state is introduced.
+        return postCommand.videoRendered >= 0 ? postCommand : before;
     }
 
     static boolean audioOutputAdvanced(Snapshot before, Snapshot after)
@@ -749,6 +764,7 @@ final class PlaybackHealthProbe
         long bufferedPositionMs = -1;
         long durationMs = -1;
         String playerError = "";
+        String playerErrorDetail = "";
 
         boolean videoRendererPresent;
         String videoMime = "";
@@ -782,6 +798,7 @@ final class PlaybackHealthProbe
         String audioDecoderName = "";
         String audioDecoderKind = "unknown";
         int audioChannels = -1;
+        int audioOutputChannels = -1;
         int audioFormatSampleRate = -1;
         long audioRendered = -1;
         long audioSkipped = -1;
@@ -912,6 +929,7 @@ final class PlaybackHealthProbe
             append(out, p + "bufferedPositionMs", bufferedPositionMs);
             append(out, p + "durationMs", durationMs);
             append(out, p + "playerError", playerError);
+            append(out, p + "playerErrorDetail", playerErrorDetail);
             append(out, p + "videoMime", videoMime);
             append(out, p + "videoCodecString", videoCodecString);
             append(out, p + "videoDecoder", videoDecoderName);
@@ -938,6 +956,7 @@ final class PlaybackHealthProbe
             append(out, p + "audioDecoder", audioDecoderName);
             append(out, p + "audioDecoderKind", audioDecoderKind);
             append(out, p + "audioChannels", audioChannels);
+            append(out, p + "audioOutputChannels", audioOutputChannels);
             append(out, p + "audioFormatSampleRate", audioFormatSampleRate);
             append(out, p + "audioRendered", audioRendered);
             append(out, p + "audioSkipped", audioSkipped);

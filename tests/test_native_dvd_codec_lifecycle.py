@@ -6,6 +6,19 @@ MEDIA3 = ROOT / "source/dev/android-shared/src/main/java/opensagetv/vibe/minicli
 
 
 class NativeDvdCodecLifecycleContractTest(unittest.TestCase):
+    def test_replacement_releases_codec_before_detaching_surface_for_both_exo_backends(self):
+        video = MEDIA3.parent
+        for name in ("media3/Media3MediaPlayerImpl.java", "exoplayer2/Exo2MediaPlayerImpl.java"):
+            source = (video / name).read_text(encoding="utf-8")
+            release = source.split("protected void releasePlayer()", 1)[1].split("\n    @Override", 1)[0]
+            self.assertIn("super.releasePlayer(false);", release)
+            self.assertLess(release.index("playerToRelease.release();"),
+                            release.index("context.removeVideoFrame();"))
+            self.assertIn("if (player == null)", release)
+        base = (video / "BaseMediaPlayerImpl.java").read_text(encoding="utf-8")
+        self.assertIn("protected void releasePlayer(boolean detachVideo)", base)
+        self.assertIn("if (detachVideo) context.removeVideoFrame();", base)
+
     def test_first_buffer_diagnostics_are_bounded_debug_only_and_payload_free(self):
         renderer = (MEDIA3 / "NativeDvdVideoRenderer.java").read_text(encoding="utf-8")
         self.assertIn("ApplicationInfo.FLAG_DEBUGGABLE", renderer)

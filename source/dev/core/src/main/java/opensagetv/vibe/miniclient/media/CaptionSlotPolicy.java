@@ -58,9 +58,8 @@ public final class CaptionSlotPolicy
 
     /**
      * Finds a caption track with independently controlled CEA and DVB
-     * eligibility. Virtual CC1/CC2 slots exclude DVB because bitmap subtitles
-     * are selected by the separate DVB mode (or the legacy STV Subtitles
-     * command), never by SageTV's CC1/CC2 callback channels.
+     * eligibility. DVB is rendered locally, not through the text callback;
+     * virtual slots may select it when the client knows the STV state.
      */
     public static SubtitleTrack findTrack(SubtitleTrack[] tracks, int slot,
             String requestedType, String requestedLanguage, boolean includeCea,

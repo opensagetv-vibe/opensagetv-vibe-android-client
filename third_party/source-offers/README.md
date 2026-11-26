@@ -58,7 +58,25 @@ module's experimental FFmpeg video renderer. The FFmpeg configuration starts
 from `--disable-everything`, disables programs and unrelated libraries, and
 enables no GPL or nonfree component.
 
+## Client AAC initialization correction
+
+FIXED-001 does not modify either audio extension AAR above: Java classes,
+resources, JNI interfaces and all eight native libraries retain their qualified
+bytes. `AacProgramConfig` and the two client `AacPceHlsExtractorFactory` adapters
+use public extraction interfaces to capture the actual AAC-LC PCE before a
+queue can discard its initial preroll sample. They provide a complete,
+independently aligned ASC and observed channel count in the track format;
+samples, timestamps, read order and other codecs remain unchanged.
+
+Parsing is bounded to512sample bytes and8tracks per explicit playback owner,
+with track/header matching and defensive copies. Each OPENURL creates new
+state; no process-global layout cache, guessed channels, decoder priority change,
+custom audio-library fork or server/Core replacement is required. The normal
+client build and shared parser/preroll/adapter tests reproduce this correction;
+native FFmpeg versions, build recipes, licenses and source offers stay unchanged.
+
 ## IJKPlayer and its FFmpeg runtime
+
 
 Distributed artifacts:
 

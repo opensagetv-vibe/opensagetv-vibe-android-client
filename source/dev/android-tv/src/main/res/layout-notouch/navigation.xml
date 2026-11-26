@@ -240,6 +240,14 @@
             android:src="@drawable/ic_equalizer_white_24dp"
             android:tag="playback_stats"/>
         <ImageView
+            android:id="@+id/nav_playback_details"
+            style="@style/NavIconButton"
+            android:layout_column="13"
+            android:layout_row="4"
+            android:contentDescription="Show Playback Information"
+            android:src="@drawable/ic_playback_info_white_24dp"
+            android:tag="playback_details"/>
+        <ImageView
             android:id="@+id/nav_toggle_ar"
             style="@style/NavIconButton"
             android:layout_column="9"
@@ -273,6 +281,15 @@
             android:contentDescription="Audio Output and Sync"
             android:src="@drawable/ic_audio_tune_white_24dp"
             android:tag="audio_output"/>
+
+        <ImageView
+            android:id="@+id/nav_playback_settings"
+            style="@style/NavIconButton"
+            android:layout_column="13"
+            android:layout_row="7"
+            android:contentDescription="Playback Settings"
+            android:src="@drawable/ic_settings_white_24dp"
+            android:tag="playback_settings"/>
 
     </GridLayout>
     </LinearLayout>

@@ -22,7 +22,13 @@ public final class ClientDiagnosticSnapshot {
         p.put("active",stats.active); p.put("backend",stats.backend); p.put("transport",stats.transport); p.put("state",stats.state);
         p.put("positionMs",number(stats.positionMs)); p.put("durationMs",number(stats.durationMs));
         p.put("bufferedAheadMs",number(stats.bufferedAheadMs)); p.put("bufferBytes",number(stats.bufferBytes));
+        p.put("directQualityState",MiniclientApplication.get().getMimDirectSession().qualityStateForDiagnostics());
+        p.put("hlsProfile",MiniclientApplication.get().getMimDirectSession().hlsProfileForDiagnostics());
+        p.put("directQualityFailure",MiniclientApplication.get().getMimDirectSession().qualityFailureForDiagnostics());
+        p.put("directQualityObservation",MiniclientApplication.get().getMimDirectSession().qualityObservationForDiagnostics());
+        p.put("directVideoTargetKbps",number(MiniclientApplication.get().getMimDirectSession().qualityVideoTargetForDiagnostics()));
         p.put("decoder",text(stats.videoDecoder)); p.put("decoderKind",text(stats.videoDecoderKind));
+        p.put("serverOutput",text(stats.serverOutput));
         p.put("deinterlace",text(stats.deinterlace));
         p.put("deinterlaceImplementation",text(stats.deinterlaceImplementation));
         p.put("deinterlaceFilter",text(stats.deinterlaceFilter));
@@ -51,6 +57,10 @@ public final class ClientDiagnosticSnapshot {
         // A connection's MediaCmd survives source/player replacement, so it
         // cannot itself identify a new playback context for pending seeks.
         result.put("_timelineOwner",player);
+        if(player instanceof opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl)
+            result.put("playbackExperience",((opensagetv.vibe.miniclient.android.video.BaseMediaPlayerImpl<?,?>)player).playbackExperienceSnapshot());
+        else if(player instanceof opensagetv.vibe.miniclient.android.video.gsy.GSYMediaPlayerImpl)
+            result.put("playbackExperience",((opensagetv.vibe.miniclient.android.video.gsy.GSYMediaPlayerImpl)player).playbackExperienceSnapshot());
         List<Map<String,Object>> tracks = new ArrayList<>();
         if (player != null) {
             int selected = player.getSelectedSubtitleTrack();

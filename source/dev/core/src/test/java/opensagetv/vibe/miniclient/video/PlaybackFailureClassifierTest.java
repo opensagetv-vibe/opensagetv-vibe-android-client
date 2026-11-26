@@ -72,6 +72,32 @@ public class PlaybackFailureClassifierTest
     }
 
     @Test
+    public void audioDecodeFailureNeverQuarantinesTheWorkingVideoDecoder()
+    {
+        PlaybackFailureClassifier.Decision result = classify(
+                "ERROR_CODE_DECODING_FAILED", "androidx.media3.decoder.ffmpeg.FfmpegDecoderException",
+                "Error decoding", true, true, false, false);
+        assertEquals(PlaybackFailureClassifier.Kind.DECODER_RUNTIME, result.kind);
+        assertEquals(PlaybackFailureClassifier.Recovery.REPREPARE_PLAYER, result.recovery);
+        assertFalse(result.mayExcludeVideoDecoder);
+        assertEquals(1, result.maxAutomaticAttempts);
+    }
+
+    @Test
+    public void platformAudioDecoderAlsoCannotExcludeVideo()
+    {
+        PlaybackFailureClassifier.Decision result = PlaybackFailureClassifier.classify(
+                "ERROR_CODE_DECODING_FAILED", "MediaCodec$CodecException", "", true,
+                true, false, false, "audio/mp4a-latm");
+        assertEquals(PlaybackFailureClassifier.Recovery.REPREPARE_PLAYER, result.recovery);
+        assertFalse(result.mayExcludeVideoDecoder);
+        PlaybackFailureClassifier.Decision video = PlaybackFailureClassifier.classify(
+                "ERROR_CODE_DECODING_FAILED", "FfmpegDecoderException", "", true,
+                false, false, false, "video/avc");
+        assertTrue(video.mayExcludeVideoDecoder);
+    }
+
+    @Test
     public void teardownSuppressesAndDisablesRecovery()
     {
         PlaybackFailureClassifier.Decision result = classify(

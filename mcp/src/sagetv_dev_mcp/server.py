@@ -215,6 +215,7 @@ def _compact_state(state: dict) -> dict:
         "fixedCaptionSideChannelState", "fixedCaptionReceivedPackets",
         "fixedCaptionLastPacketPtsMs", "fixedCaptionLastPollClockMs",
         "mimDirectRequestedMode",
+        "mimHlsOwned", "mimHlsProfile", "mimRuntimeRateEnabled",
         "mimDirectDeinterlace", "mimAcceptedDeinterlace",
         "ijkSoftwareDeinterlace", "ijkSoftwareDeinterlaceActive",
         "videoDeinterlaceMode", "videoDeinterlaceState",
@@ -226,12 +227,16 @@ def _compact_state(state: dict) -> dict:
         "videoGpuCodedFps", "videoGpuRenderer", "videoGpuProfile",
         "videoGpuSwapInterval", "videoGpuFailureWitness",
         "mimDirectNegotiatedMode", "mimDirectSessionState", "mimDirectWatchRecoveryState",
+        "mimDirectQualityState", "mimDirectVideoTargetKbps",
+        "mimDirectQualityFailure",
+        "mimDirectQualityObservation",
         "playerClass", "state", "mediaTimeMs", "sageTimelineMs", "playbackRate", "timelineSource", "serverAnchorMs",
         "serverRequestedSeekMs", "serverSeekSequence", "serverSeekMonotonicMs", "serverSeekWallMs", "serverSeekAgeMs",
         "serverFlushSequence", "serverFlushMonotonicMs", "serverFlushAgeMs",
         "serverAnchorSequence", "serverAnchorMonotonicMs", "serverAnchorAgeMs", "bufferLeft",
         "serverChannelBandwidthKbps", "serverStreamBandwidthKbps", "serverTargetBandwidthKbps",
         "serverMuxTimeMs", "clientBufferTimeMs", "clientBufferAvailableBytes",
+        "sageTvCaptionStateReceived", "sageTvCaptionState", "legacyServerCaptionFallbackActive",
         "lastPushPayloadBytes", "lastPushFlags", "lastPushReply",
         "dvdSessionPending", "dvdPushedBytes", "dvdLastReadBytes",
         "dvdEpochPushedBytes", "dvdDecoderBufferedAheadMs",
@@ -296,6 +301,7 @@ def _compact_state(state: dict) -> dict:
         "subtitleOverlayAttached", "subtitleStateError",
         "selectedAudioTrack", "audioTrackCount", "audioTracks", "audioStateError",
         "audioOutputMode", "audioOffsetSupported", "audioOffsetMs",
+        "audioOffsetSessionOverrideMs", "audioPassthroughSessionOverride",
         "passthroughAudioOffsetEnabled", "audioOffsetPath",
         "health_probeSupported", "health_probeProvider", "health_probeReason",
         "health_firstVideoFrameRendered",
@@ -335,7 +341,7 @@ def _compact_state(state: dict) -> dict:
         "health_pushMode", "health_playerReady", "health_seekPending", "health_flushed", "health_errorState", "health_retryCount",
         "health_playbackState", "health_playWhenReady", "health_isPlaying", "health_isLoading",
         "health_basicIsPlaying",
-        "health_playerPositionMs", "health_bufferedPositionMs", "health_durationMs", "health_playerError",
+        "health_playerPositionMs", "health_bufferedPositionMs", "health_durationMs", "health_playerError", "health_playerErrorDetail",
         "health_videoMime", "health_videoCodecString", "health_videoDecoder", "health_videoDecoderKind",
         "health_videoWidth", "health_videoHeight", "health_videoRendered", "health_videoSkipped", "health_videoDropped",
         "health_videoDecodeFps", "health_videoOutputFps",
@@ -344,7 +350,7 @@ def _compact_state(state: dict) -> dict:
         "health_mpeg2ProgressiveFrameCount", "health_mpeg2InterlacedFrameCount",
         "health_mpeg2FieldPictureCount",
         "health_audioMime", "health_audioCodecString", "health_audioDecoder", "health_audioDecoderKind",
-        "health_audioChannels", "health_audioFormatSampleRate", "health_audioRendered", "health_audioSkipped", "health_audioDropped",
+        "health_audioChannels", "health_audioOutputChannels", "health_audioFormatSampleRate", "health_audioRendered", "health_audioSkipped", "health_audioDropped",
         "health_audioQueuedInput", "health_audioDecoderInitCount", "health_audioDecoderReleaseCount",
         "health_audioTrackPresent", "health_audioTrackState", "health_audioTrackPlayState", "health_audioTrackSampleRate",
         "health_audioSessionId", "health_audioPlaybackHeadFrames",
@@ -548,6 +554,9 @@ def _dvd_static_menu_health(state: dict) -> tuple[bool, dict]:
     passed = (
         player_active
         and session_pending
+        # A visible subtitle is not proof of an interactive still menu.
+        # Otherwise an ordinary title frozen with a subtitle passes startup.
+        and bool(state.get("dvdHighlightVisible", False))
         and video_rendered > 0
         and overlay_presented > 0
         and overlay_pixels > 0
@@ -1602,6 +1611,9 @@ def dev_set_player_config(
     fixed_caption_side_channel_port: int = 0,
     mim_direct_mode: str = "",
     mim_direct_deinterlace: str = "",
+    mim_direct_runtime_rate: bool | None = None,
+    mim_direct_adaptive_quality: bool | None = None,
+    mim_direct_minimum_kbps: int = 0,
     ijk_software_deinterlace: str = "",
     ijk_deinterlace_filter: str = "",
     video_deinterlace_mode: str = "",
@@ -1687,6 +1699,9 @@ def dev_set_player_config(
         fixed_caption_side_channel_port=fixed_caption_side_channel_port or "",
         mim_direct_mode=mim_direct_mode,
         mim_direct_deinterlace=mim_direct_deinterlace,
+        mim_direct_runtime_rate=mim_direct_runtime_rate,
+        mim_direct_adaptive_quality=mim_direct_adaptive_quality,
+        mim_direct_minimum_kbps=mim_direct_minimum_kbps or "",
         ijk_software_deinterlace=ijk_software_deinterlace,
         ijk_deinterlace_filter=ijk_deinterlace_filter,
         video_deinterlace_mode=video_deinterlace_mode,
@@ -2851,7 +2866,7 @@ def dev_set_ime_suppression(enabled: bool) -> dict:
 
 @mcp.tool()
 def dev_player_control(action: str) -> dict:
-    """Call the active Android player: play/pause/stop or its existing restart_audio menu action."""
+    """Call the debug player: play/pause/stop, restart_audio, or one explicit ordinary-Push parser fault for recovery tests."""
     return adb.player_control(action)
 
 
@@ -3442,6 +3457,77 @@ def dev_seek_time(target_ms: int, tolerance_ms: int = 2000, timeout_s: float = 1
     }
 
 
+def _server_seek_observation_window(remaining_s: float, attempts_left: int) -> float:
+    # The ten-second split exists only to leave time for another explicitly
+    # requested DVD correction. A single/final seek must receive the caller's
+    # real observation budget; otherwise Fixed producer replacement is reported
+    # as a 30-second timeout after only ten seconds. No extra Seek is issued.
+    if attempts_left <= 1:
+        return max(0.0, remaining_s)
+    return min(10.0, max(0.0, remaining_s) / attempts_left)
+
+
+def _server_file_relative_time(state: dict, expected_media_id: int) -> int:
+    """Stock basic Fixed returns a transcode clock, not a recording position."""
+    media = state.get("media") or {}
+    if int(media.get("mediaFileId", -1)) != expected_media_id:
+        raise RuntimeError("MediaFile changed while verifying the server-owned seek")
+    # Core's public VideoFrame clock is epoch-relative for imported recordings.
+    # Subtract the same UI's actual seek-start; never invent a decoder anchor.
+    clock, start = state.get("mediaTimeMs"), state.get("seekStartMs")
+    if (isinstance(clock, bool) or isinstance(start, bool)
+            or not isinstance(clock, (int, float)) or not isinstance(start, (int, float))
+            or clock < start or start < 0):
+        raise RuntimeError("Server file-relative seek clock is unavailable")
+    return int(clock - start)
+
+
+def _owned_hls_seek_landing(before: dict, current: dict) -> dict | None:
+    """Existing first-frame event plus observed clocks, never a requested anchor.
+
+    Slow ADB snapshots can miss the tolerance window after playback resumes.
+    Only an owned HLS replacement with a fresh Seek/first-frame pair qualifies;
+    basic Fixed/Push/DVD, source changes and pending/stale frames cannot use it.
+    This changes the external verifier only, never a player clock or seek.
+    """
+    if (current.get("mimHlsOwned") is not True
+            or current.get("health_playbackSource") != "MIM_DIRECT"
+            or current.get("health_seekPending") is not False
+            or current.get("mimDirectSessionState") != "active_transcode"
+            or before.get("connectionGeneration") is None
+            or current.get("connectionGeneration") != before.get("connectionGeneration")):
+        return None
+    try:
+        sequence = int(before.get("trapSequence", -1))
+        local = int(current.get("health_playerPositionMs", -1))
+        absolute = _snapshot_media_time(current)
+        if sequence < 0 or local < 0 or absolute < local:
+            return None
+        events = [e for e in _parse_trap_recent(current.get("trapRecent"))
+                  if int(e.get("sequence", -1)) > sequence]
+        if any(e.get("event") == "server_openurl_command" for e in events):
+            return None
+        seeks = [e for e in events if e.get("event") == "server_seek_command"]
+        if not seeks:
+            return None
+        frames = [e for e in events if e.get("event") == "direct_seek_first_frame_complete"
+                  and int(e.get("sequence", -1)) > int(seeks[-1]["sequence"])
+                  and int(e.get("videoRendered", 0)) > 0
+                  and e.get("surfaceValid") is True
+                  and int(e.get("playerPositionMs", -1)) >= 0
+                  and int(e.get("monotonicMs", -1)) >= 0
+                  and 0 <= int(current.get("health_capturedMonotonicMs", -1)) - int(e.get("monotonicMs", -1)) <= 10000]
+        if not frames:
+            return None
+        frame = frames[0]
+        return {"basis": "owned_hls_confirmed_first_frame", "frameSequence": frame["sequence"],
+                "observedFileClockMs": absolute, "observedPlayerClockMs": local,
+                "presentedPlayerClockMs": frame["playerPositionMs"],
+                "filePositionMs": absolute - local + int(frame["playerPositionMs"])}
+    except (TypeError, ValueError, RuntimeError):
+        return None
+
+
 @mcp.tool()
 def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
                          timeout_s: float = 30.0, stable_ms: int = 1200,
@@ -3473,6 +3559,17 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     # Push bytes without a commissioning-only MiniClient event.
     sage_control, sage_context = _sage_control_session(server_address, client_id)
     seek_transport = getattr(sage_control, "transport", "stock_sagex_videoframe_seek")
+    basic_fixed_clock = (before.get("pushDetailedBufferStats") is False
+                         and bool(before.get("health_pushMode"))
+                         and not bool(before.get("dvdSessionPending")))
+    expected_media_id = -1
+    if basic_fixed_clock:
+        initial_ui = sage_control.ui_state(sage_context)
+        expected_media_id = int((initial_ui.get("media") or {}).get("mediaFileId", -1))
+        if expected_media_id <= 0:
+            raise RuntimeError("Cannot verify the owning MediaFile for basic Fixed seek")
+        _server_file_relative_time(initial_ui, expected_media_id)
+    previous_flush = int(before.get("serverFlushSequence", -1))
 
     def issue_server_seek(value_ms: int) -> dict:
         reply = sage_control.seek(sage_context, value_ms)
@@ -3484,6 +3581,7 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     deadline = started + timeout_s
     last = before
     reached_ms = -1
+    landing_witness = None
     replies: list[dict] = []
     requested_ms = target_ms
     previous_stc_count = int(before.get("dvdStcCount", -1))
@@ -3500,7 +3598,7 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
         # seek for server-owned DVD positioning.
         attempts_left = max_attempts - attempt
         remaining_before_attempt = max(0.0, deadline - time.monotonic())
-        attempt_window_s = min(10.0, remaining_before_attempt / max(1, attempts_left))
+        attempt_window_s = _server_seek_observation_window(remaining_before_attempt, attempts_left)
         attempt_deadline = min(deadline, time.monotonic() + max(1.0, attempt_window_s))
         # DVD VM sector interpolation can land on a nearby VOBU. Observe the
         # exact STC anchor emitted for that landing, then issue at most two
@@ -3510,7 +3608,23 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
         while time.monotonic() < attempt_deadline:
             last = adb.player_state_snapshot()
             try:
-                reached_ms = _snapshot_media_time(last)
+                if basic_fixed_clock:
+                    # Core adds its private transcode timestampOffset to raw
+                    # GETMEDIATIME. Compare file targets with that public clock,
+                    # not Android's correct zero-based decoder epoch. Require a
+                    # real new FLUSH so Core's optimistic time guess cannot pass
+                    # while the old producer is still rendering.
+                    if int(last.get("serverFlushSequence", -1)) <= previous_flush:
+                        reached_ms = -1
+                    else:
+                        reached_ms = _server_file_relative_time(
+                            sage_control.ui_state(sage_context), expected_media_id)
+                else:
+                    reached_ms = _snapshot_media_time(last)
+                    frame_witness = _owned_hls_seek_landing(before, last)
+                    if frame_witness is not None:
+                        reached_ms = frame_witness["filePositionMs"]
+                        landing_witness = frame_witness
             except RuntimeError:
                 reached_ms = -1
             stc_count = int(last.get("dvdStcCount", -1))
@@ -3548,11 +3662,14 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
     return {
         "passed": landed and recovered,
         "landed": landed,
+        "landingWitness": landing_witness,
         "recovered": recovered,
         "target_ms": target_ms,
         "reached_ms": reached_ms,
         "tolerance_ms": tolerance_ms,
         "recoveryMs": int(round((time.monotonic() - started) * 1000.0)),
+        "positionCoordinate": "stock_server_file_relative" if basic_fixed_clock else "client_media_time",
+        "clientDecoderTimeMs": _snapshot_media_time(last),
         "seekReply": replies[-1] if replies else {},
         "seekReplies": replies,
         "seekAttemptCount": len(replies),
@@ -3567,9 +3684,9 @@ def dev_server_seek_time(target_ms: int, tolerance_ms: int = 2000,
 
 
 @mcp.tool()
-def dev_show_active_player_adjustments() -> dict:
-    """Open the debug APK's live Active Player Adjustments screen."""
-    return adb.show_active_player_adjustments()
+def dev_show_active_player_adjustments(panel: str = "video") -> dict:
+    """Open a closed playback UI section: video/hub/audio/captions/transport/diagnostics/recovery/navigation."""
+    return adb.show_active_player_adjustments(panel=panel)
 
 
 @mcp.tool()
@@ -3580,7 +3697,7 @@ def dev_show_av_sync_test() -> dict:
 
 @mcp.tool()
 def dev_set_active_player_overlay(visible: bool = True, mode: str = "") -> dict:
-    """Control Playback Stats. Use mode=toggle/off/compact/detailed/detailed_30s.
+    """Control Playback Stats. Use mode=toggle/off/graphs/info/compact/detailed/detailed_30s.
 
     Omitting mode preserves the legacy visible Boolean behavior, where visible=true
     shows the bounded 30-second detailed panel and visible=false hides it.

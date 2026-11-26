@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic authored NTSC DVD-Video fixture for SageTV testing.
+"""Build a deterministic authored NTSC or PAL DVD-Video fixture for SageTV testing.
 
 The generated disc is designed for automated Android MiniClient / MiniDVDPlayer
 validation.  It contains:
@@ -42,6 +42,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
 WIDTH = 720
+STANDARD = "ntsc"
 HEIGHT = 480
 FPS_NUM = 30_000
 FPS_DEN = 1_001
@@ -72,9 +73,21 @@ BUILD_REPORT_NAME = "BUILD_REPORT.json"
 CHECKSUM_NAME = "VIDEO_TS_SHA256SUMS.txt"
 METADATA_DIR_NAME = "TEST_METADATA"
 WORK_CONFIG_NAME = "VIBE_DVD_WORK_CONFIG.json"
-WORK_ASSET_SCHEMA_VERSION = 3
+WORK_ASSET_SCHEMA_VERSION = 4
 
 COMMAND_LOG: list[dict[str, Any]] = []
+
+
+def configure_standard(standard: str) -> None:
+    """Keep one format contract for pixels, fields, authoring, SPU and metadata."""
+    global STANDARD, HEIGHT, FPS_NUM, FPS_DEN, FPS, FPS_DECIMAL, SOURCE_FPS
+    if standard not in ("ntsc", "pal"):
+        raise ValueError("Video standard must be ntsc or pal")
+    STANDARD = standard
+    HEIGHT, FPS_NUM, FPS_DEN = (576, 25, 1) if standard == "pal" else (480, 30_000, 1_001)
+    FPS = f"{FPS_NUM}/{FPS_DEN}"
+    FPS_DECIMAL = FPS_NUM / FPS_DEN
+    SOURCE_FPS = f"{FPS_NUM * 2}/{FPS_DEN}"
 
 
 @dataclass
@@ -709,7 +722,7 @@ def write_srt(
 
 def textsub_xml(srt: Path, font: Path, language: SubtitleSpec) -> str:
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<subpictures format="NTSC">
+<subpictures format="{STANDARD.upper()}">
   <stream>
     <textsub filename={quoteattr(str(srt))} characterset="UTF-8"
       fontsize="27" font={quoteattr(str(font))}
@@ -719,7 +732,7 @@ def textsub_xml(srt: Path, font: Path, language: SubtitleSpec) -> str:
       horizontal-alignment="center" vertical-alignment="bottom"
       left-margin="34" right-margin="34" top-margin="20" bottom-margin="48"
       subtitle-fps="{FPS_DECIMAL:.8f}" movie-fps="{FPS_DECIMAL:.8f}"
-      movie-width="720" movie-height="480" aspect="16:9" force="no" />
+      movie-width="{WIDTH}" movie-height="{HEIGHT}" aspect="16:9" force="no" />
   </stream>
 </subpictures>
 """
@@ -966,7 +979,7 @@ def menu_spu_xml(menu: MenuSpec) -> str:
         )
     button_xml = "\n".join(button_lines)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<subpictures format="NTSC">
+<subpictures format="{STANDARD.upper()}">
   <stream>
     <spu start="00:00:00.00"
       highlight={quoteattr(str(menu.highlight_file))}
@@ -1089,7 +1102,7 @@ def author_xml(
   <vmgm>
     <fpc>jump titleset 1 menu entry root;</fpc>
     <menus lang="en">
-      <video format="ntsc" aspect="16:9" resolution="720x480" widescreen="nopanscan" />
+      <video format="{STANDARD}" aspect="16:9" resolution="{WIDTH}x{HEIGHT}" widescreen="nopanscan" />
       <pgc entry="title">
         <pre>jump titleset 1 menu entry root;</pre>
       </pgc>
@@ -1097,12 +1110,12 @@ def author_xml(
   </vmgm>
   <titleset>
     <menus lang="en">
-      <video format="ntsc" aspect="16:9" resolution="720x480" widescreen="nopanscan" />
+      <video format="{STANDARD}" aspect="16:9" resolution="{WIDTH}x{HEIGHT}" widescreen="nopanscan" />
       <audio format="ac3" channels="2" samplerate="48khz" lang="en" />
 {menu_xml}
     </menus>
     <titles>
-      <video format="ntsc" aspect="16:9" resolution="720x480" widescreen="nopanscan" />
+      <video format="{STANDARD}" aspect="16:9" resolution="{WIDTH}x{HEIGHT}" widescreen="nopanscan" />
       <audio format="ac3" channels="2" samplerate="48khz" lang="en" />
       <audio format="ac3" channels="2" samplerate="48khz" lang="es" />
       <subpicture lang="en" content="normal" />
@@ -2274,7 +2287,7 @@ def build_test_cases(menus: Sequence[MenuSpec], checkpoints: Sequence[dict[str, 
             ],
             [
                 {"type": "overlayUsesSameDestinationRectAsVideo", "expected": True},
-                {"type": "dvdCanvasSize", "width": 720, "height": 480},
+                {"type": "dvdCanvasSize", "width": WIDTH, "height": HEIGHT},
                 {"type": "sourceCropAppliedBeforeDestinationScale", "expected": True},
                 {"type": "noOverlayPixelsOutsideVideoDestination", "expected": True},
             ],
@@ -2693,7 +2706,7 @@ def build_manifest(
         "format": {
             "disc": "DVD-Video folder",
             "region": "unrestricted-authored-test-content",
-            "videoSystem": "NTSC",
+            "videoSystem": STANDARD.upper(),
             "resolution": {"width": WIDTH, "height": HEIGHT},
             "displayAspect": DISPLAY_ASPECT,
             "frameRate": {"numerator": FPS_NUM, "denominator": FPS_DEN, "text": FPS},
@@ -2903,6 +2916,8 @@ def deep_verify_subpictures(spuunmux: str | None, feature: Path, work: Path) -> 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--standard", choices=("ntsc", "pal"), default="ntsc",
+                        help="authored DVD field/frame/canvas standard (default: ntsc)")
     parser.add_argument(
         "--output",
         type=Path,
@@ -2990,6 +3005,7 @@ def validate_args(args: argparse.Namespace) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     COMMAND_LOG.clear()
     args = parse_args(argv)
+    configure_standard(args.standard)
     def project_path(value: Path) -> Path:
         expanded = value.expanduser()
         return (expanded if expanded.is_absolute() else PROJECT_ROOT / expanded).resolve()
@@ -3084,6 +3100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         work_config = {
             "assetSchemaVersion": WORK_ASSET_SCHEMA_VERSION,
+            "videoStandard": STANDARD,
             "mainDurationSeconds": args.main_duration,
             "specialDurationSeconds": args.special_duration,
             "cueIntervalSeconds": args.cue_interval,
@@ -3139,6 +3156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.reuse_titles:
             title_keys = (
+                "videoStandard",
                 "mainDurationSeconds", "specialDurationSeconds",
                 "cueIntervalSeconds", "cueDurationSeconds", "fontSha256",
             )

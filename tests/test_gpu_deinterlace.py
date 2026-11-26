@@ -233,12 +233,13 @@ class GpuDeinterlaceTests(unittest.TestCase):
         values=[node.text for node in arrays.find("string-array[@name='entryvalues_video_deinterlace_mode']")]
         labels=[node.text for node in arrays.find("string-array[@name='entries_video_deinterlace_mode']")]
         self.assertEqual(['auto','off','client','client_gpu'],values)
-        self.assertEqual('Client GPU',labels[values.index('client_gpu')])
+        self.assertEqual('Player GPU',labels[values.index('client_gpu')])
         prefs=ET.parse(resources/'xml/prefs.xml').getroot()
         key='{http://schemas.android.com/apk/res/android}key'
         self.assertTrue(any(node.get(key)=='video_deinterlace_mode' for node in prefs.iter('ListPreference')))
         live=(JAVA.parent/'ActivePlayerAdjustmentsDialog.java').read_text(encoding='utf-8')
-        self.assertIn('"Client", "Client GPU", "MIM"',live)
+        self.assertIn('PlaybackSettingCatalog.DEINTERLACE.labels(activity)',live)
+        self.assertIn('new String[] { base[0],base[1],base[2],base[3],"MIM" } : base',live)
         settings=(JAVA.parent/'ui/settings/SettingsFragment.java').read_text(encoding='utf-8')
         self.assertIn('configureDeinterlacePreference(String.valueOf(newValue))',settings)
         self.assertIn('final boolean fixed="fixed".equals(streaming)',settings)
@@ -289,8 +290,8 @@ class GpuDeinterlaceTests(unittest.TestCase):
 
     def test_gpu_controls_are_compact_child_and_do_not_replace_ijk_choices(self):
         text=(JAVA.parent/'ActivePlayerAdjustmentsDialog.java').read_text(encoding='utf-8')
-        for required in ('"GPU filter"','"Field order"','"Output rate"','showVideoFilters()',
-                         '"fast","motion"','"auto","top","bottom"','"frame","field"',
+        for required in ('PlaybackSettingCatalog.GPU_FILTER','PlaybackSettingCatalog.GPU_ORDER','PlaybackSettingCatalog.GPU_RATE','showVideoFilters()',
+                         'd.values(activity),d.labels(activity)',
                          'setIjkDeinterlaceFilter(value)','setGpuFieldOrder(value)'):
             self.assertIn(required,text)
 

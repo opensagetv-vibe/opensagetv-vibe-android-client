@@ -200,8 +200,11 @@ final class DebugStateProvider
                         .lastPollClockMsForDiagnostics());
         out.append(";mimDirectRequestedMode=").append(safe(
                 prefs.getString(PrefStore.Keys.mim_direct_mode, "off")));
+        out.append(";mimHlsProfile=").append(safe(MiniclientApplication.get()
+                .getMimDirectSession().hlsProfileForDiagnostics()));
         out.append(";mimDirectDeinterlace=").append(safe(
                 prefs.getString(PrefStore.Keys.mim_direct_deinterlace, "auto")));
+        out.append(";mimRuntimeRateEnabled=").append(prefs.getBoolean(PrefStore.Keys.mim_direct_runtime_rate,false));
         out.append(";ijkSoftwareDeinterlace=").append(safe(
                 prefs.getString(PrefStore.Keys.ijk_software_deinterlace, "auto")));
         out.append(";videoDeinterlaceMode=").append(safe(
@@ -240,6 +243,10 @@ final class DebugStateProvider
         out.append(";mimDirectSessionState=").append(safe(
                 MiniclientApplication.get().getMimDirectSession()
                         .stateForDiagnostics()));
+        out.append(";mimDirectQualityState=").append(safe(MiniclientApplication.get().getMimDirectSession().qualityStateForDiagnostics()));
+        out.append(";mimDirectQualityFailure=").append(safe(MiniclientApplication.get().getMimDirectSession().qualityFailureForDiagnostics()));
+        out.append(";mimDirectQualityObservation=").append(safe(MiniclientApplication.get().getMimDirectSession().qualityObservationForDiagnostics()));
+        out.append(";mimDirectVideoTargetKbps=").append(MiniclientApplication.get().getMimDirectSession().qualityVideoTargetForDiagnostics());
         out.append(";mimDirectWatchRecoveryState=").append(safe(
                 MiniclientApplication.get().getMimDirectSession().recoveryStateForDiagnostics()));
 
@@ -291,6 +298,8 @@ final class DebugStateProvider
             BaseMediaPlayerImpl<?, ?> dvdPlayer =
                     transportPlayer instanceof BaseMediaPlayerImpl
                             ? (BaseMediaPlayerImpl<?, ?>) transportPlayer : null;
+            out.append(";mimHlsOwned=").append(MiniclientApplication.get()
+                    .getMimDirectSession().ownsHls(transportPlayer));
             boolean transformedTransport = dvdPlayer != null
                     && dvdPlayer.isDvdTransformedTransportForDebug();
             String ownedDvdMode = dvdPlayer == null ? ""
@@ -926,9 +935,7 @@ final class DebugStateProvider
 
     private static String captionSlotType(String value)
     {
-        String normalized = CaptionSlotPolicy.normalizeType(value);
-        return CaptionSlotPolicy.TYPE_DVB.equals(normalized)
-                ? CaptionSlotPolicy.TYPE_AUTO : normalized;
+        return CaptionSlotPolicy.normalizeType(value);
     }
 
     private static MiniClient requireClient(Context context)

@@ -59,6 +59,14 @@ public final class PlaybackFailureClassifier
             String causeMessage, boolean firstVideoFrameRendered,
             boolean seekPending, boolean flushPending, boolean tearingDown)
     {
+        return classify(errorCodeName, causeClassName, causeMessage, firstVideoFrameRendered,
+                seekPending, flushPending, tearingDown, "");
+    }
+
+    public static Decision classify(String errorCodeName, String causeClassName,
+            String causeMessage, boolean firstVideoFrameRendered,
+            boolean seekPending, boolean flushPending, boolean tearingDown, String rendererMime)
+    {
         String code = normalize(errorCodeName);
         String cause = normalize(causeClassName) + " " + normalize(causeMessage);
         Kind kind = classifyKind(code, cause);
@@ -89,6 +97,13 @@ public final class PlaybackFailureClassifier
                 return new Decision(kind, Recovery.NONE, show,
                         false, false, 0);
             case DECODER_RUNTIME:
+                // FFmpeg extensions here are audio-only. An audio failure is
+                // not evidence against the currently working video MediaCodec.
+                if (normalize(rendererMime).startsWith("AUDIO/")
+                        || (normalize(rendererMime).isEmpty()
+                            && normalize(causeClassName).contains("FFMPEGDECODEREXCEPTION")))
+                    return new Decision(kind, Recovery.REPREPARE_PLAYER,
+                            show, stale, false, 1);
                 return new Decision(kind,
                         Recovery.REBUILD_PLAYER_WITH_DECODER_EXCLUSION,
                         show, stale, true, 1);

@@ -51,7 +51,20 @@ public final class ActivePlayerProcessOverlay
     public static synchronized String visibleMode()
     {
         if (!isVisible()) return "Off";
-        return activeUpdate.detailed ? "Detailed" : "Compact";
+        return activeUpdate.panel.graphsOnly ? "Graphs" : activeUpdate.panel.infoOnly ? "Info only" : activeUpdate.detailed ? "Detailed" : "Compact";
+    }
+
+    public static synchronized boolean graphsVisible() { return isVisible() && !activeUpdate.panel.infoOnly; }
+    public static synchronized boolean infoVisible() { return isVisible() && !activeUpdate.panel.graphsOnly; }
+    public static synchronized void toggleGraphs(Activity activity, MediaCmd media) {
+        showSelection(activity,media,!graphsVisible(),infoVisible());
+    }
+    public static synchronized void toggleInfo(Activity activity, MediaCmd media) {
+        showSelection(activity,media,graphsVisible(),!infoVisible());
+    }
+    private static void showSelection(Activity activity, MediaCmd media, boolean graphs, boolean info) {
+        if(!graphs && !info)hide();
+        else showInternal(activity,media,true,Long.MAX_VALUE,!info,!graphs);
     }
 
     /** Compatibility toggle now opens a persistent compact panel. */
@@ -81,6 +94,8 @@ public final class ActivePlayerProcessOverlay
             else showPersistent(activity, media, true);
         }
         else if ("off".equals(mode)) hide();
+        else if ("graphs".equals(mode)) showInternal(activity, media, false, Long.MAX_VALUE, true);
+        else if ("info".equals(mode)) showSelection(activity, media, false, true);
         else if ("compact".equals(mode)) showPersistent(activity, media, false);
         else if ("detailed".equals(mode)) showPersistent(activity, media, true);
         else if ("detailed_30s".equals(mode)) showForThirtySeconds(activity, media, true);
@@ -106,9 +121,21 @@ public final class ActivePlayerProcessOverlay
     private static synchronized void showInternal(Activity activity, MediaCmd media,
             boolean detailed, long deadlineMs)
     {
+        showInternal(activity,media,detailed,deadlineMs,false);
+    }
+
+    private static synchronized void showInternal(Activity activity, MediaCmd media,
+            boolean detailed, long deadlineMs, boolean graphsOnly)
+    {
+        showInternal(activity,media,detailed,deadlineMs,graphsOnly,false);
+    }
+
+    private static synchronized void showInternal(Activity activity, MediaCmd media,
+            boolean detailed, long deadlineMs, boolean graphsOnly, boolean infoOnly)
+    {
         hide();
         if (activity == null || activity.isFinishing()) return;
-        StatsPanel panel = new StatsPanel(activity);
+        StatsPanel panel = new StatsPanel(activity, graphsOnly, infoOnly);
         ViewGroup root = activity.findViewById(android.R.id.content);
         if (root == null) return;
         int margin = panel.dp(10);
@@ -479,9 +506,14 @@ public final class ActivePlayerProcessOverlay
         private final Activity owner;
         private int widestContentPx;
 
-        StatsPanel(Activity activity)
+        final boolean graphsOnly;
+        final boolean infoOnly;
+
+        StatsPanel(Activity activity, boolean graphsOnly, boolean infoOnly)
         {
             owner = activity;
+            this.graphsOnly = graphsOnly;
+            this.infoOnly = infoOnly;
             root = new LinearLayout(activity);
             root.setOrientation(LinearLayout.VERTICAL);
             root.setPadding(dp(12), dp(9), dp(12), dp(10));
@@ -506,16 +538,19 @@ public final class ActivePlayerProcessOverlay
             LinearLayout.LayoutParams detailParams = matchWrap();
             detailParams.topMargin = dp(5);
             root.addView(details, detailParams);
+            if(graphsOnly)details.setVisibility(View.GONE);
         }
 
         void update(ActivePlayerStatsSnapshot snapshot, boolean detailed,
                 long activityKbps, long peakActivityKbps)
         {
-            title.setText("OpenSageTV Vibe Playback Stats  •  "
-                    + (detailed ? "Detailed" : "Compact"));
+            title.setText("OpenSageTV Vibe Playback Stats"
+                    + (graphsOnly ? "" : "  •  "
+                        + (infoOnly ? "Info only" : detailed ? "Detailed" : "Compact")));
 
             boolean activityAvailable = activityKbps >= 0;
-            activity.setVisible(activityAvailable);
+            activity.setVisible(true);
+            if(!activityAvailable)activity.update("Media network activity", "unavailable",1_000,0,0xFF888888);
             if (activityAvailable)
             {
                 long scale = Math.max(1L, peakActivityKbps);
@@ -530,13 +565,18 @@ public final class ActivePlayerProcessOverlay
             buffer.setVisible(bufferAvailable);
             if (bufferAvailable)
             {
-                long targetMs = snapshot.dvd ? 8_000L : 30_000L;
-                int progress = (int) Math.min(1_000L,
-                        snapshot.bufferedAheadMs * 1_000L / targetMs);
+                long targetMs = snapshot.bufferTargetMs;
+                int progress = targetMs > 0 ? (int) Math.min(1_000L,
+                        snapshot.bufferedAheadMs * 1_000L / targetMs) : 0;
                 int color = progress < 100 ? 0xFFEF5350
                         : progress < 300 ? 0xFFFFCA28 : 0xFF66BB6A;
                 buffer.update("Buffer health",
                         ActivePlayerStatsSnapshot.durationValue(snapshot.bufferedAheadMs)
+                                + (targetMs > 0 ? " / " + ActivePlayerStatsSnapshot.durationValue(targetMs)
+                                    : " (target unavailable)")
+                                + (snapshot.videoTargetKbps > 0 ? "  •  Video target "
+                                    + ActivePlayerStatsSnapshot.rate(snapshot.videoTargetKbps)
+                                    + " (" + snapshot.qualityState + ")" : "")
                                 + (snapshot.bufferBytes >= 0 ? "  •  "
                                 + ActivePlayerStatsSnapshot.bytes(snapshot.bufferBytes) : ""),
                         1_000, progress, color);
@@ -561,8 +601,9 @@ public final class ActivePlayerProcessOverlay
 
             String body = detailed ? snapshot.detailedText(activityKbps)
                     : snapshot.compactText(activityKbps);
-            details.setText(body);
-            resizeToContent(body);
+            if(infoOnly){activity.setVisible(false);buffer.setVisible(false);cpu.setVisible(false);}
+            if(!graphsOnly)details.setText(body);
+            resizeToContent(graphsOnly ? "" : body);
         }
 
         private void resizeToContent(String body)
@@ -581,8 +622,8 @@ public final class ActivePlayerProcessOverlay
                 width = Math.max(width, details.getPaint().measureText(line));
 
             int screenWidth = owner.getResources().getDisplayMetrics().widthPixels;
-            int maximum = Math.min((int) (screenWidth * 0.65f), dp(900));
-            int desired = Math.max(dp(300), Math.min(maximum,
+            int maximum = Math.min((int) (screenWidth * 0.65f), dp(graphsOnly ? 360 : 900));
+            int desired = Math.max(dp(graphsOnly ? 220 : 300), Math.min(maximum,
                     (int) Math.ceil(width) + root.getPaddingLeft()
                             + root.getPaddingRight() + dp(8)));
             // Do not let changing counters make the panel and graphs twitch smaller.

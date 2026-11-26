@@ -14,6 +14,7 @@ public final class DiscPlaybackSettingsFragment extends PreferenceFragmentCompat
     @Override public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
     {
         setPreferencesFromResource(R.xml.disc_playback_prefs, rootKey);
+        PlaybackSettingPreferences.applyExisting(getPreferenceScreen());
         ListPreference policy = findPreference(PrefStore.Keys.disc_playback_policy);
         if (policy != null)
             policy.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());

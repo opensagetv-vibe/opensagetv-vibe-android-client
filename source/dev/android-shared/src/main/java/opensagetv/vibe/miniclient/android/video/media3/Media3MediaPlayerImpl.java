@@ -190,6 +190,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private final Set<String> sessionDecoderExclusions = new LinkedHashSet<>();
     /** Last real HLS child datasource, retained only for health diagnostics. */
     private volatile DataSource mimDirectDiagnosticDataSource;
+    // Only the current OPENURL owns this state. Decoder/surface rebuilds share
+    // actual AAC PCE data, but a new load never inherits another stream's layout.
+    private opensagetv.vibe.miniclient.android.video.AacProgramConfig.Store aacProgramConfigStore =
+            new opensagetv.vibe.miniclient.android.video.AacProgramConfig.Store();
 
     @Override
     protected void releaseDataSource()
@@ -325,7 +329,13 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             * runtimeConfig.getTsSearchMultiplier())
                     .setConstantBitrateSeekingEnabled(true);
         }
-        return new LegacyCaptionExtractorsFactory(factory, legacyCaptionBridge,
+        ExtractorsFactory selectedFactory = factory;
+        if (!pullMode)
+        {
+            ordinaryPushRecoveryExtractors = new PushRecoveryExtractorsFactory(factory);
+            selectedFactory = ordinaryPushRecoveryExtractors;
+        }
+        return new LegacyCaptionExtractorsFactory(selectedFactory, legacyCaptionBridge,
                 mpeg2InterlaceObserver);
     }
 
@@ -348,6 +358,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 : new Media3PassthroughOffsetExtractorsFactory(factory, controller);
     }
     private volatile MediaSource mediaSource;
+    private volatile PushRecoveryExtractorsFactory ordinaryPushRecoveryExtractors;
+    private final opensagetv.vibe.miniclient.video.PushRecoveryClock pushRecoveryClock =
+            new opensagetv.vibe.miniclient.video.PushRecoveryClock();
     private final PendingPlaybackSeek pendingStartupSeek = new PendingPlaybackSeek();
     private volatile String activePlaybackUrl;
     private volatile boolean audioPassthroughEnabled;
@@ -376,6 +389,11 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     private int selectedSubtitleTrack = DISABLE_TRACK;
     private volatile int requestedSubtitleTrack = DISABLE_TRACK;
     private volatile boolean playRequested = true;
+    private volatile boolean mimSeekOutputSuspended;
+    @Override protected void suspendMimDirectSeekOutput(boolean suspended) {
+        mimSeekOutputSuspended=suspended;
+        if(player!=null)player.setPlayWhenReady(!suspended && playRequested);
+    }
     private volatile boolean serverMuted;
 
     private boolean errorState = false;
@@ -599,6 +617,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 isMimDirectMediaUrlActive() ? "MIM_DIRECT" : "");
     }
 
+    public long getBufferTargetMillis()
+    {
+        return dvdPushMode ? DvdPushLoadControl.MAX_BUFFER_MS
+                : MiniclientApplication.get().getMimDirectSession().ownsResponsiveHls(this)
+                    || (!pushMode && !httpls) ? runtimeConfig.getPullMaxBufferMs() : -1L;
+    }
+    public long getConfiguredHttpBufferTargetMillis() { return runtimeConfig.getPullMaxBufferMs(); }
+
 
     @Override
     public boolean hasRenderedFirstVideoFrame()
@@ -610,6 +636,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     public void load(byte majorHint, byte minorHint, String encodingHint, String urlString,
                      String hostname, boolean timeshifted, long bufferSize)
     {
+        aacProgramConfigStore = new opensagetv.vibe.miniclient.android.video.AacProgramConfig.Store();
         // A newer OPENURL supersedes any retained-source attempt still waiting
         // for its first frame. Never let that older watchdog rebuild the player
         // underneath the newer SageTV playback session.
@@ -618,6 +645,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         fastSwitchAwaitingFirstFrame = false;
         playbackRateController.reset();
         playRequested = true;
+        mimSeekOutputSuspended = false;
         subtitleCueUpdateCount = 0;
         subtitleNonEmptyCueCount = 0;
         subtitleBitmapCueCount = 0;
@@ -823,6 +851,16 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         log.logWarning("Fast media switch did not produce a frame (" + reason
                 + "); rebuilding the Media3 player");
         setupPlayer(fastSwitchTargetUrl);
+    }
+
+    private long directHlsPeriodPosition(ExoPlayer observedPlayer, long positionMs)
+    {
+        if (!mimDirectController().ownsResponsiveHls(this) || observedPlayer == null) return positionMs;
+        Timeline timeline = observedPlayer.getCurrentTimeline();
+        int index = observedPlayer.getCurrentMediaItemIndex();
+        if (timeline.isEmpty() || index < 0 || index >= timeline.getWindowCount()) return positionMs;
+        long offsetMs = timeline.getWindow(index, new Timeline.Window()).getPositionInFirstPeriodMs();
+        return opensagetv.vibe.miniclient.android.video.HlsPlaybackPolicy.periodPositionMs(true, offsetMs, positionMs);
     }
 
     public long getPlaybackPosition()
@@ -1268,7 +1306,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         }
         if (mediaSession != null)
             mediaSession.setActive(true);
-        player.setPlayWhenReady(true);
+        player.setPlayWhenReady(!mimSeekOutputSuspended);
     }
 
     protected void releasePlayer()
@@ -1297,7 +1335,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         // STOP may already have queued a session update on main, and the two
         // Binder paths can block one another long enough that the stock server
         // never receives its DEINIT reply or replacement media socket.
-        Media3MediaPlayerImpl.super.releasePlayer();
+        // Retire state/datasource immediately, but keep the old Surface alive
+        // until its codec has released it. Detaching first invokes a failing
+        // setOutputSurface on Fire OS during H.264 -> native MPEG-2 fallback.
+        Media3MediaPlayerImpl.super.releasePlayer(false);
         mediaSession = null;
 
         context.runOnUiThread(new Runnable()
@@ -1341,6 +1382,9 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 }
                 if (gpuToRelease != null) gpuToRelease.close();
                 if (slotToRelease != null) slotToRelease.set(null);
+                // A queued old cleanup must never detach a newer player's
+                // output. Ordinary Free still removes the view after release.
+                if (player == null) context.removeVideoFrame();
             }
         });
 
@@ -1423,12 +1467,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             }
             return dvdLogicalClockBaseMs + position;
         }
-        return lastServerTime + position;
+        return lastServerTime + (pushMode
+                ? pushRecoveryClock.position(position) : position);
     }
 
     @Override protected boolean hasConfirmedPausedZeroPosition()
     { return playerReady && pausedZeroWitness.confirmed(); }
     @Override public String getPushPausedZeroWitnessForDebug() { return pausedZeroWitness.diagnostics(); }
+
+    @Override public boolean supportsOwnedDvdPresentationClock() { return true; }
+    @Override public long getOwnedDvdPresentedPositionMillis() {
+        return playerReady && !dvdRepreparePending && dvdRenderedFirstFrameInEpoch ? getPlaybackPosition() : -1L;
+    }
 
     @Override
     public void dvdSetStc(int stc)
@@ -1911,13 +1961,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         return;
                     long current = active.getContentPosition();
                     long buffered = active.getBufferedPosition();
-                    if (timeInMS >= current && buffered >= timeInMS
+                    long decoderTargetMs = pushRecoveryClock.decoderTarget(timeInMS);
+                    if (decoderTargetMs >= current && buffered >= decoderTargetMs
                             && ((VibeForwardPushMediaSource)source).isForwardCacheReady())
                     {
                         // Do not call Base.seek: it clears extractor read-ahead
                         // caption state for a producer replacement. This path
                         // retains the very same FIFO/period and selected queues.
-                        active.seekTo(timeInMS);
+                        active.seekTo(decoderTargetMs);
                         PlaybackDebugTrap.recordDetailed("push_forward_cache_seek", Media3MediaPlayerImpl.this,
                                 "targetMs=" + timeInMS + ",fromMs=" + current);
                     }
@@ -2369,6 +2420,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                     // decoder epoch, clamp local seeks and trigger a false end
                     // timeout every minute. Keep the same server-owned byte pipe
                     // and caption/offset policy, but obtain a fresh timeline.
+                    pushRecoveryClock.reset();
                     final Media3PushDataSource pushSource = (Media3PushDataSource) dataSource;
                     mediaSource = createOrdinaryPushSource(
                             new DataSource.Factory()
@@ -2427,6 +2479,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
     @Override
     protected void setupPlayer(String sageTVurl)
     {
+        pushRecoveryClock.reset();
         activePlaybackUrl = sageTVurl;
         // A DVD_STREAMS command can be restored between load() publishing the
         // push:dvd URL and this queued UI-thread setup. Preserve that one
@@ -2727,13 +2780,18 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             log.logDebug("DVD Push load control enabled: min=2000ms max=8000ms "
                     + "playback=750ms rebuffer=2000ms with segment-drain bypass");
         }
-        else if (!pushMode && !httpls)
+        else if (MiniclientApplication.get().getMimDirectSession().ownsResponsiveHls(this)
+                || (!pushMode && !httpls))
         {
             DefaultLoadControl pullLoadControl = new DefaultLoadControl.Builder()
                     .setBufferDurationsMs(
-                            runtimeConfig.getPullMinBufferMs(),
+                            opensagetv.vibe.miniclient.android.video.HlsPlaybackPolicy.refillBufferMs(
+                                    runtimeConfig.getPullMinBufferMs(), runtimeConfig.getPullMaxBufferMs(),
+                                    MiniclientApplication.get().getMimDirectSession().ownsCompletedResponsiveHls(this)),
                             runtimeConfig.getPullMaxBufferMs(),
-                            runtimeConfig.getPullPlaybackBufferMs(),
+                            opensagetv.vibe.miniclient.android.video.HlsPlaybackPolicy.startBufferMs(
+                                    runtimeConfig.getPullPlaybackBufferMs(),
+                                    MiniclientApplication.get().getMimDirectSession().ownsResponsiveHls(this)),
                             runtimeConfig.getPullRebufferMs())
                     .setPrioritizeTimeOverSizeThresholds(true)
                     .build();
@@ -2983,6 +3041,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             public void onPlayerError(PlaybackException error)
             {
                 if (!isCurrentPlaybackSession(listenerSession) || player != listenerPlayer) return;
+                if(abortMimDirectQuality())return;
                 cancelPullSeekRecovery();
                 PlaybackDebugTrap.record("player_error_" + error.getErrorCodeName(), Media3MediaPlayerImpl.this);
                 log.logDebug("PLAYER ERROR: " + error.getErrorCodeName());
@@ -3005,7 +3064,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                                 error.getErrorCodeName(),
                                 failureCause == null ? "" : failureCause.getClass().getName(),
                                 failureCause == null ? "" : failureCause.getMessage(),
-                                firstVideoFrameRendered, seekPending, flushed, false);
+                                firstVideoFrameRendered, seekPending, flushed, false,
+                                error instanceof androidx.media3.exoplayer.ExoPlaybackException
+                                        && ((androidx.media3.exoplayer.ExoPlaybackException)error).rendererFormat != null
+                                        ? ((androidx.media3.exoplayer.ExoPlaybackException)error).rendererFormat.sampleMimeType : "");
                 PlaybackDebugTrap.record("player_error_class_" + failure.kind.name()
                         + "_recovery_" + failure.recovery.name(), Media3MediaPlayerImpl.this);
                 if (failure.transitionStale)
@@ -3098,8 +3160,24 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         PlaybackDebugTrap.record("player_error_recovery_position_preserved",
                                 Media3MediaPlayerImpl.this);
                     }
+                    else if (pushMode && !dvdPushMode && mediaSource != null
+                            && ordinaryPushRecoveryExtractors != null
+                            && ordinaryPushRecoveryExtractors.beginRecovery())
+                    {
+                        // The FIFO cannot seek/replay the consumed header. Reuse only
+                        // its validated MPEG format; fresh readers resync at packets.
+                        pushRecoveryClock.restartDecoder(recoveryPositionMs);
+                        currentPlaybackPosition = 0L;
+                        resetLegacyCaptionsForDiscontinuity();
+                        listenerPlayer.setMediaSource(mediaSource, 0L);
+                        listenerPlayer.prepare();
+                        listenerPlayer.setPlayWhenReady(resumePlayback);
+                        PlaybackDebugTrap.record("player_error_push_container_resync",
+                                Media3MediaPlayerImpl.this);
+                    }
                     else
                     {
+                        // DVD/unknown-format recovery retains its existing policy.
                         // PUSH/FIXED transport position remains server-owned.
                         listenerPlayer.seekTo(recoveryPositionMs + 100L);
                         listenerPlayer.prepare();
@@ -3249,8 +3327,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 switch (reason)
                 {
                     case Player.DISCONTINUITY_REASON_SEEK:
-                        setPlaybackPosition(newPosition.positionMs);
-                        updateMediaSessionPlaybackState(newPosition.positionMs);
+                        setPlaybackPosition(directHlsPeriodPosition(listenerPlayer, newPosition.positionMs));
+                        updateMediaSessionPlaybackState(getPlaybackPosition());
                         seekPending = false;
                         break;
 
@@ -3278,6 +3356,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 }
                 firstVideoFrameRendered = true;
                 notifyPostSeekPushFirstFrame();
+                if(hasMimDirectQualityFramePending())notifyMimDirectQualityFrame(listenerPlayer.getCurrentPosition());
                 if (dataSource instanceof Media3PullDataSource)
                     ((Media3PullDataSource) dataSource).endSeekableSnapshotPreparation();
                 cancelPullSeekRecovery();
@@ -3516,10 +3595,17 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                                     {
                                         mimDirectDiagnosticDataSource = created;
                                     }
+                                    @Override public long bufferingStamp(){return mimDirectBufferingStamp();}
+                                    @Override public void onBodyTransfer(String uri,long bytes,long readMs,long stamp){onMimDirectBodyTransfer(uri,bytes,readMs,stamp);}
+                                    @Override public boolean measureBody(){return isMimDirectAdaptiveQualityEnabled();}
                                 });
-                mediaSource = new DefaultMediaSourceFactory(
-                        directHttp, httpExtractors)
-                        .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
+                Uri directUri=Uri.parse(sageTVurl);
+                if(directUri.getPath()!=null&&directUri.getPath().endsWith(".m3u8"))
+                    mediaSource = new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(directHttp)
+                            .setExtractorFactory(new AacPceHlsExtractorFactory(aacProgramConfigStore))
+                            .createMediaSource(MediaItem.fromUri(directUri));
+                else mediaSource = new DefaultMediaSourceFactory(directHttp, httpExtractors)
+                            .createMediaSource(MediaItem.fromUri(directUri));
             }
             else
             {
@@ -3527,7 +3613,14 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         context.getContext(), httpExtractors)
                         .createMediaSource(MediaItem.fromUri(Uri.parse(sageTVurl)));
             }
-            player.setMediaSource(mediaSource, true);
+            long directJoin=isMimDirectMediaUrlActive()?mimDirectController().consumeQualityInitialPosition(this):0;
+            if(directJoin>0)player.setMediaSource(mediaSource,directJoin);
+            // Every owned producer already starts at the requested file/live
+            // offset. Its EVENT playlist is not a broadcast live edge: using
+            // that default skips the origin and its initial AAC PCE/header.
+            else if (isMimDirectMediaUrlActive() && mimDirectController().owns(this))
+                player.setMediaSource(mediaSource, 0L);
+            else player.setMediaSource(mediaSource, true);
             player.prepare();
         }
 
@@ -3563,6 +3656,10 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
         {
             playbackPositionLock.unlock();
         }
+        if (lastUri != null && lastUri.startsWith("push:dvd")
+                && context.getClient().getCurrentConnection() != null
+                && context.getClient().getCurrentConnection().getMediaCmd() != null)
+            context.getClient().getCurrentConnection().getMediaCmd().restoreDvdViewport(this);
         if (playRequested)
             super.play();
         else
@@ -3579,7 +3676,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             {
                 if (isCurrentPlaybackSession(listenerSession) && player == listenerPlayer)
                 {
-                    long reportedPositionMs = listenerPlayer.getCurrentPosition();
+                    long reportedPositionMs = directHlsPeriodPosition(listenerPlayer, listenerPlayer.getCurrentPosition());
                     long currentPositionMs = guardGrowingPullPosition(
                             reportedPositionMs, listenerSession, listenerPlayer);
                     Media3MediaPlayerImpl.this.setPlaybackPosition(currentPositionMs);
@@ -3601,7 +3698,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                             PlaybackDebugTrap.record("dvd_scan_reserve_clock_crossed", Media3MediaPlayerImpl.this);
                         }
                     }
-                    currentBufferedPosition = listenerPlayer.getBufferedPosition();
+                    currentBufferedPosition = directHlsPeriodPosition(listenerPlayer, listenerPlayer.getBufferedPosition());
+                    recordMimDirectBufferReserve(currentPositionMs,currentBufferedPosition);
                     promoteConfirmedPullTailToEos();
                     progressHandler.postDelayed(sessionProgress[0], dvdPreviewDrainPending ? 50 : 500);
                 }
@@ -3629,7 +3727,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                 if (captionClockRunnable != this || !isCurrentPlaybackSession(session)
                         || player != expectedPlayer)
                     return;
-                long currentPositionMs = expectedPlayer.getCurrentPosition();
+                long currentPositionMs = directHlsPeriodPosition(expectedPlayer, expectedPlayer.getCurrentPosition());
                 scheduleLegacyCaptionDrain(currentPositionMs * 1000L);
                 // Direct HLS uses a relative clock after seek; retain the
                 // existing absolute recording offset for its source captions.
@@ -4564,6 +4662,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
      */
     private boolean applyPublishedSubtitleSelection()
     {
+        if (applyPendingDvdSubpictureStream()) return true;
         int requestedTrack = requestedSubtitleTrack;
         if (requestedTrack != DISABLE_TRACK && requestedTrack != PREFERRED_TRACK)
         {
@@ -4873,6 +4972,7 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
                         ViewGroup layout = (ViewGroup) ((Activity) context.getContext())
                                 .findViewById(android.R.id.content);
                         layout.addView(subView);
+                        alignDvdSubtitleViewport(subView);
                         subView.bringToFront();
                         layout.invalidate();
                         subtitleOverlayAttached = true;
@@ -4885,6 +4985,8 @@ public class Media3MediaPlayerImpl extends BaseMediaPlayerImpl<ExoPlayer, DataSo
             });
         }
     }
+
+    @Override protected void onVideoViewportChanged() { alignDvdSubtitleViewport(subView); }
 
     @Override
     public boolean supportsTextSubtitlePresentation()

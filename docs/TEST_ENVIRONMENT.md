@@ -1,5 +1,15 @@
 # Local test environment
 
+Windows185 MIM-WIN-001 preflight: after a reboot/crash verify service-visible
+V: and actual capture bytes, not only the desktop's saved network mapping or
+recordingCount. Missing input prevents a playback verdict. Restore the exact
+previous mapping through authorized OS work without changing stock Sage.jar,
+share/security policy or guessing credentials. A shared OpenDCT upload handler
+can remain stuck after a client-server OS crash; inspect producer logs and
+guard all owners before any explicitly authorized capture-service recovery.
+Retain a symbol-resolved OS crash separately from Android failures; the
+2026-11-24 dump names Portmaster/PMas/free, not a proven GPU/client defect.
+
 Live-TV tests must guard every server sharing the encoder, not only the
 selected playback server. On2026-10-19,232 and175 both controlled OpenDCT
 HDHR10703705-0:175 recording activity caused STOP/START to a different output
@@ -80,11 +90,25 @@ persistent authorization keys. Default MCPProcess behavior remains unchanged.
 For an already-running unified container, owned in-container Python test
 drivers use both Docker working directory /workspace/android-client and
 SAGETV_WORKSPACE=/workspace/android-client, with explicit device/server aliases
-and the persisted ADB identity. dev.cmd/dev.sh orchestrate Docker from the
+and SAGETV_MCP_CONFIG=/workspace/android-client/config/firetv.toml plus
+PYTHONPATH=/workspace/android-client/mcp/src when invoking Python directly.
+Otherwise the MCP config loader can silently see example192.0.2.20/no device;
+the exact-target preflight must refuse before mutation. Do not install another
+ADB/SDK/Python stack to fix missing child configuration. Keep the persisted
+ADB identity. dev.cmd/dev.sh orchestrate Docker from the
 host; do not nest dev.sh inside docker exec or substitute a host adb.
 Bracket such a driver with the settings checkpoint/restore and automated
 keep-awake begin/end helpers, including failure cleanup. Capture pictures at
 the live stage before the child harness exits, not after its final STOP.
+
+STARTUP-001 startup profiling uses ordinary nonblocking public Watch after
+clearing only the canonical synthetic fixture's bookmark. The broader
+dev_play_server_path helper includes deliberate resume/fullscreen/prompt waits;
+its wall time is NOT exact player startup. Record snapshot round-trip budgets,
+first observed rendered A/V and sustained output separately. Existing
+dev_player_events can provide callback-time evidence without production polls.
+Compare the stored Push spelling dynamic consistently in activation checks;
+still require health_pushMode independently before calling a row actual Push.
 
 GPU-to-native checks must compare burned video frame numbers/PTS across the
 independent capture. A native renderer can report~60fps while displaying the

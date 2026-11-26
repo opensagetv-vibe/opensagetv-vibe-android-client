@@ -78,7 +78,7 @@ class LiveProgramTransitionTest(unittest.TestCase):
             self.assertIn("if (expected != player) return", source)
             self.assertIn("expected.setVideoSurfaceView((SurfaceView) context.getVideoView())", source)
             self.assertIn('"play_prepare_from_idle"', method)
-            self.assertLess(method.index("player.prepare();"), method.index("player.setPlayWhenReady(true);"))
+            self.assertLess(method.index("player.prepare();"), method.index("player.setPlayWhenReady(!mimSeekOutputSuspended);"))
 
     def test_server_stop_preserves_the_loaded_session_for_restart(self):
         base = self.read("BaseMediaPlayerImpl.java")

@@ -469,8 +469,10 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                         java.util.List<String> nativeVideo =
                                 opensagetv.vibe.miniclient.media.VideoCodec.getAllSageTVNames();
                         if ("fixed".equalsIgnoreCase(client.properties().getStreamingMode())
-                                && "transcode".equalsIgnoreCase(client.properties().getString(
-                                        opensagetv.vibe.miniclient.prefs.PrefStore.Keys.mim_direct_mode, "off")))
+                                && opensagetv.vibe.miniclient.MimDirectTransportPolicy.TRANSCODE.equals(
+                                        opensagetv.vibe.miniclient.MimDirectTransportPolicy.activeMode("fixed",
+                                                client.properties().getString(
+                                                        opensagetv.vibe.miniclient.prefs.PrefStore.Keys.mim_direct_mode, "off"), true)))
                             client.prepareCodecs(nativeVideo,
                                     opensagetv.vibe.miniclient.media.AudioCodec.getAllSageTVNames(),
                                     opensagetv.vibe.miniclient.media.Container.getAllSageTVNames(),
@@ -480,7 +482,13 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                                         android.text.TextUtils.join(",", nativeVideo)));
                         client.setMimDirectSourceAcceptance(MiniclientApplication.get()
                                 .getMimDirectSession().requiresPluginWatchRecovery());
-                        if ("unsupported_video_stock_fixed".equals(MiniclientApplication.get()
+                        String outputError=MiniclientApplication.get().getMimDirectSession().configurationError();
+                        if(!outputError.isEmpty())throw new IllegalStateException(outputError);
+                        final boolean hlsFallback = "fixed".equalsIgnoreCase(client.properties().getStreamingMode())
+                                && "hls".equalsIgnoreCase(client.properties().getString(
+                                        opensagetv.vibe.miniclient.prefs.PrefStore.Keys.mim_direct_mode, "off"))
+                                && client.getMimDirectTransportMode().isEmpty();
+                        if (hlsFallback || "unsupported_video_stock_fixed".equals(MiniclientApplication.get()
                                 .getMimDirectSession().stateForDiagnostics()))
                             runOnUiThread(new Runnable()
                             {
@@ -488,7 +496,9 @@ public class UIActivityLifeCycleHandler<UIRenderType extends UIRenderer> impleme
                                 {
                                     if (!destroyed)
                                         Toast.makeText(activity,
-                                                "Owned Transcode unavailable on this device; using ordinary Fixed playback",
+                                                hlsFallback
+                                                        ? "MIM HLS unavailable; using ordinary Fixed playback"
+                                                        : "Owned Transcode unavailable on this device; using ordinary Fixed playback",
                                                 Toast.LENGTH_LONG).show();
                                 }
                             });

@@ -420,6 +420,10 @@ public interface PrefStore
 
         /** MIM-owned Transcode deinterlace policy: auto, on, or off. */
         String mim_direct_deinterlace = "mim_direct/deinterlace";
+        /** Default-off measured session-only Direct adaptation; never Push/Pull. */
+        String mim_direct_adaptive_quality = "mim_direct/adaptive_quality";
+        String mim_direct_minimum_kbps = "mim_direct/minimum_kbps";
+        String mim_direct_runtime_rate = "mim_direct/runtime_rate_control";
 
         String exit_on_standby = "exit_on_standby";
 

@@ -112,6 +112,25 @@ public class FixedCaptionSideChannelClientTest
     }
 
     @Test
+    public void lateReservationAfterStopIsReleasedInsteadOfHoldingNextDirectSeek() throws Exception
+    {
+        AtomicInteger teardowns=new AtomicInteger();
+        SimpleHttpServer server=new SimpleHttpServer(teardowns);
+        server.blockReservation=true;server.start();
+        FixedCaptionSideChannelClient client=new FixedCaptionSideChannelClient();
+        try {
+            client.startForTest("127.0.0.1",server.port());
+            assertTrue(server.blockedReservation.await(4,TimeUnit.SECONDS));
+            client.stop(); // server has allocated, but the reply has not reached this generation
+            server.releaseReservation.countDown();
+            long end=System.currentTimeMillis()+3000;
+            while(teardowns.get()==0&&System.currentTimeMillis()<end)Thread.sleep(20);
+            assertEquals("Late token must not occupy the pool until its60s expiry",1,teardowns.get());
+            assertEquals("disabled",client.stateForDiagnostics());
+        } finally {server.releaseReservation.countDown();client.stop();server.close();}
+    }
+
+    @Test
     public void deliversPrefetchedPairsBetweenHttpPollsAndHonorsPause() throws Exception
     {
         SimpleHttpServer server = new SimpleHttpServer(new AtomicInteger(),
@@ -170,6 +189,9 @@ public class FixedCaptionSideChannelClientTest
         private final CountDownLatch blockedPoll = new CountDownLatch(1);
         private final CountDownLatch releasePoll = new CountDownLatch(1);
         private boolean blockSecondPoll;
+        private boolean blockReservation;
+        private final CountDownLatch blockedReservation=new CountDownLatch(1);
+        private final CountDownLatch releaseReservation=new CountDownLatch(1);
 
         SimpleHttpServer(AtomicInteger teardownCount) throws IOException
         {
@@ -222,9 +244,16 @@ public class FixedCaptionSideChannelClientTest
                     reply(client, 200, "{\"contractVersion\":1,\"state\":\"ready\"," +
                             "\"reservationAvailable\":true}");
                 else if (path.startsWith("/v1/sessions/reserve"))
+                {
+                    if(blockReservation){
+                        blockedReservation.countDown();
+                        try{releaseReservation.await(4,TimeUnit.SECONDS);}
+                        catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+                    }
                     reply(client, 200, "{\"contractVersion\":1," +
                             "\"reservationToken\":\"" + SESSION_TOKEN +
                             "\",\"expiresInMs\":60000}");
+                }
                 else if (path.startsWith("/v1/sessions/claim"))
                     reply(client, 200, "{\"contractVersion\":1," +
                             "\"sessionToken\":\"" + SESSION_TOKEN + "\"}");
@@ -268,6 +297,7 @@ public class FixedCaptionSideChannelClientTest
 
         @Override public void close() throws IOException
         {
+            releaseReservation.countDown();
             releasePoll.countDown();
             running.set(false);
             socket.close();

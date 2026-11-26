@@ -133,6 +133,7 @@ public final class ServerDiagnosticExporter implements Application.ActivityLifec
         MiniPlayerPlugin player = current.getMediaCmd() == null ? null : current.getMediaCmd().getPlaya();
         if (player != null) out.append("\nbackend=").append(player.getClass().getSimpleName())
                 .append("\nstate=").append(player.getState());
+        out.append("\n").append(DiagnosticBundleManager.serverOutput());
         // No new decoder/clock polling, key injection or player mutation. The
         // existing logs/traces/current-video tests supply detailed media stats.
         return out.append("\nDetailed codec/timing statistics: see collected logs/traces/current-video tests.\n").toString();

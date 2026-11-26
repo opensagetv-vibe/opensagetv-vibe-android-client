@@ -79,6 +79,7 @@ final class GfxSurfaceVideoCommands {
                     }
                     MediaCmd media = client.getCurrentConnection().getMediaCmd();
                     if (media != null) {
+                        media.retainDvdViewport(source, destination);
                         MiniPlayerPlugin player = media.getPlaya();
                         if (player != null)
                             player.setVideoRectangles(source, destination, false);

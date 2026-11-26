@@ -402,6 +402,11 @@ public interface MiniPlayerPlugin extends Runnable
 
     default void dvdSetStc(int stc) { }
 
+    /** Explicit owned-stream clock only; unknown backends retain native DVD. */
+    default boolean supportsOwnedDvdPresentationClock() { return false; }
+    /** Current rendered, zero-based decoder epoch; negative means not ready. */
+    default long getOwnedDvdPresentedPositionMillis() { return -1L; }
+
     default void dvdSetFormat(int format) { }
 
     default void dvdSetStream(int streamType, int streamPosition) { }

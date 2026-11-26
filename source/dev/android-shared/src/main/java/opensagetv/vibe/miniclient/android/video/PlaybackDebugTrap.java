@@ -26,6 +26,8 @@ public final class PlaybackDebugTrap
 
     public static void record(String event, MiniPlayerPlugin player)
     {
+        if("first_video_frame".equals(event)&&player instanceof BaseMediaPlayerImpl)
+            ((BaseMediaPlayerImpl<?,?>)player).notePlaybackExperienceRendererCallback();
         checkpointOnFailure(event);
         Method method = resolveRecordMethod();
         if (method == null)

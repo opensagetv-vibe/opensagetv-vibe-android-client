@@ -36,6 +36,8 @@ import opensagetv.vibe.miniclient.util.VerboseLogging;
  */
 public class MediaCmd
 {
+    private final opensagetv.vibe.miniclient.dvd.DvdOwnedPresentationClock ownedDvdClock =
+            new opensagetv.vibe.miniclient.dvd.DvdOwnedPresentationClock();
     public static final int MEDIACMD_INIT = 0;
     public static final int MEDIACMD_DEINIT = 1;
     public static final int MEDIACMD_OPENURL = 16;
@@ -74,7 +76,11 @@ public class MediaCmd
     private static final Logger log = LoggerFactory.getLogger(MediaCmd.class);
 
     private final MiniClient client;
-    private MiniPlayerPlugin playa;
+    private volatile MiniPlayerPlugin playa;
+    private PlaybackCaptionBridge companionCaptionBridge;
+    private volatile long companionCaptionGeneration;
+    private volatile boolean companionCaptionSource;
+    private volatile boolean wireCaptionSource;
     private volatile int sageTvClosedCaptionState;
     private volatile boolean sageTvClosedCaptionStateReceived;
     private boolean pushMode;
@@ -82,7 +88,7 @@ public class MediaCmd
     private final RetainedPushRestartPolicy retainedPushRestart = new RetainedPushRestartPolicy();
     private final PushStreamHandoff pushStreamHandoff = new PushStreamHandoff();
     private boolean retainedPlayerStopped;
-    private boolean dvdSessionPending;
+    private volatile boolean dvdSessionPending;
     private long dvdPushedBytes;
     private long dvdEpochPushedBytes;
     private volatile long dvdLastReadBytes = -1;
@@ -94,6 +100,7 @@ public class MediaCmd
     private volatile long dvdPushMediaCount;
     private volatile long dvdNewCellCount;
     private volatile long dvdClutCount;
+    private byte[] retainedDvdClut;
     private volatile long dvdSpuControlCount;
     private volatile long dvdStcCount;
     private volatile long dvdStreamCount;
@@ -101,6 +108,8 @@ public class MediaCmd
     private volatile int dvdLastStreamPosition = -1;
     private volatile int dvdLastAudioStreamPosition = -1;
     private volatile int dvdLastSubtitleStreamPosition = -1;
+    private final opensagetv.vibe.miniclient.dvd.DvdViewportState dvdViewport =
+            new opensagetv.vibe.miniclient.dvd.DvdViewportState();
     private volatile long dvdFormatCount;
     private volatile long dvdTransientEosCount;
     private volatile boolean dvdTransformRuntimeFallback;
@@ -228,8 +237,10 @@ public class MediaCmd
      * The state is retained when no player exists so a subsequent OPENURL
      * receives the same authoritative SageTV selection.
      */
-    public void setSageTvClosedCaptionState(int ccState)
+    public synchronized void setSageTvClosedCaptionState(int ccState)
     {
+        wireCaptionSource = true;
+        companionCaptionSource = false;
         sageTvClosedCaptionState = Math.max(0, ccState);
         sageTvClosedCaptionStateReceived = true;
         applySageTvClosedCaptionState();
@@ -238,6 +249,12 @@ public class MediaCmd
     public boolean hasSageTvClosedCaptionState()
     {
         return sageTvClosedCaptionStateReceived;
+    }
+
+    /** Re-resolve edited slots without claiming a native server-wire update. */
+    public synchronized void refreshCaptionSelection()
+    {
+        applySageTvClosedCaptionState();
     }
 
     public int getSageTvClosedCaptionState()
@@ -375,6 +392,7 @@ public class MediaCmd
 
     public void close()
     {
+        stopCompanionCaptionBridge();
         if (myConn.getGfxCmd() != null)
             myConn.getGfxCmd().setVideoBounds(null, null);
         if (playa != null)
@@ -394,6 +412,7 @@ public class MediaCmd
         switch (cmd)
         {
             case MEDIACMD_INIT:
+                stopCompanionCaptionBridge();
                 retainedPushRestart.reset();
                 retainedPlayerStopped = false;
                 ordinaryPushCredit.reset();
@@ -415,6 +434,7 @@ public class MediaCmd
                 // DVD metadata or PUSHBUFFER command so ordinary sessions keep
                 // their existing INIT -> OPENURL ownership.
                 dvdSessionPending = true;
+                ownedDvdClock.open(null);
                 // MiniDVDPlayer does not send OPENURL, so it cannot rely on
                 // OPENURL to publish the available Push-buffer capacity. A
                 // zero reply leaves the server VM polling empty PUSHBUFFER
@@ -424,6 +444,8 @@ public class MediaCmd
                 return 4;
 
             case MEDIACMD_DEINIT:
+                dvdViewport.clear();
+                ownedDvdClock.open(null);
 
                 retainedPushRestart.reset();
                 retainedPlayerStopped = false;
@@ -433,6 +455,7 @@ public class MediaCmd
                 return 4;
 
             case MEDIACMD_OPENURL:
+                stopCompanionCaptionBridge();
                 retainedPushRestart.reset();
                 retainedPlayerStopped = false;
                 ordinaryPushCredit.reset();
@@ -459,6 +482,8 @@ public class MediaCmd
                 // An explicit Vibe transport URL changes only the pushed media
                 // representation. It remains the same DVD wire session.
                 dvdSessionPending = lowerUrl.startsWith("push:dvd");
+                if (!dvdSessionPending) dvdViewport.clear();
+                ownedDvdClock.open(lowerUrl);
                 dvdTransformRuntimeFallback = dvdSessionPending
                         && (lowerUrl.contains("fallback=transform_failure")
                         // Receive-only compatibility with already deployed Vibe Core.
@@ -533,6 +558,10 @@ public class MediaCmd
                         applyRetainedDvdStreamSelections();
                     }
                 }
+                if (dvdSessionPending && playa != null && playa.supportsOwnedDvdPresentationClock())
+                    DvdCompanionCapabilities.advertise(myConn.getServerName(), myConn.getClientID());
+                else if (!dvdSessionPending && playa != null)
+                    startCompanionCaptionBridge(playa);
                 writeInt(1, retbuf, 0);
 
                 return 4;
@@ -576,6 +605,7 @@ public class MediaCmd
                 playa.setMute(readInt(0, cmddata) != 0);
                 return 4;
             case MEDIACMD_STOP:
+                stopCompanionCaptionBridge();
                 writeInt(1, retbuf, 0);
                 if (playa == null)
                     return 4;
@@ -596,11 +626,14 @@ public class MediaCmd
                 if (playa == null)
                     return 4;
                 log.debug("Play was called");
+                if (!dvdSessionPending && companionCaptionBridge == null && !wireCaptionSource)
+                    startCompanionCaptionBridge(playa);
                 retainedPlayerStopped = false;
                 PlaybackDebugEventBridge.recordAsync("server_play_command", playa);
                 playa.play();
                 return 4;
             case MEDIACMD_FLUSH:
+                ownedDvdClock.flush();
                 writeInt(1, retbuf, 0);
                 // Inspect the old state BEFORE backend.flush() prepares it.
                 // Never treat every ordinary seek as a restart. The media
@@ -1014,6 +1047,7 @@ public class MediaCmd
                         readInt(8, cmddata), readInt(12, cmddata));
                 Rectangle destRect = new Rectangle(readInt(16, cmddata), readInt(20, cmddata),
                         readInt(24, cmddata), readInt(28, cmddata));
+                retainDvdViewport(srcRect, destRect);
                 if (playa != null)
                     playa.setVideoRectangles(srcRect, destRect, false);
                 myConn.getGfxCmd().setVideoBounds(srcRect, destRect);
@@ -1083,6 +1117,7 @@ public class MediaCmd
                 if (playa != null && len >= 4)
                 {
                     int stc = readInt(0, cmddata);
+                    ownedDvdClock.anchor(stc);
                     playa.dvdSetStc(stc);
                 }
                 writeInt(playa == null ? -1 : 0, retbuf, 0);
@@ -1192,6 +1227,15 @@ public class MediaCmd
     {
         if (!dvdSessionPending || playa == null)
             return;
+        // OPENURL replaces the renderer, not the server's current preview.
+        // Apply after load so later video metadata and SPU composition share
+        // the same authoritative destination rather than full-screen defaults.
+        restoreDvdViewport(playa);
+        // OPENURL replaces the renderer, not the DVD VM. Its 16-color palette
+        // remains authoritative across Native/Copy representation changes;
+        // initialize the replacement before any queued SPU can be composed.
+        if (retainedDvdClut != null)
+            playa.dvdSetClut(retainedDvdClut.length, retainedDvdClut.clone());
         if (dvdLastAudioStreamPosition >= 0)
         {
             log.debug("Reapplying retained DVD audio stream {} after OPENURL",
@@ -1205,6 +1249,95 @@ public class MediaCmd
             playa.dvdSetStream(STREAM_TYPE_SUBTITLE,
                     dvdLastSubtitleStreamPosition);
         }
+    }
+
+    private synchronized void stopCompanionCaptionBridge()
+    {
+        companionCaptionGeneration++;
+        PlaybackCaptionBridge previous = companionCaptionBridge;
+        companionCaptionBridge = null;
+        if (previous != null) previous.close();
+        if (companionCaptionSource) sageTvClosedCaptionStateReceived = false;
+        companionCaptionSource = false;
+    }
+
+    /** On-demand menu observations/actions never alter player clock or transport. */
+    public long getCompanionMenuLoadId() { return companionCaptionGeneration; }
+    public void requestCompanionMenu(boolean dvd,String challenge,String operation,
+            PlaybackCompanionClient.Callback callback)
+    {
+        final MiniPlayerPlugin expected=playa;
+        final long generation=companionCaptionGeneration;
+        PlaybackCompanionClient.Current current=()->expected!=null && playa==expected
+                && generation==companionCaptionGeneration && (!dvd||dvdSessionPending)
+                && expected.getState()!=MiniPlayerPlugin.STOPPED_STATE;
+        if (!current.getAsBoolean()) {
+            PlaybackCompanionClient.unavailable(callback);return;
+        }
+        PlaybackCompanionClient.request(myConn.getServerName(),myConn.getClientID(),
+                dvd?"controls":"state",challenge,operation,current,callback);
+    }
+
+    private void startCompanionCaptionBridge(final MiniPlayerPlugin expected)
+    {
+        final long generation = companionCaptionGeneration;
+        try {
+        companionCaptionBridge = PlaybackCaptionBridge.start(myConn.getServerName(), myConn.getClientID(),
+                new PlaybackCaptionBridge.Target() {
+            public boolean current() {
+                return generation == companionCaptionGeneration && playa == expected && !dvdSessionPending;
+            }
+            public boolean active() {
+                int state = expected.getState();
+                return state != MiniPlayerPlugin.STOPPED_STATE && state != MiniPlayerPlugin.EOS_STATE;
+            }
+            public void apply(int state) {
+              synchronized (MediaCmd.this) {
+                if (!current() || wireCaptionSource) return;
+                if (companionCaptionSource && sageTvClosedCaptionStateReceived && sageTvClosedCaptionState == state) return;
+                companionCaptionSource = true;
+                sageTvClosedCaptionState = state;
+                sageTvClosedCaptionStateReceived = true;
+                applySageTvClosedCaptionState();
+              }
+            }
+            public void unavailable() {
+              synchronized (MediaCmd.this) {
+                if (!current() || !companionCaptionSource || wireCaptionSource) return;
+                companionCaptionSource = false;
+                sageTvClosedCaptionStateReceived = false;
+                applySageTvClosedCaptionState();
+              }
+            }
+        });
+        } catch (RuntimeException | LinkageError unavailable) {
+            // A missing/incompatible optional bridge must never terminate the
+            // media command thread (including Android regex/linkage differences).
+            companionCaptionBridge = null;
+            log.warn("Optional caption-state bridge unavailable", unavailable);
+        }
+    }
+
+    /** Both stock media SETVIDEORECT and GFX SETVIDEOPROP own the same layout.
+     * Retain either route before applying it: a replacement decoder may finish
+     * preparing after the last GFX update, with no new server rectangle coming.
+     */
+    public void retainDvdViewport(Rectangle source, Rectangle destination)
+    {
+        if (dvdSessionPending) dvdViewport.set(source, destination);
+    }
+
+    /** Prepare can finish after OPENURL replay. Never resize a newer player
+     * from a stale prepare callback; use only this DVD session's server layout.
+     */
+    public void restoreDvdViewport(MiniPlayerPlugin expected)
+    {
+        if (!dvdSessionPending || playa == null || playa != expected) return;
+        Rectangle[] viewport = dvdViewport.snapshot();
+        if (viewport != null) playa.setVideoRectangles(viewport[0], viewport[1], false);
+        PlaybackDebugEventBridge.recordAsyncDetailed("dvd_viewport_prepare", expected,
+                viewport == null ? "cached=none" : "x=" + viewport[1].x + ";y=" + viewport[1].y
+                        + ";width=" + viewport[1].width + ";height=" + viewport[1].height);
     }
 
     static boolean containsMpegPsPackHeader(byte[] data, int offset, int length)
@@ -1235,7 +1368,10 @@ public class MediaCmd
                 if (command == MEDIACMD_DVD_NEWCELL)
                     playa.dvdNewCell(payloadSize, payload);
                 else if (command == MEDIACMD_DVD_CLUT)
+                {
+                    if (payloadSize == 64) retainedDvdClut = payload.clone();
                     playa.dvdSetClut(payloadSize, payload);
+                }
                 else
                     playa.dvdSetSpuControl(payloadSize, payload);
                 result = 0;
@@ -1257,6 +1393,8 @@ public class MediaCmd
     {
         if (playa != null)
         {
+            if (ownedDvdClock.active() && playa.supportsOwnedDvdPresentationClock())
+                return ownedDvdClock.position(playa.getOwnedDvdPresentedPositionMillis());
             return playa.getMediaTimeMillis(getEffectiveServerStartPosition());
         }
 
@@ -1417,6 +1555,7 @@ public class MediaCmd
 
     private void resetDvdProtocolStats()
     {
+        dvdViewport.clear();
         dvdSessionPending = false;
         dvdPushedBytes = 0;
         dvdEpochPushedBytes = 0;
@@ -1429,6 +1568,7 @@ public class MediaCmd
         dvdPushMediaCount = 0;
         dvdNewCellCount = 0;
         dvdClutCount = 0;
+        retainedDvdClut = null;
         dvdSpuControlCount = 0;
         dvdStcCount = 0;
         dvdStreamCount = 0;

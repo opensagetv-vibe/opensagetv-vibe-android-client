@@ -1,7 +1,30 @@
 # OpenSageTV Vibe Android Client
 
+Development HLS-007 aligns graph/information icons and refills confirmed
+completed HLS near80% of the existing maximum without increasing memory or
+startup/rebuffer requirements. Owned HLS recording/caption clocks now account
+for the player's observed sliding-window offset. Live/unknown refill policy,
+other transports and saved settings remain unchanged. Qualification status is
+authoritative in TASKS.md; this is not a public release or a steady-network
+guarantee. Web Client WEB-132 uses the corresponding browser-supported layout
+and refill policy, not Android-only transports or decoder assumptions.
+
+Development SETTINGS-005 adds **Hardware Encoder** to main Fixed Playback
+Settings and long-press Transport Settings: Auto, QSV, NVENC, VAAPI, AMF and
+VideoToolbox, matching the Web Client's named accelerators. Video Codec remains
+H.264/HEVC and Software Only remains the Video Encoder policy. Auto preserves
+existing behavior; explicit backend pins require a compatible optional MIM
+provider, apply next playback and refuse unsupported execution. Copy/Stock and
+Software Only do not use a hardware pin. No shared server INI or stock Core
+changes. Platform/GPU availability is not implied by a menu choice; see
+docs/PLAYBACK_SETTINGS.md and SETTINGS-005's scoped qualification.
+
 Current GitHub sideload release: **v0.5.114**. Use the APK on the
 [release page](https://github.com/opensagetv-vibe/opensagetv-vibe-android-client/releases/tag/v0.5.114).
+
+The unreleased0.5.115 development build also releases stale Direct/HLS caption
+reservations during a stopped/superseded request. Focused tests and Windows
+Non-Pro HLS checks pass; see HLS-004 in TASKS.md. This is not a new public release.
 
 Version0.5.114 adds stale Push-clock handoff correction, supported Media3/legacy
 forward-buffer seeking, classic Fixed timing and caption fixes. It retains
@@ -30,6 +53,84 @@ tree, and update `config/logo-assets.sha256`. Do not hand-edit those PNG/XML
 resources.
 
 ## Project status
+
+Development115/92df378a restores Fixed transcoding after isolated TS-discovery
+and AAC-configuration failures.18Non-Pro/stock232 processing routes, actual
+QSV/software controls, failure/fallback and inline-blue-menu checks pass;
+all210preferences are restored. Original audio libraries and stock server files
+remain unchanged. See artifacts/results/FIXED-001/RESULT.md for exact scope and
+limitations. This is installed development work, not a new public release.
+
+Development115 adds a long-press **Playback Settings** gear while keeping the
+Video, Audio, Captions and diagnostics shortcuts. Startup and playback menus
+share setting definitions and choices. Playback changes are session-only unless
+explicitly saved; next-playback Fixed defaults do not change the active stream.
+Gray controls explain missing capabilities. See
+[Playback settings](docs/PLAYBACK_SETTINGS.md) and the editable
+[default choices](docs/SETTINGS_MENU_DEFAULTS.txt). No server change is required.
+Earlier menu-only Non-Pro/stock232 qualification22763ef7 passed menu, session/
+default, reset and Pull/HLS gates with189preferences restored. It is superseded
+by the current development build and qualification scope above; neither is a
+new published release.
+
+Current development reorganizes startup settings into six independently
+collapsible light-blue sections. Transport Method has Push, Pull, Fixed and
+SMB choices; **Fixed Playback Settings > Automatic Bitrate Adjustment** is the
+single Off / Stream Switching / Prefer In-place selector. Stock remux options
+remain inside that screen, and Selected Player Settings follows the chosen
+engine. Existing saved values survive updates; legacy fixed_adjusted migrates
+to Fixed plus its adjustment flags. Missing settings use current defaults:
+OpenGL UI and Unified HD Graphics now default On. Confirmed Reset restores
+displayed settings but preserves identity, server entries, credentials, SMB
+profiles/mappings, files and authorization keys. Review/edit proposed defaults
+in [SETTINGS_MENU_DEFAULTS.txt](docs/SETTINGS_MENU_DEFAULTS.txt). SETTINGS-001
+owns affected menu/build/device qualification; no new public release is implied.
+
+Plain Fixed uses **Maximum video bitrate**. Automatic adjustment starts at that
+same maximum and sends Minimum/Maximum to the optional MIM provider at source start;
+subsequent reports contain buffer state, not bandwidth estimates. Shared MIM
+decides conservative reductions/recovery within the range. The existing in-place
+or bounded frame-confirmed handoff executes that decision. Missing capability
+retains ordinary stock Fixed; no Web Client or MCP dependency is introduced.
+Minimum/Maximum are adjacent in Fixed Transcoding Settings. HLS-005 tracks
+affected qualification; do not infer a new public release or physical WAN pass.
+
+Development115 also adds **Fixed Transcoding Settings -> MIM transport ->
+HLS Transcode (MIM)**. Enable **Fixed (Adjusted)** to
+let MIM reduce/recover bitrate using buffer fill, between the saved limits.
+Earlier measured-delivery qualification below records the previous policy, not
+the current shared controller. Resolution remains fixed. This reuses the optional FFmpeg/MIM
+plugin's HLS and bounded producer handoff, not a multi-rendition ladder, and
+does not require the Web Client or MCP plugin. Defaults stay unchanged; absent
+HLS support or an unsupported backend retains ordinary SageTV Fixed playback.
+Media3, legacy Exo and their supported GSY delegates use this path; IJK
+Transcode remains unavailable and falls back safely. Active stats say HLS only
+for an actually owned HLS session. A newer FFmpeg0.1.28/MIM0.4.15 provider
+negotiates the responsive profile: one-second segments, bounded completed-file
+read burst, QSV IDR handling and a shorter native start reserve. Older providers
+retain legacy HLS. Burst buffering cannot move the start to the library's
+default live edge. Physical qualification was reauthorized on 2026-11-24:
+Non-Pro `.25` / stock `.232` now pass responsive HLS in Media3, legacy Exo
+and both supported GSY delegates, including quality handoff, seek,
+pause/resume and cleanup. Actual Media3 decoder EOF also passes; live-stage
+HDMI shows readable captions. HLS-003 also qualifies default-off in-place
+Linux-QSV bitrate control with FFmpeg0.1.30/MIM0.4.16: all four supported
+delegates pass actual reduction without source/player replacement; Media3
+and legacy Exo pass measured shaped-delivery4000→2200→2750kbps recovery.
+The site's separate opt-in and eligible QSV file profile are required.
+The provider's synthetic bitrate test remains a commissioning tool; its two
+old startup-menu buttons are removed in the reorganized settings. Existing
+buffered segments keep their old rate; resolution does not change. Ambiguous
+results hold adaptation, without blindly replaying a relative mutation.
+Native/older-provider fallback, physical WAN and vendor scope remain explicit
+in the compact reports. Packages are local development builds only.
+
+Development115 adds optional **Video -> Source previews** when a compatible
+FFmpeg/MIM Direct provider advertises it. Preview images are requested only
+when this tool is used, in10-second buckets; browsing does not seek or change
+playback. Use SageTV's normal Time Scroll/Comskip/chapter controls to navigate.
+Missing previews do not disable playback or network-quality controls. Current
+device qualification and limitations are in TASKS.md; this is not yet released.
 
 - Current checkout version: see `VERSION`.
 - The current APK requires Android 6.0 / API 23 or newer and packages both
@@ -90,6 +191,14 @@ watch-recovery capability and a MIM runtime advertising owned Direct support;
 otherwise the client keeps ordinary Fixed playback and the saved preference.
 GSY negotiates its selected delegate's capabilities, not assumed IJK support.
 Core MCP is commissioning tooling, not a normal playback dependency.
+Development115 adds an optional **Video > Direct quality** session action
+and a default-off automatic-reduction setting under Fixed settings. It requires
+negotiated MIM Direct Transcode handoff/atomic-seek support (FFmpeg Plugin20),
+not Web Client or MCP. Unsupported providers retain existing playback. One
+temporary candidate is prepared ahead while old playback continues; old is
+retired only after an exact new-renderer frame. Failure retains old playback.
+Physical Android handoff qualification remains in progress; this is not yet a
+released all-device or two-way adaptation claim. Copy/Push/Pull are unchanged.
 The Tab S6 Lite/API33 qualification is complete with explicit limitations:
 its original UK IJK hardware picture and CPU175500ms CEA stress readability
 remain NOT_WORKING; native MPEG-2 DVD is safely unsupported. Selected owned
@@ -406,12 +515,14 @@ panels, while the triangle opens the combined SageTV Video Information and
 Vibe Diagnostics screen directly.
 
 Long-press the remote's navigation key during playback and select the bar-chart
-icon to toggle detailed Playback Stats directly, or open **Active Player
+icon to toggle narrow playback graphs. The separate information icon toggles
+text details; enable both for full Playback Stats. Neither closes the long-press
+menu. Alternatively open **Active Player
 Adjustments > Playback Stats overlay** for compact or detailed live
 troubleshooting. The overlay supports persistent and bounded 30-second views
 plus a redacted export. The first submenu row shows a checked/unchecked icon
 and toggles the detailed view directly. MCP can perform the same operation with
-`dev_set_active_player_overlay(mode="toggle")`; deterministic `off`, `compact`,
+`dev_set_active_player_overlay(mode="toggle")`; deterministic `off`, `graphs`, `info`, `compact`,
 `detailed`, and `detailed_30s` modes are also available, while the older `visible`
 Boolean remains compatible. It always shows only available common playback data and
 adds Pull, SMB Direct, Push/Fixed, caption, error/recovery, or DVD rows only for

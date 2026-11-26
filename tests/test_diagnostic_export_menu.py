@@ -53,4 +53,18 @@ class ExportMenuContracts(unittest.TestCase):
         self.assertIn('def dev_open_diagnostic_export(',server)
         self.assertIn('DiagnosticExportController.show(',debug)
         self.assertIn('uploadRequested=false',debug)
+    def test_server_output_is_cached_and_shared_by_text_and_json_exports(self):
+        dialog=(JAVA.parent/'ActivePlayerAdjustmentsDialog.java').read_text(encoding='utf-8')
+        text=dialog.split('private String diagnosticsText(MediaCmd media)',1)[1].split('public static String diagnosticsTextForExport',1)[0]
+        self.assertIn('getMimDirectSession().serverOutputForDiagnostics()',text)
+        self.assertNotIn('refreshServerOutput(',text)
+        snapshot=(JAVA.parent/'ClientDiagnosticSnapshot.java').read_text(encoding='utf-8')
+        self.assertIn('p.put("serverOutput",text(stats.serverOutput))',snapshot)
+        bundle=(JAVA/'DiagnosticBundleManager.java').read_text(encoding='utf-8')
+        self.assertIn('new Entry("server-output.txt", utf8(serverOutput()+"\\n"))',bundle)
+        self.assertIn('output.write(utf8("\\n"+serverOutput()+"\\n"))',bundle)
+        helper=bundle.split('static String serverOutput()',1)[1].split('/** Builds',1)[0]
+        self.assertIn('serverOutputForDiagnostics()',helper);self.assertNotIn('refreshServerOutput(',helper)
+        for name in ('ServerDiagnosticExporter.java','ClientDiagnosticWebService.java'):
+            self.assertIn('DiagnosticBundleManager.serverOutput()',(JAVA/name).read_text(encoding='utf-8'))
 if __name__=='__main__':unittest.main()

@@ -342,7 +342,7 @@ final class DebugPlayerConfigCommands
         {
             String value = mimDirectMode.toLowerCase();
             if (!("off".equals(value) || "copy".equals(value)
-                    || "transcode".equals(value)))
+                    || "transcode".equals(value) || "hls".equals(value)))
                 throw new IllegalArgumentException("invalid MIM Direct mode: "
                         + mimDirectMode);
             prefs.setString(PrefStore.Keys.mim_direct_mode, value);
@@ -354,6 +354,20 @@ final class DebugPlayerConfigCommands
                 throw new IllegalArgumentException("invalid MIM Direct deinterlace mode: "
                         + mimDirectDeinterlace);
             prefs.setString(PrefStore.Keys.mim_direct_deinterlace, value);
+        }
+        String runtimeRate=clean(intent.getStringExtra("mim_direct_runtime_rate"));
+        if(!runtimeRate.isEmpty())prefs.setBoolean(PrefStore.Keys.mim_direct_runtime_rate,parseBoolean(runtimeRate,false));
+        String adaptive=clean(intent.getStringExtra("mim_direct_adaptive_quality"));
+        String minimum=clean(intent.getStringExtra("mim_direct_minimum_kbps"));
+        if(!minimum.isEmpty()){
+            int value=Integer.parseInt(minimum),maximum=prefs.getFixedEncodingVideoBitrateKBPS();
+            if(value<250||value>maximum)throw new IllegalArgumentException("minimum bitrate outside Fixed range");
+            prefs.setString(PrefStore.Keys.mim_direct_minimum_kbps,String.valueOf(value));
+        }
+        if(!adaptive.isEmpty()){
+            boolean enabled=parseBoolean(adaptive,false);
+            prefs.setBoolean(PrefStore.Keys.mim_direct_adaptive_quality,enabled);
+            if("fixed".equals(prefs.getStreamingMode()))prefs.setString(AndroidPrefStore.STREAMING_MODE,enabled?"fixed_adjusted":"fixed");
         }
         if (!ijkSoftwareDeinterlace.isEmpty())
         {
@@ -515,9 +529,6 @@ final class DebugPlayerConfigCommands
             String supplied = type.trim().toLowerCase().replace("-", "");
             if (!normalized.equals(supplied))
                 throw new IllegalArgumentException("invalid CC" + channel + " type: " + type);
-            if (CaptionSlotPolicy.TYPE_DVB.equals(normalized))
-                throw new IllegalArgumentException("DVB is a top-level caption mode, not a CC"
-                        + channel + " type; set legacy_server_caption_mode=dvb");
             prefs.setString(channel == 1 ? PrefStore.Keys.caption_cc1_type
                     : PrefStore.Keys.caption_cc2_type, normalized);
         }

@@ -910,6 +910,9 @@ class AdbClient:
         fixed_caption_side_channel_port: int | str = "",
         mim_direct_mode: str = "",
         mim_direct_deinterlace: str = "",
+        mim_direct_runtime_rate: bool | None = None,
+        mim_direct_adaptive_quality: bool | None = None,
+        mim_direct_minimum_kbps: int | str = "",
         ijk_software_deinterlace: str = "",
         ijk_deinterlace_filter: str = "",
         video_deinterlace_mode: str = "",
@@ -988,6 +991,9 @@ class AdbClient:
             "fixed_caption_side_channel_port": fixed_caption_side_channel_port,
             "mim_direct_mode": mim_direct_mode,
             "mim_direct_deinterlace": mim_direct_deinterlace,
+            "mim_direct_runtime_rate": ("true" if mim_direct_runtime_rate else "false") if isinstance(mim_direct_runtime_rate,bool) else "",
+            "mim_direct_adaptive_quality": ("true" if mim_direct_adaptive_quality else "false") if isinstance(mim_direct_adaptive_quality,bool) else "",
+            "mim_direct_minimum_kbps": mim_direct_minimum_kbps,
             "ijk_software_deinterlace": ijk_software_deinterlace,
             "ijk_deinterlace_filter": ijk_deinterlace_filter,
             "video_deinterlace_mode": video_deinterlace_mode,
@@ -1256,8 +1262,8 @@ class AdbClient:
 
     def player_control(self, action: str) -> dict[str, Any]:
         value = str(action).strip().lower()
-        if value not in {"play", "pause", "stop", "restart_audio"}:
-            raise ValueError("action must be play, pause, stop, or restart_audio")
+        if value not in {"play", "pause", "stop", "restart_audio", "inject_push_parser_error"}:
+            raise ValueError("action must be play, pause, stop, restart_audio, or inject_push_parser_error")
         return self.dev_control("player_control", action=value)
 
     def request_competing_audio_focus(self, mode: str) -> dict[str, Any]:
@@ -1442,8 +1448,10 @@ class AdbClient:
     def seek_time(self, target_ms: int) -> dict[str, Any]:
         return self.dev_control("seek_time", target_ms=max(0, int(target_ms)))
 
-    def show_active_player_adjustments(self) -> dict[str, Any]:
-        return self.dev_control("active_player_adjustments")
+    def show_active_player_adjustments(self, panel: str = "video") -> dict[str, Any]:
+        if panel not in {"video", "hub", "audio", "captions", "transport", "diagnostics", "recovery", "navigation"}:
+            raise ValueError("unsupported playback settings panel")
+        return self.dev_control("active_player_adjustments", **({} if panel == "video" else {"panel": panel}))
 
     def show_av_sync_test(self) -> dict[str, Any]:
         """Open the embedded common-clock A/V fixture on active playback."""
@@ -1457,10 +1465,10 @@ class AdbClient:
         """Control Playback Stats while preserving the legacy Boolean operation."""
         normalized = str(mode).strip().lower()
         if normalized:
-            allowed = {"toggle", "off", "compact", "detailed", "detailed_30s"}
+            allowed = {"toggle", "off", "compact", "detailed", "detailed_30s", "graphs", "info"}
             if normalized not in allowed:
                 raise ValueError(
-                    "mode must be toggle, off, compact, detailed, or detailed_30s"
+                    "mode must be toggle, off, graphs, compact, detailed, or detailed_30s"
                 )
             return self.dev_control("active_player_overlay", mode=normalized)
         return self.dev_control(
